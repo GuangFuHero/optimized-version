@@ -141,6 +141,8 @@ class RequestMutation:
         and `DuplicatesSuspected` lists each suspect (`draftRef` "task:i" is the i-th need). Send
         the request again with `acknowledgedDuplicateOf` on each need confirmed not to be a
         duplicate. A failing duplicate check never blocks.
+
+        With `buildingMapUuid` it is filed inside that building, as `createTicket` files a ticket there.
         """
         result = await submit_help_request(
             info.context["db"],
@@ -167,6 +169,7 @@ class RequestMutation:
                 for task in input.tasks
             ],
             photo_urls=input.photo_urls,
+            building_map_uuid=str(input.building_map_uuid) if input.building_map_uuid else None,
         )
         if isinstance(result, SubmissionHeld):
             return DuplicatesSuspected.of(result.suspects)

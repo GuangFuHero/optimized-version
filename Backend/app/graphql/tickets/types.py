@@ -27,6 +27,16 @@ from app.graphql.shared import (
 from app.services import ticket_audit
 
 
+async def ticket_detail_scope(info: strawberry.types.Info) -> Scope:
+    """The caller's ticket.view_detail scope: NONE to the anonymous caller, who holds no grant at all."""
+    user = info.context["user"]
+    if user is None:
+        return Scope.NONE
+    return await resolve_scope(
+        user, Perm.TICKET_VIEW_DETAIL, info.context["db"], cache=info.context["_rbac_cache"]
+    )
+
+
 def ticket_detail_visible(info: strawberry.types.Info, ticket_uuid: str, resource=None):
     """Whether the caller may see this ticket's detail (ADR-281), decided once per request.
 
@@ -215,7 +225,7 @@ class TicketVerificationState(enum.Enum):
 
 @strawberry.type(description="Another ticket a disputed ticket may duplicate")
 class TicketDuplicateRefType:
-    """An entry of `TicketVerificationType.duplicateOf`."""
+    """An entry of `TicketVerificationType.duplicateOf` and of `TicketType.suspectedDuplicateOf`."""
 
     uuid: UUID
     title: str
@@ -672,8 +682,20 @@ class CreateHelpRequestInput:
 
     title: str = strawberry.field(description="At most 200 characters")
     description: str | None = None
-    geometry: GeoJSON = strawberry.field(
-        description="GeoJSON Point for the location where help is needed — [longitude, latitude]"
+    geometry: GeoJSON | None = strawberry.field(
+        default=None,
+        description=(
+            "GeoJSON Point for the location where help is needed — [longitude, latitude]. "
+            "Required unless buildingMapUuid is given, in which case it must be omitted"
+        ),
+    )
+    building_map_uuid: UUID | None = strawberry.field(
+        default=None,
+        description=(
+            "File the request inside this building map, as createTicket does: its point and address "
+            "are copied onto the ticket, and secondaryLocation.floor (and room, on a floor with "
+            "areas) must match the building's floors. Omit floor when the reporter doesn't know it"
+        ),
     )
     contact_name: str = strawberry.field(description="Who to ask for at the place")
     contact_phone: str | None = strawberry.field(
@@ -985,19 +1007,16 @@ class TicketType:
     @strawberry.field(
         description=(
             "Whether 重複審核 still waits on this ticket, and on which other tickets (ADR-443). Null when "
-            "it does not, and to a caller without ai_duplicate.view here. Not the data check: that is "
-            "`auditStatus`"
+            "it does not. Anyone can read it (ADR-455): it names the tickets `suspectedDuplicateOf` "
+            "does. Not the data check: that is `auditStatus`"
         )
     )
     async def verification_status(self, info: strawberry.types.Info) -> TicketVerificationType | None:
-        """Read the ticket's duplicate pair cards, or nothing when the caller cannot see them.
+        """Read the ticket's duplicate pair cards.
 
-        The 重複審核 page's own capability: its reviewers already read both tickets in full there, so
-        the far tickets' titles tell them nothing new. Decided before the lookup, so a page anyone
-        else reads costs no query here.
+        Every role sees a ticket's 疑似重複 tag (ADR-455), and this says nothing `suspected_duplicate_of`
+        does not: its one state is that list being non-empty, and the tickets are the same ones.
         """
-        if not await ticket_perm_held(info, Perm.AI_DUP_VIEW, str(self.uuid), self._scope_resource()):
-            return None
         refs = await info.context["loaders"]["disputes_by_ticket"].load(str(self.uuid))
         if refs is None:
             return None
@@ -1005,6 +1024,21 @@ class TicketType:
             state=TicketVerificationState.disputed,
             duplicate_of=[TicketDuplicateRefType(uuid=UUID(ref.uuid), title=ref.title) for ref in refs],
         )
+
+    @strawberry.field(
+        description=(
+            "Other tickets this one may repeat, to anyone (ADR-454): the tickets verificationStatus "
+            "names, each once, oldest card first; empty when there are none. Not whether a verdict "
+            "was given on them"
+        )
+    )
+    async def suspected_duplicate_of(self, info: strawberry.types.Info) -> list[TicketDuplicateRefType]:
+        """Read the same cards as `verification_status`, and give only the tickets on their far side.
+
+        Every one is neither cancelled nor deleted, so whoever reads this ticket can open it too.
+        """
+        refs = await info.context["loaders"]["disputes_by_ticket"].load(str(self.uuid))
+        return [TicketDuplicateRefType(uuid=UUID(ref.uuid), title=ref.title) for ref in refs or []]
 
     @strawberry.field(
         description=(

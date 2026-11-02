@@ -1,9 +1,8 @@
 'use client';
 
-import HandshakeRoundedIcon from '@mui/icons-material/HandshakeRounded';
 import { Box, Button } from '@mui/material';
 
-import { displayTextSize } from '@rescue-frontend/ui';
+import { displayTextSize, Icons } from '@rescue-frontend/ui';
 
 import { openHelpRequest } from './open-help-request';
 
@@ -20,7 +19,7 @@ export function RequestHelpButton() {
     <Button
       variant="contained"
       size="small"
-      startIcon={<HandshakeRoundedIcon sx={{ fontSize: 16 }} />}
+      startIcon={<Icons.heartHandshake sx={{ fontSize: 16 }} />}
       onClick={() => openHelpRequest()}
       aria-label="請求協助"
       title="需要有人幫忙？在這裡說明你的需求"

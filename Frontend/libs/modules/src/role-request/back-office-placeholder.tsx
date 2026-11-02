@@ -1,11 +1,10 @@
 'use client';
 
 // A client component: its 回到地圖 hands `Link` to MUI's Button, and a server layout renders it.
-import AdminPanelSettingsRoundedIcon from '@mui/icons-material/AdminPanelSettingsRounded';
 import { Button, Stack, Typography } from '@mui/material';
 import Link from 'next/link';
 
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
 
 const { color } = designTokens;
 
@@ -17,7 +16,7 @@ const { color } = designTokens;
 export function BackOfficePlaceholder() {
   return (
     <Stack spacing={1.5} sx={{ alignItems: 'flex-start' }}>
-      <AdminPanelSettingsRoundedIcon
+      <Icons.shieldUser
         sx={{ fontSize: 28, color: color.brand.secondary.subtle }}
       />
       <Typography

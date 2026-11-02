@@ -4,7 +4,8 @@ import { Box, Typography } from '@mui/material';
 import { designTokens, Tag } from '@rescue-frontend/ui';
 
 import { getOperationalStatusMeta } from '../../operational-status';
-import { getStationTypeIcon, getStationTypeLabel } from '../../type-options';
+import { getStationTypeIcon } from '../../station-type-icon';
+import { getStationTypeLabel } from '../../type-options';
 
 const { color, typography } = designTokens;
 
