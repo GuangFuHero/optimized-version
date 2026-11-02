@@ -308,10 +308,11 @@ export function DedupReviewPage() {
   );
 }
 
+/** A side by its ticket's title, as the compare header leads (no ids are shown, design 11/01). */
 export function sideName(pair: DuplicatePair, side: 'low' | 'high') {
   const s = pair[side];
   if (s.deleted) return '已刪除';
-  return s.title || s.ticket_title || '（沒有名稱）';
+  return s.ticket_title || s.title || '（沒有名稱）';
 }
 
 function PairRow({
@@ -365,8 +366,10 @@ function PairRow({
             </Box>
           </>
         ) : (
+          // The list has only the status, so a merged pair and a plain 確認重複 share one word that
+          // covers both; the detail says which (已合併 or 確認重複).
           <Badge tone={pair.status === 'not_duplicate' ? 'neutral' : 'success'}>
-            {pair.status === 'not_duplicate' ? '不是重複' : '確認重複'}
+            {pair.status === 'not_duplicate' ? '不是重複' : '是重複'}
           </Badge>
         )}
       </Stack>

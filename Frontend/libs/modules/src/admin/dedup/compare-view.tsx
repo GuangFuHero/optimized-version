@@ -35,12 +35,14 @@ import {
 } from '../../ticket/status';
 import {
   defaultPlan,
+  decidedSides,
   duplicateTasks,
   headcount,
   gapText,
   isEdited,
   isPending,
   mergeProblems,
+  mergedSummary,
   NOTE_MAX_LENGTH,
   orderedSides,
   OUTCOME_LABELS,
@@ -1733,14 +1735,25 @@ function ConfirmDialog({
     setError(null);
     // A 409 comes back as `conflict`: a ticket changed after it was read, or someone decided
     // first (ADR-374). The page says so and offers the reload; nothing was written.
-    const settle = (message: string) => (result: { conflict: boolean }) => {
-      if (result.conflict) {
-        onStale();
-        return;
-      }
-      toast.success(message);
-      onDone();
-    };
+    const settle =
+      (message: string) =>
+      (result: { conflict: boolean; refused: boolean }) => {
+        if (result.conflict) {
+          onStale();
+          return;
+        }
+        // A 422: nothing was written. A fixed line instead of the backend's English detail.
+        if (result.refused) {
+          setError(
+            isMerge
+              ? '後端不接受這次合併的內容，例如數量少於承接人數。請回去檢查右邊的欄位，再送一次。'
+              : '後端不接受這次送出的內容，請再試一次。',
+          );
+          return;
+        }
+        toast.success(message);
+        onDone();
+      };
     if (isMerge) {
       resolve.mutate(
         { pairUuid: pair.uuid, body: resolveRequest(pair, fields, plan, note) },
@@ -1917,7 +1930,7 @@ function DoneDetail({
   pair: DuplicatePairDetail;
   labels: FieldLabels;
 }) {
-  const sides = orderedSides(pair);
+  const sides = decidedSides(pair);
   const outcome = outcomeOf(pair);
   const merged = pair.events.find((e) => e.event_type === 'merged');
   // WG-163: who decided what, and when. The events that say how a pair came to the queue are
@@ -1935,9 +1948,7 @@ function DoneDetail({
   const station = pair.entity_kind === 'station';
   const summary =
     outcome === 'merged'
-      ? keptSide
-        ? `兩張任務單合成一張（${pair[keptSide].ticket_title ?? pair[keptSide].title ?? ''}）。`
-        : '兩張任務單合成一張。'
+      ? mergedSummary(pair, merged)
       : outcome === 'confirmed'
         ? station
           ? '審核後確認這兩個站點是重複的。站點合併後端還沒做，兩個站點都維持原樣。'

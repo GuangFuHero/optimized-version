@@ -10,10 +10,12 @@ import {
   addressText,
   byLatestCreated,
   defaultPlan,
+  decidedSides,
   defaultPrimary,
   headcount,
   gapText,
   mergeProblems,
+  mergedSummary,
   orderedSides,
   outcomeOf,
   pairSignals,
@@ -527,6 +529,20 @@ describe('the one 聯絡人 row', () => {
   });
 });
 
+describe('an untouched 聯絡人 row', () => {
+  it("sends the picked side's columns as they are, so a LINE ID stays the phone", () => {
+    const pair = fixture();
+    both(pair).low.contact_phone = 'line: chen0921';
+    const fields = ticketFields(pair, labels);
+    const plan = defaultPlan(pair, fields);
+    plan.picks['ticket:contact'] = 'low';
+    expect(resolveRequest(pair, fields, plan, '').ticket).toEqual({
+      contact_name: '陳太太',
+      contact_phone: 'line: chen0921',
+    });
+  });
+});
+
 describe('configured fields', () => {
   it('types a field by its data type, with its unit, and splits a multi-select into rows', () => {
     const configured: FieldLabels = {
@@ -553,6 +569,25 @@ describe('configured fields', () => {
     const body = resolveRequest(pair, fields, plan, '');
     expect(body.primary_tasks[0].properties).toEqual([
       { property: 'H-p1', action: 'keep' },
+      { property: 'L-p1', action: 'keep' },
+    ]);
+    // Dropping 推車 keeps 鏟子 on its own row (and quantity); only the freed row is cancelled.
+    plan.edits['item:tools'] = '鏟子';
+    expect(
+      resolveRequest(pair, fields, plan, '').primary_tasks[0].properties,
+    ).toEqual([
+      { property: 'H-p1', action: 'cancel' },
+      { property: 'L-p1', action: 'keep' },
+    ]);
+    plan.edits['item:tools'] = '鏟子、手套';
+    expect(
+      resolveRequest(pair, fields, plan, '').primary_tasks[0].properties,
+    ).toEqual([
+      {
+        property: 'H-p1',
+        action: 'keep',
+        values: { property_value: '手套' },
+      },
       { property: 'L-p1', action: 'keep' },
     ]);
     plan.edits['item:tools'] = '推車、鏟子、手套';
@@ -597,16 +632,22 @@ describe('mergeProblems', () => {
     expect(resultValue(fieldOf(fields, 'task:quantity'), plan)).toBe(3);
   });
 
-  it('asks for a quantity except on a rescue need', () => {
+  it('asks for a quantity when two needs fold together, a rescue included (ADR-448)', () => {
     const pair = fixture();
+    for (const t of Object.values(both(pair))) {
+      t.tasks[0].task_type = 'rescue';
+      t.tasks[0].quantity = null;
+    }
     const fields = ticketFields(pair, labels);
+    // Both sides blank: the row is still listed, so it can be filled.
+    expect(fields.task.map((f) => f.id)).toContain('task:quantity');
+    expect(fields.empty).not.toContain('數量');
     const plan = defaultPlan(pair, fields);
-    plan.edits['task:quantity'] = '';
     expect(mergeProblems(pair, fields, plan)).toEqual([
       { field: 'task:quantity', message: '請填數量' },
     ]);
-    for (const t of Object.values(both(pair))) t.tasks[0].task_type = 'rescue';
-    expect(mergeProblems(pair, ticketFields(pair, labels), plan)).toEqual([]);
+    plan.edits['task:quantity'] = '5';
+    expect(mergeProblems(pair, fields, plan)).toEqual([]);
   });
 
   it('keeps at least one need on a whole-ticket card', () => {
@@ -618,6 +659,75 @@ describe('mergeProblems', () => {
     expect(mergeProblems(pair, fields, plan)).toEqual([
       { message: '合併後的任務單至少要留一項需求' },
     ]);
+  });
+});
+
+describe('mergedSummary', () => {
+  const event = (before: unknown, after: unknown) => ({
+    uuid: 'e',
+    event_type: 'merged',
+    actor_uuid: null,
+    source_layer: 'manual' as const,
+    decision_reason: null,
+    engine_version: null,
+    before_state: before as Record<string, unknown>,
+    after_state: after as Record<string, unknown>,
+    created_at: '2026-10-10T09:00:00Z',
+  });
+
+  it('names both tickets by their titles before the merge, A first, and the one kept', () => {
+    const pair = fixture();
+    const merged = event(
+      {
+        tickets: {
+          low: { uuid: 'T-low', title: '需要人幫忙清泥' },
+          high: { uuid: 'T-high', title: '一樓淤泥清理' },
+        },
+      },
+      { ticket: { uuid: 'T-high', title: '改過的標題' } },
+    );
+    // T-high was created first, so it is A.
+    expect(mergedSummary(pair, merged)).toBe(
+      '「一樓淤泥清理」與「需要人幫忙清泥」合成一張（留下「一樓淤泥清理」）。',
+    );
+  });
+
+  it('keeps A and B after the merge, when the cancelled side has lost its time', () => {
+    const pair = fixture();
+    // T-high (A) was cancelled: the card no longer gives it a time.
+    pair.high.created_at = null;
+    pair.high.deleted = true;
+    const merged = event(
+      {
+        tickets: {
+          low: {
+            uuid: 'T-low',
+            title: '需要人幫忙清泥',
+            created_at: '2026-10-10T08:42:00+08:00',
+          },
+          high: {
+            uuid: 'T-high',
+            title: '一樓淤泥清理',
+            created_at: '2026-10-10T07:17:00+08:00',
+          },
+        },
+      },
+      { ticket: { uuid: 'T-low' } },
+    );
+    pair.events = [merged];
+    expect(decidedSides(pair)).toEqual(['high', 'low']);
+    expect(mergedSummary(pair, merged)).toBe(
+      '「一樓淤泥清理」與「需要人幫忙清泥」合成一張（留下「需要人幫忙清泥」）。',
+    );
+  });
+
+  it('falls back to a plain line without titles', () => {
+    const pair = fixture();
+    for (const side of ['low', 'high'] as const) {
+      pair[side].ticket_title = null;
+      pair[side].title = null;
+    }
+    expect(mergedSummary(pair, event(null, null))).toBe('兩張任務單合成一張。');
   });
 });
 

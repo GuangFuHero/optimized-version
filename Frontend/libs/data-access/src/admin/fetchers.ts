@@ -927,22 +927,26 @@ export function useDuplicatePair(
 }
 
 /**
- * A decision's answer: the card, or `conflict` when the backend answered 409 (a ticket changed
- * since it was read, or someone decided first). The page explains a conflict itself, so it is a
- * result, not an error the app would also toast.
+ * A decision's answer: the card; `conflict` when the backend answered 409 (a ticket changed since
+ * it was read, or someone decided first); or `refused` when it answered 422 (the body breaks a rule,
+ * such as a quantity under the headcount). The page explains both itself in Chinese, so they are
+ * results, not errors the app would also toast with the backend's English detail.
  */
 export type DuplicatePairWrite<T> =
-  | { conflict: false; pair: T }
-  | { conflict: true };
+  | { conflict: false; refused: false; pair: T }
+  | { conflict: true; refused: false }
+  | { conflict: false; refused: true };
 
 async function conflictAsResult<T>(
   request: Promise<T>,
 ): Promise<DuplicatePairWrite<T>> {
   try {
-    return { conflict: false, pair: await request };
+    return { conflict: false, refused: false, pair: await request };
   } catch (error) {
     if (error instanceof ApiError && error.status === 409)
-      return { conflict: true };
+      return { conflict: true, refused: false };
+    if (error instanceof ApiError && error.status === 422)
+      return { conflict: false, refused: true };
     throw error;
   }
 }
@@ -978,7 +982,7 @@ export function useDecideDuplicatePair(verdict: 'reject' | 'confirm') {
       return conflictAsResult(request.then(responseData));
     },
     onSuccess: (result) => {
-      if (!result.conflict) {
+      if (!result.conflict && !result.refused) {
         return queryClient.invalidateQueries({
           queryKey: ['admin', 'duplicate-pairs'],
         });
@@ -1006,7 +1010,7 @@ export function useResolveDuplicatePair() {
           .then(responseData),
       ),
     onSuccess: (result) => {
-      if (!result.conflict) {
+      if (!result.conflict && !result.refused) {
         return queryClient.invalidateQueries({
           queryKey: ['admin', 'duplicate-pairs'],
         });

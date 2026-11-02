@@ -493,6 +493,8 @@ export function ticketFields(
 
   const keep = (fields: MergeField[]) =>
     fields.filter((field) => {
+      // The merged need's quantity is always asked for (ADR-448), even when both sides left it blank.
+      if (field.id === 'task:quantity') return true;
       const has =
         !isEmptyValue(field.read('low')) || !isEmptyValue(field.read('high'));
       if (!has) empty.push(field.label);
@@ -632,10 +634,10 @@ export function mergeProblems(
       ? resultValue(quantity, plan)
       : tasks[plan.primary].quantity;
     const floor = headcount([tasks.low, tasks.high]);
-    const rescue = tasks.low.task_type === 'rescue';
+    // Folding two needs needs a quantity, a rescue's included (ADR-448 point 4): without one the
+    // merged need would take everyone from both and never fill.
     if (value == null || value === '') {
-      if (!rescue)
-        problems.push({ field: 'task:quantity', message: '請填數量' });
+      problems.push({ field: 'task:quantity', message: '請填數量' });
     } else if (!Number.isInteger(Number(value)) || Number(value) < 1) {
       problems.push({
         field: 'task:quantity',
@@ -725,15 +727,20 @@ export function resolveRequest(
     const next = value(`ticket:${key}`);
     if (next !== undefined && !same(next, kept[key])) ticket[key] = next;
   }
-  const contact = value('ticket:contact');
-  if (contact !== undefined) {
-    const parsed = parseContact(String(contact ?? ''));
+  // An untouched 聯絡人 row takes the picked side's three columns as they are: splitting it by shape
+  // would move a LINE ID in contact_phone into the name.
+  const contactField = byId.get('ticket:contact');
+  if (contactField) {
+    const contact = isEdited(contactField, plan)
+      ? parseContact(String(resultValue(contactField, plan) ?? ''))
+      : (tickets[pickedSide(contactField, plan)] as TicketForReview);
     for (const key of [
       'contact_name',
       'contact_phone',
       'contact_email',
     ] as const) {
-      if (!same(parsed[key], kept[key])) ticket[key] = parsed[key];
+      const next = contact[key] ?? null;
+      if (!same(next, kept[key] ?? null)) ticket[key] = next;
     }
   }
   const disasterTypes = value('ticket:disaster_types');
@@ -880,19 +887,31 @@ function mergedItems(
       : isEmptyValue(value)
         ? []
         : [String(value)];
-    [...mine, ...theirs].forEach(({ item }, index) => {
-      const next = values[index];
+    // A row whose value is still there keeps it, with its own quantity; only then do the new values
+    // go on the rows left, so removing one value does not shift the others' quantities.
+    const ordered = [...mine, ...theirs];
+    const left = [...values];
+    const free: typeof ordered = [];
+    for (const row of ordered) {
+      const at = left.indexOf(row.item.property_value);
+      if (at < 0) {
+        free.push(row);
+        continue;
+      }
+      left.splice(at, 1);
+      decided.set(row.item.uuid, { property: row.item.uuid, action: 'keep' });
+    }
+    free.forEach(({ item }, index) => {
+      const next = left[index];
       decided.set(
         item.uuid,
         next == null
           ? { property: item.uuid, action: 'cancel' }
-          : next === item.property_value
-            ? { property: item.uuid, action: 'keep' }
-            : {
-                property: item.uuid,
-                action: 'keep',
-                values: { property_value: next },
-              },
+          : {
+              property: item.uuid,
+              action: 'keep',
+              values: { property_value: next },
+            },
       );
     });
   }
@@ -900,6 +919,57 @@ function mergedItems(
 }
 
 // ── Outcomes ────────────────────────────────────────────────────────────────────────────────
+
+type BeforeTicket = {
+  uuid?: string;
+  title?: string | null;
+  created_at?: string;
+};
+
+const beforeTickets = (
+  merged: DuplicatePairDetail['events'][number] | undefined,
+) =>
+  (merged?.before_state?.tickets ?? {}) as Partial<Record<Side, BeforeTicket>>;
+
+/**
+ * A and B on a decided pair. A merge cancels one ticket, and the card then gives that side no
+ * `created_at`, which would swap the letters; the merged event still holds both as they were.
+ */
+export function decidedSides(pair: DuplicatePairDetail): [Side, Side] {
+  const before = beforeTickets(
+    pair.events.find((e) => e.event_type === 'merged'),
+  );
+  const at = (side: Side) =>
+    pair[side].created_at ?? before[side]?.created_at ?? null;
+  return orderedSides({
+    low: { ...pair.low, created_at: at('low') },
+    high: { ...pair.high, created_at: at('high') },
+  });
+}
+
+/**
+ * What a merge did, by the two tickets' titles as the reviewer saw them (the merged event's
+ * `before_state`): 「A」與「B」合成一張（留下「…」）. No ids are shown (design 11/01).
+ */
+export function mergedSummary(
+  pair: DuplicatePairDetail,
+  merged: DuplicatePairDetail['events'][number] | undefined,
+): string {
+  const before = beforeTickets(merged);
+  const title = (side: Side) =>
+    before[side]?.title || pair[side].ticket_title || pair[side].title || '';
+  const sides = decidedSides(pair);
+  const names = sides.map(title);
+  if (names.some((name) => !name)) return '兩張任務單合成一張。';
+  // after_state holds the kept ticket as the resolve left it.
+  const keptUuid = (
+    merged?.after_state?.ticket as { uuid?: string } | undefined
+  )?.uuid;
+  const kept = sides.find(
+    (side) => keptUuid != null && before[side]?.uuid === keptUuid,
+  );
+  return `「${names[0]}」與「${names[1]}」合成一張${kept ? `（留下「${title(kept)}」）` : ''}。`;
+}
 
 export type Outcome = 'pending' | 'merged' | 'confirmed' | 'separate';
 
