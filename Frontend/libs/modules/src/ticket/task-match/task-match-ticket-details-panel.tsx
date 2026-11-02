@@ -2,8 +2,6 @@
 
 import { useMemo } from 'react';
 
-import { FileText, MapPin, Tag, User } from 'lucide-react';
-
 import { Alert, Box, Stack, Typography } from '@mui/material';
 import { useQuery } from 'urql';
 
@@ -34,7 +32,10 @@ import { formatTicketTypeLabel } from '../status';
 
 import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
 
-const { color, spacing } = designTokens;
+const { color, iconSize, spacing } = designTokens;
+
+/** The rows' icons: the prototype's 16 isn't on the scale, so md, as 分享 is. */
+const ROW_ICON = { fontSize: iconSize.md } as const;
 
 // 詳情面板自行顯示載入狀態，停用 suspense 避免整頁因抓取任務資料而閃爍重渲染。
 const DETAIL_QUERY_CONTEXT = { suspense: false } as const;
@@ -199,11 +200,11 @@ export function TaskMatchTicketDetailsPanel({
           Nothing of the back office's — 母單／子任務, review state, notes, times — which the
           prototype does not show. The status is a badge under the title. */}
       {coarse ? null : (
-        <SiteDetailRow label="任務說明" icon={<FileText size={16} />}>
+        <SiteDetailRow label="任務說明" icon={<Icons.details sx={ROW_ICON} />}>
           {ticket?.description?.trim() || marker.subtitle}
         </SiteDetailRow>
       )}
-      <SiteDetailRow label="任務類型" icon={<Tag size={16} />}>
+      <SiteDetailRow label="任務類型" icon={<Icons.tag sx={ROW_ICON} />}>
         {formatTicketTypeLabel(ticket?.taskType ?? marker.ticketMeta?.taskType)}
       </SiteDetailRow>
       {/* Withheld with the location — a scene photo can show the house number (AC-03) — and
@@ -236,11 +237,11 @@ export function TaskMatchTicketDetailsPanel({
           gets it masked (王◯◯ / 09*****678 — backend `graphql/tickets/types.py`), which
           tells a guest nothing and reaches no one. */}
       {coarse ? null : (
-        <SiteDetailRow label="現場聯絡人" icon={<User size={16} />}>
+        <SiteDetailRow label="現場聯絡人" icon={<Icons.user sx={ROW_ICON} />}>
           {contact}
         </SiteDetailRow>
       )}
-      <SiteDetailRow label="位置資訊" icon={<MapPin size={16} />}>
+      <SiteDetailRow label="位置資訊" icon={<Icons.pin sx={ROW_ICON} />}>
         {marker.locationCell ? (
           <>
             概略區塊（{describeLocationCellSpan(marker.locationCell)}範圍）

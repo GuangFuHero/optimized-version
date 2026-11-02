@@ -2,8 +2,6 @@
 
 import type { ReactNode } from 'react';
 
-import { ClipboardList, Share2 } from 'lucide-react';
-
 import { Box, IconButton, Stack, Tab, Typography } from '@mui/material';
 
 import {
@@ -13,7 +11,7 @@ import {
   Tabs,
 } from '@rescue-frontend/ui';
 
-const { color, radius, spacing } = designTokens;
+const { color, iconSize, radius, spacing } = designTokens;
 const CloseIcon = Icons.close;
 
 export interface SiteTicketDetailDrawerProps {
@@ -80,7 +78,7 @@ export function SiteTicketDetailDrawer({
             color: color.brand.primary.subtle,
           }}
         >
-          <ClipboardList size={20} />
+          <Icons.clipboardList sx={{ fontSize: iconSize.lg }} />
         </Box>
         <Typography
           component="h2"
@@ -176,7 +174,7 @@ export function SiteTicketDetailDrawer({
                 border: `1px solid ${color.border.default}`,
               }}
             >
-              <Share2 size={18} />
+              <Icons.share sx={{ fontSize: iconSize.md }} />
             </IconButton>
           ) : null}
         </Stack>
