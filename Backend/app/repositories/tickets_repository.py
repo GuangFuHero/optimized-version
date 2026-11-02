@@ -17,7 +17,7 @@ from app.infrastructure.repository.base import GenericRepository
 from app.models.request import Tickets
 from app.models.ticket_disaster_detail import TicketDisasterDetail
 from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask
-from app.services.ticket_status import OPEN_NEED_STATUSES, OPEN_TICKET_STATUSES
+from app.services.ticket_status import OPEN_NEED_STATUSES, OPEN_TICKET_STATUSES, VOLUNTEER_NEED_TYPES
 
 # How list_active can order the tickets (TicketListOrder in app/graphql/tickets/types.py, ADR-419).
 TICKET_ORDERS = frozenset({"newest", "needs_first"})
@@ -470,9 +470,10 @@ class TicketRepository(GenericRepository[Tickets]):
         """Counts by status and the volunteer gap over the active tickets `extra_filters` leaves.
 
         Two statements, no per-ticket work. The gap counts a need the way the board's cards do:
-        an open need (OPEN_NEED_STATUSES) with a quantity, on a ticket not completed or
-        cancelled, short of `quantity` by the people linked to it. Linked people are every
-        task_assignments row, as the `assignedCount` loader reads them.
+        an open need (OPEN_NEED_STATUSES) of a volunteer type (VOLUNTEER_NEED_TYPES) with a
+        quantity, on a ticket not completed or cancelled, short of `quantity` by the people
+        linked to it. Linked people are every task_assignments row, as the `assignedCount` loader
+        reads them. The dashboard's volunteer_gap counts by the same rule (ADR-456).
         """
         base = [self.model.delete_at.is_(None), *extra_filters]
         by_status = dict(
@@ -502,6 +503,7 @@ class TicketRepository(GenericRepository[Tickets]):
                     self.model.status.notin_(("completed", "cancelled")),
                     TicketTask.delete_at.is_(None),
                     TicketTask.status.in_(OPEN_NEED_STATUSES),
+                    TicketTask.task_type.in_(VOLUNTEER_NEED_TYPES),
                     TicketTask.quantity.is_not(None),
                     gap > 0,
                 )
