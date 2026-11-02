@@ -73,20 +73,22 @@ describe('sharesThroughDeviceSheet', () => {
 });
 
 describe('isShareSheetDismissal', () => {
-  it('is the sheet the person closed', () => {
+  it('is the sheet the person closed, or one still open from the press before', () => {
     expect(
-      isShareSheetDismissal(new DOMException('Share canceled', 'AbortError')),
-    ).toBe(true);
+      [
+        new DOMException('Share canceled', 'AbortError'),
+        new DOMException('A share is already open', 'InvalidStateError'),
+      ].map(isShareSheetDismissal),
+    ).toEqual([true, true]);
   });
 
   it('is not a sheet that failed, which the share page stands in for', () => {
     expect(
       [
         new DOMException('Not allowed', 'NotAllowedError'),
-        new DOMException('A share is already open', 'InvalidStateError'),
         new TypeError('Bad data'),
         undefined,
       ].map(isShareSheetDismissal),
-    ).toEqual([false, false, false, false]);
+    ).toEqual([false, false, false]);
   });
 });
