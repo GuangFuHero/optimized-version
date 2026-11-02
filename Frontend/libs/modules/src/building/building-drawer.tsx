@@ -1,11 +1,9 @@
 'use client';
 
-import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
-import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded';
 import { Alert, Box, ButtonBase, Stack, Typography } from '@mui/material';
 import { useEffect, useRef, useState, type RefObject } from 'react';
 
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
 
 import type { RescueMapMarkerItem } from '../map/types';
 import { SiteActionDrawer } from '../shell/site/site-action-drawer';
@@ -65,7 +63,7 @@ function BuildingNotice() {
         border: `1px solid ${color.border.accent}`,
       }}
     >
-      <WarningAmberRoundedIcon
+      <Icons.triangleAlert
         sx={{ flexShrink: 0, fontSize: 18, color: color.fg.warning }}
       />
       <Typography
@@ -363,7 +361,7 @@ function GuestBuildingFloors({
               >
                 在這一層請求協助
               </Typography>
-              <ChevronRightRoundedIcon
+              <Icons.chevronRight
                 sx={{
                   fontSize: designTokens.iconSize.md,
                   color: color.fg.neutral.muted,

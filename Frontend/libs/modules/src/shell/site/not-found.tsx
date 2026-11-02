@@ -1,11 +1,10 @@
 'use client';
 
-import MenuBookRoundedIcon from '@mui/icons-material/MenuBookRounded';
 import { Box, Stack, Typography } from '@mui/material';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
 
 import { GuangFuMascot } from '../../brand';
 import { BRIEFING_HREF } from '../../briefing/href';
@@ -42,7 +41,7 @@ const NEXT_STEPS: {
     href: BRIEFING_HREF,
     label: '志工行前資訊',
     sub: '出發前要準備什麼',
-    icon: <MenuBookRoundedIcon sx={{ fontSize: 20 }} />,
+    icon: <Icons.bookOpen sx={{ fontSize: 20 }} />,
   },
 ];
 
