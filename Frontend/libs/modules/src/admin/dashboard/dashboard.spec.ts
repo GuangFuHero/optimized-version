@@ -580,6 +580,19 @@ describe('dashboard states and filters', () => {
     );
   });
 
+  it("restamps 更新於 when a section's own filter changes, as the filter card does", async () => {
+    await mount();
+    const clock = vi
+      .spyOn(Date.prototype, 'toTimeString')
+      .mockReturnValue('23:59:58 GMT+1100');
+    try {
+      await pick('dashboard-stations-status', 'open');
+      expect(container.textContent).toContain('更新於 23:59:58');
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
   it('applies the need type to the volunteer numbers too', async () => {
     await mount();
     state.requests = [];

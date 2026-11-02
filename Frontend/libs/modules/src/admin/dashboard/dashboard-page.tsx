@@ -508,8 +508,11 @@ export function DashboardPage() {
   const [sections, setSections] = useState<
     Record<DashboardDomain, SectionFilter>
   >({ tickets: {}, stations: {} });
-  const setSection = (domain: DashboardDomain) => (next: SectionFilter) =>
+  // Restamps 更新於, as a change in the filter card does: the section's numbers are asked again.
+  const setSection = (domain: DashboardDomain) => (next: SectionFilter) => {
     setSections((current) => ({ ...current, [domain]: next }));
+    setSyncedAt(stamp());
+  };
   const [devMode, setDevMode] = useState(false);
   const previewEnabled =
     process.env.NODE_ENV !== 'production' &&
