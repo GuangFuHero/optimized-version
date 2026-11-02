@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   BASE_LAYER_CONFIG,
+  DEFAULT_BASE_LAYER,
   DEFAULT_RESCUE_MAP_OVERLAY_LAYERS,
   MAP_VIEW_TAIWAN,
   OVERLAY_LAYER_CONFIG,
@@ -217,7 +218,7 @@ export function useRescueMapController({
     ? (routeState ?? EMPTY_ROUTE_STATE)
     : internalState;
   const baseLayer: RescueMapBaseLayer =
-    state.baseLayer ?? layerPreferences.baseLayer ?? 'osm-direct';
+    state.baseLayer ?? layerPreferences.baseLayer ?? DEFAULT_BASE_LAYER;
 
   useEffect(() => {
     setLayerPreferences(readLayerPreferences());
