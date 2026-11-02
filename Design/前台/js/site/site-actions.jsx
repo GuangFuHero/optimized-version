@@ -20,7 +20,7 @@
    * 排序刻意讓 `operational_status` 在第一個 —— 08-21 決議第六節：
    * 「這站關了」晚審一小時就有人白跑一趟，其餘欄位晚三天無妨。 */
   const STATION_STATUS_VALUE_OPTIONS = [
-    { value: 'open', label: '開放中' },
+    { value: 'open', label: '開設中' },   // 跟狀態名稱同一個字（11-02，回 PR #250）
     { value: 'paused', label: '暫停服務' },
     { value: 'closed', label: '已關閉' },
   ];

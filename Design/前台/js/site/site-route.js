@@ -85,7 +85,8 @@
     const within = isWithinOpenHours(raw, now);
     if (within === true)  return { headline: '現在開放', tone: 'success', detail: raw ? '服務時間 ' + raw : '', opHour: raw, statusMeta: meta };
     if (within === false) return { headline: '休息中', tone: 'neutral', detail: raw ? '服務時間 ' + raw + '，此時段沒有服務' : '', opHour: raw, statusMeta: meta };
-    return { headline: '營運中', tone: 'success', detail: raw ? '服務時間 ' + raw : '服務時間未提供', opHour: raw, statusMeta: meta };
+    // 讀不懂服務時間（沒填、或「星期一 9-15」這種寫法）時，就只說狀態本身 → 用狀態名稱「開設中」，不另取「營運中」（11-02，回 PR #250）
+    return { headline: meta.label, tone: 'success', detail: raw ? '服務時間 ' + raw : '服務時間未提供', opHour: raw, statusMeta: meta };
   }
 
   // ── ticket/status.ts ───────────────────────────────────────────────────────
