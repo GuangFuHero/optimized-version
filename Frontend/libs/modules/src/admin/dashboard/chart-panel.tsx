@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import { Box, Stack, Typography } from '@mui/material';
 import { useQueries, type UseQueryResult } from '@tanstack/react-query';
@@ -242,6 +242,16 @@ export function ChartPanel({
 
   const forbidden =
     query.error instanceof ApiError && query.error.status === 403;
+  // Recoloured once per response: `AnalyticsChart` redraws the plot whenever the figure is a new
+  // object, which would drop a hover each time the page re-renders.
+  const tone = chart.fixed?.tone;
+  const drawn = useMemo(
+    () =>
+      query.data && tone
+        ? toneFigure(query.data, ACCENT_COLORS[tone])
+        : query.data,
+    [query.data, tone],
+  );
   const title = chart.fixed?.title ?? spec?.label;
   const xOptions = chart.fixed ? [] : knownOptions(spec?.allowed_x, X_LABELS);
   const chartTypeOptions = chart.fixed
@@ -267,14 +277,12 @@ export function ChartPanel({
   } else if (query.isError) {
     overlay = '圖表載入失敗';
     overlayIsError = true;
-  } else if (!query.data) {
+  } else if (!drawn) {
     overlay = '載入中…';
-  } else if (!hasChartData(query.data)) {
+  } else if (!hasChartData(drawn)) {
     overlay = '這段期間沒有資料';
   } else {
-    figure = chart.fixed
-      ? toneFigure(query.data, ACCENT_COLORS[chart.fixed.tone])
-      : query.data;
+    figure = drawn;
   }
 
   return (
