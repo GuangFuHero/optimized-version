@@ -540,13 +540,14 @@ class TicketRepository(GenericRepository[Tickets]):
     async def building_counts(
         self, db: AsyncSession, building_uuids: list[str], *, extra_filters=()
     ) -> dict[str, tuple[int, int]]:
-        """Each building's (tickets, people short), for the buildings that hold any (ADR-450).
+        """Each building's (tickets, shortfall), for the buildings that hold any (ADR-450).
 
         Every live ticket filed in a live building counts, completed and cancelled ones too, as
         `buildingMapTickets` lists them; `extra_filters` narrow them as it does. The shortfall adds,
         over the tickets still open, each pending people or supply need with a quantity: that
         quantity less the people linked to it, never below 0, as the site's floor drawer adds it.
-        Linked people are every task_assignments row, as for `stats`. One statement.
+        A supply need's quantity counts items, so the sum is people and supplies together. Linked
+        people are every task_assignments row, as for `stats`. One statement.
         """
         # Aliased: a ticket's own row in base_geometries is already in the FROM clause.
         building = aliased(BaseGeometry)

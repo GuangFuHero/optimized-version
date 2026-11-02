@@ -662,14 +662,9 @@ async def _make_counts_loader(info: strawberry.types.Info) -> DataLoader | None:
     detail = await ticket_detail_scope(info)
     if detail == Scope.NONE:
         return None
-    view = await resolve_scope(user, Perm.TICKET_VIEW, info.context["db"], cache=info.context["_rbac_cache"])
-    if view == Scope.NONE:
-        return None
     db = info.context["db"]
-    filters = [
-        *scope_filter(view, actor=user, model=Tickets),
-        *scope_filter(detail, actor=user, model=Tickets),
-    ]
+    # ticket.view is public, so like buildingMapTickets only view_detail narrows the rows.
+    filters = scope_filter(detail, actor=user, model=Tickets)
 
     async def load_fn(uuids: list[str]) -> list[tuple[int, int]]:
         counts = await ticket_repository.building_counts(db, uuids, extra_filters=filters)
@@ -735,19 +730,19 @@ class BuildingMapType:
 
     @strawberry.field(
         description=(
-            "How many people this building is still short (ADR-450): over its tickets not completed or "
-            "cancelled, each pending 'hr' or 'supply' need with a quantity adds that quantity less "
-            "assignedCount, never below 0. Rescue and medical needs, and needs with no quantity, add "
-            "nothing. Null to a caller without ticket.view_detail"
+            "How much this building is still short, people and supplies together (ADR-450): over its "
+            "tickets not completed or cancelled, each pending 'hr' or 'supply' need with a quantity "
+            "adds that quantity less assignedCount, never below 0. Rescue and medical needs, and needs "
+            "with no quantity, add nothing. Null to a caller without ticket.view_detail"
         )
     )
     async def shortfall(self, info: strawberry.types.Info) -> int | None:
-        """The people the building's open needs still lack, as this caller may count them."""
+        """What its open needs still lack, people and supplies together, as this caller may count it."""
         counts = await self._ticket_counts(info)
         return None if counts is None else counts[1]
 
     async def _ticket_counts(self, info: strawberry.types.Info) -> tuple[int, int] | None:
-        """(tickets, people short), or None to a caller who may place none of its tickets here."""
+        """(tickets, shortfall), or None to a caller who may place none of its tickets here."""
         loader = await _building_counts_loader(info)
         return None if loader is None else await loader.load(str(self.uuid))
 

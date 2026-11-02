@@ -750,6 +750,28 @@ async def test_view_detail_narrowed_to_own_counts_only_the_callers_tickets(
     assert [t["uuid"] for t in listed["data"]["buildingMapTickets"]] == [mine]
 
 
+@pytest.mark.parametrize("view", [None, "own"], ids=["no ticket.view grant", "ticket.view at own"])
+async def test_the_counts_follow_the_list_whatever_a_role_holds_of_ticket_view(
+    client, redis, coordinator_auth, login_user_auth, view
+):
+    """ticket.view is public, so like `buildingMapTickets` the counts read view_detail's scope alone."""
+    _, admin_token = coordinator_auth
+    their_uuid, their_token = login_user_auth
+    grants = [(Perm.TICKET_VIEW_DETAIL, "all"), (Perm.TICKET_VIEW_PII, "own")]
+    if view is not None:
+        grants.append((Perm.TICKET_VIEW, view))
+    _, token = await _actor(redis, grants)
+    building = await _create_building(client, admin_token)
+    theirs = await _file_in_building(client, their_token, building["uuid"], floor="3F")
+    await _need(theirs, their_uuid, "hr", 2)
+
+    body = await _gql(client, BUILDING_COUNTS, {"uuid": building["uuid"]}, token)
+    listed = await _gql(client, BUILDING_TICKETS, {"uuid": building["uuid"]}, token)
+
+    assert [t["uuid"] for t in listed["data"]["buildingMapTickets"]] == [theirs]
+    assert body["data"]["buildingMap"] == {"ticketCount": 1, "shortfall": 2}
+
+
 async def test_a_page_of_buildings_is_counted_in_one_query(client, coordinator_auth, login_user_auth):
     """One batched statement for every building on the page, and none for a guest, who is told nothing."""
     user_uuid, admin_token = coordinator_auth

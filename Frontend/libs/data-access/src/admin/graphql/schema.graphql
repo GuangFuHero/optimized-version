@@ -291,7 +291,7 @@ type BuildingMapType {
   ticketCount: Int
 
   """
-  How many people this building is still short (ADR-450): over its tickets not completed or cancelled, each pending 'hr' or 'supply' need with a quantity adds that quantity less assignedCount, never below 0. Rescue and medical needs, and needs with no quantity, add nothing. Null to a caller without ticket.view_detail
+  How much this building is still short, people and supplies together (ADR-450): over its tickets not completed or cancelled, each pending 'hr' or 'supply' need with a quantity adds that quantity less assignedCount, never below 0. Rescue and medical needs, and needs with no quantity, add nothing. Null to a caller without ticket.view_detail
   """
   shortfall: Int
 }

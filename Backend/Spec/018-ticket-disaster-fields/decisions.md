@@ -988,11 +988,12 @@ Dan 2026-10-29 決定用這個做法（A），另開一支 PR 接在 #121 後面
   呼叫者列的那些單，所以等於樓層抽屜的總張數。
 - 缺額：這棟沒結案（不是 completed、cancelled）的單上，類型是 `hr` 或 `supply`、狀態是 `pending`、有填人數
   （`quantity > 0`）的需求，每筆算 max(0, `quantity` − 承接人數)，再加總。承接人數是 `assignedCount` 數的
-  `task_assignments` 列。
+  `task_assignments` 列。物資的數量是東西的件數，所以缺額是人和物資加在一起的數，API 說明也這樣寫。
   - 不算：搜救和醫療需求（09-20 的規則）、沒填人數的需求、刪掉或取消的需求（重複審核併掉的也是取消加刪除）。
   - 舊的 `in_progress` 需求（ADR-293 之前留下的）不算開著，跟前端只認 `pending` 一樣。
 - 權限：沒有 `ticket.view_detail` 的呼叫者（訪客）兩個都回 null，不是 0。有的照 view_detail 的範圍逐列數，
-  跟 `buildingMapTickets` 一樣，例如範圍是 own 就只數自己的單。說出一棟有幾張單，等於說出那些單在哪，
+  跟 `buildingMapTickets` 一樣，例如範圍是 own 就只數自己的單。`ticket.view` 是公開權限，跟列表一樣不看角色
+  對它的設定（2026-11-02 review 時修正）。說出一棟有幾張單，等於說出那些單在哪，
   跟 ADR-386 的 `buildingMapUuid` 同一道邊界。
 - 效能：整個 request 的大樓用一個 loader、一句 SQL 算（`ticket_repository.building_counts`）；訪客一句都不多。
   數什麼跟誰在問有關，所以 loader 在第一次用到時才建，每個 request 只建一次。
