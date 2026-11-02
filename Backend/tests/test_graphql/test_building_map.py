@@ -525,3 +525,105 @@ async def test_a_deleted_building_lists_no_tickets(client, coordinator_auth, log
 
     body = await _gql(client, BUILDING_TICKETS, {"uuid": building["uuid"]}, token)
     assert body["data"]["buildingMapTickets"] == []
+
+
+# --- the site's help request (請求協助) filed inside a building ---
+
+CREATE_HELP_REQUEST = """
+mutation ($input: CreateHelpRequestInput!) {
+  createHelpRequest(input: $input) {
+    ... on TicketCreated { ticket {
+      uuid buildingMapUuid geometry secondaryLocation { county town road no floor room normalizationStatus }
+    } }
+  }
+}
+"""
+
+
+def _help_request_input(building_uuid, **location):
+    return {
+        "title": "咖啡廳天花板漏水",
+        "contactName": "王小明",
+        "buildingMapUuid": building_uuid,
+        "secondaryLocation": location,
+        "tasks": [{"taskType": "hr", "taskName": "清理積水", "quantity": 2}],
+    }
+
+
+async def test_a_help_request_in_a_building_takes_its_point_and_address(
+    client, coordinator_auth, login_user_auth
+):
+    """As createTicket does: the building's point and address, the reporter's floor and room, and a link."""
+    _, admin_token = coordinator_auth
+    _, token = login_user_auth
+    building = await _create_building(client, admin_token)
+    request = _help_request_input(building["uuid"], floor="2F", room="咖啡廳", fullAddress="臺北市假路1號")
+
+    body = await _gql(client, CREATE_HELP_REQUEST, {"input": request}, token)
+
+    assert "errors" not in body, body
+    ticket = body["data"]["createHelpRequest"]["ticket"]
+    assert (ticket["buildingMapUuid"], ticket["geometry"]["coordinates"]) == (
+        building["uuid"],
+        POINT["coordinates"],
+    )
+    assert ticket["secondaryLocation"] == {
+        "county": "花蓮縣",
+        "town": "光復鄉",
+        "road": "中正路",
+        "no": "10號",
+        "floor": "2F",
+        "room": "咖啡廳",
+        "normalizationStatus": "unverified",
+    }
+
+
+@pytest.mark.parametrize(
+    ("extra", "location", "message"),
+    [
+        ({"geometry": POINT}, {"floor": "1F", "room": "閱覽室"}, "Omit geometry"),
+        ({}, {"floor": "9F"}, "Floor '9F' is not in this building"),
+        ({}, {"floor": "1F", "room": "咖啡廳"}, "must be one of"),
+        ({}, {"floor": "1F"}, "must be one of"),
+    ],
+)
+async def test_a_help_request_in_a_building_keeps_to_its_layout(
+    client, coordinator_auth, login_user_auth, extra, location, message
+):
+    """Geometry beside a building, an unknown floor label, or an unlisted area is refused, as for a ticket."""
+    _, admin_token = coordinator_auth
+    _, token = login_user_auth
+    building = await _create_building(client, admin_token)
+    request = {**_help_request_input(building["uuid"], **location), **extra}
+
+    body = await _gql(client, CREATE_HELP_REQUEST, {"input": request}, token)
+
+    assert any(message in e["message"] for e in body["errors"]), body
+    async with open_db() as db:
+        linked = BuildingMapTicketMap.building_map_uuid == building["uuid"]
+        assert await db.scalar(select(BuildingMapTicketMap).where(linked)) is None
+
+
+async def test_a_help_request_cannot_be_filed_under_a_deleted_building(
+    client, coordinator_auth, login_user_auth
+):
+    """A soft-deleted building takes no new requests."""
+    _, admin_token = coordinator_auth
+    _, token = login_user_auth
+    building = await _create_building(client, admin_token)
+    await _gql(client, DELETE_BUILDING, {"uuid": building["uuid"]}, admin_token)
+
+    request = _help_request_input(building["uuid"], floor="3F")
+    body = await _gql(client, CREATE_HELP_REQUEST, {"input": request}, token)
+
+    assert any("Building map not found" in e["message"] for e in body["errors"]), body
+
+
+async def test_a_help_request_needs_geometry_or_building(client, login_user_auth):
+    """Without a building, a request still needs its own point."""
+    _, token = login_user_auth
+    request = {k: v for k, v in _help_request_input(None).items() if k != "buildingMapUuid"}
+
+    body = await _gql(client, CREATE_HELP_REQUEST, {"input": request}, token)
+
+    assert any("geometry or buildingMapUuid is required" in e["message"] for e in body["errors"]), body
