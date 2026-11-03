@@ -7,8 +7,8 @@
  * page or a wrong account.
  *
  * Left out until the page they describe is in: 互助地圖 (its areas), 重複審核, 團隊, 成員與權限 —
- * the prototype has their words. The 誰可以做什麼 tables follow the permissions as decided, the
- * 政府隊's members holding what its admins hold here, as BE-RBAC-3 has it.
+ * the prototype has their words. The 權限 tables follow the permissions as decided, which the
+ * backend is still being brought up to; ask before matching them to its grants instead.
  */
 
 import type { PageHelp } from '../site/page-help/page-help';
@@ -23,25 +23,27 @@ export const ADMIN_PAGE_HELP: Partial<Record<string, PageHelp>> = {
   '/tickets': {
     title: '任務管理',
     what: '集中管理求助任務單，每張單可包含多筆獨立需求。',
-    can: [
-      '搜尋、篩選、查看任務',
-      '建立或處理民眾提交的求助',
-      '派人處理並更新任務進度',
-    ],
+    can: ['搜尋、篩選及查看任務', '建立或處理求助任務', '更新任務內容及進度'],
     sections: [
       {
         title: '開啟空間',
         body: '同棟大樓多人求助時，可在地圖建立空間，填寫名稱及地上、地下樓層數（系統自動新增頂樓 RF）。可查看樓層需求、編輯或刪除（不影響任務單）。任務單填寫 RF 或「頂樓」皆會歸入頂樓。',
       },
     ],
-    // As decided (BE-RBAC-3, B3): the 政府隊's members import, export and open spaces as its admins do;
-    // NGO members do not. 責任區 go to NGO teams only.
+    // As decided: the 政府隊's members import, export and open spaces as its admins do. 責任區 go to
+    // NGO teams only, so an NGO team works the tickets inside its own. Import and export: super
+    // admins, the 政府隊 and NGO admins only — not NGO members, not data auditors. A member deleting
+    // the ticket they created goes without saying; writing it out only confuses.
     roles: [
       ['超級管理員', '全部功能'],
-      ['政府隊（管理員、成員）', '建立、修改、匯入、匯出、開啟空間'],
-      ['非政府組織隊管理員', '建立、修改、匯入、匯出'],
-      ['非政府組織隊成員', '建立、修改'],
-      ['資料檢核員', '查看全部任務與紀錄、匯出、重複審核'],
+      ['政府隊管理員', '建立；修改、刪除（全部任務單）；匯入、匯出；開啟空間'],
+      ['政府隊成員', '建立；修改（全部任務單）；匯入、匯出；開啟空間'],
+      [
+        '非政府組織隊管理員',
+        '建立；修改、刪除（責任區內）；匯出、匯入（責任區內）',
+      ],
+      ['非政府組織隊成員', '建立；修改（責任區內）'],
+      ['資料檢核員', '查看全部任務與紀錄、重複審核'],
     ],
   },
   '/stations': {
@@ -51,24 +53,31 @@ export const ADMIN_PAGE_HELP: Partial<Record<string, PageHelp>> = {
       '新增、編輯站點及營運狀態',
       '審核民眾提交的修改建議',
       '依權限指派站點給負責團隊',
-      '依權限匯入、匯出',
     ],
     sections: [
       {
         title: '個別指派',
-        body: '在列表「指派 Team」欄逐一指定團隊。指派後，團隊可編輯站點及處理修改建議，不會依責任區自動指派。',
+        body: '在列表「指派團隊」欄逐一指定團隊。指派後，團隊可編輯站點及處理修改建議。',
       },
     ],
-    // As decided: the 政府隊's members review every station's suggestions too.
+    // As decided: the 政府隊's members review every station's suggestions too; only its admins
+    // delete any station. Data auditors do not export.
     roles: [
       ['超級管理員', '全部功能'],
       [
-        '政府隊（管理員、成員）',
+        '政府隊管理員',
+        '新增、編輯、刪除任何站點、指派團隊、審核全部站點的修改建議；匯入、匯出',
+      ],
+      [
+        '政府隊成員',
         '新增、編輯站點、指派團隊、審核全部站點的修改建議；匯入、匯出',
       ],
-      ['非政府組織隊管理員', '新增站點、編輯／刪除／審核本隊站點；匯入、匯出'],
+      [
+        '非政府組織隊管理員',
+        '新增站點、匯入（全部）；編輯、刪除、審核、匯出（本隊站點）',
+      ],
       ['非政府組織隊成員', '新增站點、編輯本隊站點'],
-      ['資料檢核員', '審核、撤銷所有修改建議；匯出'],
+      ['資料檢核員', '審核、撤銷所有修改建議'],
     ],
     note: '所有後台人員皆可查看站點。',
   },
