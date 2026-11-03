@@ -218,6 +218,38 @@ async def test_with_the_detail_at_own_area_and_team_match_only_own_tickets(clien
     assert hidden not in teams
 
 
+async def test_with_the_detail_at_zone_area_and_team_match_only_the_zone_tickets(client, redis):
+    """At `zone`, the detail gate is itself a 責任區 test, nested in the team filter and the facets.
+
+    A team identity sees in detail only the tickets in its own zones: another team's ticket outside
+    them matches no filter, and its town and team are not offered, though both are listed.
+    """
+    place, tag = _place(), _tag()
+    county = f"測試縣{tag}"
+    alpha = await _team(f"A {tag}")
+    await _zone(place.township, alpha)
+    bravo = await _team(f"B {tag}")
+    await _zone(place.far, bravo)
+    _, token = await _actor(
+        redis, [(Perm.TICKET_VIEW, "all"), (Perm.TICKET_VIEW_DETAIL, "zone")], team_uuid=alpha
+    )
+    inside = await _tagged(place.here, tag, county=county, town="光復鄉")
+    others = await _tagged(Point(place.here.x + 0.025, place.here.y), tag, county=county, town="玉里鎮")
+    outside = await _tagged(place.elsewhere, tag, county=county, town="鳳林鎮")
+
+    assert await _listed(client, token, q=tag) == {inside, others, outside}
+    assert await _listed(client, token, q=tag, team=alpha) == {inside}
+    assert await _listed(client, token, q=tag, team=bravo) == set()
+    assert await _listed(client, token, q=tag, none=True) == set()
+    assert await _listed(client, token, q=tag, county=county) == {inside}
+
+    facets = (await _gql(client, FACETS, {}, token))["ticketFacets"]
+    assert [a for a in facets["areas"] if a["county"] == county] == [{"county": county, "town": "光復鄉"}]
+    teams = {team["uuid"] for team in facets["teams"]}
+    assert alpha in teams
+    assert bravo not in teams
+
+
 async def test_facets_list_the_areas_and_the_zone_teams(client, redis):
     """Every county and town a listed ticket's address names, once; every team holding a live zone."""
     _, token = await _actor(redis, DETAIL)
