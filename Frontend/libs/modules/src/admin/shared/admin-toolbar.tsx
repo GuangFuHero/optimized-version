@@ -4,7 +4,7 @@ import { Box, Typography } from '@mui/material';
 import { designTokens } from '@rescue-frontend/ui';
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 
-import { fitsOneRow } from './model/toolbar-fit';
+import { toolbarLayout, type ToolbarLayout } from './model/toolbar-fit';
 
 const { color, typography } = designTokens;
 
@@ -22,11 +22,17 @@ interface AdminToolbarProps {
  * the count drops to a line of its own first (BTN-115), so 新增 ▾, the row's most used action, stays
  * at the right end of the first line. The count stays, since it is the only place that says how
  * many rows a filter left; with room again it comes back.
+ *
+ * When the buttons alone don't fit either (超級管理員 and 政府隊 have 開啟空間 too, at 1024 with the
+ * sidebar), 新增 ▾ has to wrap: the count goes down with it and sits just left of it, the second line
+ * kept to the right (BTN-115b), rather than the count taking a third line of its own.
  */
 export function AdminToolbar({ search, count, children }: AdminToolbarProps) {
   const rowRef = useRef<HTMLDivElement>(null);
   const countRef = useRef<HTMLSpanElement>(null);
-  const [countDropped, setCountDropped] = useState(false);
+  const [layout, setLayout] = useState<ToolbarLayout>('inline');
+  // With 新增 ▾ on the second line: how wide the count is there, so it fills the line up to 新增 ▾.
+  const [countBasis, setCountBasis] = useState(0);
 
   // Before paint, so the page never opens on a frame with 新增 wrapped.
   useLayoutEffect(() => {
@@ -36,7 +42,11 @@ export function AdminToolbar({ search, count, children }: AdminToolbarProps) {
       return undefined;
     }
 
-    const measure = () => setCountDropped(!countFits(row, countText));
+    const measure = () => {
+      const next = measureLayout(row, countText);
+      setLayout(next.layout);
+      setCountBasis(next.countBasis);
+    };
     const resizes = new ResizeObserver(measure);
     const observeItems = () => {
       resizes.disconnect();
@@ -60,6 +70,13 @@ export function AdminToolbar({ search, count, children }: AdminToolbarProps) {
     };
   }, []);
 
+  const countSx =
+    layout === 'below'
+      ? { order: 99, flexBasis: '100%' }
+      : layout === 'withLast'
+        ? { order: 98, flexBasis: countBasis, textAlign: 'right' as const }
+        : { ml: 'auto' };
+
   return (
     <Box
       ref={rowRef}
@@ -68,9 +85,13 @@ export function AdminToolbar({ search, count, children }: AdminToolbarProps) {
         flexWrap: 'wrap',
         alignItems: 'center',
         gap: '8px',
-        // Dropped, the count no longer pushes the buttons to the right end: the first of them does.
-        ...(countDropped
+        // Moved, the count no longer pushes the buttons to the right end: the first of them does.
+        ...(layout !== 'inline'
           ? { '& > [data-toolbar-count] + *': { ml: 'auto' } }
+          : null),
+        // 新增 ▾ goes to the second line after the count, which sits just left of it.
+        ...(layout === 'withLast'
+          ? { '& > :last-child': { order: 99 } }
           : null),
       }}
     >
@@ -82,7 +103,7 @@ export function AdminToolbar({ search, count, children }: AdminToolbarProps) {
           ...typography.body[300],
           color: color.fg.neutral.muted,
           whiteSpace: 'nowrap',
-          ...(countDropped ? { order: 99, flexBasis: '100%' } : { ml: 'auto' }),
+          ...countSx,
         }}
       >
         {/* Inline-block, so its width is the text's own, on a line of its own too. */}
@@ -97,24 +118,32 @@ export function AdminToolbar({ search, count, children }: AdminToolbarProps) {
 }
 
 /**
- * Whether everything fits one line with the count in it. The search box counts at its min-width:
- * it shrinks that far before anything wraps (INP-103).
+ * Where the count goes. The search box counts at its min-width: it shrinks that far before
+ * anything wraps (INP-103).
  */
-function countFits(row: HTMLElement, countText: HTMLElement): boolean {
-  const widths = Array.from(row.children).flatMap((item) => {
+function measureLayout(
+  row: HTMLElement,
+  countText: HTMLElement,
+): { layout: ToolbarLayout; countBasis: number } {
+  const gap = Number.parseFloat(getComputedStyle(row).columnGap);
+  const rowWidth = row.getBoundingClientRect().width;
+  const others: number[] = [];
+  let count = 0;
+  let last = 0;
+  for (const item of Array.from(row.children)) {
     // Not rendered (display: none): no width, and no gap either.
-    if (item.getClientRects().length === 0) return [];
+    if (item.getClientRects().length === 0) continue;
     if (item.contains(countText)) {
-      return [countText.getBoundingClientRect().width];
+      count = countText.getBoundingClientRect().width;
+      continue;
     }
-    if (item.hasAttribute('data-toolbar-search')) {
-      return [Number.parseFloat(getComputedStyle(item).minWidth)];
-    }
-    return [item.getBoundingClientRect().width];
-  });
-  return fitsOneRow(
-    widths,
-    Number.parseFloat(getComputedStyle(row).columnGap),
-    row.getBoundingClientRect().width,
-  );
+    const width = item.hasAttribute('data-toolbar-search')
+      ? Number.parseFloat(getComputedStyle(item).minWidth)
+      : item.getBoundingClientRect().width;
+    others.push(width);
+    last = width;
+  }
+  const layout = toolbarLayout(others, count, gap, rowWidth);
+
+  return { layout, countBasis: Math.max(0, rowWidth - last - gap) };
 }
