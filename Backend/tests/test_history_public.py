@@ -1,7 +1,7 @@
 """The public timeline of a help request (ADR-421): what happened, to anyone, with nobody's name.
 
-Audit rows are written by hand, as in test_history_endpoints.py: the test database has no triggers, and
-writing them pins exactly what each case is about.
+Audit rows are written by hand, as in test_history_endpoints.py: each case clears what the triggers
+logged of its setup first, and writing the rows pins exactly what the case is about.
 """
 
 import os
@@ -14,7 +14,6 @@ import pytest
 from sqlalchemy import text, update
 
 from app.core.permissions import Perm
-from app.db.triggers import AUDIT_TRIGGER_FUNC_SQL, AUDITED_TABLES, get_audit_trigger_sql
 from app.models.audit import AuditLog
 from app.models.request import Tickets
 from app.models.secondary_location import SecondaryLocation
@@ -22,6 +21,7 @@ from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask
 from app.services import history_public
 from app.services.history_fields import FIELD_TIERS, Tier
 from tests import test_dedup_resolve as resolving
+from tests.conftest import clear_audit_trail
 from tests.test_history_endpoints import _auth, _user_with
 
 URL = "/api/v1/history/tickets/{}/public"
@@ -125,6 +125,7 @@ async def test_a_guest_reads_what_happened_and_nobody_s_name(client, db_session,
     volunteer = await _user_with(db_session, redis, "去幫忙的人")
     ticket = await _ticket(db_session, owner)
     need = await _need(db_session, ticket, owner)
+    await clear_audit_trail(db_session)
     db_session.add_all(
         [
             *_filed(ticket, need, owner),
@@ -172,6 +173,7 @@ async def test_a_signed_in_account_never_reads_the_contact_details(client, db_se
     )
     ticket = await _ticket(db_session, owner)
     need = await _need(db_session, ticket, owner)
+    await clear_audit_trail(db_session)
     db_session.add_all(
         [
             *_filed(ticket, need, owner),
@@ -215,6 +217,7 @@ async def test_stopping_recruiting_is_told_apart_from_filling_up(client, db_sess
     ticket = await _ticket(db_session, owner)
     filled = await _need(db_session, ticket, owner, name="搬家具")
     stopped = await _need(db_session, ticket, owner)
+    await clear_audit_trail(db_session)
     db_session.add_all(
         [
             _row(filled, "ticket_tasks", "INSERT", by=owner, new={"task_name": "搬家具", "quantity": 1}),
@@ -280,6 +283,7 @@ async def test_a_volunteer_giving_a_place_back_reopens_the_need(client, db_sessi
         minute=2,
         old={"task_uuid": need, "actor_uuid": volunteer},
     )
+    await clear_audit_trail(db_session)
     db_session.add_all(
         [
             *_filed(ticket, need, owner),
@@ -319,6 +323,7 @@ async def test_a_renamed_need_is_named_as_it_is_now_in_every_event(client, db_se
     ticket = await _ticket(db_session, owner)
     need = await _need(db_session, ticket, owner)
     old_name = f"清淤泥 找王小姐 {PHONE}"
+    await clear_audit_trail(db_session)
     db_session.add_all(
         [
             _row(ticket, "tickets", "INSERT", by=owner, new={"uuid": ticket, "title": "民宅清淤"}),
@@ -383,6 +388,7 @@ async def test_the_needs_a_ticket_is_filed_with_come_in_the_site_s_order(client,
         )
         for i, (uuid, name) in enumerate(zip(needs, listed, strict=True))
     ]
+    await clear_audit_trail(db_session)
     db_session.add_all([_row(ticket, "tickets", "INSERT", by=owner, new={"uuid": ticket}), *filed])
     await db_session.commit()
 
@@ -465,6 +471,7 @@ async def test_the_place_and_the_description_are_told_as_changed_without_their_v
     address = SecondaryLocation(uuid=uuidlib.uuid4(), geometry_uuid=ticket, location_type="address")
     db_session.add(address)
     await db_session.flush()
+    await clear_audit_trail(db_session)
     db_session.add_all(
         [
             _row(
@@ -523,6 +530,7 @@ async def test_a_need_s_progress_note_and_details_are_told_as_changed_without_th
     gloves = TaskProperty(uuid=uuidlib.uuid4(), task_uuid=need, property_name="手套", property_value="10 雙")
     db_session.add_all([tools, gloves])
     await db_session.flush()
+    await clear_audit_trail(db_session)
     db_session.add_all(
         [
             *_filed(ticket, need, owner),
@@ -595,6 +603,7 @@ async def test_a_detail_taken_off_and_what_a_fill_or_reopen_also_changed_are_tol
             new={**base, **new},
         )
 
+    await clear_audit_trail(db_session)
     db_session.add_all(
         [
             *_filed(ticket, need, owner),
@@ -665,9 +674,6 @@ async def test_a_merge_tells_this_ticket_s_part_and_the_merge_itself(db):
     fifth volunteer joining B's 清淤, and the 便當 being filed with B. The merge is one event on A, listing
     the needs it brought, with the headcounts after it; what it changed on A's needs is told as any save's.
     """
-    await db.execute(text(AUDIT_TRIGGER_FUNC_SQL))
-    for table in AUDITED_TABLES:
-        await db.execute(text(get_audit_trigger_sql(table)))
     reviewer, ids = await resolving._world(db)
     reviewer_uuid = str(reviewer.uuid)
     await db.commit()
@@ -706,6 +712,7 @@ async def test_the_data_check_and_the_ticket_status_are_not_told(client, db_sess
     owner = await _user_with(db_session, redis, "建單者")
     auditor = await _user_with(db_session, redis, "檢核員")
     ticket = await _ticket(db_session, owner)
+    await clear_audit_trail(db_session)
     db_session.add_all(
         [
             _row(
@@ -746,6 +753,7 @@ async def test_someone_other_than_the_requester_is_staff(client, db_session, red
     owner = await _user_with(db_session, redis, "建單者")
     coordinator = await _user_with(db_session, redis, "協調員")
     ticket = await _ticket(db_session, owner)
+    await clear_audit_trail(db_session)
     db_session.add(
         _row(
             ticket,
@@ -770,6 +778,7 @@ async def test_a_page_says_how_many_there_are(client, db_session, redis):
     owner = await _user_with(db_session, redis, "建單者")
     ticket = await _ticket(db_session, owner)
     need = await _need(db_session, ticket, owner)
+    await clear_audit_trail(db_session)
     db_session.add_all(
         [
             *_filed(ticket, need, owner),

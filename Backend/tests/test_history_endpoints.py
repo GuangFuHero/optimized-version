@@ -19,7 +19,7 @@ from app.models.auth import User
 from app.models.geo import Station
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.models.request import Tickets
-from tests.conftest import auth_headers_for
+from tests.conftest import auth_headers_for, clear_audit_trail
 
 BASE = "/api/v1/history"
 
@@ -107,6 +107,7 @@ async def test_a_ticket_timeline_comes_back_in_the_standard_envelope(client, db_
     """Success / data / meta — the same shape as every other endpoint."""
     owner = await _user_with(db_session, redis, "Owner", Perm.TICKET_VIEW_HISTORY)
     ticket = await _ticket(db_session, owner)
+    await clear_audit_trail(db_session)
     db_session.add(_audit(ticket, old={"status": "pending"}, new={"status": "in_progress"}))
     await db_session.commit()
 
@@ -134,6 +135,7 @@ async def test_a_station_timeline_uses_its_own_capability(client, db_session, re
     db_session.add(station)
     await db_session.flush()
     station_uuid = str(station.uuid)
+    await clear_audit_trail(db_session)
     db_session.add(
         _audit(station_uuid, table="stations", old={"op_hour": "0800-1700"}, new={"op_hour": "24h"})
     )
@@ -150,6 +152,7 @@ async def test_an_empty_timeline_is_not_an_error(client, db_session, redis):
     """A resource created before the triggers existed simply has no history."""
     owner = await _user_with(db_session, redis, "Owner", Perm.TICKET_VIEW_HISTORY)
     ticket = await _ticket(db_session, owner)
+    await clear_audit_trail(db_session)
     await db_session.commit()
 
     resp = await client.get(f"{BASE}/tickets/{ticket}", headers=_auth(owner))
@@ -247,6 +250,7 @@ async def test_paging_slices_events_and_reports_the_full_total(client, db_sessio
     """`total` counts merged events, not audit rows, so paging can be described honestly."""
     owner = await _user_with(db_session, redis, "Owner", Perm.TICKET_VIEW_HISTORY)
     ticket = await _ticket(db_session, owner)
+    await clear_audit_trail(db_session)
     for minute in range(5):
         db_session.add(
             _audit(ticket, old={"status": f"s{minute}"}, new={"status": f"s{minute + 1}"}, minute=minute)
@@ -267,6 +271,7 @@ async def test_an_offset_past_the_end_is_an_empty_page(client, db_session, redis
     """Running off the end is a valid request, not an error."""
     owner = await _user_with(db_session, redis, "Owner", Perm.TICKET_VIEW_HISTORY)
     ticket = await _ticket(db_session, owner)
+    await clear_audit_trail(db_session)
     db_session.add(_audit(ticket, new={"status": "a"}))
     await db_session.commit()
 
@@ -298,6 +303,7 @@ async def test_contact_details_arrive_masked_without_view_pii(client, db_session
     """The tier logic is unit-tested; this proves it is actually wired into the endpoint."""
     owner = await _user_with(db_session, redis, "Owner", Perm.TICKET_VIEW_HISTORY)
     ticket = await _ticket(db_session, owner)
+    await clear_audit_trail(db_session)
     db_session.add(_audit(ticket, old={"contact_phone": "0912345678"}, new={"contact_phone": "0987654321"}))
     await db_session.commit()
 
@@ -312,6 +318,7 @@ async def test_the_raw_payload_is_absent_without_audit_view(client, db_session, 
     """The escape hatch is invisible to callers who did not earn it."""
     owner = await _user_with(db_session, redis, "Owner", Perm.TICKET_VIEW_HISTORY)
     ticket = await _ticket(db_session, owner)
+    await clear_audit_trail(db_session)
     db_session.add(_audit(ticket, new={"status": "a"}))
     await db_session.commit()
 
@@ -333,6 +340,7 @@ async def test_an_auditor_receives_the_raw_payload(client, db_session, redis):
     )
     owner = await _user_with(db_session, redis, "Owner", Perm.TICKET_VIEW)
     ticket = await _ticket(db_session, owner)
+    await clear_audit_trail(db_session)
     db_session.add(
         _audit(ticket, old={"status": "a", "search_text": "舊"}, new={"status": "b", "search_text": "新"})
     )

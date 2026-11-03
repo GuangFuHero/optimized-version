@@ -3,36 +3,11 @@
 import uuid
 
 import pytest
-import pytest_asyncio
 from sqlalchemy import select, text
 
 from app.core.context import request_client_ip, request_user_uuid
-from app.db.triggers import (
-    AUDIT_TRIGGER_FUNC_SQL,
-    AUDITED_TABLES,
-    PROTECT_AUDIT_LOGS_FUNC_SQL,
-    PROTECT_AUDIT_LOGS_TRIGGER_SQL,
-    get_audit_trigger_sql,
-)
 from app.models.audit import AuditLog
 from app.models.auth import User, UserIdentity
-
-
-@pytest_asyncio.fixture(autouse=True)
-async def setup_audit_triggers(db):
-    """Deploy the trigger function and user audit triggers on the clean test database connection."""
-    # 1. Create trigger function
-    await db.execute(text(AUDIT_TRIGGER_FUNC_SQL))
-
-    # 2. Attach triggers on all audited tables
-    for table in AUDITED_TABLES:
-        await db.execute(text(get_audit_trigger_sql(table)))
-
-    # 3. Attach protective trigger on audit_logs table to make it append-only
-    await db.execute(text(PROTECT_AUDIT_LOGS_FUNC_SQL))
-    await db.execute(text(PROTECT_AUDIT_LOGS_TRIGGER_SQL))
-    await db.commit()
-
 
 
 @pytest.mark.asyncio
@@ -95,9 +70,7 @@ async def test_audit_trigger_on_update(db):
 
     # Verify update log
     logs_q = await db.execute(
-        select(AuditLog)
-        .where(AuditLog.row_id == new_user.uuid)
-        .order_by(AuditLog.created_at.asc())
+        select(AuditLog).where(AuditLog.row_id == new_user.uuid).order_by(AuditLog.created_at.asc())
     )
     logs = logs_q.scalars().all()
     assert len(logs) == 2
@@ -123,9 +96,7 @@ async def test_audit_trigger_on_delete(db):
 
     # Verify delete log
     logs_q = await db.execute(
-        select(AuditLog)
-        .where(AuditLog.row_id == user_uuid)
-        .order_by(AuditLog.created_at.asc())
+        select(AuditLog).where(AuditLog.row_id == user_uuid).order_by(AuditLog.created_at.asc())
     )
     logs = logs_q.scalars().all()
 
@@ -222,5 +193,3 @@ async def test_audit_log_redacts_password_hash(db):
     assert "password_hash" not in audit_entry.new_values
     assert audit_entry.new_values["provider"] == "password"
     assert audit_entry.new_values["provider_subject"] == "test_user_subject"
-
-

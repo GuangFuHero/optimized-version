@@ -1,8 +1,8 @@
 """Dedup table constraints, checked on both ways the schema gets built.
 
-Every other test builds its schema from the models (`create_all`), and
+A `TEST_SCHEMA=models` run builds the schema from the models (`create_all`), and
 test_migrations_match_models compares column *names* only, so a CHECK constraint written wrong
-in the migration would pass everything else. These run the same assertions against the models
+in either would pass everything else. These run the same assertions against the models
 and against a database built by `alembic upgrade head` → `downgrade -1` → `upgrade head`.
 """
 

@@ -5,26 +5,10 @@ import os
 os.environ["ENV"] = "testing"
 
 import pytest
-import pytest_asyncio
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.auth import Base, User, UserContact, UserIdentity
-from tests.conftest import TEST_DB_URL  # dedicated test DB, env-driven (single source of truth)
-
-
-@pytest_asyncio.fixture
-async def db():
-    """Provide a session against a freshly (re)created schema in the dedicated test DB."""
-    engine = create_async_engine(TEST_DB_URL, echo=False)
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-        await conn.run_sync(Base.metadata.create_all)
-    factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=True)
-    async with factory() as session:
-        yield session
-    await engine.dispose()
+from app.models.auth import User, UserContact, UserIdentity
 
 
 @pytest.mark.asyncio

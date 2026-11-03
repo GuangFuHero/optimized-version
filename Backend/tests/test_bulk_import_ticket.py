@@ -27,6 +27,9 @@ from app.services.bulk_export import export_tickets
 from app.services.bulk_import import commit_tickets, preview_tickets
 from tests.conftest import acting_as
 
+# Each test defines the dynamic fields it is about, so the ones the migrations seed must not be there.
+pytestmark = pytest.mark.empty_db
+
 IN_ZONE = Point(121.50, 25.00)
 OUT_OF_ZONE = Point(121.90, 25.40)
 ZONE_POLYGON = Polygon([(121.4, 24.9), (121.6, 24.9), (121.6, 25.1), (121.4, 25.1)])

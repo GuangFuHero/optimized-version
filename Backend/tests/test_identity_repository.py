@@ -5,28 +5,11 @@ import os
 os.environ["ENV"] = "testing"
 
 import pytest
-import pytest_asyncio
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
 
-from app.models.auth import Base, User, UserContact, UserIdentity
+from app.models.auth import User, UserContact, UserIdentity
 from app.models.rbac import Role
 from app.repositories.auth_repository import contact_repository, identity_repository
 from app.services.auth_account import create_account
-from tests.conftest import TEST_DB_URL  # dedicated test DB, env-driven (single source of truth)
-
-
-@pytest_asyncio.fixture
-async def db():
-    """Provide a session against a freshly (re)created schema in the dedicated test DB."""
-    engine = create_async_engine(TEST_DB_URL, echo=False)
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-        await conn.run_sync(Base.metadata.create_all)
-    factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=True)
-    async with factory() as session:
-        yield session
-    await engine.dispose()
 
 
 @pytest.mark.asyncio
@@ -69,6 +52,7 @@ async def test_create_verified_contact(db):
     """create_verified attaches a verified contact to an existing user."""
     from app.models.auth import User
     from app.repositories.auth_repository import contact_repository
+
     u = User(name="A")
     db.add(u)
     await db.flush()
@@ -96,8 +80,8 @@ async def test_get_by_provider_subject(db):
     db.add(Role(name="user", kind="platform"))
     await db.commit()
     user = await create_account(
-        db, name="G", provider="google", provider_subject="sub-xyz",
-        contact_type="email", value="g@x.com")
+        db, name="G", provider="google", provider_subject="sub-xyz", contact_type="email", value="g@x.com"
+    )
     found = await identity_repository.get_by_provider_subject(db, provider="google", subject="sub-xyz")
     assert found is not None and found.user_uuid == user.uuid
     assert await identity_repository.get_by_provider_subject(db, provider="google", subject="nope") is None

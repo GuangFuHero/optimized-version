@@ -18,17 +18,12 @@ import uuid
 os.environ["ENV"] = "testing"
 
 import pytest
-import pytest_asyncio
 from geoalchemy2.shape import from_shape
 from shapely.geometry import Point
-from sqlalchemy import select, text
+from sqlalchemy import select
 
 from app.db.triggers import (
-    AUDIT_TRIGGER_FUNC_SQL,
     AUDITED_TABLES,
-    PROTECT_AUDIT_LOGS_FUNC_SQL,
-    PROTECT_AUDIT_LOGS_TRIGGER_SQL,
-    get_audit_trigger_sql,
 )
 from app.models.audit import AuditLog
 from app.models.auth import User
@@ -36,17 +31,6 @@ from app.models.geo import Station
 from app.models.request import Tickets
 from app.models.station_property import StationProperty
 from app.models.ticket_task import TaskProperty, TicketTask
-
-
-@pytest_asyncio.fixture(autouse=True)
-async def audit_triggers(db):
-    """Deploy the audit trigger function and attach it to every table in AUDITED_TABLES."""
-    await db.execute(text(AUDIT_TRIGGER_FUNC_SQL))
-    for table in AUDITED_TABLES:
-        await db.execute(text(get_audit_trigger_sql(table)))
-    await db.execute(text(PROTECT_AUDIT_LOGS_FUNC_SQL))
-    await db.execute(text(PROTECT_AUDIT_LOGS_TRIGGER_SQL))
-    await db.commit()
 
 
 async def _logs_for(db, table_name: str) -> list[AuditLog]:
@@ -299,8 +283,8 @@ def test_every_audited_table_has_a_trigger_installed_by_some_migration():
     appending a table here later has no effect on an already-migrated database unless a new
     migration calls `get_audit_trigger_sql` for it (which is what feature 013 did for
     `project_settings`). Without this test the failure mode is silent: the list says the
-    table is audited, the suite agrees because its fixture attaches triggers at runtime, and
-    production never writes a single audit row for it.
+    table is audited, a `TEST_SCHEMA=models` run agrees because it attaches triggers from the
+    list, and production never writes a single audit row for it.
 
     Matching is deliberately on the trigger call and on the frozen snapshot only — a bare
     table name is not enough, since every table is also named by its own CREATE TABLE.

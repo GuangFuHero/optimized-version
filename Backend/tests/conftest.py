@@ -5,7 +5,7 @@ import os
 os.environ["ENV"] = "testing"
 
 # pytest-xdist (`-n N`) runs each worker in its own process and exports its name — gw0, gw1, … —
-# before this module is imported; unset in a plain run. Tests drop the database schema and flush
+# before this module is imported; unset in a plain run. Tests empty the database tables and flush
 # their Redis db, so two workers sharing either would wipe each other mid-test: each worker gets
 # its own database (`<name>_gw0`, …) and its own Redis db index below.
 _XDIST_WORKER = os.getenv("PYTEST_XDIST_WORKER")
@@ -13,13 +13,12 @@ _XDIST_WORKER = os.getenv("PYTEST_XDIST_WORKER")
 # Dedicated Postgres test DB (env-driven). Resolved BEFORE any `app.*` import so the application
 # engine (app.db.session) binds to the test DB, not the dev `postgres` maintenance DB. Session
 # tests use the real app engine (no get_db override), so this is what keeps them off dev `postgres`.
-TEST_DB_URL = os.getenv(
+_BASE_DB_URL = os.getenv(
     "TEST_DB_URL",
     "postgresql+asyncpg://postgres:postgres@localhost:5432/disaster_rescue_test",
 )
-if _XDIST_WORKER:
-    TEST_DB_URL = f"{TEST_DB_URL}_{_XDIST_WORKER}"
-# Maintenance DB used to bootstrap the dedicated test DB (CREATE DATABASE can't run in a txn).
+TEST_DB_URL = f"{_BASE_DB_URL}_{_XDIST_WORKER}" if _XDIST_WORKER else _BASE_DB_URL
+# Maintenance DB used to create the template and the per-worker databases.
 _ADMIN_DB_URL = os.getenv(
     "TEST_ADMIN_DB_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/postgres"
 )
@@ -47,10 +46,11 @@ from app.core.security import create_access_token  # noqa: E402
 from app.main import app  # noqa: E402
 from app.messaging.email import get_email_sender  # noqa: E402
 from app.messaging.sms import get_sms_sender  # noqa: E402
-from app.models.auth import Base, User  # noqa: E402
+from app.models.auth import User  # noqa: E402
 from app.models.rbac import Role, UserRoleAssign  # noqa: E402
 from app.sso.google import get_google_verifier  # noqa: E402
 from app.sso.line import get_line_verifier  # noqa: E402
+from tests import db_reset  # noqa: E402
 from tests.fakes import FakeGoogleVerifier, FakeLineVerifier  # noqa: E402
 
 TEST_REDIS_URL = os.getenv("TEST_REDIS_URL", "redis://localhost:6379/15")  # dedicated logical DB
@@ -94,121 +94,85 @@ def pytest_collection_finish(session) -> None:
                 )
 
 
-# The extensions live in a schema of their own, installed once per database, because the `db` and
-# `db_session` fixtures drop `public` for every test. With the extensions in `public` each drop took
-# about 1,600 extension objects with it (postgis 900, postgis_raster 500) and each test put them
-# back — a serial run took 15 minutes instead of 9, and one lock per object ran Postgres out of
-# shared lock memory as soon as a few pytest-xdist workers did it at once. `search_path` is set on
-# the database, so every connection, the app's engine included, finds them unqualified.
-_EXTENSION_SCHEMA = "extensions"
-_EXTENSIONS = (
-    "postgis",
-    # gin_trgm_ops for the search_text indexes: without it Base.metadata.create_all fails —
-    # not one test, the whole suite.
-    "pg_trgm",
-    # h3 + h3_postgis snap a ticket's point to a hexagon for callers without ticket.view_detail
-    # (ADR-281). The resolvers call them at query time, so without them every anonymous ticket
-    # read fails. h3_postgis brings postgis_raster in with it.
-    "h3",
-    "h3_postgis",
-)
+# The run's template database is built once, here or in the xdist controller, and each process
+# that runs tests clones it (tests/db_reset.py). A worker never builds, and the controller of an
+# xdist run never runs a test, so neither needs the other half.
+def pytest_sessionstart(session) -> None:
+    """Build the template from alembic (or the models), then this process's own database."""
+    config = session.config
+    if not hasattr(config, "workerinput"):
+        db_reset.build_template(config, _BASE_DB_URL, _ADMIN_DB_URL)
+    if not config.pluginmanager.has_plugin("dsession"):
+        db_reset.create_worker_db(_BASE_DB_URL, _ADMIN_DB_URL, TEST_DB_URL)
 
 
-async def _extensions_outside_their_schema() -> int:
-    """How many of the extensions are installed somewhere other than `_EXTENSION_SCHEMA`."""
-    eng = create_async_engine(TEST_DB_URL, isolation_level="AUTOCOMMIT")
-    try:
-        async with eng.connect() as conn:
-            return await conn.scalar(
-                text(
-                    "SELECT count(*) FROM pg_extension e"
-                    " JOIN pg_namespace n ON n.oid = e.extnamespace"
-                    " WHERE e.extname = ANY(:names) AND n.nspname <> :schema"
-                ),
-                {"names": list(_EXTENSIONS), "schema": _EXTENSION_SCHEMA},
-            )
-    finally:
-        await eng.dispose()
+def pytest_configure(config) -> None:
+    """Register the database markers."""
+    config.addinivalue_line(
+        "markers", "own_db: run on a fresh copy of the template where schema changes are allowed"
+    )
+    config.addinivalue_line(
+        "markers", "empty_db: start from empty tables, without the rows the migrations insert"
+    )
 
 
-@pytest_asyncio.fixture(scope="session", loop_scope="session", autouse=True)
-async def _ensure_test_database():
-    """Create the dedicated test DB and its extensions before any test.
-
-    Tests never touch dev `postgres`. A test DB made before the extensions had a schema of their
-    own keeps them in `public`, where the first per-test drop would take them — so it is dropped
-    and made again, once. It holds nothing worth keeping: every test wipes it anyway.
-
-    Two gotchas handled here:
-    - asyncpg can't run ``CREATE DATABASE`` inside a transaction / prepared statement, so we use an
-      AUTOCOMMIT engine and ``exec_driver_sql`` (which sends the statement unprepared).
-    - the fixture is session-scoped with a session-scoped loop so pytest-asyncio doesn't raise a
-      "fixture scoped to a different loop" error against the function-scoped test loops.
-    """
-    admin = create_async_engine(_ADMIN_DB_URL, isolation_level="AUTOCOMMIT")
-    async with admin.connect() as conn:
-        exists = await conn.scalar(
-            text("SELECT 1 FROM pg_database WHERE datname = :name"), {"name": _TEST_DB_NAME}
-        )
-        if exists and await _extensions_outside_their_schema():
-            await conn.exec_driver_sql(f'DROP DATABASE "{_TEST_DB_NAME}" WITH (FORCE)')
-            exists = False
-        if not exists:
-            await conn.exec_driver_sql(f'CREATE DATABASE "{_TEST_DB_NAME}"')
-        await conn.exec_driver_sql(
-            f'ALTER DATABASE "{_TEST_DB_NAME}" SET search_path = public, {_EXTENSION_SCHEMA}'
-        )
-    await admin.dispose()
-
-    eng = create_async_engine(TEST_DB_URL, isolation_level="AUTOCOMMIT")
-    async with eng.connect() as conn:
-        await conn.exec_driver_sql(f"CREATE SCHEMA IF NOT EXISTS {_EXTENSION_SCHEMA}")
-        for extension in _EXTENSIONS:
-            await conn.exec_driver_sql(
-                f"CREATE EXTENSION IF NOT EXISTS {extension} SCHEMA {_EXTENSION_SCHEMA} CASCADE"
-            )
-    await eng.dispose()
-
-
-async def _rebuild_public_schema(conn) -> None:
-    """Drop every table and build them again from the models; the extensions are left alone."""
-    await conn.execute(text("DROP SCHEMA public CASCADE;"))
-    await conn.execute(text("CREATE SCHEMA public;"))
-    await conn.run_sync(Base.metadata.create_all)
-
-
-
-# The six disaster keys migration e7b249d0af31 seeds. The test schema comes from
-# `Base.metadata.create_all`, which carries data from no migration, so any fixture whose test
-# writes a disaster type has to seed them — since feature 018 the vocabulary is validated
-# against this table and an unseeded one rejects every label.
+# The disaster vocabulary the migrations seed. Fixtures seed it again, insert-if-missing, so a
+# test also finds it when the template comes from the models (`TEST_SCHEMA=models`).
 DISASTER_TYPES = [
-    ("flood", "水災"), ("landslide", "土石流"), ("epidemic", "疫情"),
-    ("radiation", "核／輻射"), ("fire", "火災"), ("earthquake", "地震"),
+    ("flood", "水災"),
+    ("landslide", "土石流"),
+    ("epidemic", "疫情"),
+    ("radiation", "核／輻射"),
+    ("fire", "火災"),
+    ("earthquake", "地震"),
 ]
 
 
-def seed_disaster_types(session) -> None:
-    """Add the six seeded disaster types to a session (caller commits)."""
+async def seed_disaster_types(session) -> None:
+    """Add whichever of the six disaster types are missing (caller commits)."""
+    from sqlalchemy.dialects.postgresql import insert
+
     from app.models.disaster_type import DisasterType
 
-    session.add_all(DisasterType(key=key, label=label) for key, label in DISASTER_TYPES)
+    await session.execute(
+        insert(DisasterType)
+        .values([{"key": key, "label": label} for key, label in DISASTER_TYPES])
+        .on_conflict_do_nothing(index_elements=["key"])
+    )
+
+
+async def ensure_role(session, name: str, kind: str = "platform") -> Role:
+    """The role called `name`, added if missing (caller commits)."""
+    role = await session.scalar(select(Role).where(Role.name == name))
+    if role is None:
+        role = Role(name=name, kind=kind)
+        session.add(role)
+        await session.flush()
+    return role
+
+
+async def clear_audit_trail(session) -> None:
+    """Delete every audit_logs row so far, past its append-only guard (caller commits).
+
+    For tests that write the trail by hand: the audit triggers have already logged their setup.
+    """
+    await session.flush()
+    await session.execute(text("SET LOCAL session_replication_role = replica"))
+    await session.execute(text("DELETE FROM audit_logs"))
+    await session.execute(text("SET LOCAL session_replication_role = origin"))
 
 
 async def schema_has_role(name: str) -> bool:
-    """Whether the test DB still holds the schema and a role called `name`.
+    """Whether the test DB still holds a role called `name`.
 
-    tests/session/ and tests/test_graphql/ seed their roles once and reuse them, while the `db`
-    and `db_session` fixtures below drop the whole schema for every test that uses them. A plain
-    run happens never to put one of those between two session or GraphQL tests; under
+    tests/test_graphql/ seeds its roles once and reuses them, while the `db`
+    and `db_session` fixtures below empty every table for each test that uses them. Under
     pytest-xdist a worker can run any file between two others, so "already seeded" has to be
     looked up rather than remembered.
     """
     engine = create_async_engine(TEST_DB_URL, echo=False)
     try:
         async with engine.connect() as conn:
-            if not await conn.scalar(text("SELECT to_regclass('public.roles') IS NOT NULL")):
-                return False
             return bool(
                 await conn.scalar(
                     text("SELECT EXISTS (SELECT 1 FROM roles WHERE name = :name)"), {"name": name}
@@ -230,30 +194,40 @@ def _session_factory(engine):
 
 
 @pytest_asyncio.fixture
-async def db():
-    """Fresh schema per test, UNSEEDED (for model/repo/service/gate unit tests). Wipes the test DB."""
-    engine = create_async_engine(TEST_DB_URL, echo=False)
-    async with engine.begin() as conn:
-        await _rebuild_public_schema(conn)
-    factory = _session_factory(engine)
-    async with factory() as session:
-        yield session
+async def test_db_engine(request):
+    """The engine `db` and `db_session` use: on this worker's database, freshly reset.
+
+    The reset empties every table and puts back the rows the migrations inserted; `empty_db`
+    leaves them out. `own_db` points the engine at a fresh copy of the template instead.
+    """
+    own = request.node.get_closest_marker("own_db") is not None
+    own_name = f"{_TEST_DB_NAME}_own"
+    if own:
+        engine = create_async_engine(await db_reset.create_own_db(_BASE_DB_URL, _ADMIN_DB_URL, own_name))
+    else:
+        engine = create_async_engine(TEST_DB_URL)
+        await db_reset.reset(engine, baseline=request.node.get_closest_marker("empty_db") is None)
+    yield engine
     await engine.dispose()
+    if own:
+        await db_reset.drop_own_db(_ADMIN_DB_URL, own_name)
 
 
 @pytest_asyncio.fixture
-async def db_session():
-    """Fresh schema + seeded default 'user' platform role per test (self-contained; wipes the test DB)."""
-    engine = create_async_engine(TEST_DB_URL, echo=False)
-    async with engine.begin() as conn:
-        await _rebuild_public_schema(conn)
-    factory = _session_factory(engine)
-    async with factory() as session:
-        session.add(Role(name="user", kind="platform"))
-        seed_disaster_types(session)
+async def db(test_db_engine):
+    """A session on a freshly reset test DB, holding only what the migrations inserted."""
+    async with _session_factory(test_db_engine)() as session:
+        yield session
+
+
+@pytest_asyncio.fixture
+async def db_session(test_db_engine):
+    """A session on a freshly reset test DB, with the default `user` role and disaster types."""
+    async with _session_factory(test_db_engine)() as session:
+        await ensure_role(session, "user")
+        await seed_disaster_types(session)
         await session.commit()
         yield session
-    await engine.dispose()
 
 
 async def token_for(redis, user_uuid, role=None, team=None) -> str:

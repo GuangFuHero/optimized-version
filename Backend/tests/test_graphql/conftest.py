@@ -15,7 +15,6 @@ from sqlalchemy.orm import sessionmaker
 from app.core.identity import encode_act
 from app.core.permissions import Perm
 from app.core.security import create_access_token
-from app.db.session import Base
 from app.dedup_engine import registry as dedup_registry
 from app.main import app
 from app.models.auth import User
@@ -25,6 +24,7 @@ from app.models.request import Tickets
 from app.models.station_property import StationProperty
 from app.models.ticket_task import TicketTask
 from app.repositories.session_repository import SessionRepository
+from tests import db_reset
 from tests.conftest import TEST_DB_URL, schema_has_role  # env-driven, per-worker under xdist
 
 
@@ -40,12 +40,14 @@ async def test_db():
 
 
 async def _grant(db, role: Role, perm_cache: dict, perm: Perm, scope: str) -> None:
-    """Create (or reuse) a Permission row and grant `role` `perm` at `scope`."""
+    """Grant `role` `perm` at `scope`, adding the Permission row if no one has yet."""
     permission = perm_cache.get(perm.value)
     if permission is None:
-        permission = Permission(key=perm.value)
-        db.add(permission)
-        await db.flush()
+        permission = await db.scalar(select(Permission).where(Permission.key == perm.value))
+        if permission is None:
+            permission = Permission(key=perm.value)
+            db.add(permission)
+            await db.flush()
         perm_cache[perm.value] = permission
     db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope))
 
@@ -81,7 +83,7 @@ async def _ensure_platform_role(name: str, grants) -> None:
 
 
 async def _ensure_db():
-    """Create tables and seed RBAC roles, unless another test left them in place.
+    """Reset the DB and seed the RBAC roles below, unless they survived since the last seeding.
 
     The roles below are committed together, so finding the first one means all are there.
     """
@@ -89,10 +91,7 @@ async def _ensure_db():
         return
 
     eng = create_async_engine(TEST_DB_URL, echo=False)
-    async with eng.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-        await conn.run_sync(Base.metadata.create_all)
-
+    await db_reset.reset(eng)
     factory = sessionmaker(eng, class_=AsyncSession, expire_on_commit=True)
     async with factory() as db:
         login_role = Role(name="Login User", kind="platform")
@@ -217,7 +216,7 @@ def _no_dedup_hints(request, monkeypatch):
 
 @pytest_asyncio.fixture(autouse=True)
 async def setup_db():
-    """Ensure the test database schema and seed data are initialized before each test."""
+    """Ensure the seed roles are in the test database before each test."""
     await _ensure_db()
     # Dispose the app-level engine pool so each test gets fresh connections
     # on the current event loop (avoids "Future attached to a different loop").

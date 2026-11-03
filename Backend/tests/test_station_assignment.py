@@ -43,7 +43,7 @@ from app.services.station import (
     update_station_property,
 )
 from app.services.suggestion import SuggestionDecision, merge_station_suggestions
-from tests.conftest import TEST_DB_URL, acting_as
+from tests.conftest import TEST_DB_URL, acting_as, clear_audit_trail
 
 _POINT = Point(121.5, 24.5)
 
@@ -338,13 +338,14 @@ async def test_a_station_photo_is_moderated_by_the_stations_team(db):
 async def test_the_timeline_names_the_team_a_station_was_assigned_to(db):
     """ADR-285 decision 9: a reassignment reads as team names, not bare uuids.
 
-    The audit row is written by hand, shaped the way `audit_trigger_func()` writes it: the
-    `db` fixture builds the schema without the triggers (see tests/test_history_service.py).
+    The audit row is written by hand, shaped the way `audit_trigger_func()` writes it, after
+    clearing what the triggers logged of the setup.
     """
     ngo = await _team(db, "花蓮慈濟搜救隊", "ngo")
     author = await _user(db, "Author")
     viewer = await _user(db, "Viewer")
     station = await _station(db, created_by=author, team=ngo)
+    await clear_audit_trail(db)
     db.add(
         AuditLog(
             uuid=uuidlib.uuid4(),
