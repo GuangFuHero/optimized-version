@@ -903,7 +903,7 @@ export type DuplicateHintRates =
   components['schemas']['DuplicateHintRatesResponse'];
 
 /**
- * The fast layer's 提示率 and 誤報率 for task and station (#242, Spec 025 ADR-455): one row each.
+ * The fast layer's 提示率 and 誤報率 for task and station (#242, Spec 025 ADR-458): one row each.
  * Without `since` / `until` the backend takes the last 30 days. Needs `ai_duplicate.view`, as the
  * review page does.
  */

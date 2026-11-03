@@ -52,7 +52,7 @@ function InfoTip({ label, notes }: { label: string; notes: string[] }) {
 
 /**
  * 提示率 and 誤報率 of the fast layer for the tab's kind, over the last 30 days (#242, Spec 025
- * ADR-455). Two show-only tiles, each with its ⓘ, and the lines that say what the numbers mean.
+ * ADR-458). Two show-only tiles, each with its ⓘ, and the lines that say what the numbers mean.
  */
 export function HintRates({ tab }: { tab: PairTab }) {
   const rates = useDuplicateHintRates();
