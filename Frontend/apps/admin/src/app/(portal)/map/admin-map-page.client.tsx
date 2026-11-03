@@ -1,6 +1,7 @@
 'use client';
 
 import { Box, Stack } from '@mui/material';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -371,34 +372,32 @@ export function AdminMapPageClient() {
     [visibleClosureAreas, visiblePublicZones, viewportStore],
   );
   // `?zone=<uuid>` (the bell's 責任區 notices) opens on that area once the areas are in, as a click
-  // in the list does. Read once: an area the viewer may not see, or one since deleted, leaves the
-  // map as it is.
-  const zoneFromUrl = useRef<string | null | undefined>(undefined);
+  // in the list does. Read from the router, so a notice opened while already on this page selects
+  // too. The param is taken off once used, so the same notice opened again changes the URL again.
+  // An area the viewer may not see, or one since deleted, leaves the map as it is.
+  const router = useRouter();
+  const pathname = usePathname();
+  const zoneParam = useSearchParams().get('zone');
   useEffect(() => {
-    if (zoneFromUrl.current === undefined) {
-      zoneFromUrl.current = new URLSearchParams(window.location.search).get(
-        'zone',
-      );
-    }
-
-    const zoneId = zoneFromUrl.current;
-
-    if (!zoneId || !areas.hasFetchedOnce) {
+    if (!zoneParam || !areas.hasFetchedOnce) {
       return;
     }
 
-    zoneFromUrl.current = null;
-
     if (
       [...visibleClosureAreas, ...visiblePublicZones].some(
-        (area) => area.id === zoneId,
+        (area) => area.id === zoneParam,
       )
     ) {
-      handleSelectArea(zoneId);
+      handleSelectArea(zoneParam);
     }
+
+    router.replace(pathname, { scroll: false });
   }, [
+    zoneParam,
     areas.hasFetchedOnce,
     handleSelectArea,
+    pathname,
+    router,
     visibleClosureAreas,
     visiblePublicZones,
   ]);
