@@ -73,7 +73,7 @@
 | station.review | — | — | all | all | team | team（僅 gov）|
 | station.revoke | — | — | all | all | — | — |
 | **station.assign** | — | — | — | all | all（僅 gov） | all（僅 gov） |
-| station.export | — | — | all | all | team | team（僅 gov）|
+| station.export | — | — | — | all | team | team（僅 gov）|
 | station.import | — | — | — | all | all | all（僅 gov）|
 
 > **站點跟著指派的 team 走，不跟 zone（ADR-285）。** `team` ＝指派給當前身分那一隊的站點
@@ -105,7 +105,7 @@
 | ticket.delete | — | own | — | all | zone | own |
 | ticket.assign | — | own | — | all | zone | own |
 | **ticket.audit** | — | — | all | all | zone | zone |
-| ticket.export | — | — | all | all | zone | zone |
+| ticket.export | — | — | — | all | zone | zone（僅 gov）|
 | ticket.import | — | — | — | all | all | all（僅 gov）|
 
 > **gov team 的 `zone` 視同 `all`（BE-RBAC-3 B3，2026-11-01）。** 責任區只指派給 ngo team；gov 負責劃分與指派，自己不會有責任區，
@@ -113,12 +113,12 @@
 > 在 active gov team 身分下解析為 `all`（`resolve_scope`，`GOV_TEAM_ZONE_WIDENED_PERMS`）；只放寬本來是 `zone` 的授權，
 > member 的 `delete` / `assign` 維持 `own`。`ticket.audit` 不放寬（任務單資料檢核 11/01 取消）。
 
-> **「僅 gov」的 member 欄（BE-RBAC-3 B3，2026-11-01／02）。** gov 與 ngo 成員共用 `member` 角色；匯入匯出、站點審核佇列、
-> 責任區（含開啟空間）這幾項（任務單匯出除外，每個成員都有），`member` 只有在 active gov team 身分下才算數，ngo 成員解析為 `none`
+> **「僅 gov」的 member 欄（BE-RBAC-3 B3，2026-11-01～03）。** gov 與 ngo 成員共用 `member` 角色；匯入匯出、站點審核佇列、
+> 責任區（含開啟空間）這幾項，`member` 只有在 active gov team 身分下才算數，ngo 成員解析為 `none`
 > （`GOV_MEMBER_ONLY_PERMS`，在 `resolve_scope` 判斷，所以權限清單、各檢查、新建議通知都一致）。ngo 管理員不受影響。
 > capability 目錄以 `team_gov_zone_widened` / `team_gov_member_only` 兩個旗標標示。
 
-> **批量匯入匯出（feature 015, ADR-110/111）**：`*.export` 的 scope 是有作用的——它決定匯出檔涵蓋哪些列（team admin 只拿得到自己 WorkZone 內的通報單、指派給本隊的站點）。`*.import` 一律 `all`，因為逐筆保護來自每一列仍會跑的 `*.add` / `*.edit` 檢查；在這裡放 zone 只會看起來有意義而不影響任何行為。`data_auditor` 有 export 無 import（oversight only，除了審核之外全範圍無寫權）；platform user 沒有。team member：任務單匯出每個成員都有（ngo 成員匯出自己責任區的單，Carol 2026-11-02；gov 成員的 `zone` 放寬為 `all`）；任務單匯入與站點匯入匯出只有 gov team 的成員有（BE-RBAC-3 B3，2026-11-01；`GOV_MEMBER_ONLY_PERMS` 讓 ngo 成員的授權解析為 `none`）。
+> **批量匯入匯出（feature 015, ADR-110/111）**：`*.export` 的 scope 是有作用的——它決定匯出檔涵蓋哪些列（team admin 只拿得到自己 WorkZone 內的通報單、指派給本隊的站點）。`*.import` 一律 `all`，因為逐筆保護來自每一列仍會跑的 `*.add` / `*.edit` 檢查；在這裡放 zone 只會看起來有意義而不影響任何行為。`data_auditor` 匯出、匯入都沒有（ADR-460，Carol 2026-11-03：只在後台畫面上檢核資料）；platform user 也沒有。team member：匯入匯出只有 gov team 的成員有，scope 同 admin、放寬為 `all`（BE-RBAC-3 B3，Carol 2026-11-01～03；`GOV_MEMBER_ONLY_PERMS` 讓 ngo 成員的授權解析為 `none`）。
 
 > **檢核**：`ticket.audit` 管「單的資料檢核」——`auditTicket` 給出結論（`audited` 已檢核、`audit_issue` 有疑慮，後者必填 `note`），並解鎖 `auditNote`、`auditedAt`、`auditedBy`、`auditHistory`、`changesSinceAudit`。`auditStatus` 本身公開，前台可據此排除有疑慮的單；前台一律以 `user` 身分運作，沒有 `ticket.audit`，所以其餘欄位只在後台看得到。檢核只在單的層級，需求沒有各自的檢核。結論只對當時的內容成立：之後內容一變（文字、地址、災害欄位、需求內容、新增需求）就回到 `no_audit`；承接、人數、刪除需求、優先度、進度備註不算。`need_audit` 只由掃描系統設定，內容變動時維持不變。`audit_issue` 會通知建單者與已承接的志工（不含說明）。
 

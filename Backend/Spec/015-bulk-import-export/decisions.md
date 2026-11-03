@@ -124,7 +124,7 @@
 
 ### ADR-111 grant 矩陣：super_admin 全拿，team admin 可用，member 與 user 不給
 
-> **member 一列已被 ADR-459 取代**（2026-11-02，BE-RBAC-3 B3）：成員可匯出任務單，政府隊成員另可匯入與匯出站點。其餘各列不變。
+> **member 一列已被 ADR-459 取代**（BE-RBAC-3 B3）：政府隊成員可匯入、匯出，NGO 成員仍不行。**data_auditor 一列已被 ADR-460 取代**：資料檢核員不匯出。其餘各列不變。
 
 **白話**：平台管理員什麼都能做；團隊管理員能匯出自己負責區、能匯入；現場人員和一般使用者都不給。
 
@@ -902,13 +902,13 @@ Notion 票：https://app.notion.com/p/406bc24b8353813d9f1afba3465ab9e2
 
 ---
 
-### ADR-459 政府隊的任務單範圍放寬到全部；成員可匯出任務單，政府隊成員可匯入、匯出站點
+### ADR-459 政府隊的任務單範圍放寬到全部；政府隊成員可匯入、匯出
 
 **白話**：責任區只會指派給 NGO，政府隊沒有責任區，所以政府隊的「責任區」權限碰不到任何任務單。改成政府隊的任務單一律
-全部；成員都能匯出自己範圍的任務單，政府隊成員另外跟政府隊管理員一樣能匯入、匯出站點。NGO 成員只多了任務單匯出。
+全部；政府隊成員跟政府隊管理員一樣能匯入、匯出任務單與站點。NGO 成員維持不能匯入匯出。
 
 **規則來源**：Notion BE-RBAC-3「RBAC — admin portal permission matrix」🔄 Nov 01 Updates，B3（Carol 2026-11-01、
-2026-11-02），https://app.notion.com/p/27fbc24b8353838e947001849c73ab39 ；實作 #260、追蹤 #259。
+2026-11-02、2026-11-03），https://app.notion.com/p/27fbc24b8353838e947001849c73ab39 ；實作 #260、追蹤 #259。
 
 **Decision**：
 
@@ -921,11 +921,10 @@ Notion 票：https://app.notion.com/p/406bc24b8353813d9f1afba3465ab9e2
    | 角色 | station.export | station.import | ticket.export | ticket.import |
    |---|---|---|---|---|
    | member（gov team） | team → all | all | zone → all | all |
-   | member（ngo team） | — | — | zone | — |
+   | member（ngo team） | — | — | — | — |
 
-   seed 給 `member` 與 admin 相同的 scope；`GOV_MEMBER_ONLY_PERMS` 讓 `ticket.import`、`station.export`、
-   `station.import` 只在 active gov team 身分下算數，ngo 成員的角色授權解析為 `none`。`ticket.export` 不在其中：
-   ngo 成員匯出自己責任區的單（Carol 2026-11-02）。
+   seed 給 `member` 與 admin 相同的 scope；`GOV_MEMBER_ONLY_PERMS` 讓這四項只在 active gov team 身分下算數，
+   ngo 成員的角色授權解析為 `none`（Carol 2026-11-03，照 BULK-102；取代 2026-11-02「ngo 成員可匯出責任區內任務單」）。
 3. **同一份清單也管 `station.review` 與 `work_zone.*`**：政府隊成員審站點修改建議、畫與指派責任區、開啟空間，
    與政府隊管理員相同；ngo 成員不行。這也取代 BE-036「開啟空間只給超管與政府隊管理員」（2026-10-14）。
 4. **只擋角色的授權**：超管在 `/admin/rbac` 直接給某個 ngo 成員的授權照樣有效（ADR-073）。ngo 管理員不受影響。
@@ -933,17 +932,38 @@ Notion 票：https://app.notion.com/p/406bc24b8353813d9f1afba3465ab9e2
    （`rbac_admin`）都走同一套規則；`/admin/rbac/capabilities` 以 `team_gov_zone_widened`、`team_gov_member_only`
    標示。既有資料庫由 migration `c4e7a2b91d05` 補上 `member` 的授權（只補缺的，保留 `/admin/rbac` 的修改）。
 
-**取代**：ADR-111 的 member 一列；BE-036 的按鈕可見範圍。#241 的 ADR-453（只給成員任務單匯出、不給匯入與站點匯出）
-不進 main，內容由這一條涵蓋。
+**取代**：ADR-111 的 member 一列；BE-036 的按鈕可見範圍。#241 的 ADR-453（給每個成員任務單匯出）不進 main：
+ngo 成員不匯出，政府隊成員的部分由這一條涵蓋。
 
 ➕ 政府隊管理員與成員能處理所有任務單，匯出也不再是 0 張。
-➕ 現場人員要清單不必再請管理員匯：ngo 成員可匯出自己責任區的單。
 ➖ 角色×capability 矩陣仍表達不了 team 類型與角色的組合條件，要看目錄旗標才知道；`GET /admin/rbac/matrix`
    顯示的是原始授權。
 ➖ 角色以名稱辨認（`TEAM_MEMBER_ROLE_NAME = "member"`），與 `admin.py` 的 `TEAM_ADMIN_ROLE_NAME` 同一種做法；
    重新命名 `member` 角色會讓這條規則失效。
 ◾ 測試：`tests/test_me_capabilities.py`（6 種身分的權限清單）、`tests/test_bulk_permissions.py`（seed 矩陣、
-  ngo 成員只有任務單匯出、政府隊成員四項全有）、`tests/test_bulk_export.py`（政府隊的責任區匯出涵蓋全部）、
+  ngo 成員四項都沒有、政府隊成員四項全有）、`tests/test_bulk_export.py`（政府隊的責任區匯出涵蓋全部）、
   `tests/test_bulk_import_ticket.py`（政府隊管理員匯入，更新不在任何責任區內的既有任務單）、
   `tests/test_authz.py`、`tests/test_notifications_db_integration.py`、`tests/test_rbac_admin_api.py`、
   `tests/test_scope_by_identity.py`（直接授權不被擋）。
+
+---
+
+### ADR-460 資料檢核員不匯出
+
+**白話**：資料檢核員只在後台畫面上檢核資料，不把資料整批帶走。匯出、匯入都不給。
+
+**規則來源**：Carol 2026-11-03（照 BULK-102），Notion BE-RBAC-3「RBAC — admin portal permission matrix」決策紀錄，
+https://app.notion.com/p/27fbc24b8353838e947001849c73ab39 ；實作 #260、追蹤 #259。
+
+**Decision**：
+
+1. seed 的 `data_auditor` 拿掉 `ticket.export` 與 `station.export`（取代 ADR-111 的 data_auditor 一列）。
+   其餘授權不變：全平台可讀、審核與撤銷站點修改建議、重複審核。
+2. 既有資料庫由 migration `d8a3f6c2e417` 移除角色的這兩個授權，不論在 `/admin/rbac` 改成什麼 scope。
+   超管直接給某個帳號的授權（ADR-073）不動，那是超管自己的決定。
+3. 稽核紀錄匯出（`audit.export`）本來就只給超管（ADR-414），不受影響。
+
+➕ 角色名副其實：檢核員的工作在畫面上，帶 PII 的整份匯出檔少一個出口。
+➖ 檢核員要離線整理資料時，得請超管或負責團隊匯出。
+◾ 測試：`tests/test_bulk_permissions.py`（seed 矩陣、檢核員四項都被拒）、
+  `tests/test_migration_data_auditor_no_export.py`（既有資料庫升級拿掉、降級補回）。

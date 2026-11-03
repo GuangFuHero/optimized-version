@@ -207,14 +207,15 @@ GOV_TEAM_ZONE_WIDENED_PERMS = frozenset(
 )
 
 # Capabilities the team role `member` holds for gov teams only. Gov and NGO members share one role
-# (ADR-049), and gov members work as gov admins do: import, station export, the station review
-# queue, 互助地圖 and 開啟空間 (Carol, 2026-11-01 and 2026-11-02; BE-RBAC-3 B3). An NGO member's role grant
+# (ADR-049), and gov members work as gov admins do: import, export, the station review queue,
+# 互助地圖 and 開啟空間 (Carol, 2026-11-01 to 2026-11-03; BE-RBAC-3 B3). An NGO member's role grant
 # of these resolves to `none`; a direct grant someone gave them at /admin/rbac still counts
 # (ADR-073). Unlike GOV_TEAM_ONLY_PERMS this is fenced by role as well as team type:
 # an NGO admin keeps import, export, station review and `work_zone.view`. Applied in `resolve_scope`,
 # so every check, the capability list and the notification resolver see the same answer.
 GOV_MEMBER_ONLY_PERMS = frozenset(
     {
+        Perm.TICKET_EXPORT,
         Perm.TICKET_IMPORT,
         Perm.STATION_EXPORT,
         Perm.STATION_IMPORT,
@@ -228,6 +229,4 @@ GOV_MEMBER_ONLY_PERMS = frozenset(
 )
 
 # The team role the fence above applies to, seeded in scripts/seed_rbac.py.
-# `ticket.export` is not in it: every member, NGO members included, exports the tickets of their own
-# zone (Carol, 2026-11-02); a gov member's `zone` widens to `all` (GOV_TEAM_ZONE_WIDENED_PERMS).
 TEAM_MEMBER_ROLE_NAME = "member"

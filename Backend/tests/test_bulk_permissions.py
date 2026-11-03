@@ -30,7 +30,7 @@ BULK_PERMS = (Perm.STATION_EXPORT, Perm.STATION_IMPORT, Perm.TICKET_EXPORT, Perm
 # so a missing key and an explicit no-op scope can never be confused.
 EXPECTED_GRANTS = {
     "user": {},
-    "data_auditor": {Perm.STATION_EXPORT: "all", Perm.TICKET_EXPORT: "all"},
+    "data_auditor": {},  # ADR-460: checks data on the admin pages, takes none away in bulk
     "super_admin": dict.fromkeys(BULK_PERMS, "all"),
     "admin": {
         Perm.STATION_EXPORT: "team",  # ADR-285: the stations assigned to the team
@@ -38,8 +38,7 @@ EXPECTED_GRANTS = {
         Perm.TICKET_EXPORT: "zone",
         Perm.TICKET_IMPORT: "all",
     },
-    # BE-RBAC-3 B3: as the admin role's. Ticket export is every member's (an NGO member's zone, a gov
-    # member's everything); the other three are gov members' only (GOV_MEMBER_ONLY_PERMS).
+    # BE-RBAC-3 B3: as the admin role's, for gov members only (GOV_MEMBER_ONLY_PERMS).
     "member": {
         Perm.STATION_EXPORT: "team",
         Perm.STATION_IMPORT: "all",
@@ -156,19 +155,17 @@ async def test_team_admin_exports_its_share_but_imports_platform_wide(db):
 
 
 @pytest.mark.asyncio
-async def test_data_auditor_exports_everything_but_cannot_import(db):
-    """data_auditor oversees the whole platform, so it exports everything but imports nothing."""
+async def test_data_auditor_neither_exports_nor_imports(db):
+    """ADR-460: a data auditor checks data on the admin pages and takes none of it away in bulk."""
     actor = User(name="Auditor")
     db.add(actor)
     await db.flush()
     await _assign_seed_role(db, actor, "data_auditor")
 
-    assert await resolve_scope(actor, Perm.STATION_EXPORT, db) == Scope.ALL
-    assert await resolve_scope(actor, Perm.TICKET_EXPORT, db) == Scope.ALL
-    for perm in (Perm.STATION_IMPORT, Perm.TICKET_IMPORT):
+    for perm in BULK_PERMS:
         with pytest.raises(HTTPException) as exc:
             await require_scope(actor, perm, db)
-        assert exc.value.status_code == 403
+        assert exc.value.status_code == 403, perm
 
 
 @pytest.mark.asyncio
@@ -186,15 +183,14 @@ async def test_citizens_hold_no_bulk_capability(db):
 
 
 @pytest.mark.asyncio
-async def test_an_ngo_member_exports_its_zone_s_tickets_and_nothing_else_in_bulk(db):
-    """NGO members export their zone's tickets (Carol, 2026-11-02); no import, no station export."""
+async def test_an_ngo_member_neither_imports_nor_exports(db):
+    """BE-RBAC-3 B3 (Carol, 2026-11-03): an NGO member's role grants no bulk capability at all."""
     actor = User(name="NgoMember")
     db.add(actor)
     await db.flush()
     await _assign_seed_role(db, actor, "member", team_type="ngo")
 
-    assert await resolve_scope(actor, Perm.TICKET_EXPORT, db) == Scope.ZONE
-    for perm in (Perm.TICKET_IMPORT, Perm.STATION_EXPORT, Perm.STATION_IMPORT):
+    for perm in BULK_PERMS:
         with pytest.raises(HTTPException) as exc:
             await require_scope(actor, perm, db)
         assert exc.value.status_code == 403, perm
