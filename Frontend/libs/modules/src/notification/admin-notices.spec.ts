@@ -113,6 +113,31 @@ describe('adminNoticeHref', () => {
     ).toBe('/stations?station=s1');
   });
 
+  it('sends a request to join a team to 團隊, and any other request to 成員與權限', () => {
+    const request = {
+      type: 'role_request_submitted',
+      ref_type: 'role_request',
+      ref_uuid: 'r1',
+    };
+
+    expect(
+      adminNoticeHref({
+        ...request,
+        params: { team_name: '慈濟基金會-花蓮聯絡處' },
+      }),
+    ).toBe('/teams');
+    expect(
+      adminNoticeHref({
+        ...request,
+        params: { team_name: null, new_team_name: '新團隊' },
+      }),
+    ).toBe('/users');
+    expect(adminNoticeHref({ ...request, params: { team_name: '' } })).toBe(
+      '/users',
+    );
+    expect(adminNoticeHref({ ...request, params: null })).toBe('/users');
+  });
+
   it('opens the zone on the map', () => {
     expect(
       adminNoticeHref({

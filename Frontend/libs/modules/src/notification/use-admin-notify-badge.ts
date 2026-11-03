@@ -46,7 +46,10 @@ export function useAdminNotifyBadge(): {
       return;
     }
     const load = () =>
-      setSeen({ user: userUuid, at: readSeenAt(localDeviceStorage(), userUuid) });
+      setSeen({
+        user: userUuid,
+        at: readSeenAt(localDeviceStorage(), userUuid),
+      });
     load();
     // Another tab opened the list: its bell cleared, so this one does too.
     const onStorage = (event: StorageEvent) => {
@@ -65,7 +68,10 @@ export function useAdminNotifyBadge(): {
         return;
       }
       writeSeenAt(localDeviceStorage(), userUuid, at);
-      setSeen({ user: userUuid, at: readSeenAt(localDeviceStorage(), userUuid) ?? at });
+      setSeen({
+        user: userUuid,
+        at: readSeenAt(localDeviceStorage(), userUuid) ?? at,
+      });
     },
     [userUuid],
   );

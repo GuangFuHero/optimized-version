@@ -44,6 +44,11 @@ interface AdminNoticeEntry {
   page: AdminPage;
   /** The page opens on the station or zone the notice names, when it names one. */
   opens?: keyof typeof OPENS;
+  /**
+   * Where it opens instead when `params.team_name` names a team to join: that team's own admins
+   * review it there, and they may not open `page` (成員與權限 needs `user.view`).
+   */
+  joinTeamPage?: AdminPage;
   /** Whether it adds to the bell's number. A station's data changing is news, not a task. */
   countsOnBell?: false;
 }
@@ -61,7 +66,14 @@ const ADMIN_NOTICE_TYPES: Partial<Record<string, AdminNoticeEntry>> = {
     page: '/stations',
   },
   dedup_review_pending: { kind: 'dedup', group: 'act', page: '/audit' },
-  role_request_submitted: { kind: 'role', group: 'act', page: '/users' },
+  // A platform role, or a new team, is the super admin's to decide (成員與權限); joining a team is
+  // that team's admins' (團隊), who get the notice too (ADMIN-027).
+  role_request_submitted: {
+    kind: 'role',
+    group: 'act',
+    page: '/users',
+    joinTeamPage: '/teams',
+  },
   station_assigned: {
     kind: 'assign',
     group: 'team',
@@ -97,7 +109,7 @@ const ADMIN_NOTICE_TYPES: Partial<Record<string, AdminNoticeEntry>> = {
  * a station or zone opens it; one that names anything else, a suggestion included, opens the page.
  */
 export function adminNoticeHref(
-  row: Pick<NotificationRow, 'type' | 'ref_type' | 'ref_uuid'>,
+  row: Pick<NotificationRow, 'type' | 'ref_type' | 'ref_uuid' | 'params'>,
 ): string | null {
   const entry = ADMIN_NOTICE_TYPES[row.type];
 
@@ -105,9 +117,18 @@ export function adminNoticeHref(
 }
 
 function hrefOf(
-  { page, opens }: AdminNoticeEntry,
-  { ref_type, ref_uuid }: Pick<NotificationRow, 'ref_type' | 'ref_uuid'>,
+  { page: listPage, opens, joinTeamPage }: AdminNoticeEntry,
+  {
+    ref_type,
+    ref_uuid,
+    params,
+  }: Pick<NotificationRow, 'ref_type' | 'ref_uuid' | 'params'>,
 ): string {
+  const teamName = params?.['team_name'];
+  const page =
+    joinTeamPage && typeof teamName === 'string' && teamName !== ''
+      ? joinTeamPage
+      : listPage;
   const target = opens ? OPENS[opens] : null;
 
   return target && ref_type === target.refType && ref_uuid

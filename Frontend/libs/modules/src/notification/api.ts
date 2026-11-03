@@ -67,7 +67,9 @@ export const NOTIFICATION_POLL_INTERVAL_MS = 60_000;
  * raises no error toast: nobody asked.
  */
 export function unreadNotificationsQuery(
-  queryKey: typeof siteNotificationKeys.unread | typeof adminNotificationKeys.unread,
+  queryKey:
+    | typeof siteNotificationKeys.unread
+    | typeof adminNotificationKeys.unread,
 ) {
   return queryOptions({
     queryKey,

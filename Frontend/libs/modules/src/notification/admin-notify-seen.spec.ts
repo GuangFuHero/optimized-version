@@ -36,7 +36,10 @@ function memoryStorage(): Pick<Storage, 'getItem' | 'setItem'> {
 describe('countNewAdminNotices', () => {
   it('counts every unread notice before the list was ever opened', () => {
     expect(
-      countNewAdminNotices([notice({ uuid: 'a' }), notice({ uuid: 'b' })], null),
+      countNewAdminNotices(
+        [notice({ uuid: 'a' }), notice({ uuid: 'b' })],
+        null,
+      ),
     ).toBe(2);
   });
 
@@ -76,7 +79,10 @@ describe('countNewAdminNotices', () => {
 
   it('does not count a notice with no time once the list has been opened', () => {
     expect(
-      countNewAdminNotices([notice({ createdAt: null })], '2026-11-03T10:00:00Z'),
+      countNewAdminNotices(
+        [notice({ createdAt: null })],
+        '2026-11-03T10:00:00Z',
+      ),
     ).toBe(0);
   });
 });
@@ -127,7 +133,9 @@ describe('seen-at storage', () => {
     };
 
     expect(readSeenAt(throwing, 'u1')).toBeNull();
-    expect(() => writeSeenAt(throwing, 'u1', '2026-11-03T10:00:00Z')).not.toThrow();
+    expect(() =>
+      writeSeenAt(throwing, 'u1', '2026-11-03T10:00:00Z'),
+    ).not.toThrow();
     expect(readSeenAt(null, 'u1')).toBeNull();
     expect(() => writeSeenAt(null, 'u1', '2026-11-03T10:00:00Z')).not.toThrow();
   });
