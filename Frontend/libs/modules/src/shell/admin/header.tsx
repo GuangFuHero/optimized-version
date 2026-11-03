@@ -1,6 +1,6 @@
 'use client';
 
-import { Bell, Menu } from 'lucide-react';
+import { Menu } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
@@ -8,6 +8,7 @@ import { Box, IconButton, Stack, Typography } from '@mui/material';
 
 import { designTokens, layoutSizes } from '@rescue-frontend/ui';
 
+import { AdminNotifyBell } from '../../notification';
 import { AccountMenu } from './account-menu';
 import { AdminPageHelpButton } from './page-help-button';
 
@@ -83,12 +84,7 @@ export function AdminHeader({
           flexShrink: 0,
         }}
       >
-        <IconButton
-          aria-label="通知"
-          sx={{ color: color.fg.neutral.subtle, width: 44, height: 44 }}
-        >
-          <Box component={Bell} sx={{ width: 22, height: 22 }} />
-        </IconButton>
+        <AdminNotifyBell />
         <AccountMenu />
       </Stack>
     </Box>
