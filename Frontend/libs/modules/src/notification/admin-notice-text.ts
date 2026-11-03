@@ -18,6 +18,20 @@ const REQUESTED_ROLES: Partial<Record<string, string>> = ROLE_REQUEST_LABELS;
 /** A team role by name (成員、管理員); a role this list lacks shows its code. */
 const MEMBER_ROLES: ReadonlyMap<string, string> = ROLE_DISPLAY_NAMES;
 
+/**
+ * The live-status properties whose change sends `resource_station_updated` with `change: "status"`
+ * (`OPERATIONAL_PROPERTY_NAMES`, `Backend/app/services/station.py`), named as the backend names
+ * them there. The station's own 營運狀態 sends no such notice.
+ */
+const LIVE_STATUS_LABELS: Partial<Record<string, string>> = {
+  beds_available: '剩餘床位',
+  capacity_available: '可收治量',
+  water_level: '供水充足程度',
+  is_open: '是否營業',
+  supply_rationed: '是否限量',
+  power_stable: '供電是否穩定',
+};
+
 /** A value a sentence may name: a non-empty string or a finite number. Anything else is null. */
 function named(params: Params, key: string): string | null {
   const value = params[key];
@@ -147,7 +161,17 @@ function write(type: string, params: Params): Text | null {
       }
 
       if (change === 'status') {
-        return { summary: `「${station}」營運狀態更新`, detail: null };
+        const property = named(params, 'property_name');
+        const label =
+          property === null ? undefined : LIVE_STATUS_LABELS[property];
+
+        // 🚨 Not the prototype's 「營運狀態更新」: what changed is one of these properties.
+        return {
+          summary: label
+            ? `「${station}」的「${label}」已更新`
+            : `「${station}」狀態更新`,
+          detail: null,
+        };
       }
 
       return change === 'created'

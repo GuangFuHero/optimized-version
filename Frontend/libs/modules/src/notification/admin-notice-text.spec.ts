@@ -137,7 +137,38 @@ describe('adminNoticeText', () => {
           property_name: 'beds_available',
         }),
       ),
-    ).toEqual({ summary: '「糖廠加水站」營運狀態更新', detail: null });
+    ).toEqual({ summary: '「糖廠加水站」的「剩餘床位」已更新', detail: null });
+  });
+
+  it('station status names each live-status property, and says 狀態 for any other', () => {
+    const status = (property_name: unknown) =>
+      adminNoticeText(
+        notice('resource_station_updated', {
+          station_name: '甲站',
+          change: 'status',
+          property_name,
+        }),
+      ).summary;
+
+    expect(
+      [
+        'beds_available',
+        'capacity_available',
+        'water_level',
+        'is_open',
+        'supply_rationed',
+        'power_stable',
+      ].map(status),
+    ).toEqual([
+      '「甲站」的「剩餘床位」已更新',
+      '「甲站」的「可收治量」已更新',
+      '「甲站」的「供水充足程度」已更新',
+      '「甲站」的「是否營業」已更新',
+      '「甲站」的「是否限量」已更新',
+      '「甲站」的「供電是否穩定」已更新',
+    ]);
+    expect(status('restroom')).toBe('「甲站」狀態更新');
+    expect(status(null)).toBe('「甲站」狀態更新');
   });
 
   it('station created, and an unknown change falls back', () => {
