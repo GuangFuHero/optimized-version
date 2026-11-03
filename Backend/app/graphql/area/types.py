@@ -175,8 +175,8 @@ class CreateAreaInput:
     is_public: bool | None = strawberry.field(
         default=None,
         description=(
-            "Shown on the public map, a team zone only to those signed in; hazardous and team zones "
-            "are always public, a mark zone defaults to false"
+            "Shown on the public map; hazardous and team zones are always public, though a guest never "
+            "sees a team zone; a mark zone defaults to false"
         ),
     )
     team_uuid: UUID | None = strawberry.field(
