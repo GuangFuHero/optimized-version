@@ -710,15 +710,22 @@
     const list = B && B.readPublicZones ? B.readPublicZones() : null;
     return Array.isArray(list) ? list : [];
   }
-  function mapWorkZoneToOverlay(z) {
+  function mapWorkZoneToOverlay(z, isAuthenticated) {
     if (!z || !Array.isArray(z.ring) || z.ring.length < 3) return null;
+    const isAssign = z.kind === 'assign';
     return {
       id: 'wz-' + z.id, label: z.name, status: z.kind === 'hazard' ? 'closed' : 'open',
       informationSource: '後台互助地圖', comment: z.note || '',
       // 🔒 ZONE-COLOR-101：後端沒有顏色欄位，照類型固定（與後台同一支 wgZoneColor）
       color: z.kind === 'hazard' ? null : (window.wgZoneColor ? window.wgZoneColor(z.kind) : null),
       kind: z.kind, polygons: [[z.ring]],
-      team: z.kind === 'assign' ? (z.team || null) : null,   // 🔄 2026-10-23 PM 裁示（照後端 ADR-311 10-11 修訂）：責任區前後台都公布被指派的單位
+      /* 🔒 ZONE-TEAM-101（2026-11-03 Carol）責任區的負責單位**只給登入的人看**，訪客拿到 null。
+         推翻 10-23「前後台都公布被指派的單位」（ADR-311 第 8 點）；跟任務單詳情的負責團隊（ADR-422）同一條：
+         訪客在地圖、在單上都看不到是哪個單位負責。
+         `teamHidden` 只是讓畫面知道「這一區有負責單位、但不給你看」，好寫「登入後看得到負責單位」。
+         ❌ 不可以：只在畫面上不畫、資料照樣帶 team —— 正式版由後端看 token 回空的，前端拿到的就已經遮好了。 */
+      team: isAssign && isAuthenticated ? (z.team || null) : null,
+      teamHidden: isAssign && !isAuthenticated && !!z.team,
     };
   }
 
@@ -731,8 +738,9 @@
   }
 
   /** 前台可見的非危險區域（志工休息區等）。⚠️ 後端尚無對應 query。 */
-  function queryPublicZones() {
-    const items = readBridgeZones().filter((z) => z.kind !== 'hazard').map(mapWorkZoneToOverlay).filter(Boolean);
+  function queryPublicZones({ isAuthenticated = false } = {}) {
+    const items = readBridgeZones().filter((z) => z.kind !== 'hazard')
+      .map((z) => mapWorkZoneToOverlay(z, isAuthenticated)).filter(Boolean);
     return { items, pageInfo: { totalCount: items.length, hasNextPage: false, hasPreviousPage: false } };
   }
 

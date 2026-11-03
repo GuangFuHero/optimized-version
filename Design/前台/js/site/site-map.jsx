@@ -254,7 +254,7 @@
           skip: 0, limit: 5000, isAuthenticated,
         });
         setSnapshot({
-          markers: result.items, closureAreas: D.queryClosureAreas().items, publicZones: D.queryPublicZones().items,
+          markers: result.items, closureAreas: D.queryClosureAreas().items, publicZones: D.queryPublicZones({ isAuthenticated }).items,
           isFetching: false, hasFetchedOnce: true, totalCount: result.pageInfo.totalCount,
         });
       }, 260);
@@ -820,7 +820,14 @@
             前台多在手機上用，手機沒有「滑過」。
          🔒 ZONE-COLOR-101 顏色照類型：責任區靛、標示區綠（wg-hazard.js 的 wgZoneColor）。
          🔄 2026-10-23 PM 裁示（照後端 ADR-311 10-11 修訂）：責任區前後台都公布被指派的單位（推翻 09-25 不顯示）。
-            常駐標籤只放「類型・名稱」（標籤太長會蓋住站點）；點標籤跳出「負責：單位」與備註（ZONE-CLICK-101）。 */
+            常駐標籤只放「類型・名稱」（標籤太長會蓋住站點）；點標籤跳出「負責：單位」與備註（ZONE-CLICK-101）。
+         🔄 ZONE-TEAM-101（2026-11-03 Carol）負責單位**只給登入的人看**（資料層 site-data.js 就不給訪客 team）。
+            訪客點責任區標籤多一顆「登入看負責單位」—— 不寫的話，沒有備註的責任區點了只剩標題，看起來像壞掉。
+         🔒 ZONE-TEAM-102（2026-11-03 Sucre）那一行**一定要能按**：按了走 SiteAuth.goSignIn()，
+            登入完帶整個網址回來（地圖停在原本的位置）。
+            ❌ 不可以寫成純文字提示 —— 讀起來像在叫人去登入卻按不到，地圖上「看得到就要按得到」。
+            觸控範圍 44px（看起來是一行字，上下內距用負外距抵掉，跳出框不會變高）。
+         🚨「登入看負責單位」這幾個字是設計端擬的。 */
       const KIND_LABEL = { assign: '責任區', mark: '標示區' };
       (controller.publicZones || []).forEach((area) => {
         const col = area.color || resolveCssToken(R.OVERLAY_LAYER_CONFIG['public-zones'].color);
@@ -828,10 +835,23 @@
         area.polygons.forEach((rings) => {
           // 🔒 ZONE-CLICK-101：區域本身不可點（interactive: false），點下去直接穿到地圖 →「在這裡新增」照常出現
           const poly = L.polygon(rings, { color: col, weight: 2.5, opacity: 0.95, fillColor: col, fillOpacity: 0.14, interactive: false });
-          const lines = [kind + '・' + area.label];
-          if (area.kind === 'assign' && area.team) lines.push('負責：' + area.team);
-          if (area.comment) lines.push(area.comment);
-          if (lines.length > 1) poly.bindPopup(lines.map(escHtml).join('<br>'));
+          const lines = [escHtml(kind + '・' + area.label)];
+          if (area.kind === 'assign' && area.team) lines.push(escHtml('負責：' + area.team));
+          if (area.comment) lines.push(escHtml(area.comment));
+          if (area.teamHidden) {
+            lines.push('<button type="button" data-zone-team-login style="display:inline-flex;align-items:center;gap:2px;'
+              + 'min-height:44px;margin:-12px 0 -14px;padding:0;border:0;background:none;cursor:pointer;'
+              + 'font-family:inherit;font-size:13px;font-weight:700;line-height:1.4;'
+              /* 字色用 orange-600（#9D4F11，白底 6.4:1）：品牌橘 #E3791E 在白底只有 2.9:1，13px 字讀不清 */
+              + 'color:var(--prim-color-orange-600)">登入看負責單位 ›</button>');
+          }
+          if (lines.length > 1) poly.bindPopup(lines.join('<br>'));
+          if (area.teamHidden) {
+            poly.on('popupopen', (e) => {
+              const btn = e.popup.getElement() && e.popup.getElement().querySelector('[data-zone-team-login]');
+              if (btn) btn.onclick = () => { if (window.SiteAuth) window.SiteAuth.goSignIn(); };
+            });
+          }
           poly.addTo(layer);
           addLabel(poly, kind, area.label, area.kind === 'assign' ? 1 : 2);
         });
