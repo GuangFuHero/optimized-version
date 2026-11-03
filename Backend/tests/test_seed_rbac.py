@@ -136,10 +136,13 @@ def test_team_roles_reach_stations_by_team_not_zone():
         "station.review": "team",
         "station.export": "team",
     }
+    # BE-RBAC-3 B3: review and export as the admin role's, for gov teams only (GOV_MEMBER_ONLY_PERMS).
     assert station_grants("member") == {
         "station.view_pii": "team",
         "station.view_history": "team",
         "station.edit": "team",
+        "station.review": "team",
+        "station.export": "team",
     }
 
 

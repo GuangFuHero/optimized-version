@@ -277,6 +277,21 @@ ROLES_DATA = [
             Perm.TEAM_MEMBER_VIEW: "team",  # Spec/026: their own team's member list
             Perm.ANN_VIEW_ADMIN: "all",  # staff read admin-page announcements
             Perm.PROJECT_VIEW: "all",  # ADR-324, see the admin role above
+            # BE-RBAC-3 B3 (Carol, 2026-11-01 and 2026-11-02): a gov member works as a gov admin
+            # does on import, export, the station review queue, 互助地圖 and 開啟空間. All but
+            # ticket export are in GOV_MEMBER_ONLY_PERMS, so an NGO member's grant of them resolves
+            # to `none`. Ticket export is every member's: an NGO member exports their zone's tickets,
+            # a gov member's `zone` widens to `all`. Scopes as the admin role's.
+            Perm.TICKET_EXPORT: "zone",
+            Perm.TICKET_IMPORT: "all",
+            Perm.STATION_EXPORT: "team",
+            Perm.STATION_IMPORT: "all",
+            Perm.STATION_REVIEW: "team",
+            Perm.ZONE_VIEW: "all",
+            Perm.ZONE_ADD: "all",
+            Perm.ZONE_EDIT: "all",
+            Perm.ZONE_ASSIGN: "all",
+            Perm.ZONE_DELETE: "all",
         },
     },
 ]

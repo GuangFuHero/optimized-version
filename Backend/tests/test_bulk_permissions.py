@@ -38,7 +38,14 @@ EXPECTED_GRANTS = {
         Perm.TICKET_EXPORT: "zone",
         Perm.TICKET_IMPORT: "all",
     },
-    "member": {},
+    # BE-RBAC-3 B3: as the admin role's. Ticket export is every member's (an NGO member's zone, a gov
+    # member's everything); the other three are gov members' only (GOV_MEMBER_ONLY_PERMS).
+    "member": {
+        Perm.STATION_EXPORT: "team",
+        Perm.STATION_IMPORT: "all",
+        Perm.TICKET_EXPORT: "zone",
+        Perm.TICKET_IMPORT: "all",
+    },
 }
 
 
@@ -164,19 +171,45 @@ async def test_data_auditor_exports_everything_but_cannot_import(db):
         assert exc.value.status_code == 403
 
 
-@pytest.mark.parametrize("role_name", ["member", "user"])
 @pytest.mark.asyncio
-async def test_field_workers_and_citizens_hold_no_bulk_capability(db, role_name):
-    """Batch operations have a far larger blast radius than single rows — not for them."""
-    actor = User(name=role_name)
+async def test_citizens_hold_no_bulk_capability(db):
+    """Batch operations have a far larger blast radius than single rows — not for citizens."""
+    actor = User(name="user")
     db.add(actor)
     await db.flush()
-    await _assign_seed_role(db, actor, role_name)
+    await _assign_seed_role(db, actor, "user")
 
     for perm in BULK_PERMS:
         with pytest.raises(HTTPException) as exc:
             await require_scope(actor, perm, db)
         assert exc.value.status_code == 403, perm
+
+
+@pytest.mark.asyncio
+async def test_an_ngo_member_exports_its_zone_s_tickets_and_nothing_else_in_bulk(db):
+    """NGO members export their zone's tickets (Carol, 2026-11-02); no import, no station export."""
+    actor = User(name="NgoMember")
+    db.add(actor)
+    await db.flush()
+    await _assign_seed_role(db, actor, "member", team_type="ngo")
+
+    assert await resolve_scope(actor, Perm.TICKET_EXPORT, db) == Scope.ZONE
+    for perm in (Perm.TICKET_IMPORT, Perm.STATION_EXPORT, Perm.STATION_IMPORT):
+        with pytest.raises(HTTPException) as exc:
+            await require_scope(actor, perm, db)
+        assert exc.value.status_code == 403, perm
+
+
+@pytest.mark.asyncio
+async def test_a_gov_member_imports_and_exports_as_a_gov_admin_does(db):
+    """BE-RBAC-3 B3: a gov team's members import and export everything, as its admins do."""
+    actor = User(name="GovMember")
+    db.add(actor)
+    await db.flush()
+    await _assign_seed_role(db, actor, "member", team_type="gov")
+
+    for perm in BULK_PERMS:
+        assert await resolve_scope(actor, perm, db) == Scope.ALL, perm
 
 
 # --- documentation ---

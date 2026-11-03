@@ -37,6 +37,10 @@ class CapabilityInfo(BaseModel):
     grant alone overstates what an ngo admin can do; the frontend shows a "gov teams only" note.
     `team_gov_widened` (ADR-285) = a `team` grant on it reaches every station when held by a gov
     team, so the matrix's `team` understates what a gov admin can do.
+    `team_gov_zone_widened` (BE-RBAC-3 B3) = the same for a `zone` grant on a ticket capability:
+    a gov team has no zone, so it reaches every ticket instead.
+    `team_gov_member_only` (BE-RBAC-3 B3) = the team role `member` holds it for gov teams only;
+    an ngo member's grant of it resolves to `none`, while an ngo admin's still counts.
     """
 
     key: str
@@ -45,6 +49,8 @@ class CapabilityInfo(BaseModel):
     public: bool
     team_gov_only: bool = False
     team_gov_widened: bool = False
+    team_gov_zone_widened: bool = False
+    team_gov_member_only: bool = False
 
 
 class CapabilityCatalogResponse(BaseModel):

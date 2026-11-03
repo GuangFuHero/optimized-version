@@ -18,8 +18,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.api_errors import ApiError, ErrorCode
 from app.core.config import settings
 from app.core.context import request_identity
-from app.core.permissions import GOV_TEAM_WIDENED_PERMS, Perm
-from app.core.rbac_scopes import Scope, active_team
+from app.core.permissions import (
+    GOV_MEMBER_ONLY_PERMS,
+    GOV_TEAM_WIDENED_PERMS,
+    GOV_TEAM_ZONE_WIDENED_PERMS,
+    TEAM_MEMBER_ROLE_NAME,
+    Perm,
+)
+from app.core.rbac_scopes import Scope, active_team, widest
 from app.core.redis import get_redis
 from app.core.request_auth import accept_access_token
 from app.db.session import SessionLocal
@@ -471,9 +477,55 @@ async def resolve_scope(actor: User, perm: Perm, db: AsyncSession, cache: dict |
         if cache is not None:
             cache[actor.uuid] = grants
     scope = grants.get(perm.value, Scope.NONE)
-    if scope == Scope.TEAM and perm in GOV_TEAM_WIDENED_PERMS and await _acts_for_gov_team(actor, db, cache):
+    if scope == Scope.NONE:
+        return scope
+    if (
+        perm in GOV_MEMBER_ONLY_PERMS
+        and _acts_as_team_member(actor)
+        and not await _acts_for_gov_team(actor, db, cache)
+    ):
+        # The fence is on the `member` role's grant only: an NGO member keeps what someone granted
+        # them directly at /admin/rbac (ADR-073), as the notification resolver does.
+        scope = await _direct_grant_scope(actor, perm, db, cache)
+        if scope == Scope.NONE:
+            return scope
+    widens = (scope == Scope.TEAM and perm in GOV_TEAM_WIDENED_PERMS) or (
+        scope == Scope.ZONE and perm in GOV_TEAM_ZONE_WIDENED_PERMS
+    )
+    if widens and await _acts_for_gov_team(actor, db, cache):
         return Scope.ALL
     return scope
+
+
+async def _direct_grant_scope(actor: User, perm: Perm, db: AsyncSession, cache: dict | None = None) -> Scope:
+    """The widest direct (per-user) grant of `perm` bound to the active identity's team (ADR-073).
+
+    Read only when the member fence applies; the user's direct grants are cached per request.
+    """
+    key = ("direct_grants", str(actor.uuid))
+    if cache is not None and key in cache:
+        rows = cache[key]
+    else:
+        rows = await user_repository.get_direct_grants(db, str(actor.uuid))
+        if cache is not None:
+            cache[key] = rows
+    team_uuid = active_team(actor)
+    team = str(team_uuid) if team_uuid is not None else None
+    scopes = []
+    for granted_key, granted_scope, granted_team in rows:
+        if granted_key != perm.value or granted_team != team:
+            continue
+        try:
+            scopes.append(Scope(granted_scope))
+        except ValueError:
+            continue
+    return widest(scopes)
+
+
+def _acts_as_team_member(actor: User) -> bool:
+    """Whether `actor`'s active identity is the team role `member` (GOV_MEMBER_ONLY_PERMS)."""
+    identity = getattr(actor, "active_identity", None)
+    return identity is not None and not identity.is_platform and identity.role_name == TEAM_MEMBER_ROLE_NAME
 
 
 async def _acts_for_gov_team(actor: User, db: AsyncSession, cache: dict | None = None) -> bool:
