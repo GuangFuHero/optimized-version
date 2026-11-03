@@ -612,6 +612,50 @@ export function photoRows(pair: DuplicatePairDetail, plan: MergePlan) {
   );
 }
 
+/**
+ * The tag a row of the merge preview carries (DUP-BE-413): 已修改 when typed over, else the ticket
+ * its value came from (用 B 的), and nothing where both tickets say the same.
+ */
+export function previewTag(
+  field: MergeField,
+  plan: MergePlan,
+): 'edited' | Side | null {
+  if (isEdited(field, plan)) return 'edited';
+  if (toText(field.read('low')) === toText(field.read('high'))) return null;
+  return pickedSide(field, plan);
+}
+
+/**
+ * What the preview card cannot show (DUP-BE-413): the needs cancelled, who is told, the photos
+ * left out. Each person counted once, as the quantity check does.
+ */
+export function mergeAfterLines(
+  pair: DuplicatePairDetail,
+  plan: MergePlan,
+): string[] {
+  const lines: string[] = [];
+  const tasks = duplicateTasks(pair);
+  const needs = otherNeeds(pair, plan);
+  const kept = needs.filter((n) => n.included).map((n) => n.task);
+  const dropped = needs.filter((n) => !n.included).map((n) => n.task);
+  if (dropped.length) {
+    lines.push(
+      `沒勾的需求取消：${dropped.map((t) => `「${t.task_name}」`).join('、')}`,
+    );
+  }
+  const staying = headcount([
+    ...(tasks ? [tasks.low, tasks.high] : []),
+    ...kept,
+  ]);
+  const cancelled = headcount(dropped);
+  if (staying) lines.push(`${staying} 位已承接的志工繼續承接，會收到通知`);
+  if (cancelled) lines.push(`${cancelled} 位志工承接的需求取消了，會收到通知`);
+  const photosOut = photoRows(pair, plan).filter((p) => !p.included).length;
+  if (photosOut) lines.push(`${photosOut} 張照片不要`);
+  lines.push('通知兩邊開單的人');
+  return lines;
+}
+
 export interface MergeProblem {
   field?: string;
   message: string;

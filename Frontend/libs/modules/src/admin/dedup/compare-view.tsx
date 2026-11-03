@@ -41,6 +41,7 @@ import {
   gapText,
   isEdited,
   isPending,
+  mergeAfterLines,
   mergeProblems,
   mergedSummary,
   NOTE_MAX_LENGTH,
@@ -51,6 +52,7 @@ import {
   pairSignals,
   photoRows,
   pickedSide,
+  previewTag,
   resolveRequest,
   resultText,
   resultValue,
@@ -1642,7 +1644,7 @@ function ActionBar({
                     component="span"
                     sx={{ ...typography.data[300], ...muted, mt: 0.5 }}
                   >
-                    按下合併後會先預覽合併後的單子；確認送出後不能復原。
+                    按下合併後會先確認一次；確認送出後不能復原。
                   </Box>
                 </Stack>
               ) : null}
@@ -1686,6 +1688,173 @@ function ActionBar({
   );
 }
 
+/**
+ * DUP-BE-413: the merged ticket as people will see it, read-only, before sending. The same fields
+ * and values as the right-hand panel; a row says which ticket it came from only where the two
+ * differ, and 已修改 where it was typed over. The right is where it is edited; this is the look
+ * back before it can't be undone.
+ */
+function MergePreview({
+  pair,
+  fields,
+  plan,
+}: {
+  pair: DuplicatePairDetail;
+  fields: PairFields;
+  plan: MergePlan;
+}) {
+  const sides = orderedSides(pair);
+  const needs = otherNeeds(pair, plan).filter((n) => n.included);
+  const photos = photoRows(pair, plan).filter((p) => p.included);
+  const claimed = claimedOf(pair);
+  const title = fields.ticket.find((f) => f.id === 'ticket:title');
+
+  const tag = (field: MergeField) => {
+    const which = previewTag(field, plan);
+    if (which === 'edited') return <Chip tone="warning">已修改</Chip>;
+    if (!which) return null;
+    return (
+      <Box component="span" sx={{ ...typography.data[300], ...muted }}>
+        用 {letter(sides.indexOf(which))} 的
+      </Box>
+    );
+  };
+  const row = (field: MergeField) => (
+    <Box
+      key={field.id}
+      data-dedup-preview-field={field.id}
+      sx={{
+        display: 'grid',
+        gridTemplateColumns: '92px 1fr auto',
+        gap: 1.25,
+        alignItems: 'baseline',
+        py: 0.875,
+        borderTop: `1px solid ${color.bg.neutral.sunken}`,
+      }}
+    >
+      <Box component="span" sx={{ ...typography.label[300], ...subtle }}>
+        {field.label}
+      </Box>
+      <Box
+        component="span"
+        sx={{
+          ...typography.body[300],
+          color: color.fg.neutral.default,
+          whiteSpace: 'pre-wrap',
+          overflowWrap: 'anywhere',
+        }}
+      >
+        {field.show(resultValue(field, plan))}
+      </Box>
+      <Box component="span">{tag(field)}</Box>
+    </Box>
+  );
+
+  return (
+    <Box
+      data-dedup-preview
+      sx={{
+        flexShrink: 0,
+        border: `1px solid ${color.border.default}`,
+        borderRadius: `${radius.lg}px`,
+        bgcolor: color.bg.neutral.default,
+        overflow: 'hidden',
+      }}
+    >
+      <Stack
+        direction="row"
+        sx={{
+          p: '12px 16px',
+          gap: 1,
+          alignItems: 'baseline',
+          borderBottom: `1px solid ${color.border.default}`,
+        }}
+      >
+        <Box
+          component="span"
+          sx={{
+            flex: 1,
+            ...typography.label[400],
+            color: color.fg.neutral.default,
+          }}
+        >
+          {title ? title.show(resultValue(title, plan)) : ''}
+        </Box>
+        {title ? tag(title) : null}
+      </Stack>
+      <Box sx={{ p: '4px 16px' }}>
+        {fields.ticket.filter((f) => f.id !== 'ticket:title').map(row)}
+      </Box>
+      <Stack sx={{ p: '8px 16px 14px', gap: 1 }}>
+        <Box component="span" sx={{ ...typography.label[300], ...subtle }}>
+          需求 {(fields.task.length ? 1 : 0) + needs.length} 項
+        </Box>
+        {fields.task.length ? (
+          <Box
+            data-dedup-preview-task
+            sx={{
+              p: '6px 12px 4px',
+              borderRadius: `${radius.md}px`,
+              border: `1px solid ${color.bg.primary.default}`,
+              bgcolor: color.bg.primary.subtle,
+            }}
+          >
+            <Stack
+              direction="row"
+              sx={{ gap: 0.75, alignItems: 'center', p: '2px 0 4px' }}
+            >
+              <Merge size={14} color={color.bg.primary.default} />
+              <Box
+                component="span"
+                sx={{
+                  ...typography.label[300],
+                  color: color.fg.neutral.default,
+                }}
+              >
+                合併的這一筆
+              </Box>
+              {claimed ? (
+                <Box
+                  component="span"
+                  sx={{ ...typography.data[300], ...muted }}
+                >
+                  · {claimed} 位志工承接
+                </Box>
+              ) : null}
+            </Stack>
+            {fields.task.map(row)}
+          </Box>
+        ) : null}
+        {needs.map(({ task }) => (
+          <Box
+            key={task.uuid}
+            sx={{
+              p: '8px 12px',
+              borderRadius: `${radius.md}px`,
+              border: `1px solid ${color.border.default}`,
+              ...typography.body[300],
+              color: color.fg.neutral.default,
+            }}
+          >
+            {task.task_name}
+            {task.quantity != null ? ` ×${task.quantity}` : ''}
+            <Box component="span" sx={{ ...typography.data[300], ...muted }}>
+              {' '}
+              · {formatTicketTypeLabel(task.task_type)}
+              {task.claim_count ? ` · ${task.claim_count} 位志工承接` : ''}
+            </Box>
+          </Box>
+        ))}
+      </Stack>
+      {photos.length ? (
+        <Box sx={{ p: '0 16px 14px', ...typography.label[300], ...subtle }}>
+          照片 {photos.length} 張
+        </Box>
+      ) : null}
+    </Box>
+  );
+}
+
 function ConfirmDialog({
   mode,
   pair,
@@ -1721,7 +1890,7 @@ function ConfirmDialog({
       ? `確認這兩${noun}是重複的？`
       : `確認這兩${noun}不是重複？`;
   const sub = isMerge
-    ? '合併後的任務單就是你在右邊看到的那一張。送出後不能復原，也不能拆回。'
+    ? '合併後會是下面這一張。送出後不能復原，也不能拆回。'
     : mode === 'confirm'
       ? station
         ? '只記下判定，兩個站點都不會變。站點合併後端還沒做，之後做好再處理。送出後不能復原。'
@@ -1774,7 +1943,7 @@ function ConfirmDialog({
 
   const sides = orderedSides(pair);
   const effects = isMerge
-    ? mergeEffects(pair, fields, plan).lines
+    ? mergeAfterLines(pair, plan)
     : [
         `${sides
           .map((side, i) =>
@@ -1795,7 +1964,7 @@ function ConfirmDialog({
       slotProps={{
         paper: {
           sx: {
-            width: 'min(600px, calc(100% - 48px))',
+            width: 'min(640px, calc(100% - 48px))',
             maxHeight: '88vh',
             m: 0,
             display: 'flex',
@@ -1829,6 +1998,9 @@ function ConfirmDialog({
             gap: 2,
           }}
         >
+          {isMerge ? (
+            <MergePreview pair={pair} fields={fields} plan={plan} />
+          ) : null}
           <Stack sx={{ gap: 0.75 }}>
             <Box component="span" sx={typography.label[400]}>
               送出後會發生

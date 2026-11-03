@@ -14,12 +14,14 @@ import {
   defaultPrimary,
   headcount,
   gapText,
+  mergeAfterLines,
   mergeProblems,
   mergedSummary,
   orderedSides,
   outcomeOf,
   pairSignals,
   parseContact,
+  previewTag,
   resolveRequest,
   resultValue,
   ticketFields,
@@ -756,5 +758,50 @@ describe('outcomeOf', () => {
         ],
       }),
     ).toBe('merged');
+  });
+});
+
+describe('the merge preview (DUP-BE-413)', () => {
+  it('tags a row by the ticket it came from, only where the two differ, and 已修改 where typed over', () => {
+    const pair = fixture();
+    const fields = ticketFields(pair, labels);
+    const plan = defaultPlan(pair, fields);
+    // High is A and kept, so its title is the one used.
+    expect(previewTag(fieldOf2(fields, 'ticket:title'), plan)).toBe('high');
+    // Both say flood: nothing to tell apart.
+    expect(previewTag(fieldOf2(fields, 'ticket:disaster_types'), plan)).toBe(
+      null,
+    );
+    plan.picks['ticket:priority'] = 'low';
+    expect(previewTag(fieldOf2(fields, 'ticket:priority'), plan)).toBe('low');
+    plan.edits['ticket:title'] = '一樓淤泥清理，需要人力';
+    expect(previewTag(fieldOf2(fields, 'ticket:title'), plan)).toBe('edited');
+    // Typed back to what was picked: not an edit.
+    plan.edits['ticket:title'] = '一樓淤泥清理';
+    expect(previewTag(fieldOf2(fields, 'ticket:title'), plan)).toBe('high');
+  });
+
+  it('lists under the card only what the card cannot show', () => {
+    const pair = fixture();
+    const fields = ticketFields(pair, labels);
+    const plan = defaultPlan(pair, fields);
+    // k-both is on both duplicate needs: 3 people, not 4.
+    expect(mergeAfterLines(pair, plan)).toEqual([
+      '3 位已承接的志工繼續承接，會收到通知',
+      '通知兩邊開單的人',
+    ]);
+
+    const water = both(pair).low.tasks[1];
+    water.claim_count = 1;
+    water.claimant_keys = ['k-w'];
+    plan.needOff['L-water'] = true;
+    plan.photoOff['L-ph'] = true;
+    expect(mergeAfterLines(pair, plan)).toEqual([
+      '沒勾的需求取消：「飲用水」',
+      '3 位已承接的志工繼續承接，會收到通知',
+      '1 位志工承接的需求取消了，會收到通知',
+      '1 張照片不要',
+      '通知兩邊開單的人',
+    ]);
   });
 });
