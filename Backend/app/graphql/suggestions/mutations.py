@@ -24,7 +24,9 @@ class SuggestionMutation:
 
     @strawberry.mutation
     async def create_station_suggestion(
-        self, info: strawberry.types.Info, input: CreateStationSuggestionInput,
+        self,
+        info: strawberry.types.Info,
+        input: CreateStationSuggestionInput,
     ) -> StationSuggestionType:
         """Propose a change to one field of a station or station property.
 
@@ -32,28 +34,40 @@ class SuggestionMutation:
         suggestion. Reviewers who can act on the station are notified.
         """
         suggestion = await suggestion_service.create_station_suggestion(
-            info.context["db"], actor=require_authenticated(info),
-            target_type=input.target_type, target_uuid=str(input.target_uuid),
-            field_name=input.field_name, new_value=input.new_value, comment=input.comment,
+            info.context["db"],
+            actor=require_authenticated(info),
+            target_type=input.target_type,
+            target_uuid=str(input.target_uuid),
+            field_name=input.field_name,
+            new_value=input.new_value,
+            comment=input.comment,
         )
         return StationSuggestionType.from_model(suggestion)
 
     @strawberry.mutation
     async def merge_station_suggestions(
-        self, info: strawberry.types.Info, station_uuid: UUID,
-        decisions: list[SuggestionDecisionInput], review_note: str | None = None,
+        self,
+        info: strawberry.types.Info,
+        station_uuid: UUID,
+        decisions: list[SuggestionDecisionInput],
+        review_note: str | None = None,
     ) -> StationSuggestionMergeType:
         """Decide the pending suggestions on the given fields of one station, in one commit.
 
-        Requires station.review on the station. Approved fields take the given value; every
-        pending suggestion on a decided field is marked approved or rejected. Fields left out stay pending.
+        Requires station.review on the station. Approved fields take the given value; each pending
+        suggestion on a decided field becomes approved, not_adopted, adopted_edited or rejected. Fields
+        left out stay pending.
         """
         merge = await suggestion_service.merge_station_suggestions(
-            info.context["db"], actor=require_authenticated(info), station_uuid=str(station_uuid),
+            info.context["db"],
+            actor=require_authenticated(info),
+            station_uuid=str(station_uuid),
             decisions=[
                 suggestion_service.SuggestionDecision(
-                    target_uuid=str(d.target_uuid), field_name=d.field_name,
-                    approve=d.approve, value=d.value,
+                    target_uuid=str(d.target_uuid),
+                    field_name=d.field_name,
+                    approve=d.approve,
+                    value=d.value,
                 )
                 for d in decisions
             ],
@@ -63,13 +77,17 @@ class SuggestionMutation:
 
     @strawberry.mutation
     async def revoke_station_suggestion_merge(
-        self, info: strawberry.types.Info, uuid: UUID,
+        self,
+        info: strawberry.types.Info,
+        uuid: UUID,
     ) -> StationSuggestionMergeType:
         """Undo an applied merge by writing its before values back (requires station.revoke).
 
         Refused when any merged field has changed since the merge.
         """
         merge = await suggestion_service.revoke_station_suggestion_merge(
-            info.context["db"], actor=require_authenticated(info), uuid=str(uuid),
+            info.context["db"],
+            actor=require_authenticated(info),
+            uuid=str(uuid),
         )
         return StationSuggestionMergeType.from_model(merge)

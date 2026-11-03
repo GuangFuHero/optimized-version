@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  adminTicketPriorityBadge,
   adminTicketPriorityLabel,
+  adminTicketPriorityTag,
 } from './ticket-priority';
 
 describe('adminTicketPriorityLabel', () => {
@@ -20,23 +20,31 @@ describe('adminTicketPriorityLabel', () => {
   });
 });
 
-describe('adminTicketPriorityBadge', () => {
-  it('makes only 生命危急 solid red', () => {
-    expect(adminTicketPriorityBadge('critical')).toEqual({
+describe('adminTicketPriorityTag', () => {
+  it('makes only 生命危急 solid red, and 緊急 a pale warning', () => {
+    expect(adminTicketPriorityTag('critical')).toEqual({
       label: '生命危急',
       tone: 'danger',
-      variant: 'solid',
+      fill: 'solid',
     });
-    expect(adminTicketPriorityBadge('high')).toEqual({
+    expect(adminTicketPriorityTag('high')).toEqual({
       label: '緊急',
       tone: 'warning',
-      variant: 'subtle',
+      fill: 'subtle',
     });
   });
 
-  it('gives 一般 and 低 no badge', () => {
-    expect(adminTicketPriorityBadge('medium')).toBeNull();
-    expect(adminTicketPriorityBadge('low')).toBeNull();
-    expect(adminTicketPriorityBadge(undefined)).toBeNull();
+  it('gives 一般 and 低 quiet grey words', () => {
+    expect(adminTicketPriorityTag('medium')).toEqual({
+      label: '一般',
+      tone: 'neutral',
+      fill: 'quiet',
+    });
+    expect(adminTicketPriorityTag(' LOW ')).toMatchObject({ fill: 'quiet' });
+  });
+
+  it('gives none for a value the backend does not store', () => {
+    expect(adminTicketPriorityTag('urgent')).toBeNull();
+    expect(adminTicketPriorityTag(undefined)).toBeNull();
   });
 });

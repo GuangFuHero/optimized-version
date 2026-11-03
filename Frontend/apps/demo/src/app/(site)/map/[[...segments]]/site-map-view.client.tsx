@@ -9,11 +9,13 @@ import {
   createPointShareTarget,
   createTaskMatchTicketDetailOverrides,
   dedupeMarkersById,
+  floorHelpForOpenBuilding,
   hasRescueMapDetailItem,
   Map,
   MapCellsNotice,
   MapRequestHelpBar,
   NeedClaimProvider,
+  pinnedBesideBuildings,
   PlaceHereAction,
   PointShareDrawer,
   readLinkedSelection,
@@ -24,6 +26,7 @@ import {
   useCellMembersLoader,
   useCreatedTicketMarker,
   useLinkedTicketLookup,
+  useSiteMapBuildings,
   useSiteMapLiveData,
   useSiteMapLiveDataSnapshot,
   useSiteMapRouteState,
@@ -191,28 +194,48 @@ function SiteMapViewportDataLayer({
     setGoneTicket(letGo);
   }, [selectedMarkerId]);
 
+  // The open buildings, on the map of tickets only.
+  const buildings = useSiteMapBuildings(
+    (baseRouteState.dataType ?? SITE_FALLBACK_DATA_TYPE) === 'ticket',
+  );
+
   // A ticket made here stays on the map until the view fetches it too; from then on the fetched
   // one, being fresher, is the one shown. So does one opened from a building or a link, while open,
-  // and one read with its cell.
+  // and one read with its cell. A building's tickets are its entry's to show, but for the one open.
   const visibleMarkers = useMemo(
-    () =>
-      dedupeMarkersById([
-        ...liveDataSnapshot.markers,
-        ...[
-          ...createdMarkers,
-          ...(buildingTicketMarker ? [buildingTicketMarker] : []),
-          ...(linkedTicketMarker ? [linkedTicketMarker] : []),
-          ...cellMembers,
-        ].filter((marker) => !goneTicketIds.includes(marker.id)),
-      ]),
+    () => [
+      ...pinnedBesideBuildings(
+        dedupeMarkersById([
+          ...liveDataSnapshot.markers,
+          ...[
+            ...createdMarkers,
+            ...(buildingTicketMarker ? [buildingTicketMarker] : []),
+            ...(linkedTicketMarker ? [linkedTicketMarker] : []),
+            ...cellMembers,
+          ].filter((marker) => !goneTicketIds.includes(marker.id)),
+        ]),
+        buildings.drawn,
+        selectedMarkerId,
+      ),
+      ...buildings.markers,
+    ],
     [
       buildingTicketMarker,
+      buildings,
       cellMembers,
       createdMarkers,
       goneTicketIds,
       linkedTicketMarker,
       liveDataSnapshot.markers,
+      selectedMarkerId,
     ],
+  );
+
+  // 在這一層請求協助 in the drawer of a building the map knows the point of.
+  const requestHelpOnFloor = floorHelpForOpenBuilding(
+    buildings.entries,
+    buildingUuid,
+    () => setBuildingUuid(null),
   );
 
   // Opened from a building or a link, a ticket opens even when the map's status filter leaves its
@@ -234,6 +257,19 @@ function SiteMapViewportDataLayer({
         selectedMarkerId: marker.id,
       });
     },
+    [baseRouteState, onMapRouteStateChange, viewportStore],
+  );
+
+  // A ticket by its uuid alone, as a link to it opens: one this ticket may repeat, from 看那張.
+  const openTicket = useCallback(
+    (ticketUuid: string) =>
+      onMapRouteStateChange({
+        ...mergeRouteStateWithViewport(
+          baseRouteState,
+          viewportStore.getSnapshot(),
+        ),
+        selectedMarkerId: ticketUuid,
+      }),
     [baseRouteState, onMapRouteStateChange, viewportStore],
   );
 
@@ -366,12 +402,14 @@ function SiteMapViewportDataLayer({
         onShare: () => onOpenShareTarget(createCurrentPointShareTarget(marker)),
         onOpenBuilding: setBuildingUuid,
         onSelectTicket: openBuildingTicket,
+        onOpenTicket: openTicket,
       }),
     [
       createCurrentPointShareTarget,
       isAuthenticated,
       onOpenShareTarget,
       openBuildingTicket,
+      openTicket,
     ],
   );
 
@@ -457,6 +495,7 @@ function SiteMapViewportDataLayer({
             stationLayout="site"
             linkedItem={linkedItem}
             viewMemoryKey="site"
+            onOpenBuilding={setBuildingUuid}
           />
         </Box>
         <MapRequestHelpBar />
@@ -469,6 +508,7 @@ function SiteMapViewportDataLayer({
           setBuildingUuid(null);
           openBuildingTicket(marker);
         }}
+        onRequestHelpOnFloor={requestHelpOnFloor}
       />
     </NeedClaimProvider>
   );

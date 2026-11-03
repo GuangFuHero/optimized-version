@@ -335,6 +335,25 @@ export function useAllStations(
   return useQuery({ ...allStationsQuery(variables), enabled: options.enabled });
 }
 
+/** Counts over every station in the caller's scope, whatever the page's filters: the stats strip's. */
+export const stationFacetsQuery = () =>
+  queryOptions({
+    queryKey: ['admin', 'stations', 'facets'],
+    queryFn: ({ signal }) =>
+      adminGraphqlClient
+        .query(
+          documents.AdminStationFacetsDocument,
+          {},
+          { fetchOptions: { credentials: 'include', signal } },
+        )
+        .toPromise()
+        .then(graphqlResponseData),
+  });
+
+export function useStationFacets(options: AdminQueryOptions = {}) {
+  return useQuery({ ...stationFacetsQuery(), enabled: options.enabled });
+}
+
 export const stationQuery = (variables: documents.AdminStationQueryVariables) =>
   queryOptions({
     queryKey: ['admin', 'stations', 'station', variables],

@@ -26,6 +26,11 @@ import plotly.graph_objects as go
 
 from app.schemas.analytics import ChartStyle
 from app.services.analytics_common import MAX_TREND_DAYS, AnalyticsInputError
+from app.services.ticket_status import VOLUNTEER_NEED_TYPES
+
+_NEED_TYPE_LABEL = {"rescue": "搜救", "supply": "物資", "medical": "醫療", "hr": "人力"}
+# The need types the volunteer numbers count, as their descriptions name them: 人力 today.
+_VOLUNTEER_KINDS = "、".join(_NEED_TYPE_LABEL[kind] for kind in VOLUNTEER_NEED_TYPES)
 
 # --- Y-metric catalog. `label`/`unit`/`description` are the zh-TW glossary the dashboard shows
 # (the backend is the only source of these — the frontend must not keep its own copy).
@@ -129,20 +134,22 @@ _TICKET_CATALOG = {
         "default_chart_type": "bar",
         "allowed_chart_types": ("bar", "pie"),
     },
+    # The dashboard's three volunteer cards say up to which day on a line of their own and show these
+    # descriptions as they are, on the card and on hover, so the three leave the day out.
     "volunteers_needed": {
         "label": "志工需求人數",
         "unit": "人",
-        "description": "未取消任務的志工需求人數加總（沒填人數的不計）；截至查詢期間最後一天，未指定則為今日",
+        "description": f"沒取消的{_VOLUNTEER_KINDS}需求總共要幾個人（含已額滿、已結束；只算有寫人數的）",
         "allowed_x": (None, "category"),
         "default_chart_type": "bar",
         "allowed_chart_types": ("bar", "pie"),
     },
     "volunteers_matched": {
-        "label": "已媒合志工人數",
-        "unit": "人",
+        "label": "已媒合",
+        "unit": "人次",
         "description": (
-            "未取消任務上所有志工的人數，含已出發與已完成（沒填人數的任務不計）；"
-            "截至查詢期間最後一天，未指定則為今日"
+            f"沒取消的{_VOLUNTEER_KINDS}需求上已經被承接的名額，同一人接兩筆算 2"
+            "（含已額滿、已結束；只算有寫人數的）"
         ),
         "allowed_x": (None, "category"),
         "default_chart_type": "bar",
@@ -152,8 +159,8 @@ _TICKET_CATALOG = {
         "label": "志工缺口",
         "unit": "人",
         "description": (
-            "還在招募的任務尚缺幾人；截至查詢期間最後一天，未指定則為今日。"
-            "趨勢固定按天，為每天結束時的缺口，依異動紀錄還原當天的任務與志工"
+            f"還在招募的{_VOLUNTEER_KINDS}需求還差幾人（不是需求人數減已媒合）。"
+            "跟任務管理列表上方的「志工缺口」是同一個數字"
         ),
         "allowed_x": (None, "date", "category"),
         "default_chart_type": "bar",
@@ -162,6 +169,36 @@ _TICKET_CATALOG = {
         "allowed_x_granularities": ("day",),
         # Only the daily trend is capped; the other shapes read one instant.
         "max_range_days": MAX_TREND_DAYS,
+    },
+    "volunteer_gap_needs": {
+        "label": "還缺人的需求",
+        "unit": "項",
+        "description": (
+            f"還在招募、還沒額滿的{_VOLUNTEER_KINDS}需求有幾項；截至查詢期間最後一天，未指定則為今日。"
+            "趨勢固定按天，為每天結束時的項數"
+        ),
+        "allowed_x": (None, "date", "category"),
+        "default_chart_type": "bar",
+        "allowed_chart_types": ("bar", "line", "pie"),
+        "allowed_x_granularities": ("day",),
+        "max_range_days": MAX_TREND_DAYS,
+    },
+    # Supply needs count in 筆, one each: 便當, 箱水 and 鏟子 do not add up. A total only, for its card.
+    "supply_needs": {
+        "label": "物資需求",
+        "unit": "筆",
+        "description": "沒取消的物資需求有幾筆，一筆不管數量多少都算一筆（含已有人接、已結束）",
+        "allowed_x": (None,),
+        "default_chart_type": "bar",
+        "allowed_chart_types": ("bar",),
+    },
+    "supply_needs_unclaimed": {
+        "label": "還沒人接的物資需求",
+        "unit": "筆",
+        "description": "還在招募、還沒有人承接的物資需求有幾筆",
+        "allowed_x": (None,),
+        "default_chart_type": "bar",
+        "allowed_chart_types": ("bar",),
     },
 }
 
@@ -177,7 +214,7 @@ _STATION_CATALOG = {
     "station_status_count": {
         "label": "站點狀態",
         "unit": "站",
-        "description": "營運中／暫停／永久關閉；預設近 30 天",
+        "description": "開設中／暫停服務／已關閉；預設近 30 天",
         # Forced shape, like station_freshness_trend below: ungrouped, "how many stations
         # per status" collapses to one 100% slice repeating station_count. So "category" is
         # the only allowed value and any other `x` falls back to it.
@@ -194,9 +231,9 @@ _STATION_CATALOG = {
         "allowed_chart_types": ("line", "bar"),
     },
     "operating_station_count": {
-        "label": "營運中站點數",
+        "label": "開設中站點數",
         "unit": "站",
-        "description": "目前營運中的站點，不受日期影響",
+        "description": "目前開設中的站點，不受日期影響",
         "allowed_x": (None, "category"),
         "default_chart_type": "bar",
         "allowed_chart_types": ("bar", "pie"),
@@ -210,13 +247,10 @@ CATALOG = {"tickets": _TICKET_CATALOG, "stations": _STATION_CATALOG}
 # axis order, so 未分類 stays last.
 _CATEGORY_LABEL = {
     "overall": "總計",
-    "rescue": "搜救",
-    "supply": "物資",
-    "medical": "醫療",
-    "hr": "人力",
-    "active": "營運中",
-    "temporarily_closed": "暫停營運",
-    "permanently_closed": "永久關閉",
+    **_NEED_TYPE_LABEL,
+    "active": "開設中",
+    "temporarily_closed": "暫停服務",
+    "permanently_closed": "已關閉",
     "completed": "已完成",
     "remaining": "未完成",
     "shelter": "收容所",
@@ -337,14 +371,17 @@ _SERIES_BUILDERS = {
         "task_completion_distribution": partial(_count_series, series_label="子任務"),
         "duplicate_count": partial(_count_series, series_label="疑似重複的單"),
         "volunteers_needed": partial(_count_series, series_label="志工需求"),
-        "volunteers_matched": partial(_count_series, series_label="已媒合志工"),
+        "volunteers_matched": partial(_count_series, series_label="已媒合"),
         "volunteer_gap": partial(_count_series, series_label="志工缺口"),
+        "volunteer_gap_needs": partial(_count_series, series_label="還缺人的需求"),
+        "supply_needs": partial(_count_series, series_label="物資需求"),
+        "supply_needs_unclaimed": partial(_count_series, series_label="還沒人接的物資需求"),
     },
     "stations": {
         "station_count": partial(_count_series, series_label="站點"),
         "station_status_count": partial(_count_series, series_label="站點"),
         "station_freshness_trend": _station_freshness_trend_series,
-        "operating_station_count": partial(_count_series, series_label="營運中站點"),
+        "operating_station_count": partial(_count_series, series_label="開設中站點"),
     },
 }
 

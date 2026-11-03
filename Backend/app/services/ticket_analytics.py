@@ -80,7 +80,12 @@ from app.services.analytics_common import (
 )
 from app.services.analytics_filters import NEED_TYPE, live_tickets
 from app.services.dedup_review import PENDING_STATUSES
-from app.services.ticket_status import OPEN_NEED_STATUSES
+from app.services.ticket_status import (
+    OPEN_NEED_STATUSES,
+    OPEN_TICKET_STATUSES,
+    SUPPLY_NEED_TYPE,
+    VOLUNTEER_NEED_TYPES,
+)
 
 # The two buckets a ticket exits through; "unassigned"/"ongoing" have no exit date.
 _EXIT_BUCKETS = ("completed", "canceled")
@@ -591,6 +596,10 @@ def _on_need_type(clauses: list, need_type):
     return [replacement_traverse(clause, {}, swap) for clause in clauses]
 
 
+# The metrics get_volunteer_metric counts over supply needs; the rest are over volunteer needs.
+_SUPPLY_METRICS = ("supply_needs", "supply_unclaimed")
+
+
 async def get_volunteer_metric(
     db: AsyncSession,
     *,
@@ -602,16 +611,29 @@ async def get_volunteer_metric(
     tz: ZoneInfo,
     extra_filters: list | None = None,
 ) -> list[dict]:
-    """Volunteers needed, matched or still missing, as of now, or as of the end of `end_date`.
+    """Volunteers needed, matched or still missing, and supply needs, as of now or the end of `end_date`.
 
-    Backs 3 y-metrics via a fixed `metric`. Over the needs that give a quantity (a rescue may not)
-    and are not canceled or merged into another (a merge cancels the absorbed need):
+    Backs 6 y-metrics via a fixed `metric`. A need stands while it is created by then and not
+    canceled, deleted or merged into another (a merge cancels the absorbed need). It recruits while
+    it also is open, not stopped by hand, and on a ticket that takes people.
 
-        needed   -- sum of quantity
-        matched  -- every task_assignment on those needs, whatever its progress status, as the
-                    app counts a need's places taken
-        gap      -- sum of quantity - matched, over the needs still recruiting only: open
-                    and not stopped by hand. A full or stopped need has no gap.
+    The volunteer numbers read the needs of a volunteer type (VOLUNTEER_NEED_TYPES) that give a
+    quantity; a supply need's quantity is things, not people (ADR-456):
+
+        needed            -- sum of quantity
+        matched           -- every task_assignment on those needs, whatever its progress status,
+                             as the app counts a need's places taken
+        gap               -- the people still short on the needs recruiting. Each adds quantity -
+                             matched, never below 0, so a need with more people than it asks for
+                             hides no other's gap.
+        gap_needs         -- how many of those needs are short of anyone
+
+    gap and gap_needs are the ticket board's ticketStats gapPeople and gapNeeds as of that day, so
+    today the two agree. The supply numbers count supply needs, one each whatever its quantity,
+    since their units do not add up:
+
+        supply_needs      -- how many stand
+        supply_unclaimed  -- how many recruit with nobody on them
 
     `start_date` does not filter: these are running totals, not what was created in a range.
     `x="category"` groups by the need's own `task_type`, and a `task_type` filter reads it too.
@@ -619,7 +641,8 @@ async def get_volunteer_metric(
 
     Each instant reads every need and assignment as of then from audit_logs (see _versions_at), so a
     released claim, a stopped need or a merge changes only the days after it. The caller's scope and
-    the type, status and area filters read today's ticket rows.
+    the type, status and area filters read today's ticket rows, and so do the checks for a need left
+    on a closed ticket (`left_open` and `left_cancelled` below).
     """
     instants = _as_of_instants(x, start_date, end_date, tz)
     days = values(column("t", DateTime(timezone=True)), name="days").data([(t,) for _, t in instants])
@@ -641,6 +664,31 @@ async def get_volunteer_metric(
         .subquery()
     )
     need_type = field(need, "task_type")
+    if metric in _SUPPLY_METRICS:
+        counted = [need_type == SUPPLY_NEED_TYPE]
+    else:
+        counted = [need_type.in_(VOLUNTEER_NEED_TYPES), field(need, "quantity", Integer).is_not(None)]
+    # A need still open on a ticket closed now was left open when the ticket was closed by hand,
+    # before a ticket's status followed its needs, and nobody can take it. Every close since closes
+    # the needs too, so their history says when they stopped; these have none and recruit on no
+    # day. The ticket is the need's own now, since a merge may have moved the need off another.
+    left_need, its_ticket = aliased(TicketTask, name="left_need"), aliased(Tickets, name="its_ticket")
+    left_on_its_ticket = (
+        select(left_need.uuid)
+        .join(its_ticket, its_ticket.uuid == left_need.ticket_uuid)
+        .where(left_need.delete_at.is_(None))
+    )
+    left_open = left_on_its_ticket.where(
+        left_need.status.in_(OPEN_NEED_STATUSES),
+        or_(its_ticket.delete_at.is_not(None), its_ticket.status.notin_(OPEN_TICKET_STATUSES)),
+    )
+    # Deleting a ticket, or merging it away, cancels or moves every need on it, filled ones included.
+    # A need still standing on a ticket cancelled or deleted now was left there by a hand close too, and
+    # counts as canceled on every day. One left on a completed ticket still stands, as ended.
+    left_cancelled = left_on_its_ticket.where(
+        left_need.status != "canceled",
+        or_(its_ticket.delete_at.is_not(None), its_ticket.status == "cancelled"),
+    )
     needs = (
         select(
             need.c.t,
@@ -651,22 +699,28 @@ async def get_volunteer_metric(
             field(need, "recruiting_stopped_at", DateTime(timezone=True)).label("stopped_at"),
             need_type.label("task_type"),
             func.coalesce(claims.c.people, 0).label("matched"),
+            need.c.row_id.in_(left_open).label("left_open"),
+            need.c.row_id.in_(left_cancelled).label("left_cancelled"),
         )
         .select_from(need)
         .join(Tickets, Tickets.uuid == field(need, "ticket_uuid", UUID))
         .outerjoin(claims, and_(claims.c.t == need.c.t, claims.c.task_uuid == need.c.row_id))
-        .where(field(need, "quantity", Integer).is_not(None), *_on_need_type(extra_filters or [], need_type))
+        .where(*counted, *_on_need_type(extra_filters or [], need_type))
         .subquery()
     )
     c = needs.c
-    # Standing at `t`: created by then and neither canceled nor deleted.
-    live = and_(c.created_at < c.t, c.delete_at.is_(None), c.status != "canceled")
-    # Recruiting at `t`: standing, not yet filled, not stopped by hand.
-    recruiting = and_(live, c.status.in_(OPEN_NEED_STATUSES), c.stopped_at.is_(None))
+    # Standing at `t`: created by then, neither canceled nor deleted, and not left on a cancelled ticket.
+    live = and_(c.created_at < c.t, c.delete_at.is_(None), c.status != "canceled", ~c.left_cancelled)
+    # Recruiting at `t`: standing, not yet filled, not stopped by hand, not left open as above.
+    recruiting = and_(live, c.status.in_(OPEN_NEED_STATUSES), c.stopped_at.is_(None), ~c.left_open)
+    short = c.quantity - c.matched
     total = {
         "needed": func.sum(c.quantity).filter(live),
         "matched": func.sum(c.matched).filter(live),
-        "gap": func.sum(c.quantity - c.matched).filter(recruiting),
+        "gap": func.sum(short).filter(recruiting, short > 0),
+        "gap_needs": func.count().filter(recruiting, short > 0),
+        "supply_needs": func.count().filter(live),
+        "supply_unclaimed": func.count().filter(recruiting, c.matched == 0),
     }[metric]
 
     cols = [func.coalesce(cast(total, Integer), 0).label("count")]

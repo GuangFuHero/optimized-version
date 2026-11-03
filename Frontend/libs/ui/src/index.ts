@@ -14,6 +14,28 @@ export type {
   ButtonSize,
   ButtonVariant,
 } from './components/Button';
+export { SplitButton } from './components/SplitButton';
+export type {
+  SplitButtonItem,
+  SplitButtonProps,
+} from './components/SplitButton';
+export { SearchField } from './components/SearchField';
+export type { SearchFieldProps } from './components/SearchField';
+export { Tag } from './components/Tag';
+export type { TagFill, TagProps, TagTone } from './components/Tag';
+export { Progress } from './components/Progress';
+export type { ProgressProps } from './components/Progress';
+export {
+  NativeSelect,
+  RadioCards,
+  SettingRow,
+} from './components/SettingControls';
+export type {
+  NativeSelectProps,
+  RadioCardOption,
+  RadioCardsProps,
+  SettingRowProps,
+} from './components/SettingControls';
 export { Callout } from './components/Callout';
 export { Card } from './components/card';
 export type { CalloutProps, CalloutTone } from './components/Callout';

@@ -114,13 +114,14 @@ const STOP_RECRUITING_WORDS: RefusalWords = {
   fallback: '停止招募失敗，請稍後再試一次。',
 };
 
-const QUANTITY_REQUIRED = '每項需求都要填數量（人員受困除外）。';
+const QUANTITY_REQUIRED = '每項需求都要填數量。';
 
 /**
- * A need of a kind that needs a count, filed without one (`QUANTITY_REQUIRED_TASK_TYPES`): the
- * forms ask for it first, so these are for one that gets through. 請求協助 says them too.
+ * A need filed without a count, which every kind needs, a rescue's at least one person: the forms
+ * ask for it first, so these are for one that gets through. 請求協助 says them too.
  */
 export const QUANTITY_REFUSALS: Record<string, string> = {
+  'quantity is required for a rescue task': QUANTITY_REQUIRED,
   'quantity is required for a hr task': QUANTITY_REQUIRED,
   'quantity is required for a supply task': QUANTITY_REQUIRED,
   'quantity is required for a medical task': QUANTITY_REQUIRED,

@@ -19,7 +19,8 @@ export type DraftStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 
 /**
  * Raised when the form's shape changes, so a draft of the old shape is read as none. Not for a field
- * added that a draft can do without: `addressFilled` and `addressKept` are read as none instead.
+ * added that a draft can do without: `addressFilled`, `addressKept` and `building` are read as none
+ * instead.
  */
 const DRAFT_VERSION = 1;
 
@@ -144,15 +145,18 @@ export function readHelpRequestDraft(
       return null;
     }
 
-    const { addressFilled, addressKept } = saved.form as {
+    const { addressFilled, addressKept, building } = saved.form as {
       addressFilled?: unknown;
       addressKept?: unknown;
+      building?: unknown;
     };
 
     return {
       ...saved.form,
       addressFilled: isFilledAddress(addressFilled) ? addressFilled : null,
       addressKept: typeof addressKept === 'string' ? addressKept : null,
+      // Filed in a building still, when it was kept as one.
+      building: typeof building === 'string' ? building : null,
     };
   } catch {
     return null;

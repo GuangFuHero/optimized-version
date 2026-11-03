@@ -120,7 +120,7 @@ export const BASE_LAYER_CONFIG: Record<
     tileSourceType: 'satellite',
     tileSource: 'nlsc',
     icon: Satellite,
-    licenseNote: '依國土測繪圖資服務雲服務使用條款，授權待確認',
+    licenseNote: '依國土測繪圖資服務雲服務使用條款',
   },
   sinica: {
     label: '衛星影像（中研院）',
@@ -136,6 +136,25 @@ export const BASE_LAYER_CONFIG: Record<
     hidden: true,
   },
 };
+
+/** The base layer a map opens on, until the viewer picks another. */
+export const DEFAULT_BASE_LAYER: RescueMapBaseLayer = 'osm-direct';
+
+/**
+ * Where a base layer's tiles come from, or null for one the backend proxies: its tiles come from the
+ * page's own origin, and its URL is relative.
+ */
+export function tileOriginOf(layer: RescueMapBaseLayer): string | null {
+  const { url } = BASE_LAYER_CONFIG[layer];
+
+  return /^https?:\/\//.test(url) ? new URL(url).origin : null;
+}
+
+/**
+ * Where the default base layer's tiles come from: a page that opens on a map connects to it ahead,
+ * before the first tile is asked for. Null when that layer is proxied, with nothing to connect to.
+ */
+export const DEFAULT_TILE_ORIGIN = tileOriginOf(DEFAULT_BASE_LAYER);
 
 /** 可選取並寫入偏好設定的底圖：已知、未隱藏且未停用。 */
 export function isSelectableBaseLayer(

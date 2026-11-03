@@ -2,13 +2,14 @@
 
 import { Box, Typography, type SxProps, type Theme } from '@mui/material';
 import {
-  Badge,
   Button,
   Callout,
   DataTable,
   designTokens,
   EmptyState,
   ListPagination,
+  Progress,
+  Tag,
   type DataTableProps,
 } from '@rescue-frontend/ui';
 import {
@@ -17,7 +18,6 @@ import {
   Flag,
   Image as ImageIcon,
   PanelRightOpen,
-  Plus,
   SearchX,
   Trash2,
   UserPlus,
@@ -28,7 +28,7 @@ import { FreshnessCell } from '../../../admin/shared/freshness-cell';
 import { Muted } from '../../../admin/shared/muted';
 import { NeedActionsMenu } from '../../needs/need-actions-menu';
 import type { NeedAction } from '../../needs/need-actions';
-import { formatTicketStatusLabel } from '../../status';
+import { TicketStatusTag } from '../ticket-status-tag';
 import type { SpaceListRow } from '../space/space-analysis';
 import { SpacePill, SpaceTag, StateBadge } from '../space/space-badges';
 import { spaceTicketTag, type TaggedSpace } from '../space/space-ticket-tag';
@@ -38,7 +38,7 @@ import {
   type TicketColumnId,
 } from './model/ticket-columns';
 import { ticketPriorityLabel } from './model/ticket-detail-view';
-import { adminTicketPriorityBadge } from './model/ticket-priority';
+import { adminTicketPriorityTag } from './model/ticket-priority';
 import {
   needChipLabel,
   needProgress,
@@ -47,6 +47,7 @@ import {
   type TaskRow,
   type TicketRow,
 } from './model/ticket-row';
+import { NewTicketButton } from './ticket-toolbar';
 
 const { color, radius, typography } = designTokens;
 
@@ -82,8 +83,10 @@ interface TicketTableProps {
   onOpenTicket: (uuid: string) => void;
   /** 刪除任務單 from a row's ⋯; offered only where the ticket's `viewerCanDelete` allows. */
   onDeleteTicket: (row: TicketRow) => void;
-  /** 新增任務 in the empty board; unset when the viewer may not add. */
+  /** 新增任務 ▾ in the empty board; unset when the viewer may not add. */
   onCreate?: () => void;
+  /** The import in that ▾; unset when the viewer may not import. */
+  onImport?: () => void;
   /**
    * The spaces the filters let through, in order. The tickets come paged and sorted by the
    * server, so the spaces sit above them on the first page.
@@ -108,6 +111,7 @@ export function TicketTable({
   onOpenTicket,
   onDeleteTicket,
   onCreate,
+  onImport,
   spaces = NO_SPACES,
   spaceTags = NO_TAGS,
   onOpenSpace,
@@ -232,16 +236,10 @@ export function TicketTable({
             <EmptyState
               icon={<ClipboardList />}
               title="還沒有任何任務單"
-              description="民眾在前台報案，或後台人員按「新增任務」代為登錄後，任務單會出現在這裡。"
+              description="民眾在前台報案、後台人員按「新增任務」代為登錄，或從「新增任務 ▾」匯入 CSV／Excel 後，任務單會出現在這裡。"
               action={
                 onCreate ? (
-                  <Button
-                    size="sm"
-                    startIcon={<Plus size={15} />}
-                    onClick={onCreate}
-                  >
-                    新增任務
-                  </Button>
+                  <NewTicketButton onCreate={onCreate} onImport={onImport} />
                 ) : null
               }
             />
@@ -292,14 +290,14 @@ function CutText({
   );
 }
 
-/** 生命危急 solid red, 緊急 subtle warning; 一般 and 低 as plain muted words (prototype PriorityBadge). */
+/** 生命危急 solid red, 緊急 a pale warning, 一般 and 低 quiet grey words (`adminTicketPriorityTag`). */
 export function PriorityCell({ priority }: { priority: string }) {
-  const badge = adminTicketPriorityBadge(priority);
-  if (badge) {
+  const tag = adminTicketPriorityTag(priority);
+  if (tag) {
     return (
-      <Badge tone={badge.tone} variant={badge.variant}>
-        {badge.label}
-      </Badge>
+      <Tag tone={tag.tone} fill={tag.fill}>
+        {tag.label}
+      </Tag>
     );
   }
   return (
@@ -353,15 +351,15 @@ function TicketCell({ row, tag }: { row: TicketRow; tag: string | null }) {
           {row.title}
         </Typography>
         {row.suspectedDuplicateOf ? (
-          <Badge
-            tone="warning"
-            size="sm"
-            icon={<Flag size={10} />}
+          <Box
+            component="span"
             title="疑似重複 · 待查核"
-            sx={{ flexShrink: 0 }}
+            sx={{ display: 'inline-flex', flexShrink: 0 }}
           >
-            疑似重複
-          </Badge>
+            <Tag tone="warning" size="sm" icon={<Flag size={10} />}>
+              疑似重複
+            </Tag>
+          </Box>
         ) : null}
         {tag ? <SpacePill title={tag}>{tag}</SpacePill> : null}
       </Box>
@@ -453,42 +451,32 @@ function NeedsCell({ tasks }: { tasks: readonly TaskRow[] }) {
   );
 }
 
-/** 承接進度: the 待承接 line over its 4px bar (prototype `FillBar`); nothing with no need to count. */
-export function NeedProgressBar({ progress }: { progress: NeedProgress }) {
+/**
+ * 承接進度: the 待承接 line over its grey bar (PRG-101, PRG-102); nothing with no need to count.
+ * Green only once every need is met: 在途 3／3, everyone taken but not there yet, is not done.
+ */
+export function NeedProgressBar({
+  progress,
+  label,
+  size = 'sm',
+}: {
+  progress: NeedProgress;
+  /** Words on the left of the numbers, as the detail sheet names the bar. */
+  label?: ReactNode;
+  /** PRG-101: sm (4px) in the table, md (6px) in the detail sheet. */
+  size?: 'sm' | 'md';
+}) {
   if (!progress.label) return null;
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '5px',
-        minWidth: 0,
-      }}
-    >
-      <Typography
-        noWrap
-        sx={{ ...typography.data[300], color: color.fg.neutral.muted }}
-      >
-        {progress.label}
-      </Typography>
-      <Box
-        role="presentation"
-        sx={{
-          height: 4,
-          borderRadius: '2px',
-          bgcolor: color.bg.neutral.sunken,
-          overflow: 'hidden',
-        }}
-      >
-        <Box
-          sx={{
-            height: '100%',
-            width: `${Math.round(progress.ratio * 100)}%`,
-            bgcolor: color.fg.neutral.subtle,
-          }}
-        />
-      </Box>
-    </Box>
+    <Progress
+      label={label}
+      value={progress.total - progress.waiting}
+      max={progress.total}
+      valueText={progress.label}
+      complete={progress.done}
+      tone="neutral"
+      size={size}
+    />
   );
 }
 
@@ -529,34 +517,7 @@ function NeedChip({ task }: { task: TaskRow }) {
 
 /** 狀態: grey words; only 待處理 carries the small orange dot and reads darker. */
 export function StatusCell({ status }: { status: string }) {
-  const pending = status === 'pending';
-  return (
-    <Typography
-      noWrap
-      sx={{
-        ...typography.data[300],
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '6px',
-        color: pending ? color.fg.neutral.default : color.fg.neutral.muted,
-        fontWeight: pending ? 600 : 400,
-      }}
-    >
-      {pending ? (
-        <Box
-          component="span"
-          sx={{
-            width: 6,
-            height: 6,
-            flexShrink: 0,
-            borderRadius: `${radius.full}px`,
-            bgcolor: color.bg.primary.default,
-          }}
-        />
-      ) : null}
-      {formatTicketStatusLabel(status)}
-    </Typography>
-  );
+  return <TicketStatusTag status={status} />;
 }
 
 /**

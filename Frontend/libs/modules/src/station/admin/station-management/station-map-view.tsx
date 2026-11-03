@@ -1,7 +1,7 @@
 'use client';
 
 import { Box, ButtonBase, IconButton, Typography } from '@mui/material';
-import { Badge, Button, designTokens } from '@rescue-frontend/ui';
+import { Button, designTokens, Tag } from '@rescue-frontend/ui';
 import type { Map as LeafletMap } from 'leaflet';
 import {
   ChevronRight,
@@ -26,11 +26,7 @@ import type {
   RescueMapControllerValue,
   RescueMapMarkerItem,
 } from '../../../map/types';
-import {
-  decideStationFit,
-  readShownStationFilters,
-  rememberShownStationFilters,
-} from './model/station-map-fit';
+import { decideStationFit } from './model/station-map-fit';
 import {
   getPresentStationTypes,
   getStationTypePinColor,
@@ -38,6 +34,10 @@ import {
 } from './model/station-marker';
 import type { StationRow } from './model/station-row';
 import { FreshnessCell } from '../../../admin/shared/freshness-cell';
+import {
+  readShownFilters,
+  rememberShownFilters,
+} from '../../../admin/shared/model/shown-filters';
 import { StatusBadge } from './station-cells';
 import { StationEmptyState } from './station-table';
 
@@ -93,7 +93,8 @@ export function StationMapView({
   // A link or a reload bringing other filters than this map last showed frames them even where it
   // was left (HC on #171). Asked once, as the map is built: back from the table, it was shown them.
   const [arrivedWithNewFilters] = useState(
-    () => filtersFromLink && readShownStationFilters() !== filtersKey,
+    () =>
+      filtersFromLink && readShownFilters('station-management') !== filtersKey,
   );
   const zoom = useMapZoom(leafletMap);
   const markers = useMemo(
@@ -298,7 +299,7 @@ function useFitStations(
     });
     if (step === 'wait') return;
     framedKeyRef.current = filtersKey;
-    rememberShownStationFilters(filtersKey);
+    rememberShownFilters('station-management', filtersKey);
     if (step === 'keep') return;
     const points = markersRef.current.map((marker) => marker.position);
     if (points.length === 1) {
@@ -403,9 +404,7 @@ function SelectedStationCard({
           gap: '6px',
         }}
       >
-        <Badge icon={<TypeDot color={getStationTypePinColor(row.type)} />}>
-          {row.typeLabel}
-        </Badge>
+        <Tag dot={getStationTypePinColor(row.type)}>{row.typeLabel}</Tag>
         <StatusBadge status={row.operationalStatus} />
       </Box>
       <Typography
@@ -438,20 +437,6 @@ function SelectedStationCard({
         開啟站點細節
       </Button>
     </Box>
-  );
-}
-
-function TypeDot({ color: fill }: { color: string }) {
-  return (
-    <Box
-      component="span"
-      sx={{
-        width: 8,
-        height: 8,
-        borderRadius: `${radius.full}px`,
-        bgcolor: fill,
-      }}
-    />
   );
 }
 

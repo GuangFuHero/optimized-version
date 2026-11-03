@@ -13,10 +13,10 @@ import {
 } from '@rescue-frontend/data-access/admin';
 import type { components } from '@rescue-frontend/data-access/openapi';
 import {
-  Badge,
   Button,
   Callout,
   designTokens,
+  Tag,
   TextInput,
 } from '@rescue-frontend/ui';
 import { CircleCheck, Download, FolderOpen, Upload, X } from 'lucide-react';
@@ -212,7 +212,7 @@ export function TicketImportDialog({ onClose }: { onClose: () => void }) {
           partialNote="任務單已寫入，但這一列的需求或需求欄位沒有寫完。請打開這些任務單核對需求與欄位後補齊。"
           badges={
             result.suspected > 0 ? (
-              <Badge tone="warning">疑似重複未建立 {result.suspected} 列</Badge>
+              <Tag tone="warning">疑似重複未建立 {result.suspected} 列</Tag>
             ) : null
           }
           reportLabel="下載沒匯入的列"
@@ -340,17 +340,15 @@ export function TicketImportDialog({ onClose }: { onClose: () => void }) {
                 aside={
                   <>
                     <Muted>還沒寫入</Muted>
-                    <Badge tone="success">新增 {summary.create} 列</Badge>
+                    <Tag tone="success">新增 {summary.create} 列</Tag>
                     {summary.update > 0 ? (
-                      <Badge tone="info">更新 {summary.update} 列</Badge>
+                      <Tag tone="info">更新 {summary.update} 列</Tag>
                     ) : null}
                     {summary.suspected > 0 ? (
-                      <Badge tone="warning">
-                        疑似重複 {summary.suspected} 列
-                      </Badge>
+                      <Tag tone="warning">疑似重複 {summary.suspected} 列</Tag>
                     ) : null}
                     {summary.failedLines > 0 ? (
-                      <Badge tone="danger">失敗 {summary.failedLines} 列</Badge>
+                      <Tag tone="danger">失敗 {summary.failedLines} 列</Tag>
                     ) : null}
                   </>
                 }

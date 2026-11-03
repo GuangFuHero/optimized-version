@@ -94,13 +94,13 @@ export interface NeedDraft {
 
 export type NeedDraftErrors = Partial<Record<'taskName' | 'quantity', string>>;
 
-/** The backend's rule (`QUANTITY_REQUIRED_TASK_TYPES`): a count for every type but rescue. */
+/** The backend's rule: a count for every type, a rescue's at least one person. */
 export function validateNeedDraft(draft: NeedDraft): NeedDraftErrors {
   const errors: NeedDraftErrors = {};
   if (!draft.taskName.trim()) errors.taskName = '請填寫需求名稱';
   const quantity = draft.quantity.trim();
   if (!quantity) {
-    if (draft.taskType !== 'rescue') errors.quantity = '請填寫數量';
+    errors.quantity = '請填寫數量';
   } else if (!/^\d+$/.test(quantity) || Number(quantity) < 1) {
     errors.quantity = '數量至少為 1';
   }

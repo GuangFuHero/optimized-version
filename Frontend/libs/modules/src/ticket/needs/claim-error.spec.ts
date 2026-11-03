@@ -157,10 +157,12 @@ describe('addNeedErrorMessage', () => {
     );
   });
 
-  it('asks for the quantity the panel let through, but for a rescue', () => {
-    expect(
-      addNeedErrorMessage(refused('quantity is required for a supply task')),
-    ).toBe('每項需求都要填數量（人員受困除外）。');
+  it('asks for the quantity the panel let through, a rescue included', () => {
+    for (const kind of ['rescue', 'supply']) {
+      expect(
+        addNeedErrorMessage(refused(`quantity is required for a ${kind} task`)),
+      ).toBe('每項需求都要填數量。');
+    }
   });
 
   it('says a request closed by hand takes nothing more', () => {

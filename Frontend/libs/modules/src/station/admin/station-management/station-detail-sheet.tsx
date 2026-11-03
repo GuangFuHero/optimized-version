@@ -5,12 +5,12 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Box, Tab } from '@mui/material';
 import { useCurrentUser, useStation } from '@rescue-frontend/data-access/admin';
 import {
-  Badge,
   Button,
   designTokens,
   SheetFrame,
   SheetLayout,
   Tabs,
+  Tag,
 } from '@rescue-frontend/ui';
 import { EyeOff, PencilLine, ShieldCheck, Trash2 } from 'lucide-react';
 
@@ -21,7 +21,6 @@ import {
   StationForm,
   StationFormLayout,
 } from '../../form';
-import { getOperationalStatusMeta } from '../../operational-status';
 import type { StationCapabilities } from './hooks/use-station-capabilities';
 import {
   readOnlyCaption,
@@ -152,7 +151,6 @@ function StationDetailContent({
   const view = toStationDetailView(station, {
     canViewPii: station.viewerCanViewPii,
   });
-  const status = getOperationalStatusMeta(station.operationalStatus);
   const version = useLoadedStationVersion(station.uuid);
   const teamName = useCurrentUser().data?.active_identity?.team ?? null;
 
@@ -170,21 +168,20 @@ function StationDetailContent({
               gap: '8px',
             }}
           >
-            <Badge tone={status.tone} variant="solid">
-              {status.label}
-            </Badge>
+            {/* The table's own tag, pale: solid is only for what must be seen at once (TAG-103). */}
+            <StatusBadge status={station.operationalStatus} />
             {view.isOfficial ? (
-              <Badge tone="info" icon={<ShieldCheck size={13} />}>
+              <Tag tone="info" icon={<ShieldCheck size={13} />}>
                 官方
-              </Badge>
+              </Tag>
             ) : null}
             {view.verification.verified ? (
-              <Badge tone="success">已驗證</Badge>
+              <Tag tone="success">已驗證</Tag>
             ) : (
-              <Badge tone="warning">未驗證</Badge>
+              <Tag tone="warning">未驗證</Tag>
             )}
             {view.pendingFieldCount > 0 ? (
-              <Badge tone="warning">{view.pendingFieldCount} 欄待審</Badge>
+              <Tag tone="warning">{view.pendingFieldCount} 欄待審</Tag>
             ) : null}
           </Box>
           {station.viewerCanViewHistory ? (
@@ -312,9 +309,9 @@ function StationInfo({
         {view.resources.length ? (
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
             {view.resources.map((resource) => (
-              <Badge key={resource.id}>
+              <Tag key={resource.id}>
                 {`${resource.label}・${resource.value}`}
-              </Badge>
+              </Tag>
             ))}
           </Box>
         ) : (
@@ -369,9 +366,9 @@ function PrivateLabel({ children }: { children: ReactNode }) {
       sx={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
     >
       {children}
-      <Badge tone="primary" size="sm" icon={<EyeOff size={11} />}>
+      <Tag tone="brand" size="sm" icon={<EyeOff size={11} />}>
         不公開
-      </Badge>
+      </Tag>
     </Box>
   );
 }

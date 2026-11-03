@@ -99,13 +99,6 @@ export function toServerVariables(
   };
 }
 
-/** What to tell the user about a keyword the server would not take yet. */
-export function searchHint(q: string): string | null {
-  return resolveTicketSearch(q).kind === 'too-short'
-    ? '請輸入 2–50 個字'
-    : null;
-}
-
 export function countActiveFilters(filters: TicketFilters): number {
   return [
     filters.status,
@@ -200,6 +193,14 @@ export function toExtentVariables(
   filters: TicketFilters,
 ): AdminTicketsExtentQueryVariables {
   return toServerVariables(filters);
+}
+
+/**
+ * The filters as one string, as the server takes them: the map frames again when it changes, and
+ * remembers the one it last showed.
+ */
+export function ticketFiltersKey(filters: TicketFilters): string {
+  return JSON.stringify(toExtentVariables(filters));
 }
 
 /** The tickets inside `viewport` that match the filters, up to the map's limit. */

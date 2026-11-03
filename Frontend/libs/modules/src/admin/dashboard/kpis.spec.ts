@@ -3,7 +3,13 @@ import { describe, expect, it } from 'vitest';
 import {
   addDays,
   applyFilterChange,
+  chartAvailability,
   dateRangeProblem,
+  kpiQueryRange,
+  rangeAsOfCaption,
+  VOLUNTEER_KPIS,
+  gapNeedsLine,
+  supplyUnclaimedLine,
   isValidDateRange,
   DASHBOARD_QUICK_RANGES,
   DASHBOARD_TIME_ZONES,
@@ -11,6 +17,7 @@ import {
   kpiAvailability,
   localDateString,
   lookbackRange,
+  openTrendDays,
   rangeLengthDays,
   quickRangeDates,
   rangeCreatedCaption,
@@ -292,5 +299,109 @@ describe('dateRangeProblem', () => {
         applied,
       ),
     ).toMatch(/^日期無效/);
+  });
+});
+
+describe('the volunteer cards', () => {
+  const today = '2026-11-01';
+  const range = { start_date: '2026-10-03', end_date: today };
+
+  it('are the four running totals, 物資 first, each asked for at the end date only', () => {
+    expect(VOLUNTEER_KPIS.map((kpi) => kpi.metric)).toEqual([
+      'supply_needs',
+      'volunteers_needed',
+      'volunteers_matched',
+      'volunteer_gap',
+    ]);
+    // 物資 is a 需求 like 志工需求人數, so it shares its accent, and never takes the warning colours.
+    expect(VOLUNTEER_KPIS.map((kpi) => kpi.accent)).toEqual([
+      'secondary',
+      'secondary',
+      'success',
+      'warning',
+    ]);
+    expect(
+      VOLUNTEER_KPIS.flatMap((kpi) =>
+        kpi.footnote ? [[kpi.metric, kpi.footnote.metric]] : [],
+      ),
+    ).toEqual([
+      ['supply_needs', 'supply_needs_unclaimed'],
+      ['volunteer_gap', 'volunteer_gap_needs'],
+    ]);
+    for (const kpi of VOLUNTEER_KPIS) {
+      expect(kpiQueryRange(kpi, range)).toEqual({ end_date: today });
+    }
+    expect(kpiQueryRange({}, range)).toEqual(range);
+  });
+
+  it('say which day they stand at: today, or the end date of a past range', () => {
+    expect(rangeAsOfCaption(range, today)).toBe('截至今日');
+    expect(rangeAsOfCaption({ end_date: '2026-10-31' }, today)).toBe(
+      '截至 10/31',
+    );
+  });
+
+  it('say how many needs are short, or that none is', () => {
+    expect(gapNeedsLine(3)).toBe('3 項需求還缺人');
+    expect(gapNeedsLine(1234)).toBe('1,234 項需求還缺人');
+    expect(gapNeedsLine(0)).toBe('目前沒有缺人的需求');
+  });
+
+  it('say how many 物資 needs nobody has taken, or that all have been', () => {
+    expect(supplyUnclaimedLine(2)).toBe('還沒人接 2 筆');
+    expect(supplyUnclaimedLine(0)).toBe('都有人接了');
+  });
+});
+
+describe('chartAvailability', () => {
+  const trend = { requires_date_range: false, max_range_days: 366 };
+
+  it("caps a daily trend at the catalog's days, and lets an open range through", () => {
+    expect(
+      chartAvailability(
+        trend,
+        { start_date: '2025-01-01', end_date: '2026-11-01' },
+        'date',
+      ),
+    ).toEqual({ kind: 'needs-range', maxDays: 366 });
+    expect(
+      chartAvailability(trend, { end_date: '2026-11-01' }, 'date'),
+    ).toEqual({ kind: 'ready' });
+  });
+
+  it('leaves the other groupings to kpiAvailability: they read one instant', () => {
+    expect(
+      chartAvailability(
+        trend,
+        { start_date: '2025-01-01', end_date: '2026-11-01' },
+        'category',
+      ),
+    ).toEqual({ kind: 'ready' });
+  });
+});
+
+describe('openTrendDays', () => {
+  const trend = { requires_date_range: false, max_range_days: 366 };
+  const open = { end_date: '2026-11-01' };
+
+  it('gives the 30 days the backend draws a capped daily trend over when the range is open', () => {
+    expect(openTrendDays(trend, open, 'date')).toBe(30);
+  });
+
+  it('is null with a start date, for another grouping, or for a metric that is not capped that way', () => {
+    expect(
+      openTrendDays(trend, { start_date: '2026-10-03', ...open }, 'date'),
+    ).toBeNull();
+    expect(openTrendDays(trend, open, 'category')).toBeNull();
+    expect(openTrendDays({ requires_date_range: false }, open, 'date')).toBe(
+      null,
+    );
+    expect(
+      openTrendDays(
+        { requires_date_range: true, max_range_days: 90 },
+        open,
+        'date',
+      ),
+    ).toBeNull();
   });
 });
