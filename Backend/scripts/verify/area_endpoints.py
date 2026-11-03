@@ -201,10 +201,11 @@ async def main() -> int:
         body = await gql(create, {"i": {"type": "mark_zone", "geometry": square(120.0, 22.0)}})
         check("guest is refused", bool(errors(body)), body)
 
-        print("3/5. areas(bounds) for a guest, and the visibility switch")
+        print("3/5. areas(bounds) for a guest and for anyone signed in, and the visibility switch")
         seen = await gql(areas, {"b": box(120.0, 22.0)})
         uuids = {i["uuid"] for i in seen["data"]["areas"]["items"]}
-        check("guest sees the hazard and team zone", {hz["uuid"], tz["uuid"]} <= uuids)
+        check("guest sees the hazard", hz["uuid"] in uuids)
+        check("guest does not see the team zone", tz["uuid"] not in uuids)
         check("guest does not see the hidden mark", mz["uuid"] not in uuids)
         body = await gql(update, {"u": mz["uuid"], "i": {"isPublic": True}}, gov)
         check(
@@ -214,17 +215,24 @@ async def main() -> int:
         )
         seen = await gql(areas, {"b": box(120.0, 22.0)})
         items = {i["uuid"]: i for i in seen["data"]["areas"]["items"]}
-        check("guest now sees hazard + team zone + mark", {hz["uuid"], tz["uuid"], mz["uuid"]} <= set(items))
+        check("guest now sees hazard + mark", {hz["uuid"], mz["uuid"]} <= set(items))
+        check("guest still sees no team zone", tz["uuid"] not in items)
+        guest_total = seen["data"]["areas"]["pageInfo"]["totalCount"]
+        check("guest's count leaves the team zone out", guest_total == len(items), seen)
+        seen = await gql(areas, {"b": box(120.0, 22.0)}, ngo)
+        items = {i["uuid"]: i for i in seen["data"]["areas"]["items"]}
+        check("signed in sees hazard + team zone + mark", {hz["uuid"], tz["uuid"], mz["uuid"]} <= set(items))
         check("public layer carries the type", items[tz["uuid"]]["type"] == "team_zone")
         check("area outside the box is left out", fz["uuid"] not in items)
         body = await gql(
             "query($b: BoundsInput) { areas(bounds: $b) { items { uuid assignedTeams { uuid name } } } }",
             {"b": box(120.0, 22.0)},
+            ngo,
         )
         teams = {i["uuid"]: i["assignedTeams"] for i in body["data"]["areas"]["items"]}
         zone_teams = teams[tz["uuid"]]
         check(
-            "guest sees the team zone's team by name",
+            "signed in sees the team zone's team by name",
             [t["uuid"] for t in zone_teams] == [ngo_team] and all(t["name"] for t in zone_teams),
             body,
         )
