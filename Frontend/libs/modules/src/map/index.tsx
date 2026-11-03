@@ -61,7 +61,7 @@ import type {
   RescueMapViewportStoreLike,
 } from './types';
 
-const { color, primitives, radius, shadow } = designTokens;
+const { color, iconSize, primitives, radius, shadow } = designTokens;
 
 const MAP_LOADING_MESSAGE = '救災寶加載地圖中…';
 
@@ -101,7 +101,7 @@ const MAP_STATIC_GLOBAL_STYLES = {
   },
   '.leaflet-control-scale': {
     marginBottom: '16px',
-    marginLeft: '16px',
+    marginRight: '16px',
   },
   '.map-marker-cluster-wrapper': {
     background: 'transparent',
@@ -294,8 +294,16 @@ interface MapProps {
    * caller shows the selection itself (`controller.selectedMarkerId`). Default: the drawer opens.
    */
   hideDetailDrawer?: boolean;
-  /** Opt-in: show Leaflet's zoom buttons, top right. Default: hidden. */
+  /**
+   * Opt-in: show the zoom buttons, top right, from 768px up — a phone pinches, and its bottom edge
+   * is taken by 請求協助. Default: hidden.
+   */
   showZoomControl?: boolean;
+  /**
+   * With `showZoomControl`: how far from the map's top the buttons start, to sit under a control the
+   * page puts in the corner (the site's 圖層 button). Default: Leaflet's own margin.
+   */
+  zoomControlTop?: number;
   /** Opt-in cluster look, read once when the map is built. Default: the site's gradient discs. */
   clusterAppearance?: RescueMapClusterAppearance;
   /** Opt-in: markers stop clustering above this zoom (read once). Default: they always cluster. */
@@ -348,6 +356,7 @@ export const Map = memo(function Map({
   guestLayerCopy = false,
   hideDetailDrawer = false,
   showZoomControl = false,
+  zoomControlTop,
   clusterAppearance,
   clusterMaxZoom,
   onMapReady,
@@ -529,7 +538,30 @@ export const Map = memo(function Map({
           overflow: 'hidden',
           bgcolor: color.bg.neutral.sunken,
           ...(showZoomControl
-            ? { '& .leaflet-control-zoom': { display: 'block' } }
+            ? {
+                '& .leaflet-control-zoom': {
+                  display: { mobile: 'none', tablet: 'block' },
+                  // A column of two 44px buttons in one pill, as the map's other controls.
+                  border: 'none',
+                  borderRadius: `${radius.full}px`,
+                  overflow: 'hidden',
+                  boxShadow: shadow.md,
+                  ...(zoomControlTop === undefined
+                    ? {}
+                    : { marginTop: `${zoomControlTop}px`, marginRight: '16px' }),
+                },
+                '& .leaflet-control-zoom a': {
+                  width: 44,
+                  height: 44,
+                  lineHeight: '44px',
+                  // + and − are glyphs standing in for icons.
+                  fontSize: iconSize.lg,
+                  color: color.fg.neutral.default,
+                  bgcolor: color.bg.neutral.default,
+                  borderBottomColor: color.border.default,
+                  '&:hover': { bgcolor: color.bg.neutral.subtle },
+                },
+              }
             : {}),
         }}
       >

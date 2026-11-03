@@ -262,14 +262,17 @@ export function SiteMapControls({ controller }: SiteMapControlsProps) {
       <Box
         sx={{
           position: 'absolute',
-          top: 16,
-          left: { mobile: 16, tablet: 24 },
+          // 12 on a phone, as the prototype: at 16 the one row (站點／任務, 篩選, 列表, 圖層) is 5px
+          // too wide for a 375px screen.
+          top: { mobile: 12, tablet: 16 },
+          left: { mobile: 12, tablet: 24 },
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'flex-start',
           gap: 1,
           width: 'fit-content',
-          maxWidth: 'calc(100vw - 112px)',
+          // Clear of the buttons on the right: 列表 and 圖層 side by side on a phone, 圖層 alone above.
+          maxWidth: { mobile: 'calc(100vw - 128px)', tablet: 'calc(100vw - 112px)' },
           pointerEvents: 'auto',
         }}
       >
@@ -277,7 +280,7 @@ export function SiteMapControls({ controller }: SiteMapControlsProps) {
           sx={{
             display: 'flex',
             alignItems: 'center',
-            gap: 1.5,
+            gap: { mobile: 1, tablet: 1.5 },
             minWidth: 0,
             maxWidth: '100%',
           }}
@@ -292,6 +295,7 @@ export function SiteMapControls({ controller }: SiteMapControlsProps) {
             pinned={pinnedSubDataTypes}
             onToggle={controller.toggleSubDataType}
             onTogglePinned={handleTogglePinnedSubDataType}
+            iconOnlyOnPhone
           />
         </Box>
         <SitePinnedFilterRow
@@ -304,18 +308,18 @@ export function SiteMapControls({ controller }: SiteMapControlsProps) {
       <Box
         sx={{
           position: 'absolute',
-          top: 16,
-          right: 16,
+          top: { mobile: 12, tablet: 16 },
+          right: { mobile: 12, tablet: 16 },
           display: 'flex',
-          flexDirection: 'column',
+          // A phone's controls are one row: 站點／任務, 篩選, 列表, 圖層. The 篩選 beside them is its icon
+          // alone there, so 列表 fits beside 圖層 rather than hanging in a second row under it.
+          flexDirection: { mobile: 'row', tablet: 'column' },
           gap: 1,
           pointerEvents: 'auto',
         }}
       >
-        <SiteLayerButton controller={controller} />
-        {/* 地圖 ⇄ 列表，只在手機：平板以上的側欄已經有地圖與列表（2026-09-21 Sucre），手機的側欄
-            收在漢堡選單裡。跟圖層按鈕同一種形狀；直向疊在它下方而不是並排：390px 實測並排會蓋住
-            「篩選」。 */}
+        {/* 地圖 ⇄ 列表，只在手機：平板以上的側欄已經有地圖與列表，手機的側欄收在漢堡選單裡。
+            跟圖層按鈕同一種形狀，排在它左邊。 */}
         <SiteControlSurface
           sx={{
             display: { mobile: 'grid', tablet: 'none' },
@@ -326,6 +330,7 @@ export function SiteMapControls({ controller }: SiteMapControlsProps) {
         >
           <SiteViewSwitch module="map" />
         </SiteControlSurface>
+        <SiteLayerButton controller={controller} />
       </Box>
     </Box>
   );
