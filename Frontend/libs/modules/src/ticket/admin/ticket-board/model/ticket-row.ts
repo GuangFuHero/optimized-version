@@ -118,6 +118,10 @@ export interface TicketRow {
   /** The 責任區 teams' names (`responsibleTeams`); empty when none, and when withheld. */
   teamNames: string[];
   tasks: TaskRow[];
+  /**
+   * People still missing on its open hr needs: 缺 N 人 under the summary. Supply and rescue add
+   * nothing, as the stat tiles' 志工缺口 (`gapPeople`) counts it — 84 lunch boxes are not 84 people.
+   */
   volunteerGap: number;
   raw: TicketListItem;
 }
@@ -233,7 +237,9 @@ export function toTicketRow(ticket: TicketListItem): TicketRow {
     photoCount: ticket.photos.length,
     teamNames: ticket.responsibleTeams.map((team) => team.name),
     tasks,
-    volunteerGap: tasks.reduce((sum, t) => sum + t.gap, 0),
+    volunteerGap: tasks
+      .filter((t) => t.taskType.trim().toLowerCase() === 'hr')
+      .reduce((sum, t) => sum + t.gap, 0),
     raw: ticket,
   };
 }
