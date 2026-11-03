@@ -11,101 +11,136 @@
  * backend is still being brought up to; ask before matching them to its grants instead.
  */
 
-import type { PageHelp } from '../site/page-help/page-help';
+import type {
+  PageHelp,
+  PagePermissions,
+  PermissionMark,
+} from '../site/page-help/page-help';
+
+/** Every identity's row, in the account menu's groups; marks follow the page's `actions`. */
+function identityGroups(
+  govAdmin: readonly PermissionMark[],
+  govMember: readonly PermissionMark[],
+  ngoAdmin: readonly PermissionMark[],
+  ngoMember: readonly PermissionMark[],
+  auditor: readonly PermissionMark[],
+): PagePermissions['groups'] {
+  return [
+    {
+      title: '政府',
+      rows: [
+        ['管理員', govAdmin],
+        ['成員', govMember],
+      ],
+    },
+    {
+      title: '非政府組織',
+      rows: [
+        ['管理員', ngoAdmin],
+        ['成員', ngoMember],
+      ],
+    },
+    { title: '平台身分', rows: [['資料檢核員', auditor]] },
+  ];
+}
+
+const Y = 'all';
+const O = 'own';
+const N = 'none';
+
+const ASK_FOR_ACCESS =
+  '無法使用某項功能，表示目前身份暫無權限，請找團隊管理員或超級管理員。';
 
 /** Keyed by the page's path, as the nav's items are (`nav.ts`). */
 export const ADMIN_PAGE_HELP: Partial<Record<string, PageHelp>> = {
   '/dashboard': {
     title: '總覽儀表板',
-    what: '藉由儀表板綜觀任務需求、志工媒合、資源站點的數量、類型及趨勢變化，了解即時熱點及尚需協助的區域。',
+    what: '綜觀任務需求、志工媒合、資源站點數量、類型及趨勢，掌握即時熱點與仍需協助區域。',
     can: [],
   },
   '/tickets': {
     title: '任務管理',
-    what: '集中管理求助任務單，每張單可包含多筆獨立需求。',
-    can: ['搜尋、篩選及查看任務', '建立或處理求助任務', '更新任務內容及進度'],
+    what: '集中管理求助任務單，一張單可含多筆需求。所有後台人員都能查看。',
+    can: [
+      '搜尋、篩選及查看任務',
+      '新增或處理求助任務',
+      '更新任務內容及進度',
+      '從「新增任務 ▾」匯入多張任務',
+    ],
     sections: [
       {
         title: '開啟空間',
-        body: '同棟大樓多人求助時，可在地圖建立空間，填寫名稱及地上、地下樓層數（系統自動新增頂樓 RF）。可查看樓層需求、編輯或刪除（不影響任務單）。任務單填寫 RF 或「頂樓」皆會歸入頂樓。',
+        body: '同棟大樓多人求助時，可在地圖建立空間，填名稱與地上、地下樓層數（自動加頂樓 RF）。可查看各樓層需求、編輯或刪除，不影響任務單。任務單寫 RF 或「頂樓」都歸入頂樓。',
       },
     ],
-    // As decided: the 政府隊's members import, export and open spaces as its admins do. 責任區 go to
-    // NGO teams only, so an NGO team works the tickets inside its own. Import and export: super
-    // admins, the 政府隊 and NGO admins only — not NGO members, not data auditors. A member deleting
-    // the ticket they created goes without saying; writing it out only confuses.
-    roles: [
-      ['超級管理員', '全部功能'],
-      ['政府隊管理員', '建立；修改、刪除（全部任務單）；匯入、匯出；開啟空間'],
-      ['政府隊成員', '建立；修改（全部任務單）；匯入、匯出；開啟空間'],
-      [
-        '非政府組織隊管理員',
-        '建立；修改、刪除（責任區內）；匯出、匯入（責任區內）',
-      ],
-      ['非政府組織隊成員', '建立；修改（責任區內）'],
-      ['資料檢核員', '查看全部任務與紀錄、重複審核'],
-    ],
+    // As decided: 責任區 go to NGO teams only, so an NGO team works the tickets inside its own; the
+    // 政府隊's members import, export and open spaces as its admins do. Import and export: super
+    // admins, the 政府隊 and NGO admins only — not NGO members, not data auditors. A member's ✕
+    // under 刪除 is about others' tickets: deleting the one they created goes without saying.
+    permissions: {
+      actions: ['新增', '修改', '刪除', '匯入', '匯出', '開啟空間'],
+      own: '本隊責任區',
+      groups: identityGroups(
+        [Y, Y, Y, Y, Y, Y],
+        [Y, Y, N, Y, Y, Y],
+        [Y, O, O, O, O, N],
+        [Y, O, N, N, N, N],
+        [N, N, N, N, N, N],
+      ),
+    },
+    note: `${ASK_FOR_ACCESS}沒有責任區時，請找政府隊指派。`,
   },
   '/stations': {
     title: '資源站點管理',
-    what: '管理加水、避難、醫療、物資等資源站點。',
+    what: '管理加水、避難、醫療、物資等資源站點。所有後台人員都能查看。',
     can: [
       '新增、編輯站點及營運狀態',
-      '審核民眾提交的修改建議',
-      '依權限指派站點給負責團隊',
+      '審核民眾修改建議，已採用可撤銷',
+      '指派站點給負責團隊',
+      '從「新增站點 ▾」匯入多個站點',
     ],
     sections: [
       {
         title: '個別指派',
-        body: '在列表「指派團隊」欄逐一指定團隊。指派後，團隊可編輯站點及處理修改建議。',
+        body: '在列表「指派團隊」欄逐一指定。指派後，該團隊可編輯站點、審核修改建議。',
       },
     ],
     // As decided: the 政府隊's members review every station's suggestions too; only its admins
-    // delete any station. Data auditors do not export.
-    roles: [
-      ['超級管理員', '全部功能'],
-      [
-        '政府隊管理員',
-        '新增、編輯、刪除任何站點、指派團隊、審核全部站點的修改建議；匯入、匯出',
-      ],
-      [
-        '政府隊成員',
-        '新增、編輯站點、指派團隊、審核全部站點的修改建議；匯入、匯出',
-      ],
-      [
-        '非政府組織隊管理員',
-        '新增站點、匯入（全部）；編輯、刪除、審核、匯出（本隊站點）',
-      ],
-      ['非政府組織隊成員', '新增站點、編輯本隊站點'],
-      ['資料檢核員', '審核、撤銷所有修改建議'],
-    ],
-    note: '所有後台人員皆可查看站點。',
+    // delete any station. An NGO admin imports new stations anywhere and exports only their own.
+    permissions: {
+      actions: ['新增', '編輯', '刪除', '指派', '審核', '撤銷', '匯入', '匯出'],
+      own: '本隊站點',
+      groups: identityGroups(
+        [Y, Y, Y, Y, Y, N, Y, Y],
+        [Y, Y, N, Y, Y, N, Y, Y],
+        [Y, O, O, N, O, N, Y, O],
+        [Y, O, N, N, N, N, N, N],
+        [N, N, N, N, Y, Y, N, N],
+      ),
+    },
+    note: ASK_FOR_ACCESS,
   },
   '/announcements': {
     title: '緊急公告',
-    what: '發布會出現在每一頁最上方的紅色公告。',
-    can: [
-      '分別對前台（民眾與志工）或後台發布',
-      '超級管理員可以隨時關閉公告',
-      '查看以前發過的公告',
-    ],
-    note: '只有超級管理員可以發布。發出去所有人都會看到，請確認內容再送出。',
+    what: '發布紅色公告，顯示在每一頁最上方。',
+    can: ['對前台（民眾與志工）或後台發布', '隨時關閉公告', '查看過去公告'],
+    note: '限超級管理員發布。送出後所有人都看得到，請先確認內容。',
   },
   '/briefings': {
     title: '志工行前資訊',
-    what: '志工出發前要看的內容：怎麼參與、怎麼到、要帶什麼、要注意什麼。',
-    can: ['發布到前台，或從前台下架', '查看以前發布過的版本'],
-    note: '前台一次只會有一份。發布新版本會直接取代舊的。',
+    what: '志工出發前須知：如何參與、交通、攜帶物品、注意事項。',
+    can: ['發布到前台或下架', '查看過去版本'],
+    note: '前台一次只顯示一份，發布新版會取代舊版。',
   },
   '/settings': {
     title: '設定',
-    what: '這次災害的基本資料都在這一頁設定。',
+    what: '設定這次災害基本資料。',
     can: [
-      '改災害名稱、簡稱與起始時間',
-      '設定地圖預設位置：前台與後台的地圖第一次打開就停在災區，之後停在每個人自己上次看的地方（沒設定會顯示全台）',
-      '選這次用到哪幾種災害',
+      '修改災害名稱、簡稱與起始時間',
+      '設定地圖預設位置：第一次開地圖停在災區，之後停在各自上次位置（未設定顯示全台）',
+      '選擇這次災害類型',
     ],
-    note: '只有超級管理員可以修改。',
+    note: '限超級管理員修改。',
   },
 };
 

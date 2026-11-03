@@ -13,6 +13,27 @@ export interface PageHelpSection {
   items?: readonly string[];
 }
 
+/** One cell of the 權限 table: ● every one, ◐ only within the team's own, ✕ none. */
+export type PermissionMark = 'all' | 'own' | 'none';
+
+/**
+ * The 權限 table. Its rows are grouped as the account menu names an identity — 政府, 非政府組織,
+ * 平台身分 — so a reader finds their own row by what the menu shows them.
+ */
+export interface PagePermissions {
+  /** The page's actions, as the column heads, in the words of its buttons. */
+  actions: readonly string[];
+  /** What ◐ stands for on this page: 本隊責任區 for tickets, 本隊站點 for stations. */
+  own: string;
+  groups: ReadonlyArray<{
+    title: string;
+    /** One mark per action, in the order of `actions`. */
+    rows: ReadonlyArray<
+      readonly [role: string, marks: readonly PermissionMark[]]
+    >;
+  }>;
+}
+
 /**
  * Its sentences and list items (not the titles) may set words in bold between `**`, as the
  * prototype's `rich` does.
@@ -24,8 +45,8 @@ export interface PageHelp {
   /** 你可以 — what a person can do here. */
   can: readonly string[];
   sections?: readonly PageHelpSection[];
-  /** 權限: each role beside what it may do here, as two columns. */
-  roles?: ReadonlyArray<readonly [role: string, can: string]>;
+  /** 權限: which identity may use which of the page's actions, as a table. */
+  permissions?: PagePermissions;
   /** 注意, in a grey box at the foot. */
   note?: string;
 }
@@ -84,9 +105,9 @@ export function helpTextRuns(text: string): HelpTextRun[] {
     .filter((run) => run.text !== '');
 }
 
-/** As wide as the prototype's panel: 400 with a role table or a section holding a list, 340 otherwise. */
+/** As wide as the prototype's panel: 400 with a 權限 table or a section holding a list, 340 otherwise. */
 export function pageHelpWidth(help: PageHelp): number {
-  return help.roles?.length ||
+  return help.permissions ||
     help.sections?.some((section) => section.items?.length)
     ? 400
     : 340;

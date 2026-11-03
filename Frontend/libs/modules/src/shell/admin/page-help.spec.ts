@@ -22,4 +22,18 @@ describe('ADMIN_PAGE_HELP', () => {
 
     expect(tickets).not.toContain('指派給團隊');
   });
+
+  it('gives every row of a 權限 table one mark per action', () => {
+    for (const help of Object.values(ADMIN_PAGE_HELP)) {
+      const permissions = help?.permissions;
+      if (!permissions) {
+        continue;
+      }
+      for (const group of permissions.groups) {
+        for (const [, marks] of group.rows) {
+          expect(marks).toHaveLength(permissions.actions.length);
+        }
+      }
+    }
+  });
 });
