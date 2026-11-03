@@ -33,6 +33,7 @@ import {
   type AdminNoticeGroup,
   type AdminNoticeKind,
 } from './admin-notices';
+import { StatTilesRetry } from '../admin/shared/stat-tiles';
 import { adminNotificationKeys } from './api';
 import { useMarkNotificationsRead } from './use-mark-notifications-read';
 import { useNotificationPages } from './use-notification-pages';
@@ -71,7 +72,7 @@ const GROUP_COLORS: Record<AdminNoticeGroup, string> = {
 
 const EMPTY_REASONS: { kind: AdminNoticeKind; text: string }[] = [
   { kind: 'suggestion', text: '站點有修改建議待你審核' },
-  { kind: 'dedup', text: '有資料疑似重複，待審核' },
+  { kind: 'dedup', text: '有資料疑似重複，待審' },
   { kind: 'role', text: '有人申請管理權限' },
   { kind: 'assign', text: '站點、責任區指派給你的團隊' },
   { kind: 'team', text: '加入團隊、團隊暫停' },
@@ -90,6 +91,25 @@ function Line({ children }: { children: string }) {
     >
       {children}
     </Typography>
+  );
+}
+
+/** The list did not load: 讀不到通知 with its 重試, as the counts above a list say it (STAT-109). */
+function ReadFailed({
+  retrying,
+  onRetry,
+}: {
+  retrying: boolean;
+  onRetry: () => void;
+}) {
+  return (
+    <Stack sx={{ alignItems: 'center', py: 4 }}>
+      <StatTilesRetry
+        message="讀不到通知"
+        retrying={retrying}
+        onRetry={onRetry}
+      />
+    </Stack>
   );
 }
 
@@ -277,7 +297,7 @@ export function AdminNotifySheet({ open, onClose }: AdminNotifySheetProps) {
 function AdminNotifyContent({ onClose }: { onClose: () => void }) {
   const router = useRouter();
   // A staff member's newest page can be all site notices: the hook reads on without a tap.
-  const { list, notices, searching, empty } = useNotificationPages({
+  const { list, notices, searching } = useNotificationPages({
     listKey: adminNotificationKeys.list,
     read: readAdminNotices,
   });
@@ -362,23 +382,30 @@ function AdminNotifyContent({ onClose }: { onClose: () => void }) {
       <Box>
         {!notices ? (
           <Box sx={{ p: BODY_PADDING }}>
-            <Line>
-              {list.isError ? '讀不到通知，請稍後再試一次。' : '載入中…'}
-            </Line>
+            {list.isError ? (
+              <ReadFailed
+                retrying={list.isFetching}
+                onRetry={() => void list.refetch()}
+              />
+            ) : (
+              <Line>載入中…</Line>
+            )}
           </Box>
-        ) : empty ? (
+        ) : notices.length === 0 && searching ? (
           <Box sx={{ p: BODY_PADDING }}>
-            <AdminNotifyEmpty />
+            <Line>載入中…</Line>
+          </Box>
+        ) : notices.length === 0 && list.isFetchNextPageError ? (
+          <Box sx={{ p: BODY_PADDING }}>
+            <ReadFailed
+              retrying={list.isFetchingNextPage}
+              onRetry={() => void list.fetchNextPage()}
+            />
           </Box>
         ) : notices.length === 0 ? (
+          // Only the site's notices so far: for the back office that is no notices (Sucre).
           <Box sx={{ p: BODY_PADDING }}>
-            <Line>
-              {searching
-                ? '載入中…'
-                : list.isFetchNextPageError
-                  ? '讀不到通知，請稍後再試一次。'
-                  : '最近的通知都是給前台的，這裡不顯示。'}
-            </Line>
+            <AdminNotifyEmpty />
           </Box>
         ) : (
           groups.map(({ group, notices: inGroup, unread: groupUnread }) => {
@@ -439,7 +466,10 @@ function AdminNotifyContent({ onClose }: { onClose: () => void }) {
           })
         )}
 
-        {list.hasNextPage && !searching ? (
+        {/* Not under 讀不到通知: its 重試 reads that page already. */}
+        {list.hasNextPage &&
+        !searching &&
+        !(notices?.length === 0 && list.isFetchNextPageError) ? (
           <Stack sx={{ alignItems: 'center', p: BODY_PADDING }}>
             <Button
               variant="ghost"

@@ -138,7 +138,6 @@ function hrefOf(
     : page;
 }
 
-/** A notice as the bell shows it. */
 /**
  * Where a notice's link goes from the page the viewer is on. Already on the page it links to, its
  * query is laid over the one there, so a station opens on 資源站點管理 without resetting the
@@ -164,6 +163,7 @@ export function noticeHrefFrom(
   return `${path}?${merged.toString()}`;
 }
 
+/** A notice as the bell shows it. */
 export interface AdminNotice {
   uuid: string;
   kind: AdminNoticeKind;
