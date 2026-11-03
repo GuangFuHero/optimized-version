@@ -490,7 +490,12 @@ async def test_mixed_case_settings_still_match_config(client, db_session, redis)
 
     types = await project_settings_repository.get_current_disaster_types(db_session)
     rows = await station_property_config_repository.list_by_type(db_session, "shelter", disaster_types=types)
+    # The migrations seed shelter fields too: the mis-cased setting must list what the right case does.
+    cased = await station_property_config_repository.list_by_type(
+        db_session, "shelter", disaster_types=["flood"]
+    )
     assert "淹水深度" in [r.property_name for r in rows]
+    assert [r.property_name for r in rows] == [r.property_name for r in cased]
 
 
 async def test_empty_disaster_types_survives_normalization(db):

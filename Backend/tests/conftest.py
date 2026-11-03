@@ -165,7 +165,7 @@ async def clear_audit_trail(session) -> None:
 async def schema_has_role(name: str) -> bool:
     """Whether the test DB still holds a role called `name`.
 
-    tests/session/ and tests/test_graphql/ seed their roles once and reuse them, while the `db`
+    tests/test_graphql/ seeds its roles once and reuses them, while the `db`
     and `db_session` fixtures below empty every table for each test that uses them. Under
     pytest-xdist a worker can run any file between two others, so "already seeded" has to be
     looked up rather than remembered.

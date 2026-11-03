@@ -635,7 +635,7 @@ async def test_disaster_detail_writes_are_audited(client, coordinator_auth):
     )
 
     async with test_db() as db:
-        rows = (await db.execute(_audit_rows())).all()
+        rows = (await db.execute(_audit_rows(), {"ticket": ticket["uuid"]})).all()
 
     assert rows, "no audit_logs row for ticket_disaster_details"
     assert any(r.action == "INSERT" for r in rows)
@@ -646,14 +646,15 @@ def _audit_rows():
 
     return _text(
         "SELECT action, new_values FROM audit_logs "
-        "WHERE table_name = 'ticket_disaster_details' ORDER BY created_at DESC LIMIT 10"
+        "WHERE table_name = 'ticket_disaster_details' AND new_values->>'ticket_uuid' = :ticket "
+        "ORDER BY created_at DESC LIMIT 10"
     )
 
 
 async def test_the_ticket_itself_still_records_its_disaster_types(client, coordinator_auth):
     """`tickets` was already audited; the column rename must not have dropped it out."""
     _, token = coordinator_auth
-    await _create_ticket(client, token, disasterTypes=["flood", "landslide"])
+    ticket = await _create_ticket(client, token, disasterTypes=["flood", "landslide"])
 
     async with test_db() as db:
         from sqlalchemy import text as _text
@@ -662,9 +663,9 @@ async def test_the_ticket_itself_still_records_its_disaster_types(client, coordi
             await db.execute(
                 _text(
                     "SELECT new_values->>'disaster_types' AS types FROM audit_logs "
-                    "WHERE table_name = 'tickets' AND action = 'INSERT' "
-                    "ORDER BY created_at DESC LIMIT 1"
-                )
+                    "WHERE table_name = 'tickets' AND action = 'INSERT' AND row_id = :ticket"
+                ),
+                {"ticket": ticket["uuid"]},
             )
         ).first()
 
