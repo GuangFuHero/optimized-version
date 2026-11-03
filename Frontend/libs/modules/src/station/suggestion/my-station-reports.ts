@@ -22,17 +22,23 @@ type SuggestionRow = MyStationSuggestionsQuery['myStationSuggestions'][number];
 
 /**
  * A card answers one thing: how the viewer's report came out, not what the station became after.
- * The backend's six statuses read as three. Approved, adopted with the reviewer's own wording, and
- * revoked all read 已採用: the report was taken, and a value put back later is the station's
- * business, which 看這個站點 shows. Rejected and not adopted (another person's value was taken)
- * both read 未採用: in the second case the station changed anyway, and the station shows it.
+ * The backend's six statuses read as four. 已採用 only when the value written is the viewer's own:
+ * approved, and revoked, as a value put back later is the station's business, which 看這個站點
+ * shows. A value the reviewer wrote that matches no suggestion (adopted_edited) reads 已參考修改,
+ * with that value on the card: calling it 已採用 would tell the viewer the station holds what they
+ * sent when it does not. Rejected and not adopted (another person's value was taken) both read
+ * 未採用: in the second case the station changed anyway, and the station shows it.
  */
-export type StationReportOutcome = 'pending' | 'adopted' | 'not-adopted';
+export type StationReportOutcome =
+  | 'pending'
+  | 'adopted'
+  | 'consulted'
+  | 'not-adopted';
 
 const OUTCOMES: Partial<Record<string, StationReportOutcome>> = {
   pending: 'pending',
   approved: 'adopted',
-  adopted_edited: 'adopted',
+  adopted_edited: 'consulted',
   revoked: 'adopted',
   rejected: 'not-adopted',
   not_adopted: 'not-adopted',
@@ -40,10 +46,11 @@ const OUTCOMES: Partial<Record<string, StationReportOutcome>> = {
 
 export const STATION_REPORT_OUTCOME_LOOKS: Record<
   StationReportOutcome,
-  { label: string; tone: 'warning' | 'success' | 'neutral' }
+  { label: string; tone: 'warning' | 'success' | 'secondary' | 'neutral' }
 > = {
   pending: { label: '等待審核', tone: 'warning' },
   adopted: { label: '已採用', tone: 'success' },
+  consulted: { label: '已參考修改', tone: 'secondary' },
   'not-adopted': { label: '未採用', tone: 'neutral' },
 };
 
@@ -90,6 +97,8 @@ export interface StationReport {
    */
   previous: string | null;
   suggested: string;
+  /** 已參考修改 only: the value the reviewer wrote, which is what the station took. */
+  applied: string | null;
   comment: string | null;
   outcome: StationReportOutcome;
   /** 「3 天前送出」, or null for a time that cannot be read. */
@@ -103,6 +112,7 @@ export function readMyStationReports(
   return rows.map((row) => {
     const field = suggestionField(row.fieldName);
     const ago = timeAgo(row.submittedAt, now);
+    const outcome = stationReportOutcome(row.status);
 
     return {
       uuid: row.uuid,
@@ -115,8 +125,12 @@ export function readMyStationReports(
           ? null
           : describeValue(field, row.previousValue),
       suggested: describeValue(field, row.newValue),
+      applied:
+        outcome === 'consulted' && row.appliedValue != null
+          ? describeValue(field, row.appliedValue)
+          : null,
       comment: row.comment?.trim() || null,
-      outcome: stationReportOutcome(row.status),
+      outcome,
       sentAgo: ago ? `${ago}送出` : null,
     };
   });

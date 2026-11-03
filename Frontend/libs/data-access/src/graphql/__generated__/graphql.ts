@@ -2507,6 +2507,7 @@ export type MyStationSuggestionsQuery = {
     newValue: string;
     comment?: string | null;
     status: string;
+    appliedValue?: string | null;
     submittedAt: any;
     decidedAt?: any | null;
     station?: {
@@ -4876,6 +4877,10 @@ export const MyStationSuggestionsDocument = {
                 { kind: 'Field', name: { kind: 'Name', value: 'newValue' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'comment' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'status' } },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'appliedValue' },
+                },
                 { kind: 'Field', name: { kind: 'Name', value: 'submittedAt' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'decidedAt' } },
               ],

@@ -22,6 +22,7 @@ function row(overrides: Partial<Row> = {}): Row {
     newValue: 'temporarily_closed',
     comment: null,
     status: 'pending',
+    appliedValue: null,
     submittedAt: '2026-10-30T12:00:00Z',
     decidedAt: null,
     ...overrides,
@@ -29,7 +30,7 @@ function row(overrides: Partial<Row> = {}): Row {
 }
 
 describe('stationReportOutcome', () => {
-  it('reads six statuses as three', () => {
+  it('reads six statuses as four', () => {
     expect(
       [
         'pending',
@@ -42,7 +43,7 @@ describe('stationReportOutcome', () => {
     ).toEqual([
       'pending',
       'adopted',
-      'adopted',
+      'consulted',
       'adopted',
       'not-adopted',
       'not-adopted',
@@ -55,6 +56,29 @@ describe('stationReportOutcome', () => {
 });
 
 describe('readMyStationReports', () => {
+  it('gives the value the station took when the reviewer wrote their own', () => {
+    const [consulted, adopted] = readMyStationReports(
+      [
+        row({
+          fieldName: 'op_hour',
+          previousValue: '08:00-17:00',
+          newValue: '08:00-20:00',
+          status: 'adopted_edited',
+          appliedValue: '09:00-18:00',
+        }),
+        row({ status: 'approved', appliedValue: 'temporarily_closed' }),
+      ],
+      NOW,
+    );
+
+    expect(consulted).toMatchObject({
+      outcome: 'consulted',
+      suggested: '08:00-20:00',
+      applied: '09:00-18:00',
+    });
+    expect(adopted.applied).toBeNull();
+  });
+
   it('names the field and its values as the suggestion form does', () => {
     const [report] = readMyStationReports([row()], NOW);
 

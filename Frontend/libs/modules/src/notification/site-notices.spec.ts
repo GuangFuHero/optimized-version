@@ -7,7 +7,6 @@ import {
   PAGES_READ_UNASKED,
   readSiteNotices,
   readsNextPageUnasked,
-  rewordAdoptedEdited,
   ticketOfNeed,
   withReadState,
   type NotificationRow,
@@ -323,7 +322,7 @@ describe('station suggestion notices', () => {
     expect(notices.every((notice) => notice.ticketUuid === null)).toBe(true);
   });
 
-  it("reads a reviewer's own wording as adopted, as the report card does", () => {
+  it("keeps the backend's words for a value the reviewer wrote", () => {
     const [notice] = readSiteNotices([
       suggestion(
         'station_suggestion_adopted_edited',
@@ -333,16 +332,11 @@ describe('station suggestion notices', () => {
     ]);
 
     expect(notice).toMatchObject({
-      kind: 'suggestion-adopted',
-      title: '📝 站點修改建議已採用',
-      body: '你對「光復國小加水站」的「服務時間」的修改建議已採用。',
+      kind: 'suggestion-consulted',
+      title: '📝 站點修改建議已納入參考',
+      body: '「光復國小加水站」的「服務時間」已參考你的建議修改。',
+      opensStationReports: true,
     });
-  });
-
-  it('keeps a body worded otherwise', () => {
-    expect(
-      rewordAdoptedEdited({ title: '已納入參考', body: '已參考修改' }),
-    ).toEqual({ title: '📝 站點修改建議已採用', body: '已參考修改' });
   });
 
   it('leaves other notices opening nothing new', () => {

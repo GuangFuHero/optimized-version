@@ -39,6 +39,7 @@ query MyStationSuggestions {
     newValue
     comment
     status
+    appliedValue
     submittedAt
     decidedAt
   }
