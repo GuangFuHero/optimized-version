@@ -47,6 +47,48 @@ describe('polygonSelfIntersects', () => {
     ).toBe(true);
   });
 
+  it('is true for a spike drawn out and back, a hair off its own line', () => {
+    // Out to (4, 8) and back to just beside the edge it went out on: no two edges meet, but the
+    // spike encloses next to nothing.
+    expect(
+      polygonSelfIntersects([
+        [0, 0],
+        [0, 4],
+        [4, 4],
+        [4, 8],
+        [4.0001, 4.5],
+        [4, 0],
+      ]),
+    ).toBe(true);
+  });
+
+  it('is true for corners on one line, which enclose no area', () => {
+    expect(
+      polygonSelfIntersects([
+        [0, 0],
+        [0, 1],
+        [0, 2],
+      ]),
+    ).toBe(true);
+    expect(
+      polygonSelfIntersects([
+        [0, 0],
+        [1, 1.00001],
+        [2, 2],
+      ]),
+    ).toBe(true);
+  });
+
+  it('is false for a thin but real triangle', () => {
+    expect(
+      polygonSelfIntersects([
+        [0, 0],
+        [0, 4],
+        [0.2, 2],
+      ]),
+    ).toBe(false);
+  });
+
   it('is false for a concave outline that does not cross', () => {
     expect(
       polygonSelfIntersects([

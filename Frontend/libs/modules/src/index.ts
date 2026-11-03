@@ -187,11 +187,7 @@ export {
   type SiteActionDrawerProps,
 } from './shell/site';
 
-export {
-  StationCreateDrawer,
-  StationDetailDrawer,
-  StationManagementPage,
-} from './station';
+export { StationDetailDrawer, StationManagementPage } from './station';
 
 export {
   TicketBoardPage,

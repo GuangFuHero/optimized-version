@@ -112,7 +112,7 @@ export function AdminAreaBoundsPanel({
             role="alert"
             sx={{ ...typography.body[300], color: color.fg.danger }}
           >
-            邊線交叉了，這樣的範圍不能儲存。請把轉角拖回去，或按「回到原本範圍」。
+            邊線交叉或重疊了，這樣的範圍不能儲存。請把轉角拖回去，或按「回到原本範圍」。
           </Typography>
         ) : null}
         {change.removed > 0 ? (

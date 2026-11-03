@@ -317,7 +317,7 @@ export function AdminAreaDrawPanel({
           role="alert"
           sx={{ ...typography.body[300], color: color.fg.danger }}
         >
-          邊線交叉了，這樣的範圍不能儲存。請按「退回一點」，或換個方式圈。
+          邊線交叉或重疊了，這樣的範圍不能儲存。請按「退回一點」，或換個方式圈。
         </Typography>
       ) : null}
       {contents.tickets > HIGH_VOLUME_TICKETS ? (

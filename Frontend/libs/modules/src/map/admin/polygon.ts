@@ -35,16 +35,54 @@ function segmentsMeet(a: LatLng, b: LatLng, c: LatLng, d: LatLng): boolean {
   );
 }
 
+// How close to a straight line back two neighbouring edges may turn before the outline counts as
+// folding back over itself: the sine of about 0.6°, far sharper than any corner a person means.
+const FOLD_BACK_SINE = 0.01;
+
 /**
- * Whether an outline crosses itself (MAP-ZD-131): two of its edges that are not neighbours meet.
- * The edge from the last corner back to the first counts once there are three corners; before that
- * the outline is a line and cannot cross itself.
+ * Whether the edges p–q and q–r run back over each other at q: they turn round almost completely,
+ * so the outline doubles back along itself. A spike drawn out and back, and three corners on one
+ * line (an outline with no area), both do this somewhere.
+ */
+function foldsBack(p: LatLng, q: LatLng, r: LatLng): boolean {
+  const u = [q[0] - p[0], q[1] - p[1]];
+  const v = [r[0] - q[0], r[1] - q[1]];
+  const lengths = Math.hypot(u[0], u[1]) * Math.hypot(v[0], v[1]);
+
+  if (lengths === 0) {
+    return false;
+  }
+
+  const dot = u[0] * v[0] + u[1] * v[1];
+  const sine = Math.abs(u[0] * v[1] - u[1] * v[0]) / lengths;
+
+  return dot < 0 && sine < FOLD_BACK_SINE;
+}
+
+/**
+ * Whether an outline crosses itself (MAP-ZD-131): two of its edges that are not neighbours meet,
+ * or two neighbours fold back over each other (a spike, or corners on one line that enclose
+ * nothing). The edge from the last corner back to the first counts once there are three corners;
+ * before that the outline is a line and cannot cross itself. The backend only checks that it is a
+ * polygon, so this is what keeps such an area from being saved.
  */
 export function polygonSelfIntersects(points: readonly LatLng[]): boolean {
   const count = points.length;
 
-  if (count < 4) {
+  if (count < 3) {
     return false;
+  }
+
+  for (let i = 0; i < count; i++) {
+    if (
+      foldsBack(
+        points[(i + count - 1) % count],
+        points[i],
+        points[(i + 1) % count],
+      )
+    ) {
+      return true;
+    }
   }
 
   for (let i = 0; i < count; i++) {
