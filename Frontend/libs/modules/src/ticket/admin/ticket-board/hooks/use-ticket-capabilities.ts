@@ -18,6 +18,11 @@ export function useTicketCapabilities() {
     canExport: has('ticket.export'),
     /** The exact point and address: what the 行政區域 and 組織分配 filters match on. */
     canViewDetail: has('ticket.view_detail'),
+    /**
+     * Whether the capabilities above are known. On a fresh page load the user is not cached yet, so
+     * every `can*` reads false until it arrives: nothing may be undone on that false alone.
+     */
+    loaded: data !== undefined,
   };
 }
 

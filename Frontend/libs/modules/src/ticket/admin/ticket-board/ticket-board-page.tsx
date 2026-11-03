@@ -140,15 +140,17 @@ export function TicketBoardPage() {
     enabled: caps.canViewDetail && Boolean(filters.team || filters.county),
   });
   const listed = facets.isSuccess ? facets.data.ticketFacets : undefined;
+  // Unknown until the user loads: a reload or a shared link would otherwise lose its choice at once.
+  const canViewDetail = caps.loaded ? caps.canViewDetail : undefined;
   const clearTeam = isUnlistedTeam(
     filters.team,
-    caps.canViewDetail,
+    canViewDetail,
     listed?.teams.map((t) => t.uuid),
   );
   const clearArea = isUnlistedArea(
     filters.county,
     filters.town,
-    caps.canViewDetail,
+    canViewDetail,
     listed?.areas,
   );
   useEffect(() => {

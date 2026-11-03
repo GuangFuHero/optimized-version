@@ -322,6 +322,11 @@ describe('isUnlistedTeam', () => {
     expect(isUnlistedTeam(team, false, undefined)).toBe(true);
     expect(isUnlistedTeam(UNASSIGNED_TEAM, false, undefined)).toBe(true);
   });
+
+  it('keeps any team while the capabilities are unknown (a fresh load)', () => {
+    expect(isUnlistedTeam(team, undefined, undefined)).toBe(false);
+    expect(isUnlistedTeam(UNASSIGNED_TEAM, undefined, [])).toBe(false);
+  });
 });
 
 describe('isUnlistedArea', () => {
@@ -337,6 +342,11 @@ describe('isUnlistedArea', () => {
     expect(isUnlistedArea('花蓮縣', '鳳林鎮', true, listed)).toBe(true);
     expect(isUnlistedArea('花蓮縣', null, true, listed)).toBe(true);
     expect(isUnlistedArea('花蓮縣', '光復鄉', false, undefined)).toBe(true);
+  });
+
+  it('keeps any place while the capabilities are unknown (a fresh load)', () => {
+    expect(isUnlistedArea('花蓮縣', '光復鄉', undefined, undefined)).toBe(false);
+    expect(isUnlistedArea('花蓮縣', null, undefined, listed)).toBe(false);
   });
 });
 

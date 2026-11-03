@@ -131,15 +131,15 @@ export function parseTicketFilters(params: URLSearchParams): TicketFilters {
 /**
  * Whether the 組織分配 choice names a team the panel cannot show: one without a ticket the caller
  * sees (a link from someone else, or a team since gone), or any team for a caller without
- * ticket.view_detail, who has no 組織分配 row. The board then clears it. `listedTeams` is the facets'
- * teams, undefined until they load, which keeps the choice.
+ * ticket.view_detail, who has no 組織分配 row. The board then clears it. `canViewDetail` and
+ * `listedTeams` (the facets' teams) are undefined until they load, which keeps the choice.
  */
 export function isUnlistedTeam(
   team: string | null,
-  canViewDetail: boolean,
+  canViewDetail: boolean | undefined,
   listedTeams: readonly string[] | undefined,
 ): boolean {
-  if (!team) return false;
+  if (!team || canViewDetail === undefined) return false;
   if (!canViewDetail) return true;
   if (team === UNASSIGNED_TEAM || !listedTeams) return false;
   return !listedTeams.includes(team);
@@ -148,15 +148,16 @@ export function isUnlistedTeam(
 /**
  * Whether the 行政區域 choice names a place the panel has no chip for: a county alone, a town no
  * ticket the caller sees is in, or any place for a caller without ticket.view_detail. The board then
- * clears it. `listedAreas` is the facets' areas, undefined until they load, which keeps the choice.
+ * clears it. `canViewDetail` and `listedAreas` (the facets' areas) are undefined until they load,
+ * which keeps the choice.
  */
 export function isUnlistedArea(
   county: string | null,
   town: string | null,
-  canViewDetail: boolean,
+  canViewDetail: boolean | undefined,
   listedAreas: readonly { county: string; town: string }[] | undefined,
 ): boolean {
-  if (!county) return false;
+  if (!county || canViewDetail === undefined) return false;
   if (!canViewDetail) return true;
   if (!listedAreas) return false;
   return !listedAreas.some((a) => a.county === county && a.town === town);
