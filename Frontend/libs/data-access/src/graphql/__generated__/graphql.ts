@@ -2316,6 +2316,7 @@ export type GetStationQuery = {
 
 export type GetMapAreasQueryVariables = Exact<{
   bounds?: InputMaybe<BoundsInput>;
+  includePrivate?: InputMaybe<Scalars['Boolean']['input']>;
   skip?: InputMaybe<Scalars['Int']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
 }>;
@@ -2331,6 +2332,7 @@ export type GetMapAreasQuery = {
       name?: string | null;
       note?: string | null;
       geometry?: Geometry | null;
+      isPublic: boolean;
       assignedTeams: Array<{
         __typename?: 'AssignedTeamType';
         uuid: string;
@@ -2688,6 +2690,35 @@ export type GetCellTicketsQuery = {
       }
     >;
     pageInfo: { __typename?: 'PageInfo'; hasNextPage: boolean };
+  };
+};
+
+export type GetAdminMapTicketsQueryVariables = Exact<{
+  bounds?: InputMaybe<BoundsInput>;
+  skip?: InputMaybe<Scalars['Int']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  zoom?: InputMaybe<Scalars['Float']['input']>;
+}>;
+
+export type GetAdminMapTicketsQuery = {
+  __typename?: 'Query';
+  tickets: {
+    __typename?: 'TicketConnection';
+    items: Array<
+      {
+        __typename?: 'TicketType';
+        responsibleTeams: Array<{
+          __typename?: 'AssignedTeamType';
+          name: string;
+        }>;
+      } & { ' $fragmentRefs'?: { TicketFieldsFragment: TicketFieldsFragment } }
+    >;
+    pageInfo: {
+      __typename?: 'PageInfo';
+      totalCount: number;
+      hasNextPage: boolean;
+      hasPreviousPage: boolean;
+    };
   };
 };
 
@@ -4028,6 +4059,15 @@ export const GetMapAreasDocument = {
         },
         {
           kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'includePrivate' },
+          },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'Boolean' } },
+          defaultValue: { kind: 'BooleanValue', value: false },
+        },
+        {
+          kind: 'VariableDefinition',
           variable: { kind: 'Variable', name: { kind: 'Name', value: 'skip' } },
           type: { kind: 'NamedType', name: { kind: 'Name', value: 'Int' } },
           defaultValue: { kind: 'IntValue', value: '0' },
@@ -4055,6 +4095,14 @@ export const GetMapAreasDocument = {
                 value: {
                   kind: 'Variable',
                   name: { kind: 'Name', value: 'bounds' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'includePrivate' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'includePrivate' },
                 },
               },
               {
@@ -4090,6 +4138,10 @@ export const GetMapAreasDocument = {
                       {
                         kind: 'Field',
                         name: { kind: 'Name', value: 'geometry' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'isPublic' },
                       },
                       {
                         kind: 'Field',
@@ -5565,6 +5617,177 @@ export const GetCellTicketsDocument = {
     },
   ],
 } as unknown as DocumentNode<GetCellTicketsQuery, GetCellTicketsQueryVariables>;
+export const GetAdminMapTicketsDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'GetAdminMapTickets' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'bounds' },
+          },
+          type: {
+            kind: 'NamedType',
+            name: { kind: 'Name', value: 'BoundsInput' },
+          },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'skip' } },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'Int' } },
+          defaultValue: { kind: 'IntValue', value: '0' },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'limit' },
+          },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'Int' } },
+          defaultValue: { kind: 'IntValue', value: '50' },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'zoom' } },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'Float' } },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'tickets' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'bounds' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'bounds' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'skip' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'skip' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'limit' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'limit' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'zoom' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'zoom' },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'items' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      {
+                        kind: 'FragmentSpread',
+                        name: { kind: 'Name', value: 'TicketFields' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'responsibleTeams' },
+                        selectionSet: {
+                          kind: 'SelectionSet',
+                          selections: [
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'name' },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'pageInfo' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'totalCount' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'hasNextPage' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'hasPreviousPage' },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+    {
+      kind: 'FragmentDefinition',
+      name: { kind: 'Name', value: 'TicketFields' },
+      typeCondition: {
+        kind: 'NamedType',
+        name: { kind: 'Name', value: 'TicketType' },
+      },
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'propertyName' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'locationCell' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'buildingMapUuid' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'title' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'description' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'contactEmail' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'contactPhone' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'status' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'priority' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'auditStatus' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  GetAdminMapTicketsQuery,
+  GetAdminMapTicketsQueryVariables
+>;
 export const GetTicketsWithNeedsDocument = {
   kind: 'Document',
   definitions: [

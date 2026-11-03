@@ -49,7 +49,9 @@ import type {
   RescueMapClosureArea,
   RescueMapControllerValue,
   RescueMapDetailItem,
+  RescueMapDraftArea,
   RescueMapDraftPoint,
+  RescueMapEditArea,
   RescueMapGoneTicket,
   RescueMapLocationCell,
   RescueMapMarkerItem,
@@ -253,10 +255,18 @@ interface MapProps {
   showScale?: boolean;
   /** 點擊地圖空白處時回傳經緯度。 */
   onMapClick?: (position: [number, number]) => void;
+  /** 後台正在圈選、尚未儲存的區域外框。 */
+  draftArea?: RescueMapDraftArea | null;
+  /** 後台正在調整邊界的區域：每個轉角一個把手。 */
+  editArea?: RescueMapEditArea | null;
   /** 顯示在地圖上的暫存圖釘。 */
   previewMarker?: RescueMapMarkerItem | null;
   /** 覆寫地圖互動游標。 */
   cursor?: string;
+  /** A double-click then adds a corner (or nothing) instead of zooming. */
+  disableDoubleClickZoom?: boolean;
+  /** Draws 責任區 and 標示區 as the admin 互助地圖 does (canvas `getAdminZoneStyle`). */
+  adminAreaStyle?: boolean;
   /**
    * A point picked on the map, marked by a crosshair that drags (the site's 「在這裡新增」).
    * Moving the map by hand lets it go, through `onDraftPointChange(null)`.
@@ -318,7 +328,11 @@ export const Map = memo(function Map({
   showScale = false,
   onMapClick,
   previewMarker,
+  draftArea,
+  editArea,
   cursor,
+  disableDoubleClickZoom,
+  adminAreaStyle,
   draftPoint,
   onDraftPointChange,
   draftPointAction,
@@ -531,7 +545,11 @@ export const Map = memo(function Map({
               locationCells={locationCells}
               onLocationCellClick={handleLocationCellClick}
               previewMarker={previewMarker}
+              draftArea={draftArea}
+              editArea={editArea}
               cursor={cursor}
+              disableDoubleClickZoom={disableDoubleClickZoom}
+              adminAreaStyle={adminAreaStyle}
               onMapClick={onMapClick}
               layoutKey={drawerOpen ? 'detail-open' : 'detail-closed'}
               showScale={showScale}

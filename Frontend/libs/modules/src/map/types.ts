@@ -120,6 +120,30 @@ export interface RescueMapArea {
   name: string | null;
   comment?: string | null;
   polygons: [number, number][][][];
+  /** The area the admin 互助地圖 list has picked: drawn heavier so it stands out. */
+  highlighted?: boolean;
+  /** Another area is picked: this one is drawn fainter (admin 互助地圖, `adminAreaStyle`). */
+  dimmed?: boolean;
+}
+
+/**
+ * The outline an admin is drawing on 互助地圖, before it is saved: its corners in the order they were
+ * clicked, and whether it crosses itself (drawn red, and not to be finished).
+ */
+export interface RescueMapDraftArea {
+  points: [number, number][];
+  invalid: boolean;
+}
+
+/**
+ * An area whose boundary an admin is changing on 互助地圖: its corners, with a handle on each to drag
+ * or click away, and a plus between each two to add one. `onChange` gets the corners as they are
+ * once a handle is let go; a corner is not reported while it is dragged.
+ */
+export interface RescueMapEditArea {
+  points: [number, number][];
+  invalid: boolean;
+  onChange: (points: [number, number][]) => void;
 }
 
 /** A 危險區, on the 封閉區域 layer. */
@@ -130,6 +154,13 @@ export interface RescueMapPublicZone extends RescueMapArea {
   kind: 'team_zone' | 'mark_zone';
   /** The teams a 責任區 is assigned to, public since ADR-311's 10-11 revision; none for a 標示區. */
   teams: readonly string[];
+  /** The same teams by uuid, in the same order, for the admin 互助地圖 to add and remove them by. */
+  teamUuids?: readonly string[];
+  /**
+   * False for a 標示區 the public map does not show. Only the admin 互助地圖 asks for those
+   * (`includePrivate`), and draws them dashed.
+   */
+  isPublic?: boolean;
 }
 
 export interface RescueMapOverlayLayerMeta {
@@ -155,8 +186,13 @@ export interface RescueMapPinAppearance {
   dimmed?: boolean;
   /** Outlined, enlarged and lifted above the other pins. */
   selected?: boolean;
-  /** A teardrop unless set; square marks a 開啟空間 space on the admin ticket map. */
-  shape?: 'drop' | 'square';
+  /**
+   * A teardrop unless set. `square` marks a 開啟空間 space on the admin ticket map. On the admin
+   * 互助地圖 a ticket is a `dot` (the page's subject is the areas, and a hundred drops would cover
+   * them) and a station a `station`: a dark rounded square with its type's icon, a different shape
+   * and not just a different colour, so the two read apart at a glance (prototype `map-canvas.jsx`).
+   */
+  shape?: 'drop' | 'square' | 'dot' | 'station';
 }
 
 /** Opt-in hover tooltip for a marker. Plain text; it is escaped. */
@@ -219,7 +255,10 @@ export interface RescueMapMarkerItem {
       | 'createdAt'
       | 'updatedAt'
     >
-  >;
+  > & {
+    /** The 責任區 teams of the place, where the admin map asked for them; none = 未指派. */
+    responsibleTeams?: readonly { name: string }[];
+  };
   /**
    * The ticket's needs, each with its own claim button. Only the site list fetches them
    * (`GetTicketsWithNeeds`); a map marker has none, as its popup offers no claiming.
