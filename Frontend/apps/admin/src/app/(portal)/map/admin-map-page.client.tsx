@@ -10,6 +10,7 @@ import {
   useCreateArea,
   useDeleteArea,
   useAssignableStationTeams,
+  useCurrentUser,
   useRemoveZoneFromTeam,
   useUpdateArea,
 } from '@rescue-frontend/data-access/admin';
@@ -54,6 +55,7 @@ import {
   AdminAreaDetailPanel,
   AdminAreaListPanel,
   toAdminAreaListItems,
+  type AdminMapLogEntry,
 } from './admin-area-list-panel';
 import { designTokens } from '@rescue-frontend/ui';
 
@@ -65,6 +67,12 @@ const { color, shadow, typography } = designTokens;
 const DEFAULT_HAZARD_STATUS = 'dangerous';
 
 const NO_AREAS: never[] = [];
+
+const MAX_LOG_ENTRIES = 40;
+
+function formatLogTime(date: Date): string {
+  return date.toTimeString().slice(0, 5);
+}
 
 // Two clicks on one corner this close are a double-click.
 const DOUBLE_CLICK_MS = 500;
@@ -91,6 +99,35 @@ export function AdminMapPageClient() {
   // Without this the backend gives no 責任區 teams, and every ticket would read as 未指派.
   const canViewTicketDetail = useCapability('ticket.view_detail').data ?? false;
   const mapBoxRef = useRef<HTMLDivElement>(null);
+  // What was done on this page, newest first, kept in memory alone (prototype `record`): the
+  // 操作紀錄 tab. The backend's audit log is the record that lasts.
+  const actor = useCurrentUser().data?.name ?? '';
+  const [log, setLog] = useState<AdminMapLogEntry[]>([]);
+  const record = useCallback(
+    (action: string) =>
+      setLog((current) =>
+        [{ at: formatLogTime(new Date()), actor, action }, ...current].slice(
+          0,
+          MAX_LOG_ENTRIES,
+        ),
+      ),
+    [actor],
+  );
+  // A change held for its 5 seconds goes in the log when it is made, and 復原 goes in as its own
+  // line (AC-03: every undo is recorded).
+  const hold = useCallback(
+    (request: Parameters<typeof holdRequest>[0]) => {
+      record(request.message);
+      holdRequest({
+        ...request,
+        onUndo: () => {
+          record(`復原：${request.message}`);
+          request.onUndo();
+        },
+      });
+    },
+    [record],
+  );
   const [viewportStore] = useState(() => createSiteMapViewportStore({}));
   const [routeState, setRouteState] = useState<RescueMapRouteState>({});
   const liveMarkers = useAdminMapLiveMarkers(viewportStore);
@@ -231,6 +268,7 @@ export function AdminMapPageClient() {
         .map((zone) => ({
           ...zone,
           highlighted: zone.id === selectedAreaId,
+          dimmed: selectedAreaId !== null && zone.id !== selectedAreaId,
         })),
     [editing?.areaId, visiblePublicZones, selectedAreaId],
   );
@@ -241,8 +279,20 @@ export function AdminMapPageClient() {
         closureAreas: visibleClosureAreas,
         publicZones: visiblePublicZones,
         countContents: (area) => countInsideArea(area, markers),
+        // Told only where the teams are: without them every ticket would read as not yet theirs.
+        countAttributed: (area, teams) =>
+          canViewTicketDetail
+            ? markers.filter(
+                (marker) =>
+                  marker.detailType === 'ticket' &&
+                  isInArea(marker.position, area) &&
+                  marker.ticketMeta?.responsibleTeams?.some((team) =>
+                    teams.includes(team.name),
+                  ),
+              ).length
+            : null,
       }),
-    [visibleClosureAreas, visiblePublicZones, markers],
+    [visibleClosureAreas, visiblePublicZones, markers, canViewTicketDetail],
   );
   const selectedAreaItem =
     areaListItems.find((item) => item.id === selectedAreaId) ?? null;
@@ -430,7 +480,7 @@ export function AdminMapPageClient() {
       setDrawPoints([]);
       setFormValues(EMPTY_AREA_FORM);
 
-      holdRequest({
+      hold({
         message: `已建立${label}`,
         onUndo: backToForm,
         send: async () => {
@@ -453,7 +503,7 @@ export function AdminMapPageClient() {
         },
       });
     },
-    [areas, createArea, drawPoints],
+    [areas, createArea, drawPoints, hold],
   );
   // Changing the boundary of the area on show (FE-021 item 5, MAP-ZD-191 to 199).
   const editedArea = useMemo(
@@ -556,7 +606,7 @@ export function AdminMapPageClient() {
         ...current,
         [area.id]: [...(current[area.id] ?? []), next],
       }));
-      holdRequest({
+      hold({
         message,
         onUndo: settle,
         send: () =>
@@ -587,18 +637,22 @@ export function AdminMapPageClient() {
       onTogglePublic: (isPublic) =>
         void updateArea
           .mutateAsync({ uuid: area.id, input: { isPublic } })
-          .then(() => areas.reload(), fail),
+          .then(() => {
+            record(`${isPublic ? '已公開' : '已改為只有後台看得到'}${label}`);
+            areas.reload();
+          }, fail),
       onSave: (changes) =>
         void updateArea
           .mutateAsync({ uuid: area.id, input: changes })
           .then(() => {
+            record(`已更新${label}`);
             areas.reload();
             toast.success(`已更新${label}`);
           }, fail),
       onDelete: () => {
         setHiddenAreaIds((current) => new Set(current).add(area.id));
         setSelectedAreaId(null);
-        holdRequest({
+        hold({
           message: `${area.kind === 'hazardous_zone' ? '已解除' : '已刪除'}${label}`,
           onUndo: () => settleHidden(area.id),
           send: () =>
@@ -657,6 +711,8 @@ export function AdminMapPageClient() {
     canDeleteZone,
     canEditZone,
     deleteArea,
+    hold,
+    record,
     removeZoneFromTeam,
     selectedAreaId,
     settleHidden,
@@ -681,7 +737,7 @@ export function AdminMapPageClient() {
       [areaId]: [...(current[areaId] ?? []), shown],
     }));
     setEditing(null);
-    holdRequest({
+    hold({
       message: `已調整${name}的範圍`,
       onUndo: () => settleGeometry(areaId, shown),
       send: () =>
@@ -700,7 +756,7 @@ export function AdminMapPageClient() {
           )
           .then(() => settleGeometry(areaId, shown)),
     });
-  }, [areas, editedArea, editing, settleGeometry, updateArea]);
+  }, [areas, editedArea, editing, hold, settleGeometry, updateArea]);
   const handleRouteStateChange = useCallback(
     (next: RescueMapRouteState) => {
       const { position, bbox, ...picked } = next;
@@ -784,12 +840,14 @@ export function AdminMapPageClient() {
             routeState={routeState}
             onRouteStateChange={handleRouteStateChange}
             viewportStore={viewportStore}
+            showScale
             viewMemoryKey="mutual-aid"
             onMapClick={handleMapClick}
             draftArea={draftArea}
             editArea={editArea}
             cursor={drawStep === 'drawing' ? 'crosshair' : undefined}
             disableDoubleClickZoom={isBusy}
+            adminAreaStyle
             renderControls={() => (
               <Box
                 sx={{
@@ -935,6 +993,7 @@ export function AdminMapPageClient() {
             ) : (
               <AdminAreaListPanel
                 items={areaListItems}
+                log={log}
                 selectedId={selectedAreaId}
                 isLoading={areas.isFetching && !areas.hasFetchedOnce}
                 hasError={areas.error !== null}

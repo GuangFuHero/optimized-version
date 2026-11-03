@@ -65,6 +65,8 @@ interface RescueMapCanvasProps {
   editArea?: RescueMapEditArea | null;
   cursor?: string;
   disableDoubleClickZoom?: boolean;
+  /** Draws 責任區 and 標示區 as the admin 互助地圖 does; the site's own look when unset. */
+  adminAreaStyle?: boolean;
   onMapClick?: (position: [number, number]) => void;
   layoutKey: string;
   showScale?: boolean;
@@ -361,6 +363,33 @@ function getPublicZoneStyle(zone: RescueMapPublicZone): L.PathOptions {
     opacity: 0.95,
     fillColor: zoneColor,
     fillOpacity: hidden ? 0.06 : 0.14,
+    ...(hidden ? { dashArray: '8 6' } : {}),
+  };
+}
+
+/**
+ * 責任區 and 標示區 on the admin 互助地圖 (prototype `map-canvas.jsx`, design review 2026-11-03): a
+ * light fill (0.07) and a 3px line; the one picked is filled 0.14 and drawn at 4px, and the others
+ * fade (line 0.45, fill 0.03) so it stands out. `getPublicZoneStyle` is the site's and stays as it is.
+ */
+function getAdminZoneStyle(zone: RescueMapPublicZone): L.PathOptions {
+  const zoneColor = PUBLIC_ZONE_COLORS[zone.kind];
+  const hidden = zone.isPublic === false;
+
+  return {
+    pane: PUBLIC_ZONE_PANE,
+    interactive: false,
+    color: zoneColor,
+    weight: zone.highlighted ? 4 : 3,
+    opacity: zone.dimmed ? 0.45 : 0.95,
+    fillColor: zoneColor,
+    fillOpacity: zone.highlighted
+      ? 0.14
+      : zone.dimmed
+        ? 0.03
+        : hidden
+          ? 0.04
+          : 0.07,
     ...(hidden ? { dashArray: '8 6' } : {}),
   };
 }
@@ -943,6 +972,7 @@ export function RescueMapCanvas({
   editArea,
   cursor,
   disableDoubleClickZoom = false,
+  adminAreaStyle = false,
   onMapClick,
   layoutKey,
   showScale = false,
@@ -1507,10 +1537,10 @@ export function RescueMapCanvas({
       overlayLayer,
       areas: controller.publicZones,
       handles: publicZoneHandlesRef.current,
-      style: getPublicZoneStyle,
+      style: adminAreaStyle ? getAdminZoneStyle : getPublicZoneStyle,
     });
     queueAreaLabelsRef.current?.();
-  }, [controller.publicZones]);
+  }, [adminAreaStyle, controller.publicZones]);
 
   useEffect(() => {
     const map = mapRef.current;

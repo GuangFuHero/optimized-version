@@ -7,7 +7,7 @@ import {
   SlidersHorizontal,
 } from 'lucide-react';
 
-import { Box, Button, ButtonBase, Stack, Typography } from '@mui/material';
+import { Box, ButtonBase, Stack, Typography } from '@mui/material';
 import { useEffect, useState } from 'react';
 
 import {
@@ -21,7 +21,7 @@ import {
   toggleValue,
   type AdminMapFilters,
 } from '@rescue-frontend/modules';
-import { designTokens } from '@rescue-frontend/ui';
+import { Button, designTokens } from '@rescue-frontend/ui';
 
 const { color, radius, shadow, typography } = designTokens;
 
@@ -200,9 +200,12 @@ export function AdminMapFilterBar({
               sx={{
                 ...typography.body[300],
                 whiteSpace: 'nowrap',
-                // The prototype's orange (#E65100, amber-700), whatever the count; `fg.warning` is the
-                // darker amber-900, which reads brown here.
-                color: color.bg.warning.hover,
+                // Orange (#E65100, amber-700) only when some are unassigned; 0 is an answer, not a
+                // warning, so it reads in the muted grey. `fg.warning` is amber-900, which reads brown.
+                color:
+                  unassignedTickets > 0
+                    ? color.bg.warning.hover
+                    : color.fg.neutral.muted,
               }}
             >
               {unassignedTickets}
@@ -212,43 +215,29 @@ export function AdminMapFilterBar({
         ) : null}
         <Box sx={{ flex: 1 }} />
         {active > 0 ? (
-          <ButtonBase
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() =>
               onChange({ ...DEFAULT_ADMIN_MAP_FILTERS, layers: filters.layers })
             }
-            sx={{
-              flexShrink: 0,
-              whiteSpace: 'nowrap',
-              ...typography.label[300],
-              textDecoration: 'underline',
-              color: color.fg.neutral.subtle,
-            }}
           >
             清除
-          </ButtonBase>
+          </Button>
         ) : null}
-        <ButtonBase
+        {/* The count sits in the button (BTN-110); open, it shows so (BTN-111). */}
+        <Button
+          variant="neutral"
+          size="sm"
           onClick={() => setOpen((current) => !current)}
           disabled={disabled}
           aria-expanded={open}
-          sx={{
-            flexShrink: 0,
-            whiteSpace: 'nowrap',
-            gap: 0.5,
-            ...typography.label[300],
-            fontWeight: 700,
-            color:
-              active > 0 ? color.brand.primary.subtle : color.fg.neutral.subtle,
-            opacity: disabled ? 0.4 : 1,
-          }}
+          startIcon={<SlidersHorizontal size={15} />}
+          endIcon={open ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+          count={active}
         >
-          <Box component={SlidersHorizontal} sx={{ width: 15, height: 15 }} />
-          篩選{active > 0 ? ` ${active}` : ''}
-          <Box
-            component={open ? ChevronUp : ChevronDown}
-            sx={{ width: 13, height: 13 }}
-          />
-        </ButtonBase>
+          篩選
+        </Button>
       </Stack>
       {isFiltered ? (
         <Box
@@ -358,7 +347,8 @@ export function AdminMapFilterBar({
           </Row>
           <Stack direction="row" sx={{ justifyContent: 'flex-end' }}>
             <Button
-              size="small"
+              variant="ghost"
+              size="sm"
               onClick={() => onChange(DEFAULT_ADMIN_MAP_FILTERS)}
             >
               全部清除

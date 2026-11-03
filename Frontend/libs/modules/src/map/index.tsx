@@ -265,6 +265,8 @@ interface MapProps {
   cursor?: string;
   /** A double-click then adds a corner (or nothing) instead of zooming. */
   disableDoubleClickZoom?: boolean;
+  /** Draws 責任區 and 標示區 as the admin 互助地圖 does (canvas `getAdminZoneStyle`). */
+  adminAreaStyle?: boolean;
   /**
    * A point picked on the map, marked by a crosshair that drags (the site's 「在這裡新增」).
    * Moving the map by hand lets it go, through `onDraftPointChange(null)`.
@@ -330,6 +332,7 @@ export const Map = memo(function Map({
   editArea,
   cursor,
   disableDoubleClickZoom,
+  adminAreaStyle,
   draftPoint,
   onDraftPointChange,
   draftPointAction,
@@ -546,6 +549,7 @@ export const Map = memo(function Map({
               editArea={editArea}
               cursor={cursor}
               disableDoubleClickZoom={disableDoubleClickZoom}
+              adminAreaStyle={adminAreaStyle}
               onMapClick={onMapClick}
               layoutKey={drawerOpen ? 'detail-open' : 'detail-closed'}
               showScale={showScale}

@@ -33,8 +33,9 @@ export function AreaSwatch({
           borderRadius: '3px',
           ...(kind === 'hazardous_zone'
             ? {
-                background: `repeating-linear-gradient(135deg, ${color.bg.warning.default} 0 3px, ${color.bg.neutral.default} 3px 6px)`,
-                border: `1px solid ${color.bg.warning.default}`,
+                // The map's own stripes: 45°, 4px a stripe, and the outline of a 危險區 there.
+                background: `repeating-linear-gradient(45deg, ${color.bg.warning.default} 0 4px, ${color.bg.neutral.default} 4px 8px)`,
+                border: `1px solid ${color.bg.warning.hover}`,
               }
             : { bgcolor: PUBLIC_ZONE_COLORS[kind] }),
         },

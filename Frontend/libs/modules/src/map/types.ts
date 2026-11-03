@@ -122,6 +122,8 @@ export interface RescueMapArea {
   polygons: [number, number][][][];
   /** The area the admin 互助地圖 list has picked: drawn heavier so it stands out. */
   highlighted?: boolean;
+  /** Another area is picked: this one is drawn fainter (admin 互助地圖, `adminAreaStyle`). */
+  dimmed?: boolean;
 }
 
 /**
