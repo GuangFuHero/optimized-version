@@ -140,8 +140,8 @@ async def _contact_teams() -> dict[str, tuple[str, str]]:
     }
 
 
-async def _token(redis, *, platform: str, team_role: str | None = None, team_uuid: str | None = None) -> str:
-    """A token acting as the platform role `platform`; the account may also hold `team_role` in a team.
+async def _token(redis, *, platform: str, team_grants: tuple[tuple[str, str], ...] = ()) -> str:
+    """A token acting as the platform role `platform`; the account also holds each (role, team uuid) given.
 
     Acting as the platform role shows the contact depends on what the account holds, not on the identity it
     acts as.
@@ -152,7 +152,7 @@ async def _token(redis, *, platform: str, team_role: str | None = None, team_uui
         platform_role = await ensure_role(db, platform)
         await db.flush()
         db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=platform_role.uuid))
-        if team_role is not None:
+        for team_role, team_uuid in team_grants:
             role = await ensure_role(db, team_role, kind="team")
             db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid, team_uuid=team_uuid))
         user_uuid, role_uuid = str(user.uuid), str(platform_role.uuid)
@@ -179,7 +179,7 @@ async def test_a_team_holder_reads_every_teams_contact(client, redis, team_role)
     """A member or admin of one team reads the contact of every active team, its own and the others."""
     others = await _contact_teams()
     own = await _contact_team(contact_name="陳隊長")
-    token = await _token(redis, platform="plain-holder", team_role=team_role, team_uuid=own)
+    token = await _token(redis, platform="plain-holder", team_grants=((team_role, own),))
 
     contacts = await _contacts(client, token)
 
@@ -212,16 +212,31 @@ async def test_an_account_with_no_team_identity_reads_no_contact(client, redis, 
 
 
 @pytest.mark.asyncio
-async def test_a_suspended_teams_member_reads_no_contact(client, redis):
-    """Suspension switches a team's grants off, so holding a role only there counts as no team identity."""
+@pytest.mark.parametrize("gone", [{"status": "suspended"}, {"delete_at": datetime.now(UTC)}])
+async def test_a_suspended_or_deleted_teams_member_reads_no_contact(client, redis, gone):
+    """A suspended or deleted team's grants are off, so holding a role only there is no team identity."""
     teams = await _contact_teams()
-    suspended = await _contact_team(status="suspended")
-    token = await _token(redis, platform="plain-holder", team_role="member", team_uuid=suspended)
+    dead = await _contact_team(**gone)
+    token = await _token(redis, platform="plain-holder", team_grants=(("member", dead),))
 
     contacts = await _contacts(client, token)
 
     assert set(teams) <= set(contacts)
     assert set(contacts.values()) == {(None, None)}
+
+
+@pytest.mark.asyncio
+async def test_a_member_of_a_suspended_and_an_active_team_reads_every_contact(client, redis):
+    """The active team's grant is enough, whatever the other one's state."""
+    teams = await _contact_teams()
+    suspended, active = await _contact_team(status="suspended"), await _contact_team()
+    token = await _token(
+        redis, platform="plain-holder", team_grants=(("member", suspended), ("member", active))
+    )
+
+    contacts = await _contacts(client, token)
+
+    assert {uuid_: contacts[uuid_] for uuid_ in teams} == teams
 
 
 @pytest.mark.asyncio

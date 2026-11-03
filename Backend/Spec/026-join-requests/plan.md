@@ -136,8 +136,8 @@ export TEST_REDIS_URL="redis://localhost:6394/15"
 
 **Files:** `app/graphql/role_requests/queries.py`、`types.py`、`app/repositories/team_repository.py`
 
-- [ ] `roleRequestTeams(type: GOV|NGO = null)` → `[{ uuid, name, type }]`，只列 `status='active'` 且未刪除，依名稱排序
-- [ ] 需登入，不檢查 capability；不回稅籍、聯絡人、成員
+- [ ] `roleRequestTeams(type: GOV|NGO = null)` → `[{ uuid, name, type, contactName, contactPhone }]`，只列 `status='active'` 且未刪除，依名稱排序
+- [ ] 需登入，不檢查 capability；聯絡人只給有團隊身分的人和超級管理員，其他人為 null；不回稅籍、狀態、成員（ADR-357 point 5）
 
 **Tests:** `tests/test_graphql/test_role_request_teams.py`（新）
 - 未登入 → 401；登入的一般使用者看得到全部啟用中團隊
