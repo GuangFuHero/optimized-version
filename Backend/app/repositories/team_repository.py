@@ -22,11 +22,7 @@ class TeamRepository(GenericRepository[Team]):
 
     async def list_active(self, db: AsyncSession, *, extra_filters=()) -> list[Team]:
         """List non-deleted teams, newest first, honoring RBAC scope_filter conditions."""
-        query = (
-            select(Team)
-            .where(Team.delete_at.is_(None), *extra_filters)
-            .order_by(Team.created_at.desc())
-        )
+        query = select(Team).where(Team.delete_at.is_(None), *extra_filters).order_by(Team.created_at.desc())
         return (await db.execute(query)).scalars().all()
 
     async def lock_name(self, db: AsyncSession, name: str) -> None:
@@ -53,7 +49,8 @@ class TeamRepository(GenericRepository[Team]):
         """Teams someone can ask to join: active and not deleted, by name (Spec/026, ADR-352).
 
         No RBAC filter: it backs the 申請成為後台人員 picker, read by people in no team yet.
-        Callers expose only uuid, name and type.
+        Callers expose uuid, name and type, and the contact only to team holders and super admins
+        (ADR-357 point 5).
         """
         query = select(Team).where(joinable())
         if type_ is not None:
@@ -104,14 +101,10 @@ class TeamZoneAssignRepository(GenericRepository[TeamZoneAssign]):
         self, db: AsyncSession, *, team_uuid: str, zone_uuid: str
     ) -> TeamZoneAssign | None:
         """Return the assignment row linking `team_uuid` and `zone_uuid`, if any."""
-        query = select(self.model).where(
-            self.model.team_uuid == team_uuid, self.model.zone_uuid == zone_uuid
-        )
+        query = select(self.model).where(self.model.team_uuid == team_uuid, self.model.zone_uuid == zone_uuid)
         return (await db.execute(query)).scalar_one_or_none()
 
-    async def teams_by_zones(
-        self, db: AsyncSession, zone_uuids: list[str]
-    ) -> list[tuple[str, Team]]:
+    async def teams_by_zones(self, db: AsyncSession, zone_uuids: list[str]) -> list[tuple[str, Team]]:
         """Return (zone_uuid, Team) pairs for `zone_uuids`, excluding soft-deleted teams.
 
         Batched for the GraphQL DataLoader: one IN-query for every zone in a page, instead of

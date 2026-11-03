@@ -1058,6 +1058,16 @@ type RoleRequestTeam {
   uuid: UUID!
   name: String!
   type: RoleRequestTeamType!
+
+  """
+  In `roleRequestTeams` for a caller holding a team identity or super admin, else null
+  """
+  contactName: String
+
+  """
+  In `roleRequestTeams` for a caller holding a team identity or super admin, else null
+  """
+  contactPhone: String
 }
 
 enum RoleRequestTeamType {

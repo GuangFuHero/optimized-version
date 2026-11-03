@@ -40,11 +40,22 @@ class RoleRequestTeamType(enum.Enum):
 
 @strawberry.type
 class RoleRequestTeam:
-    """One entry of the team picker. Nothing else about a team is shown here (ADR-357 point 5)."""
+    """One entry of the team picker and team directory, plus the contact for team holders (ADR-357 point 5).
+
+    Tax ID, status and members are never shown here.
+    """
 
     uuid: UUID
     name: str
     type: RoleRequestTeamType
+    contact_name: str | None = strawberry.field(
+        default=None,
+        description="In `roleRequestTeams` for a caller holding a team identity or super admin, else null",
+    )
+    contact_phone: str | None = strawberry.field(
+        default=None,
+        description="In `roleRequestTeams` for a caller holding a team identity or super admin, else null",
+    )
 
 
 async def _team_by_uuid(info: strawberry.types.Info, team_uuid: UUID | None) -> RoleRequestTeam | None:

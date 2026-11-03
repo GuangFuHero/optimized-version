@@ -1255,6 +1255,10 @@ export type RoleRequestStatus =
   (typeof RoleRequestStatus)[keyof typeof RoleRequestStatus];
 export type RoleRequestTeam = {
   __typename?: 'RoleRequestTeam';
+  /** In `roleRequestTeams` for a caller holding a team identity or super admin, else null */
+  contactName?: Maybe<Scalars['String']['output']>;
+  /** In `roleRequestTeams` for a caller holding a team identity or super admin, else null */
+  contactPhone?: Maybe<Scalars['String']['output']>;
   name: Scalars['String']['output'];
   type: RoleRequestTeamType;
   uuid: Scalars['UUID']['output'];

@@ -30,7 +30,7 @@ from app.models.team import Team
 from app.repositories.active_identity_repository import active_identity_repository
 from app.repositories.auth_repository import role_repository
 from app.repositories.team_repository import joinable, team_repository
-from app.services.admin import DEFAULT_TEAM_ROLE, TEAM_ADMIN_ROLE_NAME, grant_team_role
+from app.services.admin import DEFAULT_TEAM_ROLE, SUPER_ADMIN_ROLE_NAME, TEAM_ADMIN_ROLE_NAME, grant_team_role
 from app.services.auth_account import DEFAULT_PLATFORM_ROLE
 from app.services.authz import require_scope
 from app.services.notification_resolver import NotificationRecipientResolver
@@ -208,6 +208,19 @@ async def _has_backoffice_identity(db: AsyncSession, user_uuid, *, besides: str 
         db, str(user_uuid), include_inactive_teams=True
     )
     return any(identity.team_uuid is not None or identity.role_name not in plain for identity in identities)
+
+
+async def sees_team_contacts(db: AsyncSession, user_uuid) -> bool:
+    """Whether the account reads every team's contact: a team identity or super admin (ADR-357 point 5).
+
+    Judged on the identities the account may act as rather than the one it acts as now, which on the public
+    site is `user`; a grant in a suspended or deleted team counts for nothing here, as it does for acting.
+    """
+    identities = await active_identity_repository.list_for_user(db, str(user_uuid))
+    return any(
+        identity.team_uuid is not None or identity.role_name == SUPER_ADMIN_ROLE_NAME
+        for identity in identities
+    )
 
 
 async def submit(

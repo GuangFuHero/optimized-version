@@ -287,8 +287,12 @@ listed but can do nothing as that team. A team is never disbanded: it stays, wit
    | `suspended` | Kept, but resolve to no permission | Refused; a token acting as it answers 401, as a revoked identity does (ADR-096) | Refused (invite 404, team not in the form's list) | Restore to `active` |
 
    Pending requests for a team that is suspended are rejected with the note `團隊已停用`, and the applicants told.
-5. **Contact fields are visible where the team already is** (`team.view` scope, unchanged): its own members and
-   super admins. They are not shown to other teams; `team.view` is not widened.
+5. **Every team identity sees every team's contact, read-only.** `roleRequestTeams` adds `contactName` and
+   `contactPhone` to each active team for a caller who holds a team identity (any role, in an active team) or is
+   a super admin, and leaves them null for everyone else, so teams can find each other when assigning zones,
+   referring cases or coordinating. The check reads the identities the account may act as, not the one it acts
+   as now; a grant in a suspended team does not count. `team.view` is not widened: `GET /admin/teams`, the tax
+   ID, the status and the member list stay with the team's own members and super admins.
 
 **Consequences**:
 ➕ Suspension is undone by one call, with every membership as it was.

@@ -33,16 +33,22 @@ class RoleRequestQuery:
     async def role_request_teams(
         self, info: strawberry.types.Info, type: RoleRequestTeamType | None = None
     ) -> list[RoleRequestTeam]:
-        """Active teams to pick from when applying, by name; `type` narrows to gov or NGO.
+        """Active teams by name, for the application form's picker and the back office's team directory.
 
-        Signed in, no capability: the applicant is in no team yet, and `GET /admin/teams` lists
-        only the caller's own (Spec/026).
+        Signed in, no capability; `type` narrows to gov or NGO. The contact is filled only for a caller
+        holding a team identity or super admin (ADR-357 point 5).
         """
-        require_authenticated(info)
-        teams = await team_repository.list_joinable(
-            info.context["db"], type_=type.value if type is not None else None
-        )
+        actor = require_authenticated(info)
+        db = info.context["db"]
+        teams = await team_repository.list_joinable(db, type_=type.value if type is not None else None)
+        contacts = await role_request_service.sees_team_contacts(db, actor.uuid)
         return [
-            RoleRequestTeam(uuid=team.uuid, name=team.name, type=RoleRequestTeamType(team.type))
+            RoleRequestTeam(
+                uuid=team.uuid,
+                name=team.name,
+                type=RoleRequestTeamType(team.type),
+                contact_name=team.contact_name if contacts else None,
+                contact_phone=team.contact_phone if contacts else None,
+            )
             for team in teams
         ]
