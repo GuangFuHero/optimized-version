@@ -331,7 +331,8 @@ function AdminNotifyContent({ onClose }: { onClose: () => void }) {
               onClick={() =>
                 markRead.mutate(unread.map((notice) => notice.uuid))
               }
-              sx={{ ml: 'auto', whiteSpace: 'nowrap' }}
+              // Never narrower than its label: on a phone the caption wraps instead.
+              sx={{ ml: 'auto', whiteSpace: 'nowrap', flexShrink: 0 }}
             >
               全部標為已讀
             </Button>
