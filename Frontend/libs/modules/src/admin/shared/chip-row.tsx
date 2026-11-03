@@ -22,7 +22,7 @@ export function ChipRow<T extends string>({
 }) {
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-      {/* Narrow on purpose: a long label (指派 Team) wraps to two lines rather than widening the column. */}
+      {/* Narrow on purpose: a long label (指派團隊) wraps to two lines rather than widening the column. */}
       <Typography
         sx={{
           ...typography.body[300],

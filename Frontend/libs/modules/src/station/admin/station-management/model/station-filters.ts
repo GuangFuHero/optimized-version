@@ -9,7 +9,7 @@ import {
 
 export type Established = 'first_week' | 'later';
 
-/** The 指派 Team filter value for stations no team runs yet. */
+/** The 指派團隊 filter value for stations no team runs yet. */
 export const UNASSIGNED_TEAM = '__none__';
 
 export interface StationFilters {

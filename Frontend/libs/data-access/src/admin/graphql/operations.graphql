@@ -114,7 +114,7 @@ query AdminTickets(
   ) {
     items {
       ...AdminTicketFields
-      # The board's row: the street line under the title, the 照片 count and the 指派 Team cell.
+      # The board's row: the street line under the title, the 照片 count and the 指派團隊 cell.
       secondaryLocation {
         fullAddress
         landmarkNote

@@ -513,7 +513,7 @@ export function StatusCell({ status }: { status: string }) {
 }
 
 /**
- * 指派 Team: the teams of the 責任區 the ticket lies in, read-only. Withheld from a viewer without
+ * 指派團隊: the teams of the 責任區 the ticket lies in, read-only. Withheld from a viewer without
  * detail on it, which is not the same as none.
  */
 function TeamCell({ row }: { row: TicketRow }) {
@@ -532,7 +532,7 @@ function TeamCell({ row }: { row: TicketRow }) {
 }
 
 /**
- * The row's ⋯: view, 指派 Team (not open yet), and delete where the ticket's `viewerCanDelete` allows. Its
+ * The row's ⋯: view, 指派團隊 (not open yet), and delete where the ticket's `viewerCanDelete` allows. Its
  * clicks stay in the cell (the menu is portalled, but React bubbles through it) so the row does
  * not open under it.
  */
@@ -549,7 +549,7 @@ function RowMenu({
     { label: '檢視任務', icon: <PanelRightOpen size={16} />, onSelect: onOpen },
     {
       // The backend has no ticket–team assignment yet (ADR-049): drawn as the design does, not wired.
-      label: '指派 Team',
+      label: '指派團隊',
       icon: <UserPlus size={16} />,
       onSelect: () => undefined,
       disabled: true,
