@@ -1,13 +1,7 @@
 'use client';
 
 import { Box, ButtonBase, Stack, Typography } from '@mui/material';
-import {
-  useInfiniteQuery,
-  useMutation,
-  useQueryClient,
-  type InfiniteData,
-  type QueryClient,
-} from '@tanstack/react-query';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import {
   Building2,
   CheckCheck,
@@ -42,15 +36,10 @@ import {
 import {
   adminNotificationKeys,
   listNotificationsAsync,
-  markNotificationReadAsync,
   siteNotificationKeys,
-  type NotificationPage,
 } from './api';
-import {
-  notMarkedRead,
-  readsNextPageUnasked,
-  withReadState,
-} from './site-notices';
+import { readsNextPageUnasked } from './site-notices';
+import { useMarkNotificationsRead } from './use-mark-notifications-read';
 
 const { color, radius, typography } = designTokens;
 
@@ -101,29 +90,6 @@ const EMPTY_REASONS: { kind: AdminNoticeKind; text: string }[] = [
   { kind: 'assign', text: '站點、責任區指派給你的團隊' },
   { kind: 'team', text: '加入團隊、團隊暫停' },
 ];
-
-/** The list's cached pages with those in `uuids` read, or unread again. */
-function setCachedReadState(
-  queryClient: QueryClient,
-  uuids: readonly string[],
-  read: boolean,
-) {
-  if (uuids.length === 0) {
-    return;
-  }
-
-  queryClient.setQueryData<InfiniteData<NotificationPage>>(
-    adminNotificationKeys.list,
-    (data) =>
-      data && {
-        ...data,
-        pages: data.pages.map((page) => ({
-          ...page,
-          items: withReadState(page.items, uuids, read),
-        })),
-      },
-  );
-}
 
 function Line({ children }: { children: string }) {
   return (
@@ -320,7 +286,6 @@ export function AdminNotifySheet({ open, onClose }: AdminNotifySheetProps) {
 
 function AdminNotifyContent({ onClose }: { onClose: () => void }) {
   const router = useRouter();
-  const queryClient = useQueryClient();
   const list = useInfiniteQuery({
     queryKey: adminNotificationKeys.list,
     queryFn: ({ pageParam }) => listNotificationsAsync({ page: pageParam }),
@@ -331,22 +296,9 @@ function AdminNotifyContent({ onClose }: { onClose: () => void }) {
     // The sheet says so itself, in place of the notices.
     meta: { quietErrors: true },
   });
-  // Shown read at once, and read for good in the background. A PATCH that fails puts its notice
-  // back to unread, to try again; then the list is read again from the backend.
-  const markRead = useMutation({
-    mutationFn: (uuids: string[]) =>
-      Promise.allSettled(uuids.map(markNotificationReadAsync)),
-    onMutate: async (uuids) => {
-      await queryClient.cancelQueries({ queryKey: adminNotificationKeys.list });
-      setCachedReadState(queryClient, uuids, true);
-    },
-    onSuccess: (results, uuids) =>
-      setCachedReadState(queryClient, notMarkedRead(uuids, results), false),
-    onSettled: () =>
-      Promise.all([
-        queryClient.invalidateQueries({ queryKey: adminNotificationKeys.all }),
-        queryClient.invalidateQueries({ queryKey: siteNotificationKeys.all }),
-      ]),
+  const markRead = useMarkNotificationsRead({
+    listKey: adminNotificationKeys.list,
+    invalidateKeys: [adminNotificationKeys.all, siteNotificationKeys.all],
   });
 
   const notices = list.data
