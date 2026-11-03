@@ -29,6 +29,7 @@ export type SiteNoticeKind =
   | 'role-approved'
   | 'role-rejected'
   | 'suggestion-adopted'
+  | 'suggestion-consulted'
   | 'suggestion-not-adopted';
 
 /**
@@ -49,10 +50,6 @@ const SITE_NOTICE_TYPES: Partial<
     {
       kind: SiteNoticeKind;
       opens?: Opens;
-      reword?: (row: Pick<NotificationRow, 'title' | 'body'>) => {
-        title: string;
-        body: string;
-      };
     }
   >
 > = {
@@ -90,12 +87,11 @@ const SITE_NOTICE_TYPES: Partial<
     kind: 'suggestion-adopted',
     opens: 'station-reports',
   },
-  // The reviewer wrote the value in their own words: 已採用 on the site, as the report's card says,
-  // where the backend says 已參考你的建議修改.
+  // The reviewer wrote a value no suggestion had: 已參考修改, in the backend's words, as the report's
+  // card says. Not 已採用, which would tell the viewer the station holds what they sent.
   station_suggestion_adopted_edited: {
-    kind: 'suggestion-adopted',
+    kind: 'suggestion-consulted',
     opens: 'station-reports',
-    reword: rewordAdoptedEdited,
   },
   // Rejected, and another person's value taken, read the same.
   station_suggestion_not_adopted: {
@@ -103,25 +99,6 @@ const SITE_NOTICE_TYPES: Partial<
     opens: 'station-reports',
   },
 };
-
-const ADOPTED_EDITED_ENDING = '已參考你的建議修改。';
-
-/**
- * 「「站名」的「服務時間」已參考你的建議修改。」 as an adopted one reads: 「你對「站名」的「服務時間」的修改
- * 建議已採用。」 A body worded otherwise keeps its words, under the adopted title.
- */
-export function rewordAdoptedEdited({
-  body,
-}: Pick<NotificationRow, 'title' | 'body'>): { title: string; body: string } {
-  const where = body.endsWith(ADOPTED_EDITED_ENDING)
-    ? body.slice(0, -ADOPTED_EDITED_ENDING.length)
-    : null;
-
-  return {
-    title: '📝 站點修改建議已採用',
-    body: where ? `你對${where}的修改建議已採用。` : body,
-  };
-}
 
 /** A notice as the drawer shows it: four of the row's fields as they come, the rest the site's own. */
 export interface SiteNotice
@@ -153,14 +130,12 @@ export function readSiteNotices(
         ? (row.ref_uuid ?? null)
         : null;
 
-    const { title, body } = type.reword ? type.reword(row) : row;
-
     return [
       {
         uuid: row.uuid,
         kind: type.kind,
-        title,
-        body,
+        title: row.title,
+        body: row.body,
         read: row.read,
         at: formatTaiwanTime(row.created_at),
         needUuid: names('need', 'ticket_task'),
