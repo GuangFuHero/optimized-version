@@ -10,7 +10,6 @@ import {
 import ApiError from '../rest/api-error';
 import type { components, paths } from '../rest/openapi';
 import { adminRestClient } from './client';
-import ApiError from '../rest/api-error';
 import { responseData } from '../rest/openapi-client';
 import {
   invalidateTicketWrite,
