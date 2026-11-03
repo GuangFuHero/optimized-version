@@ -34,7 +34,6 @@ import {
   type PairTab,
   type PairView,
 } from './model';
-import { HintRates } from './hint-rates';
 import { LetterDot, muted, subtle } from './parts';
 
 const { color, radius, shadow, typography } = designTokens;
@@ -182,7 +181,7 @@ export function DedupReviewPage() {
         </Tabs>
         <Box sx={{ flex: 1 }} />
         {/* BTN-114: a grey pill holding ghost sm buttons; the chosen one is light orange (BTN-107),
-            never black, which means nothing in this palette (design review, 2026-11-03). */}
+            never black, which means nothing in this palette. */}
         <Stack
           direction="row"
           role="group"
@@ -239,8 +238,6 @@ export function DedupReviewPage() {
           <option value="latest">最新建立的在前</option>
         </Box>
       </Stack>
-
-      <HintRates tab={tab} />
 
       {tab === 'station' ? (
         <Box component="span" sx={{ ...typography.body[300], ...muted }}>
@@ -366,10 +363,7 @@ function PairRow({
       <Stack sx={{ gap: 0.25, alignItems: 'flex-start' }}>
         {pending ? (
           <>
-            <Box
-              component="span"
-              sx={{ ...typography.label[500], fontSize: 18 }}
-            >
+            <Box component="span" sx={typography.data[500]}>
               {pair.similarity == null
                 ? '—'
                 : `${Math.round(pair.similarity * 100)}%`}

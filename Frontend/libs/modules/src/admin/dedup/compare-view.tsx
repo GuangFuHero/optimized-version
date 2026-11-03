@@ -271,7 +271,6 @@ function PairCompare({
           component="h1"
           sx={{
             ...typography.heading[600],
-            fontSize: 18,
             m: 0,
             whiteSpace: 'nowrap',
           }}
@@ -1986,7 +1985,14 @@ function ConfirmDialog({
             borderBottom: `1px solid ${color.border.default}`,
           }}
         >
-          <Box sx={{ ...typography.heading[600], fontSize: 19 }}>{title}</Box>
+          <Box
+            sx={{
+              ...typography.heading[600],
+              fontSize: designTokens.textSize[20],
+            }}
+          >
+            {title}
+          </Box>
           <Box sx={{ mt: 0.5, ...typography.body[300], ...subtle }}>{sub}</Box>
         </Box>
         <Stack
@@ -2060,12 +2066,7 @@ function ConfirmDialog({
             borderTop: `1px solid ${color.border.default}`,
           }}
         >
-          <Box
-            component="span"
-            sx={{ flex: 1, ...typography.data[300], ...muted }}
-          >
-            送出後不能復原
-          </Box>
+          <Box component="span" sx={{ flex: 1 }} />
           <Button variant="outline" onClick={onClose} disabled={submitting}>
             回去修改
           </Button>
