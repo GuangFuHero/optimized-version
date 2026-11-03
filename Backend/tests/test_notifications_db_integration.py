@@ -297,6 +297,104 @@ async def test_new_suggestion_notifies_only_reviewers_who_can_act(db: AsyncSessi
 
 
 @pytest.mark.asyncio
+async def test_new_suggestion_reaches_gov_members_but_not_ngo_members(db: AsyncSession):
+    """BE-RBAC-3 B3: the team role `member` reviews station suggestions for gov teams only.
+
+    So a new suggestion is told to an active gov team's members (any station, gov widening), but not
+    to the members of the NGO team that runs the station, nor to a suspended gov team's members:
+    the notice follows who can review, as resolve_scope decides it. The NGO team's admin still hears.
+    """
+    from app.services.notification_resolver import NotificationRecipientResolver
+
+    review = Permission(key=Perm.STATION_REVIEW.value)
+    admin_role = Role(name="admin", kind="team")
+    member_role = Role(name="member", kind="team")
+    ngo = Team(name="負責的NGO", type="ngo")
+    gov = Team(name="縣府", type="gov")
+    suspended_gov = Team(name="停權的縣府", type="gov", status="suspended")
+    db.add_all([review, admin_role, member_role, ngo, gov, suspended_gov])
+    await db.flush()
+    db.add_all(
+        [
+            RolePermissionAssign(role_uuid=admin_role.uuid, permission_uuid=review.uuid, scope="team"),
+            RolePermissionAssign(role_uuid=member_role.uuid, permission_uuid=review.uuid, scope="team"),
+        ]
+    )
+    users = [User(name=n) for n in ("NGO管理員", "NGO成員", "政府成員", "停權政府成員")]
+    db.add_all(users)
+    await db.flush()
+    ids = {u.name: str(u.uuid) for u in users}
+    db.add_all(
+        [
+            UserRoleAssign(user_uuid=ids["NGO管理員"], role_uuid=admin_role.uuid, team_uuid=ngo.uuid),
+            UserRoleAssign(user_uuid=ids["NGO成員"], role_uuid=member_role.uuid, team_uuid=ngo.uuid),
+            UserRoleAssign(user_uuid=ids["政府成員"], role_uuid=member_role.uuid, team_uuid=gov.uuid),
+            UserRoleAssign(
+                user_uuid=ids["停權政府成員"], role_uuid=member_role.uuid, team_uuid=suspended_gov.uuid
+            ),
+        ]
+    )
+    station = Station(
+        name="站", geometry=WKTElement("SRID=4326;POINT(121.42 23.66)", srid=4326), team_uuid=ngo.uuid
+    )
+    db.add(station)
+    await db.flush()
+
+    recipients = await NotificationRecipientResolver.resolve_permission(
+        db, Perm.STATION_REVIEW.value, station_uuid=station.uuid
+    )
+
+    assert sorted(recipients) == sorted([ids["NGO管理員"], ids["政府成員"]])
+
+
+@pytest.mark.asyncio
+async def test_zone_notices_store_the_zone_and_the_team(db: AsyncSession):
+    """Assigning and removing a team zone each tell that team's admins, naming the zone and the team."""
+    from unittest.mock import AsyncMock, patch
+
+    from app.services import area as area_service
+
+    admin_role = Role(name="admin", kind="team")
+    joining = Team(name="光復救援隊", type="ngo", status="active")
+    leaving = Team(name="鳳林救援隊", type="ngo", status="active")
+    joining_admin, leaving_admin, assigner = User(name="甲隊長"), User(name="乙隊長"), User(name="政府專員")
+    db.add_all([admin_role, joining, leaving, joining_admin, leaving_admin, assigner])
+    await db.flush()
+    polygon_wkt = "SRID=4326;POLYGON((121.5 23.9, 121.7 23.9, 121.7 24.1, 121.5 24.1, 121.5 23.9))"
+    zone = TeamZone(name="大平村", geometry=WKTElement(polygon_wkt, srid=4326))
+    db.add(zone)
+    await db.flush()
+    db.add_all(
+        [
+            UserRoleAssign(user_uuid=joining_admin.uuid, role_uuid=admin_role.uuid, team_uuid=joining.uuid),
+            UserRoleAssign(user_uuid=leaving_admin.uuid, role_uuid=admin_role.uuid, team_uuid=leaving.uuid),
+            TeamZoneAssign(team_uuid=leaving.uuid, zone_uuid=zone.uuid, assigned_by=str(assigner.uuid)),
+        ]
+    )
+    zone_id, joining_id, leaving_id, assigner_id = zone.uuid, joining.uuid, leaving.uuid, assigner.uuid
+    await db.commit()
+
+    with (
+        patch("app.services.area.require_scope", new_callable=AsyncMock),
+        patch("app.services.area._require_gov_zone_authority", new_callable=AsyncMock),
+    ):
+        actor = await db.get(User, assigner_id, populate_existing=True)
+        await area_service.assign_zone_to_team(
+            db, actor=actor, zone_uuid=str(zone_id), team_uuid=str(joining_id)
+        )
+        actor = await db.get(User, assigner_id, populate_existing=True)
+        await area_service.remove_zone_from_team(
+            db, actor=actor, zone_uuid=str(zone_id), team_uuid=str(leaving_id)
+        )
+
+    sent = dict((await db.execute(select(Notification.type, Notification.params))).all())
+    assert sent == {
+        "zone_assigned": {"zone_name": "大平村", "team_name": "光復救援隊"},
+        "zone_unassigned": {"zone_name": "大平村", "team_name": "鳳林救援隊"},
+    }
+
+
+@pytest.mark.asyncio
 async def test_notification_dispatch_persists_across_sessions(db: AsyncSession):
     """Verify notifications dispatched are committed and persist after the session is closed."""
     recipient = User(name="Recipient User")
@@ -313,6 +411,7 @@ async def test_notification_dispatch_persists_across_sessions(db: AsyncSession):
         event_type="zone_assigned",
         title="⚠️ 【緊急】新工作分區指派",
         body="您的團隊已獲指派責任分區。",
+        params={"zone_name": "大平村", "team_name": "光復救援隊"},
         priority="urgent",
         actor_uuid=act_id,
         ref_type="work_zone",
@@ -510,6 +609,12 @@ async def test_operational_property_update_notifies_gov(db: AsyncSession):
     assert len(rows) == 1, "Gov staff must be notified when beds_available changes"
     assert str(rows[0].ref_uuid) == str(station_id), "Deep link must point at the station"
     assert rows[0].ref_type == "station"
+    assert rows[0].params == {
+        "station_name": "大進國小收容中心",
+        "station_type": "shelter",
+        "change": "status",
+        "property_name": "beds_available",
+    }
 
 
 @pytest.mark.asyncio
@@ -642,6 +747,12 @@ async def test_approved_suggestion_on_boolean_property_notifies_gov(db: AsyncSes
     )
     assert len(rows) == 1, "Approving an is_open change must notify Gov"
     assert str(rows[0].ref_uuid) == str(station_id)
+    assert rows[0].params == {
+        "station_name": "大進國小收容中心",
+        "station_type": "shelter",
+        "change": "status",
+        "property_name": "is_open",
+    }
 
 
 @pytest.mark.asyncio
@@ -788,6 +899,7 @@ async def test_urgent_notifications_sort_above_newer_ones(db: AsyncSession):
         event_type="zone_assigned",
         title="⚠️ 【緊急】新工作分區指派",
         body="您的團隊已獲指派責任分區。",
+        params={"zone_name": "大平村", "team_name": "光復救援隊"},
         priority="urgent",
         explicit_recipients=[rec_id],
     )
@@ -797,6 +909,7 @@ async def test_urgent_notifications_sort_above_newer_ones(db: AsyncSession):
             event_type="resource_station_updated",
             title=f"🏢 新建物資資源站 {n}",
             body="新建物資資源站。",
+            params={"station_name": None, "station_type": None, "change": "created", "property_name": None},
             priority="medium",
             explicit_recipients=[rec_id],
         )

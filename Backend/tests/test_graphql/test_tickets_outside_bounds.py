@@ -6,7 +6,7 @@ from sqlalchemy import text
 from app.core import search
 from app.models.request import Tickets
 from app.repositories.tickets_repository import ticket_repository
-from tests.test_graphql.conftest import test_db
+from tests.test_graphql.conftest import test_db as db_ctx  # renamed so pytest does not collect it
 from tests.test_graphql.test_ticket_detail_boundary import (  # noqa: F401 — _only_this_tests_tickets is autouse
     INSIDE,
     OUTSIDE,
@@ -51,7 +51,7 @@ async def test_a_ticket_with_no_point_is_outside(client, redis):
     """A ticket filed without coordinates is in no box: `outsideBounds` lists it and `bounds` never does."""
     _, token = await _signed_in(redis)
     uuid = await _ticket(OUTSIDE)
-    async with test_db() as db:
+    async with db_ctx() as db:
         (await db.get(Tickets, uuid)).geometry = None
     box = _box([INSIDE.x, INSIDE.y], 0.01)
 
@@ -84,7 +84,7 @@ async def test_the_two_boxes_split_every_ticket_once_with_the_edge_inside(client
     on_edge = await _ticket(type(INSIDE)(box["minLng"], INSIDE.y))
     near, far = await _ticket(INSIDE), await _ticket(OUTSIDE)
     finished = await _ticket(OUTSIDE)
-    async with test_db() as db:
+    async with db_ctx() as db:
         (await db.get(Tickets, finished)).status = "completed"
 
     inside, inside_total = await _uuids(client, {"bounds": box}, token)

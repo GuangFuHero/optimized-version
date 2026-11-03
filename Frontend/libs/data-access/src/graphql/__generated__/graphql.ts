@@ -290,6 +290,10 @@ export type BuildingMapType = {
   name: Scalars['String']['output'];
   /** The building's street address. Public, like a station's */
   secondaryLocation?: Maybe<SecondaryLocationType>;
+  /** How many people this building is still short (ADR-450): over its tickets not completed or cancelled, each pending 'hr' or 'supply' need with a quantity adds that quantity less assignedCount, never below 0. Rescue and medical needs, and needs with no quantity, add nothing. Null to a caller without ticket.view_detail */
+  shortfall?: Maybe<Scalars['Int']['output']>;
+  /** How many tickets are filed in this building and not deleted, completed and cancelled ones too: every one buildingMapTickets lists, past any page (ADR-450). Null to a caller without ticket.view_detail, to whom those tickets are not placed in the building */
+  ticketCount?: Maybe<Scalars['Int']['output']>;
   updatedAt?: Maybe<Scalars['DateTime']['output']>;
   uuid: Scalars['UUID']['output'];
 };
@@ -353,6 +357,8 @@ export type CreateCrowdSourcingInput = {
 };
 
 export type CreateHelpRequestInput = {
+  /** File the request inside this building map, as createTicket does: its point and address are copied onto the ticket, and secondaryLocation.floor (and room, on a floor with areas) must match the building's floors. Omit floor when the reporter doesn't know it */
+  buildingMapUuid?: InputMaybe<Scalars['UUID']['input']>;
   /** Optional; the account's own email is never filled in for it */
   contactEmail?: InputMaybe<Scalars['String']['input']>;
   /** Who to ask for at the place */
@@ -360,8 +366,8 @@ export type CreateHelpRequestInput = {
   /** Phone number or LINE ID, as the person typed it */
   contactPhone?: InputMaybe<Scalars['String']['input']>;
   description?: InputMaybe<Scalars['String']['input']>;
-  /** GeoJSON Point for the location where help is needed — [longitude, latitude] */
-  geometry: Scalars['GeoJSON']['input'];
+  /** GeoJSON Point for the location where help is needed — [longitude, latitude]. Required unless buildingMapUuid is given, in which case it must be omitted */
+  geometry?: InputMaybe<Scalars['GeoJSON']['input']>;
   /** Scene photos as links to images kept elsewhere — the platform stores no image. At most 10, each an https:// URL of at most 500 characters */
   photoUrls?: InputMaybe<Array<Scalars['String']['input']>>;
   /** The address line goes in `fullAddress` (with its `addressToken` if looked up), with `floor` and `room` */
@@ -486,7 +492,7 @@ export type CreateTicketTaskDraft = {
 };
 
 export type CreateTicketTaskInput = {
-  /** People or units needed, at least 1; required except for a 'rescue' task, which may omit it */
+  /** People or units needed, at least 1; required, for a 'rescue' task too */
   quantity?: InputMaybe<Scalars['Int']['input']>;
   /** Optional UUID of an associated route */
   routeUuid?: InputMaybe<Scalars['UUID']['input']>;
@@ -607,7 +613,7 @@ export type HazardousZoneType = {
 export type HelpRequestTaskInput = {
   /** Confirmed not a duplicate of this task (a relatedUuid from DuplicatesSuspected); not checked again */
   acknowledgedDuplicateOf?: InputMaybe<Scalars['String']['input']>;
-  /** People or units needed, at least 1; required except for a 'rescue' need, which may omit it */
+  /** People or units needed, at least 1; required, for a 'rescue' need too */
   quantity?: InputMaybe<Scalars['Int']['input']>;
   taskDescription?: InputMaybe<Scalars['String']['input']>;
   /** What is needed, at most 200 characters */
@@ -940,6 +946,29 @@ export type MyRoleRequestsType = {
 };
 
 /** One of the caller's claims, with the need and the ticket it is for */
+export type MyStationSuggestionType = {
+  __typename?: 'MyStationSuggestionType';
+  /** Approved, adopted_edited or revoked: the value the reviewer wrote, which may differ from newValue. Otherwise null, as for an approval from before merges were recorded */
+  appliedValue?: Maybe<Scalars['String']['output']>;
+  comment?: Maybe<Scalars['String']['output']>;
+  /** When it was approved or rejected, or for a revoked one when the approval was undone; for one decided before merges were recorded, when the row last changed. Null while pending */
+  decidedAt?: Maybe<Scalars['DateTime']['output']>;
+  fieldName: Scalars['String']['output'];
+  /** The value suggested, the latest if sent again */
+  newValue: Scalars['String']['output'];
+  /** The field's value when last sent, as text ('' for none); null for a suggestion sent before this was recorded */
+  previousValue?: Maybe<Scalars['String']['output']>;
+  /** The station it is about, or its property's; null once deleted or out of the caller's view, by the rules of `station` */
+  station?: Maybe<StationType>;
+  /** 'pending', 'approved', 'adopted_edited', 'not_adopted', 'rejected', or 'revoked' */
+  status: Scalars['String']['output'];
+  /** When it was first sent */
+  submittedAt: Scalars['DateTime']['output'];
+  /** 'station' or 'station_property' */
+  targetType: Scalars['String']['output'];
+  uuid: Scalars['UUID']['output'];
+};
+
 export type MyTaskAssignmentType = {
   __typename?: 'MyTaskAssignmentType';
   assignment: TaskAssignmentType;
@@ -1002,6 +1031,7 @@ export type Query = {
   hazardousZone?: Maybe<HazardousZoneType>;
   hazardousZones: HazardousZoneConnection;
   myRoleRequests: MyRoleRequestsType;
+  myStationSuggestions: Array<MyStationSuggestionType>;
   myTaskAssignments: Array<MyTaskAssignmentType>;
   myTickets: Array<TicketType>;
   /** Look a typed address up in TGOS before saving it (exact matches only). Pass the map pin as lat/lng to check the two agree. Signed-in callers only, 30 lookups a minute shared with reverseGeocode */
@@ -1088,6 +1118,11 @@ export type QueryHazardousZoneArgs = {
 
 export type QueryHazardousZonesArgs = {
   bounds?: InputMaybe<BoundsInput>;
+  limit?: Scalars['Int']['input'];
+  skip?: Scalars['Int']['input'];
+};
+
+export type QueryMyStationSuggestionsArgs = {
   limit?: Scalars['Int']['input'];
   skip?: Scalars['Int']['input'];
 };
@@ -1735,6 +1770,13 @@ export type TicketDisasterDetailType = {
   value: Scalars['String']['output'];
 };
 
+/** Another ticket a disputed ticket may duplicate */
+export type TicketDuplicateRefType = {
+  __typename?: 'TicketDuplicateRefType';
+  title: Scalars['String']['output'];
+  uuid: Scalars['UUID']['output'];
+};
+
 export const TicketListOrder = {
   NeedsFirst: 'NEEDS_FIRST',
   Newest: 'NEWEST',
@@ -1865,6 +1907,8 @@ export type TicketType = {
   secondaryLocation?: Maybe<SecondaryLocationType>;
   /** Lifecycle state: 'pending', 'in_progress', 'completed', or 'cancelled' */
   status: Scalars['String']['output'];
+  /** Other tickets this one may repeat, to anyone (ADR-454): the tickets verificationStatus names, each once, oldest card first; empty when there are none. Not whether a verdict was given on them */
+  suspectedDuplicateOf: Array<TicketDuplicateRefType>;
   /** Type of help needed: 'rescue', 'supply', 'medical', or 'hr' */
   taskType?: Maybe<Scalars['String']['output']>;
   tasks: Array<TicketTaskType>;
@@ -2128,6 +2172,32 @@ export type GetBuildingMapWithTicketsQuery = {
   >;
 };
 
+export type GetBuildingMapsQueryVariables = Exact<{
+  limit?: Scalars['Int']['input'];
+}>;
+
+export type GetBuildingMapsQuery = {
+  __typename?: 'Query';
+  buildingMaps: {
+    __typename?: 'BuildingMapConnection';
+    items: Array<{
+      __typename?: 'BuildingMapType';
+      uuid: string;
+      name: string;
+      geometry?: Geometry | null;
+      ticketCount?: number | null;
+      shortfall?: number | null;
+      floors: Array<{ __typename?: 'BuildingFloorType'; label: string }>;
+      secondaryLocation?: {
+        __typename?: 'SecondaryLocationType';
+        fullAddress?: string | null;
+        landmarkNote?: string | null;
+      } | null;
+    }>;
+    pageInfo: { __typename?: 'PageInfo'; totalCount: number };
+  };
+};
+
 export type PageInfoFieldsFragment = {
   __typename?: 'PageInfo';
   totalCount: number;
@@ -2246,6 +2316,7 @@ export type GetStationQuery = {
 
 export type GetMapAreasQueryVariables = Exact<{
   bounds?: InputMaybe<BoundsInput>;
+  includePrivate?: InputMaybe<Scalars['Boolean']['input']>;
   skip?: InputMaybe<Scalars['Int']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
 }>;
@@ -2261,6 +2332,7 @@ export type GetMapAreasQuery = {
       name?: string | null;
       note?: string | null;
       geometry?: Geometry | null;
+      isPublic: boolean;
       assignedTeams: Array<{
         __typename?: 'AssignedTeamType';
         uuid: string;
@@ -2420,6 +2492,31 @@ export type CreateStationSuggestionMutation = {
   };
 };
 
+export type MyStationSuggestionsQueryVariables = Exact<{
+  [key: string]: never;
+}>;
+
+export type MyStationSuggestionsQuery = {
+  __typename?: 'Query';
+  myStationSuggestions: Array<{
+    __typename?: 'MyStationSuggestionType';
+    uuid: string;
+    targetType: string;
+    fieldName: string;
+    previousValue?: string | null;
+    newValue: string;
+    comment?: string | null;
+    status: string;
+    submittedAt: any;
+    decidedAt?: any | null;
+    station?: {
+      __typename?: 'StationType';
+      uuid: string;
+      name?: string | null;
+    } | null;
+  }>;
+};
+
 export type MyRoleRequestsQueryVariables = Exact<{ [key: string]: never }>;
 
 export type MyRoleRequestsQuery = {
@@ -2486,6 +2583,7 @@ export type TicketFieldsFragment = {
   propertyName: string;
   geometry?: Geometry | null;
   locationCell?: string | null;
+  buildingMapUuid?: string | null;
   title: string;
   description?: string | null;
   contactName?: string | null;
@@ -2541,9 +2639,14 @@ export type GetTicketsQuery = {
   tickets: {
     __typename?: 'TicketConnection';
     items: Array<
-      { __typename?: 'TicketType' } & {
-        ' $fragmentRefs'?: { TicketFieldsFragment: TicketFieldsFragment };
-      }
+      {
+        __typename?: 'TicketType';
+        suspectedDuplicateOf: Array<{
+          __typename?: 'TicketDuplicateRefType';
+          uuid: string;
+          title: string;
+        }>;
+      } & { ' $fragmentRefs'?: { TicketFieldsFragment: TicketFieldsFragment } }
     >;
     pageInfo: {
       __typename?: 'PageInfo';
@@ -2590,6 +2693,35 @@ export type GetCellTicketsQuery = {
   };
 };
 
+export type GetAdminMapTicketsQueryVariables = Exact<{
+  bounds?: InputMaybe<BoundsInput>;
+  skip?: InputMaybe<Scalars['Int']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  zoom?: InputMaybe<Scalars['Float']['input']>;
+}>;
+
+export type GetAdminMapTicketsQuery = {
+  __typename?: 'Query';
+  tickets: {
+    __typename?: 'TicketConnection';
+    items: Array<
+      {
+        __typename?: 'TicketType';
+        responsibleTeams: Array<{
+          __typename?: 'AssignedTeamType';
+          name: string;
+        }>;
+      } & { ' $fragmentRefs'?: { TicketFieldsFragment: TicketFieldsFragment } }
+    >;
+    pageInfo: {
+      __typename?: 'PageInfo';
+      totalCount: number;
+      hasNextPage: boolean;
+      hasPreviousPage: boolean;
+    };
+  };
+};
+
 export type GetTicketsWithNeedsQueryVariables = Exact<{
   bounds?: InputMaybe<BoundsInput>;
   status?: InputMaybe<Scalars['String']['input']>;
@@ -2608,6 +2740,11 @@ export type GetTicketsWithNeedsQuery = {
     items: Array<
       {
         __typename?: 'TicketType';
+        suspectedDuplicateOf: Array<{
+          __typename?: 'TicketDuplicateRefType';
+          uuid: string;
+          title: string;
+        }>;
         tasks: Array<
           { __typename?: 'TicketTaskType' } & {
             ' $fragmentRefs'?: {
@@ -2636,6 +2773,11 @@ export type GetTicketQuery = {
     | ({
         __typename?: 'TicketType';
         buildingMapUuid?: string | null;
+        suspectedDuplicateOf: Array<{
+          __typename?: 'TicketDuplicateRefType';
+          uuid: string;
+          title: string;
+        }>;
         secondaryLocation?: {
           __typename?: 'SecondaryLocationType';
           fullAddress?: string | null;
@@ -3046,6 +3188,7 @@ export const TicketFieldsFragmentDoc = {
           { kind: 'Field', name: { kind: 'Name', value: 'propertyName' } },
           { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
           { kind: 'Field', name: { kind: 'Name', value: 'locationCell' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'buildingMapUuid' } },
           { kind: 'Field', name: { kind: 'Name', value: 'title' } },
           { kind: 'Field', name: { kind: 'Name', value: 'description' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },
@@ -3363,6 +3506,7 @@ export const GetBuildingMapWithTicketsDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'propertyName' } },
           { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
           { kind: 'Field', name: { kind: 'Name', value: 'locationCell' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'buildingMapUuid' } },
           { kind: 'Field', name: { kind: 'Name', value: 'title' } },
           { kind: 'Field', name: { kind: 'Name', value: 'description' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },
@@ -3411,6 +3555,123 @@ export const GetBuildingMapWithTicketsDocument = {
 } as unknown as DocumentNode<
   GetBuildingMapWithTicketsQuery,
   GetBuildingMapWithTicketsQueryVariables
+>;
+export const GetBuildingMapsDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'GetBuildingMaps' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'limit' },
+          },
+          type: {
+            kind: 'NonNullType',
+            type: { kind: 'NamedType', name: { kind: 'Name', value: 'Int' } },
+          },
+          defaultValue: { kind: 'IntValue', value: '200' },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'buildingMaps' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'limit' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'limit' },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'items' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'name' } },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'geometry' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'floors' },
+                        selectionSet: {
+                          kind: 'SelectionSet',
+                          selections: [
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'label' },
+                            },
+                          ],
+                        },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'secondaryLocation' },
+                        selectionSet: {
+                          kind: 'SelectionSet',
+                          selections: [
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'fullAddress' },
+                            },
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'landmarkNote' },
+                            },
+                          ],
+                        },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'ticketCount' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'shortfall' },
+                      },
+                    ],
+                  },
+                },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'pageInfo' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'totalCount' },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  GetBuildingMapsQuery,
+  GetBuildingMapsQueryVariables
 >;
 export const GetStationsDocument = {
   kind: 'Document',
@@ -3798,6 +4059,15 @@ export const GetMapAreasDocument = {
         },
         {
           kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'includePrivate' },
+          },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'Boolean' } },
+          defaultValue: { kind: 'BooleanValue', value: false },
+        },
+        {
+          kind: 'VariableDefinition',
           variable: { kind: 'Variable', name: { kind: 'Name', value: 'skip' } },
           type: { kind: 'NamedType', name: { kind: 'Name', value: 'Int' } },
           defaultValue: { kind: 'IntValue', value: '0' },
@@ -3825,6 +4095,14 @@ export const GetMapAreasDocument = {
                 value: {
                   kind: 'Variable',
                   name: { kind: 'Name', value: 'bounds' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'includePrivate' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'includePrivate' },
                 },
               },
               {
@@ -3860,6 +4138,10 @@ export const GetMapAreasDocument = {
                       {
                         kind: 'Field',
                         name: { kind: 'Name', value: 'geometry' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'isPublic' },
                       },
                       {
                         kind: 'Field',
@@ -4557,6 +4839,56 @@ export const CreateStationSuggestionDocument = {
   CreateStationSuggestionMutation,
   CreateStationSuggestionMutationVariables
 >;
+export const MyStationSuggestionsDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'MyStationSuggestions' },
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'myStationSuggestions' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'targetType' } },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'station' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'name' } },
+                    ],
+                  },
+                },
+                { kind: 'Field', name: { kind: 'Name', value: 'fieldName' } },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'previousValue' },
+                },
+                { kind: 'Field', name: { kind: 'Name', value: 'newValue' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'comment' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'status' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'submittedAt' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'decidedAt' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  MyStationSuggestionsQuery,
+  MyStationSuggestionsQueryVariables
+>;
 export const MyRoleRequestsDocument = {
   kind: 'Document',
   definitions: [
@@ -4953,6 +5285,23 @@ export const GetTicketsDocument = {
                         kind: 'FragmentSpread',
                         name: { kind: 'Name', value: 'TicketFields' },
                       },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'suspectedDuplicateOf' },
+                        selectionSet: {
+                          kind: 'SelectionSet',
+                          selections: [
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'uuid' },
+                            },
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'title' },
+                            },
+                          ],
+                        },
+                      },
                     ],
                   },
                 },
@@ -4997,6 +5346,7 @@ export const GetTicketsDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'propertyName' } },
           { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
           { kind: 'Field', name: { kind: 'Name', value: 'locationCell' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'buildingMapUuid' } },
           { kind: 'Field', name: { kind: 'Name', value: 'title' } },
           { kind: 'Field', name: { kind: 'Name', value: 'description' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },
@@ -5249,6 +5599,7 @@ export const GetCellTicketsDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'propertyName' } },
           { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
           { kind: 'Field', name: { kind: 'Name', value: 'locationCell' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'buildingMapUuid' } },
           { kind: 'Field', name: { kind: 'Name', value: 'title' } },
           { kind: 'Field', name: { kind: 'Name', value: 'description' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },
@@ -5266,6 +5617,177 @@ export const GetCellTicketsDocument = {
     },
   ],
 } as unknown as DocumentNode<GetCellTicketsQuery, GetCellTicketsQueryVariables>;
+export const GetAdminMapTicketsDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'GetAdminMapTickets' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'bounds' },
+          },
+          type: {
+            kind: 'NamedType',
+            name: { kind: 'Name', value: 'BoundsInput' },
+          },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'skip' } },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'Int' } },
+          defaultValue: { kind: 'IntValue', value: '0' },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'limit' },
+          },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'Int' } },
+          defaultValue: { kind: 'IntValue', value: '50' },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'zoom' } },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'Float' } },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'tickets' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'bounds' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'bounds' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'skip' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'skip' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'limit' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'limit' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'zoom' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'zoom' },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'items' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      {
+                        kind: 'FragmentSpread',
+                        name: { kind: 'Name', value: 'TicketFields' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'responsibleTeams' },
+                        selectionSet: {
+                          kind: 'SelectionSet',
+                          selections: [
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'name' },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'pageInfo' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'totalCount' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'hasNextPage' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'hasPreviousPage' },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+    {
+      kind: 'FragmentDefinition',
+      name: { kind: 'Name', value: 'TicketFields' },
+      typeCondition: {
+        kind: 'NamedType',
+        name: { kind: 'Name', value: 'TicketType' },
+      },
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'propertyName' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'locationCell' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'buildingMapUuid' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'title' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'description' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'contactEmail' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'contactPhone' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'status' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'priority' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'auditStatus' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  GetAdminMapTicketsQuery,
+  GetAdminMapTicketsQueryVariables
+>;
 export const GetTicketsWithNeedsDocument = {
   kind: 'Document',
   definitions: [
@@ -5422,6 +5944,23 @@ export const GetTicketsWithNeedsDocument = {
                       },
                       {
                         kind: 'Field',
+                        name: { kind: 'Name', value: 'suspectedDuplicateOf' },
+                        selectionSet: {
+                          kind: 'SelectionSet',
+                          selections: [
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'uuid' },
+                            },
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'title' },
+                            },
+                          ],
+                        },
+                      },
+                      {
+                        kind: 'Field',
                         name: { kind: 'Name', value: 'tasks' },
                         selectionSet: {
                           kind: 'SelectionSet',
@@ -5477,6 +6016,7 @@ export const GetTicketsWithNeedsDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'propertyName' } },
           { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
           { kind: 'Field', name: { kind: 'Name', value: 'locationCell' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'buildingMapUuid' } },
           { kind: 'Field', name: { kind: 'Name', value: 'title' } },
           { kind: 'Field', name: { kind: 'Name', value: 'description' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },
@@ -5565,6 +6105,17 @@ export const GetTicketDocument = {
                 {
                   kind: 'FragmentSpread',
                   name: { kind: 'Name', value: 'TicketFields' },
+                },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'suspectedDuplicateOf' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'title' } },
+                    ],
+                  },
                 },
                 {
                   kind: 'Field',
@@ -5681,6 +6232,7 @@ export const GetTicketDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'propertyName' } },
           { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
           { kind: 'Field', name: { kind: 'Name', value: 'locationCell' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'buildingMapUuid' } },
           { kind: 'Field', name: { kind: 'Name', value: 'title' } },
           { kind: 'Field', name: { kind: 'Name', value: 'description' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },
@@ -5835,6 +6387,7 @@ export const GetLinkedTicketDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'propertyName' } },
           { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
           { kind: 'Field', name: { kind: 'Name', value: 'locationCell' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'buildingMapUuid' } },
           { kind: 'Field', name: { kind: 'Name', value: 'title' } },
           { kind: 'Field', name: { kind: 'Name', value: 'description' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },
@@ -6155,6 +6708,7 @@ export const CreateHelpRequestDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'propertyName' } },
           { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
           { kind: 'Field', name: { kind: 'Name', value: 'locationCell' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'buildingMapUuid' } },
           { kind: 'Field', name: { kind: 'Name', value: 'title' } },
           { kind: 'Field', name: { kind: 'Name', value: 'description' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },
@@ -6286,6 +6840,7 @@ export const UpdateTicketDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'propertyName' } },
           { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
           { kind: 'Field', name: { kind: 'Name', value: 'locationCell' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'buildingMapUuid' } },
           { kind: 'Field', name: { kind: 'Name', value: 'title' } },
           { kind: 'Field', name: { kind: 'Name', value: 'description' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },

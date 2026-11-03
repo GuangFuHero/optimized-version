@@ -213,6 +213,7 @@ async def add_team_member(
     # moment we commit, and touching them afterwards raises MissingGreenlet in async.
     team_name = team.name
     team_id = team.uuid
+    role_name = role.name
     actor_uid = actor.uuid
 
     await db.commit()
@@ -225,6 +226,7 @@ async def add_team_member(
         event_type="team_member_added",
         title=f"歡迎加入團隊：{team_name}",
         body=f"您已成功加入團隊「{team_name}」{f'，擔任 {team_role_name}' if team_role_name else ''}。",
+        params={"team_name": team_name, "role": role_name},
         priority="high",
         actor_uuid=actor_uid,
         ref_type="team",
@@ -480,13 +482,19 @@ async def set_team_status(db: AsyncSession, *, actor: User, team_uuid: str, new_
         members = await _team_member_uuids(db, team_id)
     await db.commit()
     # Each notice in its own try: one applicant's failing must not keep the team from hearing.
-    for request_uuid, applicant_uuid in closed:
+    for request_uuid, applicant_uuid, requested_role in closed:
         await _notify_or_log(
             db,
             f"Telling applicant {applicant_uuid} that team {team_id} closed their request failed",
             event_type="role_request_rejected",
             title="你的加入團隊申請沒有通過",
             body=_CLOSED_NOTE,
+            params={
+                "requested_role": requested_role,
+                "team_name": team_name,
+                "new_team_name": None,
+                "review_note": _CLOSED_NOTE,
+            },
             actor_uuid=actor_uuid,
             ref_type="role_request",
             ref_uuid=request_uuid,
@@ -499,6 +507,7 @@ async def set_team_status(db: AsyncSession, *, actor: User, team_uuid: str, new_
             event_type="team_suspended",
             title=f"「{team_name}」已暫停",
             body=f"你在「{team_name}」的身分暫時無法使用，恢復後會自動回來。",
+            params={"team_name": team_name},
             priority="high",
             actor_uuid=actor_uuid,
             ref_type="team",
@@ -527,7 +536,7 @@ async def _team_member_uuids(db: AsyncSession, team_uuid) -> list:
 
 
 async def _close_pending_requests(db: AsyncSession, team_uuid, reviewer_uuid, note: str) -> list[tuple]:
-    """Reject the team's pending member requests; return (request uuid, applicant uuid) pairs."""
+    """Reject the team's pending member requests; return (request uuid, applicant uuid, requested role)."""
     pending = (
         (
             await db.execute(
@@ -543,7 +552,7 @@ async def _close_pending_requests(db: AsyncSession, team_uuid, reviewer_uuid, no
     for request in pending:
         request.status, request.review_note = "rejected", note
         request.reviewed_by, request.closed_at = reviewer_uuid, now
-    return [(request.uuid, request.created_by) for request in pending]
+    return [(request.uuid, request.created_by, request.requested_role) for request in pending]
 
 
 async def list_teams(db: AsyncSession, *, actor: User, scope: Scope) -> list[Team]:

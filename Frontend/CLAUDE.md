@@ -22,8 +22,9 @@
 - 先用 `libs/ui` 的元件。缺某個 variant 就去 `libs/ui` 擴充，不要在頁面裡把 MUI 元件重新上色、改圓角。
 - 按鈕一律用 `libs/ui` 的 `Button`，照 `docs/design-system.md` 的 BTN 規則；不要 import MUI 的 `Button`。
   標「未實作」的 BTN 規則：先用最接近的現有 variant，在 PR 說明註明；不要自己做，handoff `Button` 搬進來時會一起補上。
-- 圖示：前台用 MUI 圖示（`@mui/icons-material`），後台用 Lucide（`lucide-react`）；不要加別的圖示套件。
-  前台之後也會改用 Lucide，時間未定；在那之前新程式照用 MUI 圖示。原型畫的是另一套時，用這一側最接近的圖示，保留 `iconSize` 與顏色 token。
+- 圖示：前台、後台都用 Lucide（`lucide-react`）；不要加別的圖示套件，`@mui/icons-material` 也不要加回來。
+  新圖示加進 `libs/ui` 的 `Icons`（後台也可以直接 import `lucide-react`），站點類型用 `station/station-type-icon.tsx`。
+  原型畫了哪個圖示就用同一個，保留 `iconSize` 與顏色 token。
 - `design-tokens.ts` 比設計系統的 CSS 匯出新（設計師的裁示先寫進來了）。**不要為了跟 `semantic.css` 一致把它改回去。**
 - 不要改 `../Design/`，也不要動設計分支；那是設計師的。她給的元件在設計分支的 `Design/handoff/`（目前在 `Design/components/`），搬法見 `docs/design-system.md`。
 

@@ -19,7 +19,7 @@ const meta = {
         note: '近光復國中後門',
       },
       { label: '聯絡人', value: '王小明 · 0912-345-678' },
-      { label: '指派 Team', value: null },
+      { label: '指派團隊', value: null },
       { label: '狀態', value: <Badge tone="warning">待指派</Badge> },
     ],
   },
@@ -47,7 +47,7 @@ export const Split: Story = {
       { label: '站點類型', value: '物資站' },
       { label: '營運狀態', value: <Badge tone="success">營運中</Badge> },
       { label: '容量', value: '120 人' },
-      { label: '指派 Team', value: '慈濟基金會' },
+      { label: '指派團隊', value: '慈濟基金會' },
       {
         label: '最後盤點',
         value: (

@@ -7,6 +7,7 @@ import {
   PAGES_READ_UNASKED,
   readSiteNotices,
   readsNextPageUnasked,
+  rewordAdoptedEdited,
   ticketOfNeed,
   withReadState,
   type NotificationRow,
@@ -97,6 +98,7 @@ describe('readSiteNotices', () => {
         at: '10/21 14:05',
         needUuid: 'need-1',
         ticketUuid: null,
+        opensStationReports: false,
       },
     ]);
   });
@@ -286,5 +288,66 @@ describe('bellLabel', () => {
   it('says how many are unread, for a screen reader that cannot see the badge', () => {
     expect(bellLabel(0)).toBe('通知');
     expect(bellLabel(12)).toBe('通知，12 則未讀');
+  });
+});
+
+describe('station suggestion notices', () => {
+  const suggestion = (type: string, title: string, body: string) =>
+    row({
+      type,
+      ref_type: 'station_suggestion',
+      ref_uuid: 'suggestion-1',
+      title,
+      body,
+    });
+
+  it('shows the three results and opens 我回報的站點', () => {
+    const notices = readSiteNotices([
+      suggestion(
+        'station_suggestion_adopted',
+        '📝 站點修改建議已採用',
+        '你對「光復國小加水站」的「營運狀態」的修改建議已採用。',
+      ),
+      suggestion(
+        'station_suggestion_not_adopted',
+        '📝 站點修改建議未採用',
+        '你對「光復國小加水站」的「營運狀態」的修改建議未採用。',
+      ),
+    ]);
+
+    expect(notices.map((notice) => notice.kind)).toEqual([
+      'suggestion-adopted',
+      'suggestion-not-adopted',
+    ]);
+    expect(notices.every((notice) => notice.opensStationReports)).toBe(true);
+    expect(notices.every((notice) => notice.ticketUuid === null)).toBe(true);
+  });
+
+  it("reads a reviewer's own wording as adopted, as the report card does", () => {
+    const [notice] = readSiteNotices([
+      suggestion(
+        'station_suggestion_adopted_edited',
+        '📝 站點修改建議已納入參考',
+        '「光復國小加水站」的「服務時間」已參考你的建議修改。',
+      ),
+    ]);
+
+    expect(notice).toMatchObject({
+      kind: 'suggestion-adopted',
+      title: '📝 站點修改建議已採用',
+      body: '你對「光復國小加水站」的「服務時間」的修改建議已採用。',
+    });
+  });
+
+  it('keeps a body worded otherwise', () => {
+    expect(
+      rewordAdoptedEdited({ title: '已納入參考', body: '已參考修改' }),
+    ).toEqual({ title: '📝 站點修改建議已採用', body: '已參考修改' });
+  });
+
+  it('leaves other notices opening nothing new', () => {
+    const [notice] = readSiteNotices([row()]);
+
+    expect(notice.opensStationReports).toBe(false);
   });
 });

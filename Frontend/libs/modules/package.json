@@ -8,12 +8,13 @@
     "./briefing": "./src/briefing/index.ts",
     "./session": "./src/session/index.ts",
     "./server": "./src/server.ts",
-    "./document": "./src/document-layout.tsx"
+    "./document": "./src/document-layout.tsx",
+    "./content-security-policy": "./src/http/content-security-policy.js",
+    "./zod-jitless": "./src/http/zod-jitless.ts"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
-    "@mui/icons-material": "^9.0.0",
     "@mui/material": "^9.0.0",
     "@mui/material-nextjs": "^9.0.1",
     "@rescue-frontend/data-access": "workspace:*",
@@ -37,7 +38,7 @@
     "sonner": "^2.0.7",
     "urql": "^5.0.1",
     "usehooks-ts": "^3.1.1",
-    "zod": "^4.3.6"
+    "zod": "^4.6.6"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.lib.json"

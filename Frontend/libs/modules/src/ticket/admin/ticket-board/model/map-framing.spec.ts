@@ -8,6 +8,7 @@ import {
   framingStep,
   outsideCount,
   selectedFocusStep,
+  shownOutsideCount,
   TICKET_MAP_HEIGHT,
   ticketMapNotice,
 } from './map-framing';
@@ -208,6 +209,63 @@ describe('outsideCount', () => {
     expect(
       outsideCount({ wentHome: true, inViewTotal: 12, matchingTotal: null }),
     ).toBeNull();
+  });
+});
+
+describe('shownOutsideCount', () => {
+  const home = {
+    framing: 2,
+    settled: true,
+    wentHome: true,
+    inViewTotal: 12,
+    matchingTotal: 13,
+  };
+
+  it('waits for the view the map went home to: the count still in is the last view’s', () => {
+    // 顯示全部 from an empty view: its 0 in view would make N the whole total.
+    expect(
+      shownOutsideCount(
+        { framing: 1, count: null },
+        { ...home, settled: false, inViewTotal: 0 },
+      ),
+    ).toEqual({ framing: 2, count: null });
+  });
+
+  it('counts once that view has settled and loaded', () => {
+    expect(shownOutsideCount({ framing: 2, count: null }, home)).toEqual({
+      framing: 2,
+      count: 1,
+    });
+  });
+
+  it('keeps the last N up while a pan’s count loads, so the notice holds still', () => {
+    expect(
+      shownOutsideCount(
+        { framing: 2, count: 1 },
+        { ...home, inViewTotal: null },
+      ),
+    ).toEqual({ framing: 2, count: 1 });
+  });
+
+  it('drops it once a pan’s count has every match in view', () => {
+    expect(
+      shownOutsideCount({ framing: 2, count: 1 }, { ...home, inViewTotal: 13 }),
+    ).toEqual({ framing: 2, count: null });
+  });
+
+  it('clears it on a new framing, whether or not that one goes home', () => {
+    expect(
+      shownOutsideCount(
+        { framing: 2, count: 1 },
+        { ...home, framing: 3, settled: false, inViewTotal: null },
+      ),
+    ).toEqual({ framing: 3, count: null });
+    expect(
+      shownOutsideCount(
+        { framing: 2, count: 1 },
+        { ...home, framing: 3, wentHome: false, inViewTotal: null },
+      ),
+    ).toEqual({ framing: 3, count: null });
   });
 });
 

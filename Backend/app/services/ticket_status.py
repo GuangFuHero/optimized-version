@@ -24,6 +24,12 @@ from app.models.ticket_task import TaskAssignment, TicketTask
 OPEN_NEED_STATUSES = frozenset({"pending", "in_progress"})
 # The ticket statuses that say a need is still open: what recompute_ticket_status gives such a ticket.
 OPEN_TICKET_STATUSES = frozenset({"pending", "in_progress"})
+# The need types whose quantity is volunteers, the only ones the volunteer numbers count: the
+# dashboard's and the ticket board's (ADR-456). A supply need's quantity is things, and a rescue's head
+# count is not filled by people signing up. Add a type here and both follow.
+VOLUNTEER_NEED_TYPES = ("hr",)
+# The need type the dashboard counts in needs rather than people (ADR-456).
+SUPPLY_NEED_TYPE = "supply"
 
 
 async def recompute_ticket_status(db: AsyncSession, *, ticket_uuid: str) -> None:

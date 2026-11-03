@@ -1,6 +1,6 @@
 """Unit tests for ticket/task analytics aggregation and the chart_render x resolution.
 
-Covers the trickiest pieces: the four-way bucket classification (exposed as
+Covers the trickiest pieces: the four-way bucket classification by ticket status (exposed as
 get_ticket_count(bucket=...)), date-grouping on top of a bucket filter, age-distribution
 bucketing, the volunteer totals and trend, duplicate-ticket counting from the AI review's pairs,
 and the "ignore x when it doesn't apply" behavior in app.services.chart_render.resolve().
@@ -25,7 +25,9 @@ from app.schemas.analytics import ChartStyle, TicketTaskType
 from app.services import ticket as ticket_service
 from app.services import ticket_analytics
 from app.services.analytics_common import MAX_TREND_DAYS, UNCATEGORIZED_LABEL, AnalyticsInputError
+from app.services.analytics_filters import ticket_filters
 from app.services.chart_render import _render_pivoted, chart_series, render_chart, resolve
+from app.services.ticket_status import recompute_ticket_status
 
 UTC_TZ = ZoneInfo("UTC")
 
@@ -38,14 +40,19 @@ async def _make_user(db) -> str:
 
 
 def _make_ticket(
-    user_uuid: str, *, task_type: str = "rescue", lon: float = 121.5, lat: float = 25.0
+    user_uuid: str,
+    *,
+    task_type: str = "rescue",
+    lon: float = 121.5,
+    lat: float = 25.0,
+    status: str = "pending",
 ) -> Tickets:
     return Tickets(
         geometry=from_shape(Point(lon, lat), srid=4326),
         created_by=user_uuid,
         title="t",
         contact_name="c",
-        status="pending",
+        status=status,
         priority="high",
         task_type=task_type,
     )
@@ -80,123 +87,74 @@ async def _count(db, *, bucket, x=None, x_granularity="day") -> int:
     return rows[0]["count"] if rows else 0
 
 
-@pytest.mark.asyncio
-async def test_ticket_count_buckets(db):
-    """Classify tickets into the four buckets based on their tasks.
+async def _metric(db, fn, **kwargs):
+    """Run an analytics function over every date, in UTC."""
+    defaults = {"x": None, "x_granularity": "day", "start_date": None, "end_date": None, "tz": UTC_TZ}
+    return await fn(db, **{**defaults, **kwargs})
 
-    unassigned (no tasks or no assignments), ongoing (assigned, not all fulfilled), and
-    completed (all un-canceled tasks fulfilled). bucket=None counts every ticket. The
-    canceled bucket has its own test below.
+
+@pytest.mark.asyncio
+async def test_ticket_count_buckets_follow_the_ticket_status(db):
+    """Each ticket lands in the bucket its own status names, and every bucket metric agrees.
+
+    A need stopped with nobody on it leaves the ticket completed, and a ticket cancelled by hand
+    is canceled, even though nobody ever claimed either.
     """
     user_uuid = await _make_user(db)
-
-    # A: no tasks at all -> unassigned
-    ticket_a = _make_ticket(user_uuid)
-    # B: one task, no assignment -> unassigned
-    ticket_b = _make_ticket(user_uuid)
-    # C: one task, one assignment, still in_progress -> ongoing
-    ticket_c = _make_ticket(user_uuid)
-    # D: one task, one assignment, fulfilled -> completed
-    ticket_d = _make_ticket(user_uuid)
-    db.add_all([ticket_a, ticket_b, ticket_c, ticket_d])
+    unclaimed, claimed, stopped = (_make_ticket(user_uuid) for _ in range(3))
+    by_hand = _make_ticket(user_uuid, status="cancelled")
+    db.add_all([unclaimed, claimed, stopped, by_hand])
     await db.flush()
 
-    task_b = _make_task(str(ticket_b.uuid), user_uuid, status="pending")
-    task_c = _make_task(str(ticket_c.uuid), user_uuid, status="in_progress")
-    task_d = _make_task(str(ticket_d.uuid), user_uuid, status="fulfilled")
-    db.add_all([task_b, task_c, task_d])
+    needs = {t.uuid: _make_task(str(t.uuid), user_uuid) for t in (unclaimed, claimed, stopped, by_hand)}
+    needs[stopped.uuid].status = "fulfilled"
+    needs[stopped.uuid].completed_at = needs[stopped.uuid].recruiting_stopped_at = datetime.now(UTC)
+    db.add_all(needs.values())
     await db.flush()
-
-    db.add_all(
-        [
-            TaskAssignment(task_uuid=task_c.uuid, actor_uuid=user_uuid, status="accepted"),
-            TaskAssignment(task_uuid=task_d.uuid, actor_uuid=user_uuid, status="completed"),
-        ]
-    )
+    db.add(TaskAssignment(task_uuid=needs[claimed.uuid].uuid, actor_uuid=user_uuid, status="accepted"))
+    await db.flush()
+    for ticket in (unclaimed, claimed, stopped, by_hand):
+        await recompute_ticket_status(db, ticket_uuid=ticket.uuid)
     await db.commit()
 
-    assert await _count(db, bucket=None) == 4  # total_tickets
-    assert await _count(db, bucket="unassigned") == 2  # A, B
-    assert await _count(db, bucket="ongoing") == 1  # C
-    assert await _count(db, bucket="completed") == 1  # D
-    assert await _count(db, bucket="canceled") == 0  # nothing was called off here
+    counts = {b: await _count(db, bucket=b) for b in ("unassigned", "ongoing", "completed", "canceled")}
+    assert counts == {"unassigned": 1, "ongoing": 1, "completed": 1, "canceled": 1}
+    assert sum(counts.values()) == await _count(db, bucket=None) == 4
+
+    rate = await _metric(db, ticket_analytics.get_completion_rate)
+    assert (rate[0]["completed"], rate[0]["total"]) == (1, 3)  # canceled is in neither half
+
+    ages = await _metric(db, ticket_analytics.get_age_distribution)
+    assert sum(row["count"] for row in ages) == counts["unassigned"] + counts["ongoing"]
+
+    # Both exits land on a day, the hand-cancelled one by its own updated_at.
+    for bucket in ("completed", "canceled"):
+        by_day = await _metric(db, ticket_analytics.get_ticket_count, bucket=bucket, x="date")
+        assert [row["count"] for row in by_day] == [1]
+    backlog = await _metric(db, ticket_analytics.get_net_backlog_change, x="date")
+    assert [(r["new_count"], r["completed_count"], r["canceled_count"]) for r in backlog] == [(4, 1, 1)]
+    assert backlog[0]["net_change"] == 2
 
 
 @pytest.mark.asyncio
-async def test_a_fully_canceled_ticket_leaves_every_open_work_metric(db):
-    """A ticket whose only task was canceled has no outstanding work, and must show that.
-
-    Before the "canceled" bucket, such a ticket matched neither "unassigned" (it has an
-    assignment) nor "completed" (no un-canceled task), so it fell through to "ongoing"
-    permanently — inflating four metrics at once.
-    """
+async def test_a_ticket_whose_needs_were_all_deleted_exits_on_the_day_of_the_deletion(db):
+    """Deleting a ticket's only need completes it, and the exit day is the deletion, not today."""
     user_uuid = await _make_user(db)
     ticket = _make_ticket(user_uuid)
     db.add(ticket)
     await db.flush()
-
-    task = _make_task(str(ticket.uuid), user_uuid, status="canceled")
-    task.canceled_at = datetime.now(UTC)
-    db.add(task)
+    need = _make_task(str(ticket.uuid), user_uuid)
+    db.add(need)
     await db.flush()
-    db.add(TaskAssignment(task_uuid=task.uuid, actor_uuid=user_uuid, status="accepted"))
+    deleted_at = datetime.now(UTC) - timedelta(days=5)
+    ticket_service.mark_need_deleted(need, deleted_at)
+    await db.flush()
+    await recompute_ticket_status(db, ticket_uuid=ticket.uuid)
     await db.commit()
 
-    assert await _count(db, bucket=None) == 1  # still a real ticket
-    assert await _count(db, bucket="canceled") == 1
-    assert await _count(db, bucket="ongoing") == 0
-    assert await _count(db, bucket="completed") == 0
-    assert await _count(db, bucket="unassigned") == 0
-
-    # Excluded from the ratio entirely rather than counted as a delivery failure.
-    rate = await ticket_analytics.get_completion_rate(
-        db,
-        x=None,
-        x_granularity="day",
-        start_date=None,
-        end_date=None,
-        tz=UTC_TZ,
-    )
-    assert rate[0]["total"] == 0
-    assert rate[0]["completed"] == 0
-
-    # Entered the backlog as new, left it as canceled, so the day nets out to zero.
-    backlog = await ticket_analytics.get_net_backlog_change(
-        db,
-        x="date",
-        x_granularity="day",
-        start_date=None,
-        end_date=None,
-        tz=UTC_TZ,
-    )
-    assert len(backlog) == 1
-    assert backlog[0]["new_count"] == 1
-    assert backlog[0]["completed_count"] == 0
-    assert backlog[0]["canceled_count"] == 1
-    assert backlog[0]["net_change"] == 0
-
-    # No longer ageing — there is no outstanding work to be overdue.
-    ages = await ticket_analytics.get_age_distribution(
-        db,
-        x=None,
-        x_granularity="day",
-        start_date=None,
-        end_date=None,
-        tz=UTC_TZ,
-    )
-    assert sum(row["count"] for row in ages) == 0
-
-    # And it appears on the day it was called off, matching the backlog drain series.
-    by_day = await ticket_analytics.get_ticket_count(
-        db,
-        bucket="canceled",
-        x="date",
-        x_granularity="day",
-        start_date=None,
-        end_date=None,
-        tz=UTC_TZ,
-    )
-    assert [row["count"] for row in by_day] == [1]
+    assert await _count(db, bucket="completed") == 1
+    by_day = await _metric(db, ticket_analytics.get_ticket_count, bucket="completed", x="date")
+    assert [(row["x"].date(), row["count"]) for row in by_day] == [(deleted_at.date(), 1)]
 
 
 @pytest.mark.asyncio
@@ -207,9 +165,9 @@ async def test_ticket_count_bucket_with_date_grouping(db):
 
     # Two "ongoing" tickets created on different days; one "unassigned" ticket that
     # must not be counted in the "ongoing" x=date breakdown.
-    ongoing_day1 = _make_ticket(user_uuid)
+    ongoing_day1 = _make_ticket(user_uuid, status="in_progress")
     ongoing_day1.created_at = now - timedelta(days=3)
-    ongoing_day2 = _make_ticket(user_uuid)
+    ongoing_day2 = _make_ticket(user_uuid, status="in_progress")
     ongoing_day2.created_at = now - timedelta(days=1)
     unassigned = _make_ticket(user_uuid)
     unassigned.created_at = now - timedelta(days=3)
@@ -255,7 +213,7 @@ async def test_age_distribution_buckets_and_excludes_completed(db):
         db.add(ticket)
 
     # A completed ticket, also >72h old, must NOT show up in any age bucket.
-    completed_ticket = _make_ticket(user_uuid)
+    completed_ticket = _make_ticket(user_uuid, status="completed")
     completed_ticket.created_at = now - timedelta(hours=200)
     db.add(completed_ticket)
     await db.flush()
@@ -292,13 +250,12 @@ def test_resolve_still_rejects_invalid_chart_type():
 
 @pytest.mark.asyncio
 async def test_ticket_count_category_labels_null_task_type(db):
-    """A NULL task_type becomes a real label, so a line chart can sort the axis.
-
-    Regression for the PR #32 review's H1a: task_type is nullable and was grouped raw, so
-    `x=category&chart_type=line` mixed None with str in chart_render's sort and 500'd.
-    """
+    """A ticket with no needs gets a real label, so a line chart can sort the axis."""
     user_uuid = await _make_user(db)
-    db.add_all([_make_ticket(user_uuid, task_type="rescue"), _make_ticket(user_uuid, task_type=None)])
+    with_need, without = _make_ticket(user_uuid, task_type=None), _make_ticket(user_uuid, task_type="rescue")
+    db.add_all([with_need, without])
+    await db.flush()
+    db.add(_make_task(str(with_need.uuid), user_uuid))
     await db.flush()
 
     rows = await ticket_analytics.get_ticket_count(
@@ -431,8 +388,13 @@ def _record(db, row, *steps: tuple[datetime, dict | None]) -> None:
 
 
 def _need(ticket_uuid: str, user_uuid: str, *, quantity: int | None, **columns) -> TicketTask:
-    """A need created in the past; `columns` overrides any TicketTask column."""
-    task = _make_task(ticket_uuid, user_uuid, status=columns.pop("status", "pending"))
+    """A 人力 need created in the past; `columns` overrides any TicketTask column."""
+    task = _make_task(
+        ticket_uuid,
+        user_uuid,
+        status=columns.pop("status", "pending"),
+        task_type=columns.pop("task_type", "hr"),
+    )
     task.quantity = quantity
     task.created_at = columns.pop("created_at", datetime.now(UTC) - timedelta(days=10))
     for name, value in columns.items():
@@ -521,36 +483,99 @@ async def test_volunteer_totals_count_standing_needs_that_give_a_quantity(db):
 @pytest.mark.asyncio
 async def test_volunteer_totals_are_zero_with_no_needs(db):
     """With nothing to count a total is 0, and a grouping has no rows."""
-    for metric in ("needed", "matched", "gap"):
+    for metric in ("needed", "matched", "gap", "gap_needs", "supply_needs", "supply_unclaimed"):
         assert await _volunteers(db, metric) == [{"count": 0}]
         assert await _volunteers(db, metric, x="category") == []
 
 
 @pytest.mark.asyncio
-async def test_volunteer_totals_by_category_follow_the_needs_task_type(db):
-    """x=category groups by the need's own task_type, and a task_type filter reads it too."""
+async def test_volunteer_totals_count_people_needs_only_by_their_own_type(db):
+    """Only 人力 needs count: a supply need's quantity is things, and a rescue's is not filled by sign-ups.
+
+    x=category groups by the need's own task_type, and a task_type filter reads it too, whatever the
+    ticket's own type says.
+    """
     owner = await _make_user(db)
     people = [await _make_user(db) for _ in range(2)]
-    tickets = [_make_ticket(owner, task_type="supply") for _ in range(4)]
+    tickets = [_make_ticket(owner, task_type="supply") for _ in range(5)]
     db.add_all(tickets)
     await db.flush()
     needs = [
         _need(str(ticket.uuid), owner, quantity=quantity, task_type=kind)
         for ticket, quantity, kind in zip(
-            tickets, (3, 4, 5, 6), ("supply", "supply", "medical", "hr"), strict=True
+            tickets, (3, 4, 84, 5, 6), ("hr", "hr", "supply", "medical", "rescue"), strict=True
         )
     ]
     db.add_all(needs)
     await db.flush()
-    db.add_all(_taken(needs[0], people) + _taken(needs[2], people[:1]))
+    db.add_all(_taken(needs[0], people) + _taken(needs[2], people[:1]) + _taken(needs[3], people[:1]))
     await db.flush()
 
-    rows = await _volunteers(db, "gap", x="category")
-    assert {r["x"]: r["count"] for r in rows} == {"supply": 5, "medical": 4, "hr": 6}
-    rows = await _volunteers(db, "matched", x="category")
-    assert {r["x"]: r["count"] for r in rows} == {"supply": 2, "medical": 1, "hr": 0}
-    # The ticket says supply for all four; the filter still sees the medical need's own type.
-    assert await _volunteers(db, "needed", extra_filters=[Tickets.task_type == "medical"]) == [{"count": 5}]
+    for metric, total in (("needed", 7), ("matched", 2), ("gap", 5), ("gap_needs", 2)):
+        assert await _volunteers(db, metric) == [{"count": total}]
+        assert await _volunteers(db, metric, x="category") == [{"x": "hr", "count": total}]
+
+    def of_type(kind: str) -> list:
+        return ticket_filters(
+            task_type=TicketTaskType(kind), status=None, county=None, town=None, village=None
+        )
+
+    # The tickets all say supply; the filter still sees each need's own type.
+    assert await _volunteers(db, "needed", extra_filters=of_type("hr")) == [{"count": 7}]
+    assert await _volunteers(db, "needed", extra_filters=of_type("supply")) == [{"count": 0}]
+
+
+@pytest.mark.asyncio
+async def test_supply_needs_count_one_each_and_the_ones_nobody_has_taken(db):
+    """A supply need counts once whatever its quantity; unclaimed are those recruiting with nobody on them.
+
+    A full or claimed one is not unclaimed, a canceled one counts in neither, and one left open on a
+    ticket closed by hand still stands but takes nobody. A 人力 need counts in neither.
+    """
+    owner, person = await _make_user(db), await _make_user(db)
+    ticket, closed = _make_ticket(owner), _make_ticket(owner, status="completed")
+    db.add_all([ticket, closed])
+    await db.flush()
+    t, supply, now = str(ticket.uuid), {"task_type": "supply"}, datetime.now(UTC)
+    lunch = _need(t, owner, quantity=84, **supply)
+    water = _need(t, owner, quantity=10, **supply)
+    shovels = _need(t, owner, quantity=1, status="fulfilled", completed_at=now, **supply)
+    blank = _need(t, owner, quantity=None, **supply)  # filed before every need gave a quantity
+    gone = _need(t, owner, quantity=3, status="canceled", canceled_at=now, delete_at=now, **supply)
+    left = _need(str(closed.uuid), owner, quantity=5, **supply)
+    db.add_all([lunch, water, shovels, blank, gone, left, _need(t, owner, quantity=2)])
+    await db.flush()
+    db.add_all([*_taken(water, [person]), *_taken(shovels, [person])])
+    await db.flush()
+
+    assert await _volunteers(db, "supply_needs") == [{"count": 5}]
+    assert await _volunteers(db, "supply_unclaimed") == [{"count": 2}]
+
+
+@pytest.mark.asyncio
+async def test_supply_needs_can_be_read_as_of_an_earlier_day(db):
+    """Filed on the 1st and claimed on the 3rd: it stands from the 1st and is unclaimed until the 3rd."""
+    owner, person = await _make_user(db), await _make_user(db)
+    ticket = _make_ticket(owner)
+    db.add(ticket)
+    await db.flush()
+    need = _need(str(ticket.uuid), owner, quantity=20, task_type="supply", created_at=_utc(9, 1, 9))
+    db.add(need)
+    await db.flush()
+    _record(db, need, (_utc(9, 1, 9), {}))
+    claims = _taken(need, [person], at=_utc(9, 3, 10))
+    db.add_all(claims)
+    await db.flush()
+    _record(db, claims[0], (claims[0].assigned_at, {}))
+    await db.flush()
+
+    for day, standing, unclaimed in (
+        (date(2026, 8, 31), 0, 0),
+        (date(2026, 9, 2), 1, 1),
+        (date(2026, 9, 3), 1, 0),
+    ):
+        assert await _volunteers(db, "supply_needs", end_date=day) == [{"count": standing}]
+        assert await _volunteers(db, "supply_unclaimed", end_date=day) == [{"count": unclaimed}]
 
 
 @pytest.mark.asyncio
@@ -565,6 +590,154 @@ async def test_volunteer_totals_stay_inside_the_callers_filters(db):
 
     assert await _volunteers(db, "needed", extra_filters=[Tickets.created_by == mine]) == [{"count": 2}]
     assert await _volunteers(db, "needed", extra_filters=[Tickets.created_by == nobody]) == [{"count": 0}]
+
+
+@pytest.mark.asyncio
+async def test_a_need_with_more_people_than_it_asks_for_takes_nothing_off_the_gap(db):
+    """Each need adds what it is still short, never below 0; gap_needs counts the needs short of anyone."""
+    owner = await _make_user(db)
+    people = [await _make_user(db) for _ in range(3)]
+    ticket = _make_ticket(owner, task_type="hr")
+    db.add(ticket)
+    await db.flush()
+    t = str(ticket.uuid)
+    short = _need(t, owner, quantity=5)
+    over = _need(t, owner, quantity=1)  # its quantity cut below the people already on it
+    level = _need(t, owner, quantity=2)
+    db.add_all([short, over, level])
+    await db.flush()
+    db.add_all([*_taken(short, people[:2]), *_taken(over, people), *_taken(level, people[:2])])
+    await db.flush()
+
+    assert await _volunteers(db, "gap") == [{"count": 3}]
+    assert await _volunteers(db, "gap_needs") == [{"count": 1}]
+    assert await _volunteers(db, "gap_needs", x="category") == [{"x": "hr", "count": 1}]
+    assert await _volunteers(db, "matched") == [{"count": 7}]
+
+
+@pytest.mark.asyncio
+async def test_the_gap_leaves_out_needs_left_open_on_a_closed_ticket(db):
+    """A ticket closed by hand before its status followed its needs kept them open, and nobody can take them.
+
+    They are short on no day, today or in a trend.
+    """
+    owner = await _make_user(db)
+    ticket = _make_ticket(owner)
+    completed, cancelled, deleted = (
+        _make_ticket(owner, status=s) for s in ("completed", "cancelled", "pending")
+    )
+    deleted.delete_at = datetime.now(UTC) - timedelta(days=5)
+    db.add_all([ticket, completed, cancelled, deleted])
+    await db.flush()
+    db.add_all(
+        [
+            _need(str(ticket.uuid), owner, quantity=4),
+            *(_need(str(closed.uuid), owner, quantity=9) for closed in (completed, cancelled, deleted)),
+        ]
+    )
+    await db.flush()
+
+    assert await _volunteers(db, "gap") == [{"count": 4}]
+    assert await _volunteers(db, "gap_needs") == [{"count": 1}]
+    today = date.today()
+    trend = await _volunteers(db, "gap", x="date", start_date=today - timedelta(days=7), end_date=today)
+    assert [r["count"] for r in trend] == [4] * 8
+
+
+@pytest.mark.asyncio
+async def test_needs_left_on_a_cancelled_or_deleted_ticket_count_in_nothing(db):
+    """A ticket cancelled or deleted by hand kept its needs, open or filled; they count as canceled every day.
+
+    The needs left on a completed ticket still count in the totals, as ended, and recruit on no day.
+    """
+    owner, person = await _make_user(db), await _make_user(db)
+    completed, cancelled, deleted = (
+        _make_ticket(owner, status=s) for s in ("completed", "cancelled", "pending")
+    )
+    deleted.delete_at = datetime.now(UTC) - timedelta(days=5)
+    db.add_all([completed, cancelled, deleted])
+    await db.flush()
+    left = [
+        (
+            _need(str(closed.uuid), owner, quantity=3),
+            _need(str(closed.uuid), owner, quantity=1, status="fulfilled", completed_at=datetime.now(UTC)),
+            _need(str(closed.uuid), owner, quantity=20, task_type="supply"),
+        )
+        for closed in (completed, cancelled, deleted)
+    ]
+    db.add_all([need for needs in left for need in needs])
+    await db.flush()
+    taken_at = datetime.now(UTC) - timedelta(days=9)
+    db.add_all([claim for need, _, _ in left for claim in _taken(need, [person], at=taken_at)])
+    db.add_all([claim for _, filled, _ in left for claim in _taken(filled, [person], at=taken_at)])
+    await db.flush()
+
+    # The completed ticket's alone: 3 + 1 people asked for, a place taken on each, one supply need.
+    for end_date in (None, date.today() - timedelta(days=7)):
+        assert await _volunteers(db, "needed", end_date=end_date) == [{"count": 4}]
+        assert await _volunteers(db, "matched", end_date=end_date) == [{"count": 2}]
+        assert await _volunteers(db, "supply_needs", end_date=end_date) == [{"count": 1}]
+    for metric in ("gap", "gap_needs", "supply_unclaimed"):
+        assert await _volunteers(db, metric) == [{"count": 0}]
+
+
+@pytest.mark.asyncio
+async def test_a_ticket_closed_since_shows_its_gap_on_the_days_before(db):
+    """Closing a ticket now closes its needs with it, so their history says when they stopped being short.
+
+    One ticket was completed when its need filled on the 3rd; another was merged away on the 3rd, its
+    need canceled and another moved to the ticket kept, where it is still open.
+    """
+    owner = await _make_user(db)
+    people = [await _make_user(db) for _ in range(3)]
+    kept, done, merged = _make_ticket(owner), _make_ticket(owner, status="completed"), _make_ticket(owner)
+    merged.status, merged.delete_at = "cancelled", _utc(9, 3, 8)
+    db.add_all([kept, done, merged])
+    await db.flush()
+    filled = _need(
+        str(done.uuid),
+        owner,
+        quantity=3,
+        status="fulfilled",
+        created_at=_utc(9, 1, 9),
+        completed_at=_utc(9, 3, 8),
+    )
+    absorbed = _need(
+        str(merged.uuid),
+        owner,
+        quantity=2,
+        status="canceled",
+        created_at=_utc(9, 1, 9),
+        canceled_at=_utc(9, 3, 8),
+    )
+    moved = _need(str(kept.uuid), owner, quantity=4, created_at=_utc(9, 1, 9))
+    db.add_all([filled, absorbed, moved])
+    await db.flush()
+    _record(
+        db,
+        filled,
+        (_utc(9, 1, 9), {"status": "pending", "completed_at": None}),
+        (_utc(9, 3, 8), {"status": "fulfilled", "completed_at": _utc(9, 3, 8)}),
+    )
+    _record(
+        db,
+        absorbed,
+        (_utc(9, 1, 9), {"status": "pending", "canceled_at": None}),
+        (_utc(9, 3, 8), {"status": "canceled", "canceled_at": _utc(9, 3, 8)}),
+    )
+    _record(
+        db, moved, (_utc(9, 1, 9), {"ticket_uuid": merged.uuid}), (_utc(9, 3, 8), {"ticket_uuid": kept.uuid})
+    )
+    claims = _taken(filled, people, at=_utc(9, 3, 8))
+    db.add_all(claims)
+    await db.flush()
+    for claim in claims:
+        _record(db, claim, (claim.assigned_at, {}))
+    await db.flush()
+
+    span = dict(x="date", start_date=date(2026, 9, 1), end_date=date(2026, 9, 4))
+    assert [r["count"] for r in await _volunteers(db, "gap", **span)] == [9, 9, 4, 4]
+    assert [r["count"] for r in await _volunteers(db, "gap_needs", **span)] == [3, 3, 1, 1]
 
 
 async def _seed_trend(db) -> None:
@@ -1035,16 +1208,24 @@ async def test_duplicate_count_dates_a_ticket_by_its_cards(db):
 
 
 @pytest.mark.asyncio
-async def test_duplicate_count_by_category_follows_the_tickets_task_type(db):
-    """x=category groups a flagged ticket by its task_type."""
+async def test_duplicate_count_by_category_follows_the_need_types(db):
+    """x=category groups a flagged ticket by its needs' types, and a type filter shows only its bucket."""
     user_uuid = await _make_user(db)
-    a, b = await _tickets_with_a_need(db, user_uuid, 2, task_type="supply")
-    c, d = await _tickets_with_a_need(db, user_uuid, 2, task_type="medical")
+    a, b, c, d = await _tickets_with_a_need(db, user_uuid, 4, task_type="hr")
+    for (_, need_uuid), need_type in zip(
+        (a, b, c, d), ("supply", "supply", "medical", "medical"), strict=True
+    ):
+        (await db.get(TicketTask, need_uuid)).task_type = need_type
     db.add_all([_pair("ticket_task", a[1], b[1]), _pair("ticket_task", c[1], d[1])])
     await db.flush()
 
     rows = await _duplicates(db, x="category")
     assert {r["x"]: r["count"] for r in rows} == {"supply": 2, "medical": 2}
+    supply = ticket_filters(
+        task_type=TicketTaskType("supply"), status=None, county=None, town=None, village=None
+    )
+    rows = await _duplicates(db, x="category", extra_filters=supply)
+    assert {r["x"]: r["count"] for r in rows} == {"supply": 2}
 
 
 @pytest.mark.asyncio
@@ -1059,3 +1240,87 @@ async def test_duplicate_count_needs_both_tickets_of_a_card_inside_the_callers_f
     assert await _duplicates(db) == [{"count": 3}]
     assert await _duplicates(db, extra_filters=[Tickets.created_by == mine]) == [{"count": 2}]
     assert await _duplicates(db, extra_filters=[Tickets.created_by == theirs]) == [{"count": 0}]
+
+
+async def _by_category(db, metric=ticket_analytics.get_ticket_count, **kwargs) -> dict:
+    if metric is ticket_analytics.get_ticket_count:
+        kwargs.setdefault("bucket", None)
+    rows = await metric(
+        db, x="category", x_granularity="day", start_date=None, end_date=None, tz=UTC_TZ, **kwargs
+    )
+    return {r["x"]: r.get("count", r.get("total")) for r in rows}
+
+
+@pytest.mark.asyncio
+async def test_category_groups_a_ticket_under_each_type_of_its_live_needs(db):
+    """A ticket counts once per live need type, so the categories can sum to more than the total.
+
+    The ticket's own task_type column plays no part; a deleted need's type is dropped, and a
+    ticket with no live needs is uncategorised.
+    """
+    user_uuid = await _make_user(db)
+    both, gone, bare = (_make_ticket(user_uuid, task_type="rescue") for _ in range(3))
+    db.add_all([both, gone, bare])
+    await db.flush()
+    db.add_all(
+        [
+            _make_task(str(both.uuid), user_uuid, task_type="hr"),
+            _make_task(str(both.uuid), user_uuid, task_type="supply"),
+            _make_task(str(both.uuid), user_uuid, task_type="supply"),
+            _need(str(gone.uuid), user_uuid, quantity=None, task_type="medical", delete_at=datetime.now(UTC)),
+            _make_task(str(gone.uuid), user_uuid, task_type="hr"),
+        ]
+    )
+    await db.flush()
+
+    expected = {"hr": 2, "supply": 1, UNCATEGORIZED_LABEL: 1}
+    assert await _by_category(db) == expected
+    assert await _by_category(db, ticket_analytics.get_completion_rate) == expected
+    assert await _count(db, bucket=None) == 3
+
+    hr = ticket_filters(task_type=TicketTaskType("hr"), status=None, county=None, town=None, village=None)
+    assert await _by_category(db, extra_filters=hr) == {"hr": 2}
+    assert await _by_category(db, ticket_analytics.get_completion_rate, extra_filters=hr) == {"hr": 2}
+
+
+@pytest.mark.asyncio
+async def test_category_puts_a_deleted_ticket_under_its_needs_types(db):
+    """With deleted tickets counted, one lands under its needs' types, though they were deleted with it."""
+    user_uuid = await _make_user(db)
+    ticket = _make_ticket(user_uuid)
+    db.add(ticket)
+    await db.flush()
+    now = datetime.now(UTC)
+    db.add(_need(str(ticket.uuid), user_uuid, quantity=None, task_type="supply", delete_at=now))
+    ticket.delete_at = now
+    await db.flush()
+
+    assert await _by_category(db) == {}
+    with_deleted = ticket_filters(
+        task_type=None, status=None, county=None, town=None, village=None, include_deleted=True
+    )
+    assert await _by_category(db, extra_filters=with_deleted) == {"supply": 1}
+    supply = ticket_filters(
+        task_type=TicketTaskType("supply"),
+        status=None,
+        county=None,
+        town=None,
+        village=None,
+        include_deleted=True,
+    )
+    assert await _count_filtered(db, supply) == 1
+    assert await _by_category(db, extra_filters=supply) == {"supply": 1}
+
+
+async def _count_filtered(db, extra_filters) -> int:
+    rows = await ticket_analytics.get_ticket_count(
+        db,
+        bucket=None,
+        x=None,
+        x_granularity="day",
+        start_date=None,
+        end_date=None,
+        tz=UTC_TZ,
+        extra_filters=extra_filters,
+    )
+    return rows[0]["count"]

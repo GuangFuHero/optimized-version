@@ -31,7 +31,9 @@ import type {
   RescueMapArea,
   RescueMapClusterAppearance,
   RescueMapControllerValue,
+  RescueMapDraftArea,
   RescueMapDraftPoint,
+  RescueMapEditArea,
   RescueMapLocationCell,
   RescueMapMarkerItem,
   RescueMapPublicZone,
@@ -39,7 +41,11 @@ import type {
   RescueMapViewportStoreSnapshot,
   RescueMapViewportStoreLike,
 } from '../../types';
-import { createMapMarkerIcon, createMapMarkerTooltipHtml } from '../map-marker';
+import {
+  createMapMarkerIcon,
+  createMapMarkerTooltipHtml,
+  shownBuildingTickets,
+} from '../map-marker';
 
 import { designTokens } from '@rescue-frontend/ui';
 
@@ -53,7 +59,14 @@ interface RescueMapCanvasProps {
   /** 點選訪客的概略區塊（ADR-281）。未提供時格子只畫不接點擊。 */
   onLocationCellClick?: (cell: RescueMapLocationCell) => void;
   previewMarker?: RescueMapMarkerItem | null;
+  /** The outline being drawn: see `Map`'s prop of the same name. */
+  draftArea?: RescueMapDraftArea | null;
+  /** The boundary being changed: see `Map`'s prop of the same name. */
+  editArea?: RescueMapEditArea | null;
   cursor?: string;
+  disableDoubleClickZoom?: boolean;
+  /** Draws 責任區 and 標示區 as the admin 互助地圖 does; the site's own look when unset. */
+  adminAreaStyle?: boolean;
   onMapClick?: (position: [number, number]) => void;
   layoutKey: string;
   showScale?: boolean;
@@ -167,12 +180,26 @@ type MarkerClusterConstructor = new (
 function getPinnedMarkers(
   markers: readonly RescueMapMarkerItem[],
 ): RescueMapMarkerItem[] {
-  return markers.filter((marker) => !isCoarseTicket(marker));
+  return markers.filter(
+    (marker) => !isCoarseTicket(marker) && !marker.building,
+  );
 }
 
-/** marker icon 的外觀只由色調（detailType）、圖示（variant）與標籤文字決定 —— 另加選用的 pin／tooltip。 */
+/**
+ * Open buildings' entries, kept out of the clusters: a building is never counted among the tickets
+ * around it, and its entry stays in sight at any zoom.
+ */
+function getBuildingMarkers(
+  markers: readonly RescueMapMarkerItem[],
+): RescueMapMarkerItem[] {
+  return markers.filter((marker) => marker.building);
+}
+
+/** marker icon 的外觀只由色調（detailType）、圖示（variant）與標籤文字決定，大樓另加件數 —— 另加選用的 pin／tooltip。 */
 function getMarkerIconSignature(item: RescueMapMarkerItem): string {
-  const base = `${item.detailType}|${item.variant}|${item.label}`;
+  const base = item.building
+    ? `${item.detailType}|${item.variant}|${item.label}|${item.building.ticketCount}`
+    : `${item.detailType}|${item.variant}|${item.label}`;
 
   if (!item.pin && !item.tooltip) {
     return base;
@@ -182,7 +209,9 @@ function getMarkerIconSignature(item: RescueMapMarkerItem): string {
 
   return [
     base,
-    pin ? `${pin.color}|${pin.dimmed ? 1 : 0}|${pin.selected ? 1 : 0}` : '',
+    pin
+      ? `${pin.shape ?? 'drop'}|${pin.color}|${pin.dimmed ? 1 : 0}|${pin.selected ? 1 : 0}${pin.shape === 'station' ? `|${item.stationMeta?.type ?? ''}` : ''}`
+      : '',
     tooltip ? `${tooltip.title}|${tooltip.subtitle ?? ''}` : '',
   ].join('|');
 }
@@ -205,8 +234,16 @@ function syncMarkerTooltip(marker: L.Marker, item: RescueMapMarkerItem) {
   });
 }
 
-/** A selected opt-in pin rises above its neighbours. */
+/**
+ * A selected opt-in pin rises above its neighbours. A building's entry with no count lies under the
+ * rest, a guest's cell counts included: they are what may be waiting there. One that counts its
+ * tickets stands among them.
+ */
 function getMarkerZIndexOffset(item: RescueMapMarkerItem): number {
+  if (item.building) {
+    return shownBuildingTickets(item) > 0 ? 0 : -1000;
+  }
+
   return item.pin?.selected ? 1000 : 0;
 }
 
@@ -301,18 +338,59 @@ const HAZARD_ZONE_STYLE: L.PathOptions = {
   fillOpacity: 0.6,
 };
 
-/** 責任區 and 標示區: a light fill in their kind's colour (prototype `site-map.jsx`, 2026-10-23). */
+/** The edge of the area picked in the admin list: heavier, so it stands out among the rest. */
+const HIGHLIGHTED_WEIGHT = 5;
+
+function getHazardZoneStyle(area: RescueMapArea): L.PathOptions {
+  return area.highlighted
+    ? { ...HAZARD_ZONE_STYLE, weight: HIGHLIGHTED_WEIGHT }
+    : HAZARD_ZONE_STYLE;
+}
+
+/**
+ * 責任區 and 標示區: a light fill in their kind's colour (prototype `site-map.jsx`, 2026-10-23). A
+ * 標示區 the public cannot see (admin only) is drawn dashed and fainter, so an admin can tell it apart.
+ */
 function getPublicZoneStyle(zone: RescueMapPublicZone): L.PathOptions {
   const zoneColor = PUBLIC_ZONE_COLORS[zone.kind];
+  const hidden = zone.isPublic === false;
 
   return {
     pane: PUBLIC_ZONE_PANE,
     interactive: false,
     color: zoneColor,
-    weight: 2.5,
+    weight: zone.highlighted ? HIGHLIGHTED_WEIGHT : 2.5,
     opacity: 0.95,
     fillColor: zoneColor,
-    fillOpacity: 0.14,
+    fillOpacity: hidden ? 0.06 : 0.14,
+    ...(hidden ? { dashArray: '8 6' } : {}),
+  };
+}
+
+/**
+ * 責任區 and 標示區 on the admin 互助地圖 (prototype `map-canvas.jsx`, design review 2026-11-03): a
+ * light fill (0.07) and a 3px line; the one picked is filled 0.14 and drawn at 4px, and the others
+ * fade (line 0.45, fill 0.03) so it stands out. `getPublicZoneStyle` is the site's and stays as it is.
+ */
+function getAdminZoneStyle(zone: RescueMapPublicZone): L.PathOptions {
+  const zoneColor = PUBLIC_ZONE_COLORS[zone.kind];
+  const hidden = zone.isPublic === false;
+
+  return {
+    pane: PUBLIC_ZONE_PANE,
+    interactive: false,
+    color: zoneColor,
+    weight: zone.highlighted ? 4 : 3,
+    opacity: zone.dimmed ? 0.45 : 0.95,
+    fillColor: zoneColor,
+    fillOpacity: zone.highlighted
+      ? 0.14
+      : zone.dimmed
+        ? 0.03
+        : hidden
+          ? 0.04
+          : 0.07,
+    ...(hidden ? { dashArray: '8 6' } : {}),
   };
 }
 
@@ -660,7 +738,7 @@ function syncMarkerLayer({
     if (existing.iconSignature !== iconSignature) {
       existing.marker.setIcon(createMapMarkerIcon(item, leaflet));
 
-      if (item.pin || existing.item.pin) {
+      if (item.pin || existing.item.pin || item.building) {
         existing.marker.setZIndexOffset(getMarkerZIndexOffset(item));
       }
 
@@ -862,13 +940,39 @@ function syncLocationCellLayer({
   return labels;
 }
 
+/** A corner of a boundary being changed: a white dot with a dark rim, big enough to grab. */
+function createEditCornerIcon(invalid: boolean): L.DivIcon {
+  const stroke = invalid ? color.bg.danger.default : color.fg.neutral.default;
+
+  return L.divIcon({
+    className: 'rescue-map-edit-corner',
+    html: `<span style="display:block;width:16px;height:16px;border-radius:50%;background:${color.bg.neutral.default};border:3px solid ${stroke};box-sizing:border-box;cursor:move"></span>`,
+    iconSize: [16, 16],
+    iconAnchor: [8, 8],
+  });
+}
+
+/** The plus between two corners: a click puts a new corner there, to drag where it should go. */
+function createEditMidpointIcon(): L.DivIcon {
+  return L.divIcon({
+    className: 'rescue-map-edit-midpoint',
+    html: `<span style="display:flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:${color.bg.neutral.default};border:1.5px solid ${color.fg.neutral.muted};color:${color.fg.neutral.muted};font:700 11px/1 sans-serif;box-sizing:border-box;cursor:copy">+</span>`,
+    iconSize: [14, 14],
+    iconAnchor: [7, 7],
+  });
+}
+
 export function RescueMapCanvas({
   controller,
   onMarkerClick,
   locationCells,
   onLocationCellClick,
   previewMarker,
+  draftArea,
+  editArea,
   cursor,
+  disableDoubleClickZoom = false,
+  adminAreaStyle = false,
   onMapClick,
   layoutKey,
   showScale = false,
@@ -895,9 +999,13 @@ export function RescueMapCanvas({
   const markerLayerRef = useRef<MarkerClusterGroupLike | null>(null);
   const overlayLayerRef = useRef<L.LayerGroup | null>(null);
   const cellLayerRef = useRef<L.LayerGroup | null>(null);
+  const buildingLayerRef = useRef<L.LayerGroup | null>(null);
+  const buildingHandlesRef = useRef<Map<string, MarkerHandle>>(new Map());
   const cellLayerSignatureRef = useRef<string | null>(null);
   const cellLabelsRef = useRef<LocationCellLabel[]>([]);
   const previewMarkerRef = useRef<L.Marker | null>(null);
+  const draftAreaLayerRef = useRef<L.LayerGroup | null>(null);
+  const editAreaLayerRef = useRef<L.LayerGroup | null>(null);
   const draftMarkerRef = useRef<L.Marker | null>(null);
   const draftBubbleRef = useRef<L.Marker | null>(null);
   // While the crosshair is dragged, the map autopans: that move is not the person moving the map.
@@ -973,7 +1081,9 @@ export function RescueMapCanvas({
 
     const overlayLayer = L.layerGroup();
     const cellLayer = L.layerGroup();
+    const buildingLayer = L.layerGroup();
     const markerHandles = markerHandlesRef.current;
+    const buildingHandles = buildingHandlesRef.current;
     const closureAreaHandles = closureAreaHandlesRef.current;
     const publicZoneHandles = publicZoneHandlesRef.current;
     let cancelled = false;
@@ -981,10 +1091,19 @@ export function RescueMapCanvas({
     mapRef.current = map;
     overlayLayerRef.current = overlayLayer;
     cellLayerRef.current = cellLayer;
+    buildingLayerRef.current = buildingLayer;
 
     overlayLayer.addTo(map);
     // Drawn by the cell effect below, which runs after this one in the same commit.
     cellLayer.addTo(map);
+    buildingLayer.addTo(map);
+    syncMarkerLayer({
+      markerLayer: buildingLayer,
+      items: getBuildingMarkers(controllerRef.current.markers),
+      handles: buildingHandles,
+      leaflet: L,
+      onMarkerClickRef,
+    });
 
     void import(MARKER_CLUSTER_MODULE_ID).then(() => {
       if (cancelled || !mapRef.current) {
@@ -1184,11 +1303,13 @@ export function RescueMapCanvas({
       cancelled = true;
 
       markerHandles.clear();
+      buildingHandles.clear();
       closureAreaHandles.clear();
       publicZoneHandles.clear();
       markerLayerRef.current = null;
       overlayLayerRef.current = null;
       cellLayerRef.current = null;
+      buildingLayerRef.current = null;
       cellLayerSignatureRef.current = null;
       cellLabelsRef.current = [];
       queueAreaLabelsRef.current = null;
@@ -1263,6 +1384,20 @@ export function RescueMapCanvas({
 
   useEffect(() => {
     const map = mapRef.current;
+
+    if (!map) {
+      return;
+    }
+
+    if (disableDoubleClickZoom) {
+      map.doubleClickZoom.disable();
+    } else {
+      map.doubleClickZoom.enable();
+    }
+  }, [disableDoubleClickZoom]);
+
+  useEffect(() => {
+    const map = mapRef.current;
     const currentTileLayer = tileLayerRef.current;
     const nextTileLayer = controller.tileLayer;
 
@@ -1319,6 +1454,18 @@ export function RescueMapCanvas({
   // 以 id 增量同步 marker：只移除消失的、加入新增的，內容相同時不動 DOM，
   // 避免每次資料刷新都整批 clearLayers 再重建造成閃爍。
   useEffect(() => {
+    const buildingLayer = buildingLayerRef.current;
+
+    if (buildingLayer) {
+      syncMarkerLayer({
+        markerLayer: buildingLayer,
+        items: getBuildingMarkers(controller.markers),
+        handles: buildingHandlesRef.current,
+        leaflet: L,
+        onMarkerClickRef,
+      });
+    }
+
     const markerLayer = markerLayerRef.current;
 
     if (!markerLayer) {
@@ -1374,7 +1521,7 @@ export function RescueMapCanvas({
       overlayLayer,
       areas: controller.closureAreas,
       handles: closureAreaHandlesRef.current,
-      style: () => HAZARD_ZONE_STYLE,
+      style: getHazardZoneStyle,
     });
     queueAreaLabelsRef.current?.();
   }, [controller.closureAreas]);
@@ -1390,10 +1537,10 @@ export function RescueMapCanvas({
       overlayLayer,
       areas: controller.publicZones,
       handles: publicZoneHandlesRef.current,
-      style: getPublicZoneStyle,
+      style: adminAreaStyle ? getAdminZoneStyle : getPublicZoneStyle,
     });
     queueAreaLabelsRef.current?.();
-  }, [controller.publicZones]);
+  }, [adminAreaStyle, controller.publicZones]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1420,6 +1567,148 @@ export function RescueMapCanvas({
     marker.addTo(map);
     previewMarkerRef.current = marker;
   }, [previewMarker]);
+
+  // The outline being drawn: a dashed line through the corners, filled once there are three, red
+  // while it crosses itself. Not interactive, so a click on it still reaches the map and adds a corner.
+  useEffect(() => {
+    const map = mapRef.current;
+
+    draftAreaLayerRef.current?.remove();
+    draftAreaLayerRef.current = null;
+
+    if (!map || !draftArea || draftArea.points.length === 0) {
+      return;
+    }
+
+    const stroke = draftArea.invalid
+      ? color.bg.danger.default
+      : color.fg.neutral.default;
+    const layer = L.layerGroup();
+
+    if (draftArea.points.length >= 3) {
+      L.polygon(draftArea.points, {
+        interactive: false,
+        color: stroke,
+        weight: 2.5,
+        dashArray: '6 6',
+        fillColor: stroke,
+        fillOpacity: 0.18,
+      }).addTo(layer);
+    } else {
+      L.polyline(draftArea.points, {
+        interactive: false,
+        color: stroke,
+        weight: 2.5,
+        dashArray: '6 6',
+      }).addTo(layer);
+    }
+
+    draftArea.points.forEach((point) => {
+      L.circleMarker(point, {
+        interactive: false,
+        radius: 6,
+        color: stroke,
+        weight: 3,
+        fillColor: color.bg.neutral.default,
+        fillOpacity: 1,
+      }).addTo(layer);
+    });
+
+    layer.addTo(map);
+    draftAreaLayerRef.current = layer;
+
+    return () => {
+      layer.remove();
+    };
+  }, [draftArea]);
+
+  // The boundary being changed. A corner is dragged on the map's own layers and reported once it is
+  // let go: reported on every step, the corners would be made again under the hand that holds one.
+  useEffect(() => {
+    const map = mapRef.current;
+
+    editAreaLayerRef.current?.remove();
+    editAreaLayerRef.current = null;
+
+    if (!map || !editArea) {
+      return;
+    }
+
+    const { points, invalid, onChange } = editArea;
+    const stroke = invalid ? color.bg.danger.default : color.fg.neutral.default;
+    const layer = L.layerGroup();
+    const corners = points.map((point): [number, number] => [...point]);
+    const outline = L.polygon(corners, {
+      interactive: false,
+      color: stroke,
+      weight: 2.5,
+      dashArray: '6 6',
+      fillColor: stroke,
+      fillOpacity: 0.18,
+    }).addTo(layer);
+    // A click comes right after the drag is let go; it is not a click on the corner.
+    let justDragged = false;
+
+    corners.forEach((corner, index) => {
+      const handle = L.marker(corner, {
+        draggable: true,
+        keyboard: false,
+        icon: createEditCornerIcon(invalid),
+        zIndexOffset: 1000,
+      }).addTo(layer);
+
+      handle.on('drag', () => {
+        const { lat, lng } = handle.getLatLng();
+        corners[index] = [lat, lng];
+        outline.setLatLngs(corners);
+      });
+      handle.on('dragend', () => {
+        justDragged = true;
+        window.setTimeout(() => {
+          justDragged = false;
+        }, 50);
+        onChange(corners.map((point): [number, number] => [...point]));
+      });
+      handle.on('click', () => {
+        // A boundary keeps three corners at the least.
+        if (!justDragged && corners.length > 3) {
+          onChange(
+            corners
+              .filter((_, other) => other !== index)
+              .map((point): [number, number] => [...point]),
+          );
+        }
+      });
+    });
+
+    corners.forEach((corner, index) => {
+      const next = corners[(index + 1) % corners.length];
+      const middle: [number, number] = [
+        (corner[0] + next[0]) / 2,
+        (corner[1] + next[1]) / 2,
+      ];
+
+      L.marker(middle, {
+        keyboard: false,
+        icon: createEditMidpointIcon(),
+      })
+        .on('click', () =>
+          onChange([
+            ...corners.slice(0, index + 1),
+            middle,
+            ...corners.slice(index + 1),
+          ]),
+        )
+        .addTo(layer);
+    });
+
+    layer.addTo(map);
+    editAreaLayerRef.current = layer;
+
+    return () => {
+      layer.remove();
+    };
+  }, [editArea]);
 
   const draftLat = draftPoint?.lat;
   const draftLng = draftPoint?.lng;

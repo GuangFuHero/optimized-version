@@ -158,9 +158,7 @@ async def promote_mark_zone(
         .values(property_name="hazardous_zone", updated_at=func.now())
     )
     await db.execute(
-        update(AreaPolygon.__table__)
-        .where(AreaPolygon.__table__.c.uuid == area_uuid)
-        .values(is_public=True)
+        update(AreaPolygon.__table__).where(AreaPolygon.__table__.c.uuid == area_uuid).values(is_public=True)
     )
     await db.commit()
     db.expunge(area)
@@ -191,6 +189,7 @@ async def assign_zone_to_team(
     if existing is not None:
         return existing
 
+    team_name = team.name  # read before the create commits and expires `team`
     try:
         actor_uid = actor.uuid
         assignment = await team_zone_assign_repository.create(
@@ -203,13 +202,15 @@ async def assign_zone_to_team(
         )
         # 觸發 zone_assigned 通知 (Urgent 等級，送給 NGO Admin)
         zone_obj = await team_zone_repository.get_by_uuid_active(db, zone_uuid)
-        zone_name = (zone_obj.name if zone_obj else None) or "工作分區"
+        params = {"zone_name": zone_obj.name if zone_obj else None, "team_name": team_name}
+        zone_name = params["zone_name"] or "工作分區"
         admins = await NotificationRecipientResolver.resolve_team_admin(db, team_uuid=team_uuid)
         await NotificationService.dispatch(
             db,
             event_type="zone_assigned",
             title=f"⚠️ 新指派工作區域：{zone_name}",
             body=f"您的團隊已獲指派負責工作分區「{zone_name}」，請進行評估與派工。",
+            params=params,
             priority="urgent",
             actor_uuid=actor_uid,
             ref_type="work_zone",
@@ -245,13 +246,18 @@ async def remove_zone_from_team(db: AsyncSession, *, actor: User, zone_uuid: str
 
     # 觸發 zone_unassigned 通知 (High 等級，送給 NGO Admin)
     zone_obj = await team_zone_repository.get_by_uuid_active(db, zone_uuid)
-    zone_name = (zone_obj.name if zone_obj else None) or "工作分區"
+    params = {
+        "zone_name": zone_obj.name if zone_obj else None,
+        "team_name": await db.scalar(select(Team.name).where(Team.uuid == team_uuid)),
+    }
+    zone_name = params["zone_name"] or "工作分區"
     admins = await NotificationRecipientResolver.resolve_team_admin(db, team_uuid=team_uuid)
     await NotificationService.dispatch(
         db,
         event_type="zone_unassigned",
         title=f"工作區域指派已解除：{zone_name}",
         body=f"您的團隊對工作分區「{zone_name}」的指派已解除。",
+        params=params,
         priority="high",
         actor_uuid=actor_uid,
         ref_type="work_zone",

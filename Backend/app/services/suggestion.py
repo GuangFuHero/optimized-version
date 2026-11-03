@@ -1,4 +1,4 @@
-"""Station-update suggestion write actions (create / merge / revoke).
+"""Station-update suggestion actions (create / merge / revoke), and the submitter's own list.
 
 Same flat-service style as station.py. A merge decides every pending suggestion on the chosen
 fields of one station, writes the reviewer's values, and records the before/after in a
@@ -17,7 +17,7 @@ from app.core.permissions import Perm
 from app.graphql.suggestions.fields import VALID_TARGET_TYPES, coerce_and_validate
 from app.models.auth import User
 from app.models.geo import Station, touch
-from app.models.station_property import StationSuggestionMerge, StationUpdateSuggestion
+from app.models.station_property import StationProperty, StationSuggestionMerge, StationUpdateSuggestion
 from app.repositories.geo_repository import (
     station_property_repository,
     station_repository,
@@ -84,6 +84,19 @@ async def create_station_suggestion(
         # Stripped here as at merge, so one line however spaced is one proposal to the reviewer.
         # A blank stays "", the column being text; the merge stores it as null (ADR-333).
         value = value.strip()
+    # What the field holds now, so the submitter can later read "this → that" (ADR-420). Read after
+    # the field is validated as suggestable: no other attribute of the row is ever copied out.
+    current = getattr(target, field_name)
+    previous = "" if current is None else str(current)
+    station = target
+    if target_type == "station_property":
+        station = await station_repository.get_by_uuid_active(db, station_uuid)
+    # Read before the commit expires the rows.
+    params = {
+        **_station_params(station),
+        "field": field_name,
+        "property_name": target.property_name if target_type == "station_property" else None,
+    }
 
     # xmax = 0 only on a freshly inserted row, which tells an insert from a resubmit.
     suggestion_uuid, inserted = (
@@ -94,6 +107,7 @@ async def create_station_suggestion(
                 target_uuid=target_uuid,
                 field_name=field_name,
                 new_value=value,
+                previous_value=previous,
                 comment=comment,
                 status="pending",
                 created_by=str(actor_uid),
@@ -103,7 +117,12 @@ async def create_station_suggestion(
                 # A bound 'pending' stops matching the partial index once Postgres caches a generic
                 # plan, so the predicate is literal SQL.
                 index_where=text("status = 'pending'"),
-                set_={"new_value": value, "comment": comment, "updated_at": func.now()},
+                set_={
+                    "new_value": value,
+                    "previous_value": previous,
+                    "comment": comment,
+                    "updated_at": func.now(),
+                },
             )
             .returning(StationUpdateSuggestion.uuid, literal_column("xmax = 0"))
         )
@@ -116,11 +135,13 @@ async def create_station_suggestion(
     recipients = await NotificationRecipientResolver.resolve_permission(
         db, Perm.STATION_REVIEW.value, station_uuid=station_uuid
     )
+    label = _FIELD_LABELS.get(field_name, field_name)
     await NotificationService.dispatch(
         db,
         event_type="station_suggestion_created",
         title="📝 新的站點修改建議",
-        body=f"「{field_name}」有一筆新的修改建議待審核。",
+        body=f"{_where(params['station_name'])}「{label}」有一筆新的修改建議待審核。",
+        params=params,
         priority="medium",
         actor_uuid=actor_uid,
         ref_type="station_suggestion",
@@ -129,6 +150,86 @@ async def create_station_suggestion(
     )
     await db.refresh(suggestion)
     return suggestion
+
+
+@dataclass(frozen=True)
+class MySuggestion:
+    """One of the caller's suggestions, with the merge that decided it and the station it is about.
+
+    `station` is None once the station is deleted; `merge` is None while the row is pending, and for
+    a row decided before merges were recorded.
+    """
+
+    suggestion: StationUpdateSuggestion
+    merge: StationSuggestionMerge | None
+    station: Station | None
+
+
+async def list_my_station_suggestions(
+    db: AsyncSession, *, actor: User, limit: int, skip: int = 0
+) -> list[MySuggestion]:
+    """The suggestions `actor` sent — the site's 我回報的站點 (ADR-420), `skip` rows in.
+
+    Latest activity first: a resubmit or a decision moves a row up, both setting `updated_at`. No
+    capability check, as for the caller's own tickets: losing station.contribute stops new
+    suggestions, not the reading of old ones. A soft-deleted row drops off. The merges and stations
+    are read in one query each, whatever the number of rows.
+    """
+    rows = list(
+        (
+            await db.scalars(
+                select(StationUpdateSuggestion)
+                .where(
+                    StationUpdateSuggestion.created_by == str(actor.uuid),
+                    StationUpdateSuggestion.delete_at.is_(None),
+                )
+                .order_by(StationUpdateSuggestion.updated_at.desc(), StationUpdateSuggestion.uuid.desc())
+                .offset(skip)
+                .limit(limit)
+            )
+        ).all()
+    )
+
+    merges: dict[str, StationSuggestionMerge] = {}
+    merge_uuids = {str(row.merge_uuid) for row in rows if row.merge_uuid}
+    if merge_uuids:
+        found = await db.scalars(
+            select(StationSuggestionMerge).where(StationSuggestionMerge.uuid.in_(merge_uuids))
+        )
+        merges = {str(merge.uuid): merge for merge in found}
+
+    # A property's station even once the property is deleted: the suggestion was still about it.
+    station_of_property: dict[str, str] = {}
+    property_uuids = {row.target_uuid for row in rows if row.target_type == "station_property"}
+    if property_uuids:
+        found = await db.execute(
+            select(StationProperty.uuid, StationProperty.station_uuid).where(
+                StationProperty.uuid.in_(property_uuids)
+            )
+        )
+        station_of_property = {str(uuid): str(station_uuid) for uuid, station_uuid in found}
+
+    def station_uuid_of(row: StationUpdateSuggestion) -> str | None:
+        if row.target_type == "station_property":
+            return station_of_property.get(row.target_uuid)
+        return row.target_uuid
+
+    stations: dict[str, Station] = {}
+    station_uuids = {uuid for uuid in map(station_uuid_of, rows) if uuid}
+    if station_uuids:
+        found = await db.scalars(
+            select(Station).where(Station.uuid.in_(station_uuids), Station.delete_at.is_(None))
+        )
+        stations = {str(station.uuid): station for station in found}
+
+    return [
+        MySuggestion(
+            suggestion=row,
+            merge=merges.get(str(row.merge_uuid)) if row.merge_uuid else None,
+            station=stations.get(station_uuid_of(row) or ""),
+        )
+        for row in rows
+    ]
 
 
 async def merge_station_suggestions(
@@ -142,7 +243,10 @@ async def merge_station_suggestions(
     """Decide the pending suggestions on the given fields of one station (requires station.review).
 
     Only fields with a pending suggestion can be decided; anything else is a station.edit.
-    Every pending row on a decided field shares the decision, and fields left out stay pending.
+    A decided field closes every pending row on it. A rejected field rejects them all; an approved
+    one approves the rows whose own value it wrote and marks the rest not_adopted, or, when the
+    written value matches none of them, marks them all adopted_edited.
+    Fields left out stay pending. Each suggester is told the outcome of their suggestion.
     """
     _check_length(review_note=review_note)
     for decision in decisions:
@@ -178,6 +282,8 @@ async def merge_station_suggestions(
 
     # The database's clock, read under the station's lock; every stamp this merge writes carries it.
     decided_at = await db.scalar(select(func.clock_timestamp()))
+    # The name the suggesters knew, read before a merge that renames the station writes the new one.
+    station_params = _station_params(station)
     changes, touched = await _apply_decisions(db, station, decisions, rows_by_field, decided_at)
     if changes:
         # An approval is an update at its own time, even one that wrote a property or an unchanged value.
@@ -193,17 +299,30 @@ async def merge_station_suggestions(
     )
     db.add(merge)
     await db.flush()
+    written = {(c["target_uuid"], c["field_name"]): c["after"] for c in changes}
     for decision in decisions:
-        for row in rows_by_field[(decision.target_uuid, decision.field_name)]:
-            row.status = "approved" if decision.approve else "rejected"
+        key = (decision.target_uuid, decision.field_name)
+        rows = rows_by_field[key]
+        _set_outcomes(rows, decision.approve, written.get(key))
+        for row in rows:
             row.reviewed_by = actor_uid
             row.review_note = review_note
             row.merge_uuid = merge.uuid
+    # Read before the commit expires the rows.
+    decided = [
+        row for decision in decisions for row in rows_by_field[(decision.target_uuid, decision.field_name)]
+    ]
+    property_names = await _property_names(db, decided)
+    outcomes = [
+        (row.created_by, row.uuid, row.field_name, property_names.get(row.target_uuid), row.status)
+        for row in decided
+    ]
 
     operational = _operational_changes(touched, changes)
     await db.commit()
     await _notify_operational(db, operational, actor_uid)
-    # Refresh last: both commits above expire the merge.
+    await _notify_suggesters(db, station_params, outcomes, actor_uid)
+    # Refresh last: the commits above expire the merge.
     await db.refresh(merge)
     return merge
 
@@ -266,7 +385,7 @@ async def revoke_station_suggestion_merge(
         update(StationUpdateSuggestion)
         .where(
             StationUpdateSuggestion.merge_uuid == merge.uuid,
-            StationUpdateSuggestion.status == "approved",
+            StationUpdateSuggestion.status.in_(("approved", "adopted_edited")),
         )
         .values(status="revoked")
     )
@@ -295,9 +414,7 @@ async def _apply_decisions(
             continue
         if decision.value is None:
             raise ValueError(f"'{decision.field_name}' needs a value to approve")
-        value = coerce_and_validate(target_type, decision.field_name, decision.value)
-        if target_type == "station" and decision.field_name == "supply_status":
-            value = normalize_supply_status(value)
+        value = _merge_value(target_type, decision.field_name, decision.value)
         before = getattr(target, decision.field_name)
         change = {
             "target_type": target_type,
@@ -348,6 +465,107 @@ async def _revoke_target(db: AsyncSession, station: Station, change: dict):
         if prop and prop.delete_at is not None and str(prop.station_uuid) == str(station.uuid):
             return None
     return await _station_target(db, station, change["target_type"], change["target_uuid"])
+
+
+# How a notification names a field: the labels the public suggestion form shows for a station's fields
+# and plain words for a property's; anything else keeps its column name.
+_FIELD_LABELS = {
+    "operational_status": "營運狀態",
+    "op_hour": "服務時間",
+    "name": "站點名稱",
+    "description": "地址／位置說明",
+    "type": "站點類型",
+    "supply_status": "目前缺少",
+    "property_name": "項目名稱",
+    "quantity": "數量",
+}
+
+
+def _where(station_name: str | None) -> str:
+    """The 「station」的 a notification opens with, or nothing for a station without a name."""
+    return f"「{station_name}」的" if station_name else ""
+
+
+def _station_params(station: Station | None) -> dict:
+    """The station values a suggestion notice stores in its params."""
+    return {
+        "station_name": station.name if station else None,
+        "station_type": station.type if station else None,
+    }
+
+
+async def _property_names(db: AsyncSession, rows: list[StationUpdateSuggestion]) -> dict[str, str]:
+    """The property_name of each station property these suggestions are on, by its uuid."""
+    uuids = {row.target_uuid for row in rows if row.target_type == "station_property"}
+    if not uuids:
+        return {}
+    found = await db.execute(
+        select(StationProperty.uuid, StationProperty.property_name).where(StationProperty.uuid.in_(uuids))
+    )
+    return {str(uuid): name for uuid, name in found}
+
+
+async def _notify_suggesters(db: AsyncSession, station_params: dict, outcomes, actor_uid: str):
+    """Tell each suggester whether their suggestion was adopted, adopted with edits, or not adopted.
+
+    Not adopted covers both not_adopted and rejected rows, which read the same to a suggester.
+    """
+    where = _where(station_params["station_name"])
+    for recipient, suggestion_uuid, field_name, property_name, status in outcomes:
+        field = f"「{_FIELD_LABELS.get(field_name, field_name)}」"
+        if status == "adopted_edited":
+            event_type, title = "station_suggestion_adopted_edited", "📝 站點修改建議已納入參考"
+            body = f"{where}{field}已參考你的建議修改。"
+        else:
+            result = "已採用" if status == "approved" else "未採用"
+            event_type = (
+                "station_suggestion_adopted" if status == "approved" else "station_suggestion_not_adopted"
+            )
+            title = f"📝 站點修改建議{result}"
+            body = f"你對{where}{field}的修改建議{result}。"
+        await NotificationService.dispatch(
+            db,
+            event_type=event_type,
+            title=title,
+            body=body,
+            params={**station_params, "field": field_name, "property_name": property_name},
+            actor_uuid=actor_uid,
+            ref_type="station_suggestion",
+            ref_uuid=suggestion_uuid,
+            explicit_recipients=[recipient],
+        )
+
+
+def _merge_value(target_type: str, field_name: str, raw: str):
+    """A value as a merge writes it: typed for its column, a supply status stripped."""
+    value = coerce_and_validate(target_type, field_name, raw)
+    if target_type == "station" and field_name == "supply_status":
+        value = normalize_supply_status(value)
+    return value
+
+
+def _set_outcomes(rows: list[StationUpdateSuggestion], approve: bool, written) -> None:
+    """Set each row's status from its field's decision and the value that decision wrote.
+
+    Rows matching the written value are approved and the rest not_adopted; when none match, the
+    reviewer edited the value, and every row counts as adopted with edits.
+    """
+    adopted = {row.uuid for row in rows if approve and _adopted(row, written)}
+    for row in rows:
+        if not approve:
+            row.status = "rejected"
+        elif not adopted:
+            row.status = "adopted_edited"
+        else:
+            row.status = "approved" if row.uuid in adopted else "not_adopted"
+
+
+def _adopted(row: StationUpdateSuggestion, written) -> bool:
+    """Whether a merge wrote this suggestion's own value; one its field no longer accepts was not."""
+    try:
+        return _merge_value(row.target_type, row.field_name, row.new_value) == written
+    except ValueError:
+        return False
 
 
 def _check_length(**fields: str | None) -> None:

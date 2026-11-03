@@ -1040,8 +1040,8 @@ staging 2026-10-29 唯讀查過：229 筆，不一致 0 筆。
 
 - `tickets` 只有 `bounds`（框裡的單）。前端想列框外的單只能拆成四條帶狀 `bounds`（沒辦法一起分頁），或不帶 `bounds`
   抓 200 張再自己篩（超過 200 張就漏）。
-- 框外的張數也不能用 `ticketsExtent.count` 減 `tickets(bounds:).totalCount`：`ticketsExtent` 沒有 `auditStatus`，
-  管理平台篩審核狀態時兩邊數的不是同一群單。
+- 框外的張數用 `ticketsExtent.count` 減 `tickets(bounds:).totalCount` 算時，`ticketsExtent` 沒有 `auditStatus`，
+  篩審核狀態的話兩邊數的不是同一群單。
 
 **Decision**：
 
@@ -1055,10 +1055,13 @@ staging 2026-10-29 唯讀查過：229 筆，不一致 0 筆。
    只在有 `q` 時作用，所以沒帶 `q` 的 `outsideBounds` 改在 `statement_ceiling` 底下，跟 `ticketCells`、`ticketsExtent`
    一樣，逾時回「範圍外的單太多，查詢逾時已中止，請縮小篩選再試」；帶 `q` 時照舊用 `search_timeout`（2026-11-02 review
    時補上）。有看不到點位的列時跟 `bounds` 一樣用 generic plan（ADR-437）。
-6. 前端拿框外的張數用 `tickets(outsideBounds: …, limit: 0) { pageInfo { totalCount } }`，跟按下去列出來的單一定一致。
+6. 框外的張數不用 `outsideBounds` 算，用同一組篩選的總數減框內的 totalCount（第 3 點保證相減剛好是框外）：框內的
+   用得到 index，總數不用逐張判斷框。`outsideBounds` 只用在「看是哪幾張」的分頁列表。管理平台拿 `ticketsExtent.count`
+   當總數；任務管理沒有審核狀態篩選，所以它就是 `tickets` 的 totalCount。要篩審核狀態時改用 `tickets(limit: 0)` 的
+   totalCount。
 7. `bounds` 的判斷抽成 `_in_box`，兩個篩選共用。`bounds` 的 SQL 不變。
 
-➕ 「看是哪幾張」可以照常分頁，張數跟列表一定對得上。
+➕ 「看是哪幾張」可以照常分頁；同一組篩選下，列表的 totalCount 就是相減得到的張數（第 3 點）。
 ➕ 前台訪客不會用到，用了也不會多透露位置。
 ➖ 框外的查詢沒有 index 可用，單量大時比 `bounds` 慢；目前單量小，又有第 5 點的上限擋著。
 ◾ 測試：`tests/test_graphql/test_tickets_outside_bounds.py`（簽入的人用點位：框外只列框外的單；沒有點位的單算框外；

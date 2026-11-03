@@ -1,17 +1,33 @@
 'use client';
 
-import { Box, Menu, MenuItem, Typography } from '@mui/material';
-import { Button, designTokens } from '@rescue-frontend/ui';
-import { ChevronDown, Plus, Upload } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { Button } from '@rescue-frontend/ui';
+import { Upload } from 'lucide-react';
+import { type ReactNode } from 'react';
 
-import { ToolbarButton } from '../../../admin/shared/toolbar-button';
+import { AdminToolbar } from '../../../admin/shared/admin-toolbar';
+import { NewSplitButton } from '../../../admin/shared/new-split-button';
 import { ToolbarSearch } from '../../../admin/shared/toolbar-search';
 import { boardCountLine } from '../space/board-count';
 import type { TicketCapabilities } from './hooks/use-ticket-capabilities';
-import { searchHint } from './model/ticket-filters';
 
-const { color, typography } = designTokens;
+/** 新增任務 ▾, the same in the toolbar and on the empty board. */
+export function NewTicketButton({
+  onCreate,
+  onImport,
+}: {
+  onCreate: () => void;
+  onImport?: () => void;
+}) {
+  return (
+    <NewSplitButton
+      label="新增任務"
+      newItem="新增一張"
+      importItem="從 CSV／Excel 匯入多張"
+      onNew={onCreate}
+      onImport={onImport}
+    />
+  );
+}
 
 interface TicketToolbarProps {
   caps: TicketCapabilities;
@@ -39,7 +55,7 @@ interface TicketToolbarProps {
 
 /**
  * The board's toolbar, per the prototype (tk-table.jsx): 篩選, the search box, the count, 匯出,
- * and 新增任務 — split, its ▾ holding 匯入任務單.
+ * and 新增任務 — split, its ▾ holding 新增一張 and the import, for a viewer who may import.
  */
 export function TicketToolbar({
   caps,
@@ -58,122 +74,47 @@ export function TicketToolbar({
   exportControl,
 }: TicketToolbarProps) {
   const canCreate = caps.canAdd && onCreate !== undefined;
+  // `q` matches the title, the description, and the needs' names and properties — never the
+  // address or the contact, which it leaves out on purpose (tickets resolver).
+  const search = (
+    <ToolbarSearch
+      query={query}
+      onQueryChange={onQueryChange}
+      activeFilterCount={activeFilterCount}
+      filterOpen={filterOpen}
+      onToggleFilter={onToggleFilter}
+      onClear={onClear}
+      placeholder="打 2 個字以上搜尋標題／描述／需求…"
+      shortPlaceholder="至少打 2 個字"
+      ariaLabel="搜尋任務單"
+    />
+  );
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        flexWrap: 'wrap',
-        alignItems: 'center',
-        gap: '8px',
-      }}
-    >
-      {/* `q` matches the title, the description, and the needs' names and properties — never
-          the address or the contact, which it leaves out on purpose (tickets resolver). */}
-      <ToolbarSearch
-        query={query}
-        onQueryChange={onQueryChange}
-        activeFilterCount={activeFilterCount}
-        filterOpen={filterOpen}
-        onToggleFilter={onToggleFilter}
-        onClear={onClear}
-        placeholder="搜尋標題／描述／需求…"
-        ariaLabel="搜尋任務單"
-        hint={(draft) => searchHint(draft) ?? undefined}
-      />
-
-      <Typography
-        sx={{
-          ...typography.body[300],
-          color: color.fg.neutral.muted,
-          ml: 'auto',
-        }}
-      >
-        {count === null
+    <AdminToolbar
+      search={search}
+      count={
+        count === null
           ? '— 筆任務'
-          : boardCountLine(count, spaceCount, moreSpaces)}
-      </Typography>
-
+          : boardCountLine(count, spaceCount, moreSpaces)
+      }
+    >
       {caps.canExport ? exportControl : null}
       {spaceControl}
 
       {canCreate ? (
-        <CreateSplitButton
+        <NewTicketButton
           onCreate={onCreate}
           onImport={caps.canImport ? onImport : undefined}
         />
       ) : caps.canImport ? (
-        <ToolbarButton onClick={onImport}>
-          <Upload size={16} />
-          匯入任務單
-        </ToolbarButton>
-      ) : null}
-    </Box>
-  );
-}
-
-/** 新增任務, with a ▾ for 匯入任務單 when the viewer may import; the plain button otherwise. */
-function CreateSplitButton({
-  onCreate,
-  onImport,
-}: {
-  onCreate: () => void;
-  onImport?: () => void;
-}) {
-  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
-  const create = (
-    <Button
-      onClick={onCreate}
-      startIcon={<Plus size={17} />}
-      sx={
-        onImport
-          ? {
-              borderTopRightRadius: 0,
-              borderBottomRightRadius: 0,
-              '&:hover': { transform: 'none' },
-            }
-          : undefined
-      }
-    >
-      新增任務
-    </Button>
-  );
-  if (!onImport) return create;
-  return (
-    <Box sx={{ display: 'inline-flex' }}>
-      {create}
-      <Button
-        aria-label="更多新增方式"
-        aria-haspopup="menu"
-        aria-expanded={Boolean(anchor)}
-        onClick={(event) => setAnchor(event.currentTarget)}
-        sx={{
-          px: '12px',
-          borderTopLeftRadius: 0,
-          borderBottomLeftRadius: 0,
-          borderLeft: `1px solid ${color.bg.primary.hover}`,
-          '&:hover': { transform: 'none' },
-        }}
-      >
-        <ChevronDown size={17} />
-      </Button>
-      <Menu
-        open={Boolean(anchor)}
-        anchorEl={anchor}
-        onClose={() => setAnchor(null)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-      >
-        <MenuItem
-          onClick={() => {
-            setAnchor(null);
-            onImport();
-          }}
-          sx={{ gap: '8px' }}
+        <Button
+          variant="neutral"
+          startIcon={<Upload size={16} />}
+          onClick={onImport}
         >
-          <Upload size={16} />
           匯入任務單
-        </MenuItem>
-      </Menu>
-    </Box>
+        </Button>
+      ) : null}
+    </AdminToolbar>
   );
 }

@@ -1,7 +1,12 @@
 import type { AnalyticsChartFigure } from '@rescue-frontend/data-access/admin';
 import type { components } from '@rescue-frontend/data-access/openapi';
 
-import { type DashboardDateRange, type DashboardMetric } from './kpis';
+import {
+  type DashboardDateRange,
+  type DashboardKpiAccent,
+  type DashboardMetric,
+  type MetricSpec,
+} from './kpis';
 
 export type ChartType = components['schemas']['ChartType'];
 export type ChartGranularity = components['schemas']['ChartXGranularity'];
@@ -11,16 +16,39 @@ export type ChartXOption = components['schemas']['ChartX'] | 'none';
 /**
  * One chart on the dashboard, laid out as in the design (`design/netlify-sync`,
  * `js/admin/dashboard/db-app.jsx`). `x` and `chartType` are only the starting view — the panel
- * lets the viewer switch among what the catalog allows. All display text comes from the catalog.
+ * lets the viewer switch among what the catalog allows. All display text comes from the catalog,
+ * but a `fixed` chart's.
  */
 export type DashboardChart = DashboardMetric & {
   x: ChartXOption;
   chartType: ChartType;
   /** Columns out of 12 on desktop. */
   span: 4 | 6 | 8 | 12;
+  /**
+   * For a chart of a metric that is also a card: the design's own heading and line, the card's
+   * colour, and no switches. The catalog's label would name the card a second time, and the card
+   * is already the other view of the number.
+   */
+  fixed?: { title: string; description: string; tone: DashboardKpiAccent };
+};
+
+/** The gap card's number day by day, the full row right under the volunteer cards. */
+export const VOLUNTEER_GAP_TREND: DashboardChart = {
+  domain: 'tickets',
+  metric: 'volunteer_gap',
+  x: 'date',
+  chartType: 'line',
+  span: 12,
+  fixed: {
+    title: '志工缺口每天的變化',
+    description:
+      '每一天結束時還缺幾個人。線往下＝補人的速度追上需求，往上＝該再招募',
+    tone: 'warning',
+  },
 };
 
 export const TICKET_CHARTS: readonly DashboardChart[] = [
+  VOLUNTEER_GAP_TREND,
   {
     domain: 'tickets',
     metric: 'total_tickets',
@@ -45,6 +73,8 @@ export const TICKET_CHARTS: readonly DashboardChart[] = [
 ];
 
 /** Secondary analysis, folded away by default so the first screen stays readable. */
+// No gap by need type here: the gap counts 人力 only, so split by type it is one bar; the cards
+// above already say how many people 人力 lacks and how many 物資 needs nobody has taken.
 export const TICKET_DETAIL_CHARTS: readonly DashboardChart[] = [
   {
     domain: 'tickets',
@@ -159,6 +189,30 @@ export function chartQueryParams(
     x_granularity: granularity,
     ...(view.x === 'none' ? {} : { x: view.x }),
   };
+}
+
+/**
+ * The bucket size a chart is asked for. A metric whose trend comes in one size only (the volunteer
+ * gap is always by day) is asked for that size, so switching the page to 一週 does not ask for it
+ * again only to get the same days back.
+ */
+export function chartGranularity(
+  spec: Pick<MetricSpec, 'allowed_x_granularities'> | undefined,
+  granularity: ChartGranularity,
+): ChartGranularity {
+  const allowed = spec?.allowed_x_granularities as
+    | ChartGranularity[]
+    | undefined;
+  if (!allowed?.length || allowed.includes(granularity)) return granularity;
+  return allowed[0];
+}
+
+/** A one-series figure drawn in `color`, which the backend would otherwise take from its palette. */
+export function toneFigure(
+  figure: AnalyticsChartFigure,
+  color: string,
+): AnalyticsChartFigure {
+  return { ...figure, layout: { ...figure.layout, colorway: [color] } };
 }
 
 /** Empty traces and null samples have no data; zero remains a valid measurement. */

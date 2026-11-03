@@ -1,4 +1,7 @@
+import type { Client } from 'urql';
+
 import {
+  GetLinkedTicketDocument,
   GetStationDocument,
   GetTicketDocument,
   StationFieldsFragmentDoc,
@@ -10,24 +13,37 @@ import {
   type GetTicketQuery,
 } from '@rescue-frontend/data-access';
 
+import {
+  linkedTicketUuid,
+  resolveLinkedTicket,
+} from '../map/site/linked-ticket';
 import { parseSiteRouteState } from '../route/parse';
 import { createSiteHref } from '../route/serialize';
 import type { SiteModule, SiteRouteState } from '../route/types';
-import { readOpHour } from '../station/availability';
-import { getStationTypeLabel } from '../station/type-options';
 import type { TicketNeed } from '../ticket/needs/need-claim';
-import { describeTicketForShare } from './share-description';
+import {
+  describeStationForShare,
+  describeTicketForShare,
+} from './share-description';
 import type { PointShareTarget } from './types';
 
+/**
+ * What a share is made of. Not a marker's `subtitle`: a ticket says what it needs and a station what
+ * it is (`share-description.ts`), the same on the server and in the browser.
+ */
 type PointShareMarker = {
   id: string;
   title: string;
-  /** What a station says of itself. A ticket's comes from its needs (`describeTicketForShare`). */
-  subtitle: string;
   detailType: 'station' | 'ticket';
   /** A ticket's needs, when they are known: always on the server, on a list marker in the browser. */
   needs?: readonly TicketNeed[];
   ticketMeta?: { taskType?: string | null };
+  stationMeta?: {
+    type?: string | null;
+    description?: string | null;
+    opHour?: string | null;
+    operationalStatus?: string | null;
+  };
 };
 
 const SHARE_QUERY_CONTEXT = {
@@ -49,16 +65,17 @@ function toPointShareMarkerFromStation(
   const station = useFragment(StationFieldsFragmentDoc, stationRef);
   const title =
     station.name?.trim() || station.propertyName?.trim() || station.uuid;
-  const subtitle =
-    station.description?.trim() ||
-    readOpHour(station.opHour) ||
-    getStationTypeLabel(station.type);
 
   return {
     id: station.uuid,
     title,
-    subtitle,
     detailType: 'station',
+    stationMeta: {
+      type: station.type,
+      description: station.description,
+      opHour: station.opHour,
+      operationalStatus: station.operationalStatus,
+    },
   };
 }
 
@@ -76,7 +93,6 @@ function toPointShareMarkerFromTicket(
   return {
     id: ticket.uuid,
     title,
-    subtitle: '',
     detailType: 'ticket',
     // Read here rather than through `readTicketNeeds`, whose module is client-only: this runs in
     // the page's `generateMetadata`. Need names and headcounts reach a guest (ADR-281).
@@ -106,6 +122,48 @@ function buildRouteStateFromRoute({
   return { baseLayer, dataType, selectedMarkerId, subDataTypes: [] };
 }
 
+/**
+ * The ticket a link names, read as the drawer reads it (map/site/linked-ticket): one 重複審核 merged
+ * into another is named by that one. The page sets the tab's title itself once the drawer opens, but
+ * the metadata from here streams in after it; naming the list instead, it put the tab back to
+ * 「救災列表」 on a link to a merged ticket.
+ */
+export async function fetchTicketShareMarker(
+  client: Pick<Client, 'query'>,
+  uuid: string,
+): Promise<PointShareMarker | null> {
+  const result = await client
+    .query(GetTicketDocument, { uuid }, SHARE_QUERY_CONTEXT)
+    .toPromise();
+
+  if (result.error) {
+    return null;
+  }
+
+  if (result.data?.ticket) {
+    return toPointShareMarkerFromTicket(result.data.ticket);
+  }
+
+  const linked = resolveLinkedTicket(
+    uuid,
+    await client
+      .query(GetLinkedTicketDocument, { uuid }, SHARE_QUERY_CONTEXT)
+      .toPromise(),
+  );
+
+  if (linked.kind !== 'replace') {
+    return null;
+  }
+
+  const merged = await client
+    .query(GetTicketDocument, { uuid: linked.uuid }, SHARE_QUERY_CONTEXT)
+    .toPromise();
+
+  return merged.error
+    ? null
+    : toPointShareMarkerFromTicket(merged.data?.ticket ?? null);
+}
+
 async function fetchPointShareMarker({
   dataType,
   markerId,
@@ -120,15 +178,9 @@ async function fetchPointShareMarker({
   });
 
   if (dataType === 'ticket') {
-    const result = await client
-      .query(GetTicketDocument, { uuid: markerId }, SHARE_QUERY_CONTEXT)
-      .toPromise();
+    const uuid = linkedTicketUuid(markerId);
 
-    if (result.error) {
-      return null;
-    }
-
-    return toPointShareMarkerFromTicket(result.data?.ticket ?? null);
+    return uuid ? fetchTicketShareMarker(client, uuid) : null;
   }
 
   const result = await client
@@ -169,7 +221,7 @@ export function createPointShareTarget({
             needs: marker.needs,
             taskType: marker.ticketMeta?.taskType,
           })
-        : marker.subtitle,
+        : describeStationForShare(marker.stationMeta ?? {}),
     url: new URL(href, origin).toString(),
   };
 }

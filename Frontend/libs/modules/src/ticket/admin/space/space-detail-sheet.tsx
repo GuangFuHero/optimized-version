@@ -5,7 +5,6 @@ import { useEffect, useState } from 'react';
 import { Box, ButtonBase, Typography } from '@mui/material';
 import { useDeleteBuildingMap } from '@rescue-frontend/data-access/admin';
 import {
-  Badge,
   Button,
   Callout,
   designTokens,
@@ -18,7 +17,7 @@ import { Building2, Layers, PenLine, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Muted } from '../../../admin/shared/muted';
-import { formatTicketStatusLabel, getTicketStatusTone } from '../../status';
+import { TicketStatusTag } from '../ticket-status-tag';
 import { matchFloor } from './floors';
 import {
   householdActionsShown,
@@ -559,9 +558,7 @@ function MiniTicket({
       >
         {fill.label}
       </Typography>
-      <Badge tone={getTicketStatusTone(ticket.status)}>
-        {formatTicketStatusLabel(ticket.status)}
-      </Badge>
+      <TicketStatusTag status={ticket.status} />
     </ButtonBase>
   );
 }

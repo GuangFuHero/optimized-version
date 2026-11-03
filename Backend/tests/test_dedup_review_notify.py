@@ -90,7 +90,7 @@ def _pending(calls) -> list[dict]:
 
 
 def _task(name="抽水", ack=None) -> TaskSubmission:
-    return TaskSubmission(task_type="rescue", task_name=name, acknowledged_duplicate_of=ack)
+    return TaskSubmission(task_type="rescue", task_name=name, quantity=1, acknowledged_duplicate_of=ack)
 
 
 async def test_one_created_anyway_task_sends_one_notice(db, sent):
@@ -101,6 +101,7 @@ async def test_one_created_anyway_task_sends_one_notice(db, sent):
 
     (notice,) = _pending(sent)
     assert "1 筆" in notice["title"]
+    assert notice["params"] == {"count": 1}
     assert (notice["ref_type"], notice["ref_uuid"]) == ("dedup_review", None)
     assert notice["priority"] == "medium"
 
@@ -115,6 +116,7 @@ async def test_three_cards_in_one_submission_send_one_notice(db, sent):
 
     (notice,) = _pending(sent)
     assert "3 筆" in notice["title"]
+    assert notice["params"] == {"count": 3}
 
 
 async def test_a_submission_without_cards_sends_none(db, engine, sent):
@@ -207,3 +209,14 @@ async def test_the_notice_reaches_review_holders_only(db):
     assert reviewer in recipients
     assert viewer not in recipients
     assert actor_uuid not in recipients
+
+
+async def test_the_notice_names_the_page_without_ai(db, sent):
+    """The page is 重複審核: the checks use no AI (DEDUP-008 decision 1, ADR-442)."""
+    actor = await actor_with(db, Perm.TICKET_ADD)
+
+    await submit_new_ticket(db, actor=actor, tasks=[_task(ack=RELATED)], **TICKET)
+
+    (notice,) = _pending(sent)
+    assert "「重複審核」" in notice["body"]
+    assert "AI" not in notice["title"] + notice["body"]

@@ -41,9 +41,12 @@ libs/data-access/
 - 預設使用 `graphCache + fetchExchange`
 - server runtime 預設 `fetchOptions.cache = 'no-store'`
 - 可透過 `authToken` 或 `getToken()` 自動帶入 `Authorization` header
-- GraphQL URL 解析順序：
+- 瀏覽器端一律傳 `url: '/api/graphql'`，走 app 自己的 proxy，不直接連後端。
+  Content-Security-Policy 的 `connect-src 'self'` 會擋掉瀏覽器對其他網域的 fetch，
+  被擋時只在 console 留一行訊息，畫面上看不到錯誤。
+- 沒傳 `url` 時的解析順序（只該在 server 端用到）：
   1. server: `GRAPHQL_URL`，否則 `NEXT_PUBLIC_GRAPHQL_URL`
-  2. client: `NEXT_PUBLIC_GRAPHQL_URL`
+  2. client: `NEXT_PUBLIC_GRAPHQL_URL`（會被上面的 CSP 擋，瀏覽器端不要靠這條）
   3. 若都沒有，從 `NEXT_PUBLIC_API_BASE_URL` 推導 `/graphql`
 
 ## Graphcache
@@ -101,7 +104,9 @@ libs/data-access/
 - users
   - `me`
 
-所有 REST endpoint 都從 `NEXT_PUBLIC_API_BASE_URL` 推導，預設值是 `http://localhost:8000/api`。
+這份清單的完整 URL 從 `API_BASE_URL` / `NEXT_PUBLIC_API_BASE_URL` 推導，預設值是 `http://localhost:8000/api`，
+只能在 server 端用。瀏覽器端用 `createRestClient()`（`baseUrl: ''`），呼叫 app 自己的 `/api/v1/*`，
+原因同上：CSP 的 `connect-src 'self'` 會擋掉瀏覽器直接連後端。
 
 ## Frontend Integration Points
 

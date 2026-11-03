@@ -53,9 +53,20 @@ export { SiteListView } from './list';
 
 export { BuildingDrawer } from './building';
 
-export { Map, readRescueMapMarkers } from './map';
+export { Map, preloadRescueMapCanvas, readRescueMapMarkers } from './map';
+export { DEFAULT_TILE_ORIGIN } from './map/constants';
 export { hasRescueMapDetailItem } from './map/location-cells';
+export {
+  AREA_KIND_LABELS,
+  AREA_LABEL_NAME_MAX,
+  type RescueMapAreaKind,
+} from './map/areas';
+export { PUBLIC_ZONE_COLORS } from './map/constants';
 export type {
+  RescueMapClosureArea,
+  RescueMapDraftArea,
+  RescueMapEditArea,
+  RescueMapPublicZone,
   RescueMapBaseLayer,
   RescueMapControllerValue,
   RescueMapDataType,
@@ -67,9 +78,46 @@ export type {
 } from './map/types';
 
 export {
+  activeFilterCount,
+  ADMIN_MAP_PRIORITIES,
+  ADMIN_MAP_STATION_TYPES,
+  ADMIN_MAP_ASSIGNMENTS,
+  ADMIN_MAP_STATUSES,
+  areaErrorMessage,
+  boundaryChange,
+  countInsideArea,
+  editableOutline,
+  DEFAULT_ADMIN_MAP_FILTERS,
+  filterMarkers,
+  isFiltering,
+  toggleExclusive,
+  toggleValue,
+  type AdminMapFilters,
+  isInArea,
+  polygonAreaKm2,
+  polygonSelfIntersects,
+  toGeoJsonPolygon,
+  holdRequest,
+  UNDO_MS,
+  useAdminMapAreas,
+  ADMIN_MAP_LIVE_QUERY_LIMIT,
+  toAdminMapPin,
+  useAdminMapLiveMarkers,
+  viewOfArea,
+  type AdminMapAreas,
+  type AdminMapLiveMarkers,
+  type AreaContents,
+  type BoundaryChange,
+} from './map/admin';
+
+export {
+  createSiteMapViewportStore,
   dedupeMarkersById,
+  floorHelpForOpenBuilding,
   MapCellsNotice,
+  pinnedBesideBuildings,
   readLinkedSelection,
+  requestHelpOnBuildingFloor,
   SiteMapControls,
   SiteMapRouteProvider,
   useCellMembersLoader,
@@ -78,9 +126,11 @@ export {
   useSiteMapLiveData,
   useSiteMapLiveDataSnapshot,
   usePaginatedRescueMapMarkers,
+  useSiteMapBuildings,
   useSiteMapRouteState,
   useSiteMapViewportState,
   useSiteMapViewportStore,
+  type SiteMapViewportStore,
 } from './map/site';
 
 export {
@@ -137,11 +187,7 @@ export {
   type SiteActionDrawerProps,
 } from './shell/site';
 
-export {
-  StationCreateDrawer,
-  StationDetailDrawer,
-  StationManagementPage,
-} from './station';
+export { StationDetailDrawer, StationManagementPage } from './station';
 
 export {
   TicketBoardPage,

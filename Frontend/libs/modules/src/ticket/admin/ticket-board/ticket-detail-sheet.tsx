@@ -12,7 +12,6 @@ import {
   useTicketPropertyConfigs,
 } from '@rescue-frontend/data-access/admin';
 import {
-  Badge,
   Button,
   CountBadge,
   designTokens,
@@ -20,6 +19,7 @@ import {
   SheetFrame,
   SheetLayout,
   Tabs,
+  Tag,
 } from '@rescue-frontend/ui';
 import { ChevronDown, ChevronRight, Flag, PencilLine } from 'lucide-react';
 
@@ -554,7 +554,7 @@ function TicketInfo({
 
 /**
  * The card at the top: priority, status and 查核中 · 疑似重複 on a suspected duplicate, 承接進度
- * over its bar; when it last changed, and 指派 Team — the 責任區 teams, read-only (a team gets a
+ * over its bar; when it last changed, and 指派團隊 — the 責任區 teams, read-only (a team gets a
  * ticket by its zone).
  */
 function SummaryCard({
@@ -607,21 +607,28 @@ function SummaryCard({
             <StatusCell status={ticket.status} />
           </Box>
           {view.suspectedDuplicateOf ? (
-            <Badge variant="outline" icon={<Flag size={11} />}>
-              查核中 · 疑似重複
-            </Badge>
+            <Tag icon={<Flag size={11} />}>查核中 · 疑似重複</Tag>
           ) : null}
         </Box>
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <Typography component="span" sx={caption}>
-            承接進度
-          </Typography>
-          {progress.label ? (
-            <NeedProgressBar progress={progress} />
-          ) : (
+        {/* The name and the numbers on one line over the bar (PRG-103). */}
+        {progress.label ? (
+          <NeedProgressBar
+            progress={progress}
+            size="md"
+            label={
+              <Typography component="span" sx={caption}>
+                承接進度
+              </Typography>
+            }
+          />
+        ) : (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <Typography component="span" sx={caption}>
+              承接進度
+            </Typography>
             <Muted inline>尚無需求 · 待補列</Muted>
-          )}
-        </Box>
+          </Box>
+        )}
       </Box>
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
         <Box
@@ -637,7 +644,7 @@ function SummaryCard({
             更新
           </Typography>
         </Box>
-        <InfoRow label="指派 Team">
+        <InfoRow label="指派團隊">
           {view.teamNames === null ? (
             <Muted inline>無權限檢視</Muted>
           ) : view.teamNames.length ? (

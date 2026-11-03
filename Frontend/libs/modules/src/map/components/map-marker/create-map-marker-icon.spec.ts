@@ -1,3 +1,4 @@
+import { MapPin, type LucideIcon } from 'lucide-react';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -5,10 +6,10 @@ import { describe, expect, it } from 'vitest';
 import { designTokens } from '@rescue-frontend/ui';
 
 import {
-  STATION_TYPE_ICONS,
-  STATION_TYPE_OPTIONS,
-  getStationTypeIcon,
-} from '../../../station/type-options';
+  getStationTypeLucideIcon,
+  STATION_TYPE_LUCIDE_ICONS,
+} from '../../../station/station-type-icon';
+import { STATION_TYPE_OPTIONS } from '../../../station/type-options';
 import type { RescueMapMarkerItem } from '../../types';
 import { createMapMarkerIcon } from './create-map-marker-icon';
 
@@ -35,14 +36,15 @@ function pinHtml(item: Partial<RescueMapMarkerItem>): string {
     .html;
 }
 
-/** An icon's first shape as MUI draws it: what the list row shows for the type. */
-function firstShape(icon: ReturnType<typeof getStationTypeIcon>): string {
-  const shape = /<path d="([^"]+)"/.exec(
-    renderToStaticMarkup(createElement(icon)),
-  )?.[1];
+/** An icon's first shape as Lucide draws it: what the list row shows for the type. */
+function firstShape(icon: LucideIcon): string {
+  const shape =
+    /<(?:path|circle|rect|line|polyline|polygon|ellipse)\b[^>]*>/.exec(
+      renderToStaticMarkup(createElement(icon)),
+    )?.[0];
 
   if (!shape) {
-    throw new Error('every station type icon draws at least one path');
+    throw new Error('every station type icon draws at least one shape');
   }
 
   return shape;
@@ -52,37 +54,44 @@ describe('a station pin', () => {
   it("shows its type's own icon, the one the list row shows", () => {
     for (const { value } of STATION_TYPE_OPTIONS) {
       expect(pinHtml({ stationMeta: { type: value } })).toContain(
-        firstShape(STATION_TYPE_ICONS[value]),
+        firstShape(STATION_TYPE_LUCIDE_ICONS[value]),
       );
     }
   });
 
-  it('draws the icon white on the blue (designer, 2026-10-25)', () => {
+  it('draws the icon white on the blue (designer, 2026-10-25), in lines', () => {
     expect(pinHtml({ stationMeta: { type: 'water' } })).toContain(
-      `fill="${color.fg.inverse}"`,
+      `fill="none" stroke="${color.fg.inverse}" stroke-width="2"`,
+    );
+  });
+
+  it('draws a pin for a type it does not know, not the supply box', () => {
+    expect(getStationTypeLucideIcon('evacuation')).toBe(MapPin);
+    expect(pinHtml({ stationMeta: { type: 'evacuation' } })).toContain(
+      firstShape(MapPin),
     );
   });
 
   it('reads the type as the list does, and falls back to its icon for one it does not know', () => {
     expect(pinHtml({ stationMeta: { type: ' Water ' } })).toContain(
-      firstShape(STATION_TYPE_ICONS.water),
+      firstShape(STATION_TYPE_LUCIDE_ICONS.water),
     );
     expect(pinHtml({ stationMeta: { type: 'evacuation' } })).toContain(
-      firstShape(getStationTypeIcon('evacuation')),
+      firstShape(getStationTypeLucideIcon('evacuation')),
     );
-    expect(pinHtml({})).toContain(firstShape(getStationTypeIcon(null)));
+    expect(pinHtml({})).toContain(firstShape(getStationTypeLucideIcon(null)));
   });
 
   it('gives a shelter and a temporary station their type icons too, not one shape between them', () => {
     expect(
       pinHtml({ variant: 'pinned-location', stationMeta: { type: 'shelter' } }),
-    ).toContain(firstShape(STATION_TYPE_ICONS.shelter));
+    ).toContain(firstShape(STATION_TYPE_LUCIDE_ICONS.shelter));
     expect(
       pinHtml({
         variant: 'pinned-location',
         stationMeta: { type: 'water', isTemporary: true },
       }),
-    ).toContain(firstShape(STATION_TYPE_ICONS.water));
+    ).toContain(firstShape(STATION_TYPE_LUCIDE_ICONS.water));
   });
 
   it("carries only the icon's shapes, none of MUI's classes or styles", () => {
@@ -123,5 +132,85 @@ describe('a teardrop pin (`pin`)', () => {
 
   it('escapes the colour it is handed', () => {
     expect(pinHtml({ pin: { color: '"><b>&' } })).not.toContain('"><b>');
+  });
+});
+
+describe("a building's entry (`building`)", () => {
+  function entry(ticketCount: number | null, shortfall: number | null) {
+    const options = createMapMarkerIcon(
+      {
+        id: 'building:b-1',
+        title: '大進國小',
+        subtitle: '',
+        position: [23.67, 121.43],
+        label: '大進國小',
+        variant: 'in-progress',
+        detailType: 'ticket',
+        building: { uuid: 'b-1', ticketCount, shortfall },
+      },
+      leaflet,
+    ) as unknown as { html: string; iconAnchor: [number, number] };
+
+    return { html: options.html, anchor: options.iconAnchor };
+  }
+
+  it('says its tickets and never what they are short: people and supplies do not add up', () => {
+    const { html } = entry(7, 53);
+
+    expect(html).toContain('<span class="map-building__count">7 件</span>');
+    expect(html).not.toContain('缺');
+    expect(html).not.toContain('看各樓層');
+  });
+
+  it('says 看各樓層, never 0 件, for a building with none and to a guest, who is given no counts', () => {
+    for (const html of [entry(0, 0).html, entry(null, null).html]) {
+      expect(html).toContain('看各樓層');
+      expect(html).not.toContain('件');
+    }
+  });
+
+  it("stands above its point without a count, clear of a guest's cell, and on it with one", () => {
+    expect(entry(null, null).anchor).toEqual([70, 72]);
+    expect(entry(0, 0).anchor).toEqual([70, 72]);
+    expect(entry(7, 3).anchor).toEqual([70, 40]);
+  });
+});
+
+describe('the admin 互助地圖 pins', () => {
+  function pin(item: Partial<RescueMapMarkerItem>): string {
+    return (
+      createMapMarkerIcon(
+        {
+          id: 'm',
+          title: 't',
+          subtitle: '',
+          position: [23.67, 121.43],
+          label: 'l',
+          variant: 'urgent-ticket',
+          detailType: 'ticket',
+          ...item,
+        },
+        leaflet,
+      ) as unknown as { html: string }
+    ).html;
+  }
+
+  it('draws a ticket as a dot in the colour it is given', () => {
+    const html = pin({ pin: { shape: 'dot', color: '#D32F2F' } });
+
+    expect(html).toContain('map-pin--dot');
+    expect(html).toContain('background:#D32F2F');
+  });
+
+  it('draws a station as a dark square with its type icon', () => {
+    const html = pin({
+      detailType: 'station',
+      variant: 'resource-station',
+      stationMeta: { type: 'water' },
+      pin: { shape: 'station', color: '#0F172A' },
+    });
+
+    expect(html).toContain('map-pin--station');
+    expect(html).toContain(firstShape(getStationTypeLucideIcon('water')));
   });
 });

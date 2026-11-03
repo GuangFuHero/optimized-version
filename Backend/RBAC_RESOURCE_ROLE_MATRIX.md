@@ -4,7 +4,7 @@
 > 事實來源：`scripts/seed_rbac.py`（授權）+ `app/core/permissions.py`（capability 目錄）+ `app/core/rbac_scopes.py`（scope 引擎）。
 > 此檔為快照，seed 一改就會過時——以程式碼為準。
 >
-> **⚠️ Live 事實來源（feature 009）**：runtime 的權威視圖是 `GET /admin/rbac/matrix`（角色×capability×scope 即時網格）+ `GET /admin/rbac/capabilities`（capability 目錄，含 `public` / `team_gov_only` / `team_gov_widened` 旗標）。此 `.md` 只是 2026-07-12 的靜態快照、且早於 PR #24 review 的收斂，個別 cell（例如下方 Work Zone 的 gov/ngo 註記）可能已落後——需要當下真值時查 API，不要以本檔為準。站點（Station）一節與 scope 語意表已於 2026-09-23 依 ADR-285 更新。
+> **⚠️ Live 事實來源（feature 009）**：runtime 的權威視圖是 `GET /admin/rbac/matrix`（角色×capability×scope 即時網格）+ `GET /admin/rbac/capabilities`（capability 目錄，含 `public` / `team_gov_only` / `team_gov_widened` / `team_gov_zone_widened` / `team_gov_member_only` 旗標）。此 `.md` 只是 2026-07-12 的靜態快照、且早於 PR #24 review 的收斂，個別 cell（例如下方 Work Zone 的 gov/ngo 註記）可能已落後——需要當下真值時查 API，不要以本檔為準。站點（Station）一節與 scope 語意表已於 2026-09-23 依 ADR-285 更新。
 
 ## 模型速記（ADR-019 / ADR-049，**身分部分已由 `Spec/010` 取代**）
 
@@ -45,7 +45,7 @@
 | **data_auditor** | platform | 稽核：全平台可讀（含 PII、audit log）；寫入只有審核——站點修改建議（ADR-300）、單與需求（ADR-312）；無 edit/make |
 | **super_admin** | platform | 全能 |
 | **admin** | team | 團隊協調者：責任區內的通報單、指派給本隊的站點全操作 + 管團隊成員 + 畫/指派 zone + 指派站點（後兩者僅 gov） |
-| **member** | team | 團隊現場人員：責任區內的通報單、本隊的站點可編輯，無團隊管理、無 zone、無站點指派 |
+| **member** | team | 團隊現場人員：責任區內的通報單、本隊的站點可編輯，無團隊管理。可匯出自己責任區的任務單。gov team 的成員另與 gov 管理員相同：匯入、站點匯出、站點審核、責任區與開啟空間（BE-RBAC-3 B3） |
 
 ## 權限矩陣
 
@@ -70,11 +70,11 @@
 | station.contribute | — | all | — | all | all | all |
 | station.edit | — | own | — | all | team | team |
 | station.delete | — | own | — | all | team | own |
-| station.review | — | — | all | all | team | — |
+| station.review | — | — | all | all | team | team（僅 gov）|
 | station.revoke | — | — | all | all | — | — |
 | **station.assign** | — | — | — | all | all（僅 gov） | all（僅 gov） |
-| station.export | — | — | all | all | team | — |
-| station.import | — | — | — | all | all | — |
+| station.export | — | — | — | all | team | team（僅 gov）|
+| station.import | — | — | — | all | all | all（僅 gov）|
 
 > **站點跟著指派的 team 走，不跟 zone（ADR-285）。** `team` ＝指派給當前身分那一隊的站點
 > （`stations.team_uuid`）；以 team 身分建立的站會自動指派給該隊，民眾建的站為未指派。
@@ -105,10 +105,20 @@
 | ticket.delete | — | own | — | all | zone | own |
 | ticket.assign | — | own | — | all | zone | own |
 | **ticket.audit** | — | — | all | all | zone | zone |
-| ticket.export | — | — | all | all | zone | — |
-| ticket.import | — | — | — | all | all | — |
+| ticket.export | — | — | — | all | zone | zone（僅 gov）|
+| ticket.import | — | — | — | all | all | all（僅 gov）|
 
-> **批量匯入匯出（feature 015, ADR-110/111）**：`*.export` 的 scope 是有作用的——它決定匯出檔涵蓋哪些列（team admin 只拿得到自己 WorkZone 內的通報單、指派給本隊的站點）。`*.import` 一律 `all`，因為逐筆保護來自每一列仍會跑的 `*.add` / `*.edit` 檢查；在這裡放 zone 只會看起來有意義而不影響任何行為。`data_auditor` 有 export 無 import（oversight only，除了審核之外全範圍無寫權）；team member 與 platform user 兩者皆無——批量誤操作的爆炸半徑遠大於單筆。
+> **gov team 的 `zone` 視同 `all`（BE-RBAC-3 B3，2026-11-01）。** 責任區只指派給 ngo team；gov 負責劃分與指派，自己不會有責任區，
+> 所以 gov 的 `zone` 授權原本什麼單都碰不到。`ticket.view_history` / `edit` / `delete` / `assign` / `export` 的 `zone`，
+> 在 active gov team 身分下解析為 `all`（`resolve_scope`，`GOV_TEAM_ZONE_WIDENED_PERMS`）；只放寬本來是 `zone` 的授權，
+> member 的 `delete` / `assign` 維持 `own`。`ticket.audit` 不放寬（任務單資料檢核 11/01 取消）。
+
+> **「僅 gov」的 member 欄（BE-RBAC-3 B3，2026-11-01～03）。** gov 與 ngo 成員共用 `member` 角色；匯入匯出、站點審核佇列、
+> 責任區（含開啟空間）這幾項，`member` 只有在 active gov team 身分下才算數，ngo 成員解析為 `none`
+> （`GOV_MEMBER_ONLY_PERMS`，在 `resolve_scope` 判斷，所以權限清單、各檢查、新建議通知都一致）。ngo 管理員不受影響。
+> capability 目錄以 `team_gov_zone_widened` / `team_gov_member_only` 兩個旗標標示。
+
+> **批量匯入匯出（feature 015, ADR-110/111）**：`*.export` 的 scope 是有作用的——它決定匯出檔涵蓋哪些列（team admin 只拿得到自己 WorkZone 內的通報單、指派給本隊的站點）。`*.import` 一律 `all`，因為逐筆保護來自每一列仍會跑的 `*.add` / `*.edit` 檢查；在這裡放 zone 只會看起來有意義而不影響任何行為。`data_auditor` 匯出、匯入都沒有（ADR-460，Carol 2026-11-03：只在後台畫面上檢核資料）；platform user 也沒有。team member：匯入匯出只有 gov team 的成員有，scope 同 admin、放寬為 `all`（BE-RBAC-3 B3，Carol 2026-11-01～03；`GOV_MEMBER_ONLY_PERMS` 讓 ngo 成員的授權解析為 `none`）。
 
 > **檢核**：`ticket.audit` 管「單的資料檢核」——`auditTicket` 給出結論（`audited` 已檢核、`audit_issue` 有疑慮，後者必填 `note`），並解鎖 `auditNote`、`auditedAt`、`auditedBy`、`auditHistory`、`changesSinceAudit`。`auditStatus` 本身公開，前台可據此排除有疑慮的單；前台一律以 `user` 身分運作，沒有 `ticket.audit`，所以其餘欄位只在後台看得到。檢核只在單的層級，需求沒有各自的檢核。結論只對當時的內容成立：之後內容一變（文字、地址、災害欄位、需求內容、新增需求）就回到 `no_audit`；承接、人數、刪除需求、優先度、進度備註不算。`need_audit` 只由掃描系統設定，內容變動時維持不變。`audit_issue` 會通知建單者與已承接的志工（不含說明）。
 
@@ -140,14 +150,14 @@
 
 | capability | Guest | user | data_auditor | super_admin | admin(team) | member(team) |
 |---|---|---|---|---|---|---|
-| work_zone.view | — | — | — | all | all | — |
-| work_zone.add | — | — | — | all | all | — |
-| work_zone.edit | — | — | — | all | all | — |
-| work_zone.assign | — | — | — | all | all | — |
-| work_zone.delete | — | — | — | all | all | — |
+| work_zone.view | — | — | — | all | all | all（僅 gov）|
+| work_zone.add | — | — | — | all | all | all（僅 gov）|
+| work_zone.edit | — | — | — | all | all | all（僅 gov）|
+| work_zone.assign | — | — | — | all | all | all（僅 gov）|
+| work_zone.delete | — | — | — | all | all | all（僅 gov）|
 
 > ⚠️ ADR-049 的意圖是「畫/指派/刪除 zone 只有 gov 側能做」，但 gov/ngo admin 共用同一個 `admin`
-> 角色，能力層分不出來。ADR-063 之後改為**硬擋**：`app/services/work_zone.py` 的
+> 角色，能力層分不出來。ADR-063 之後改為**硬擋**：`app/services/area.py` 的
 > `_require_gov_zone_authority` 要求 team-kind 持有者的 team 必須是 gov 型，否則 403。
 > ngo admin 在矩陣上仍持有這些 capability，但實際呼叫會被擋下 —— 這就是
 > `GOV_TEAM_ONLY_PERMS`（`app/core/permissions.py`）在 capability catalog 標記的意義。
@@ -163,6 +173,8 @@
 
 > 查詢的 `includeInactive: true`（管理端才看得到已停用欄位）在 `dynamic_field.view` 之外**額外**要求
 > `dynamic_field.edit`（ADR-226）：看得到誰把欄位退役，屬於「有權退役」的一環，而不是「有權填表單」。
+>
+> 配對卡詳情另有一個只涵蓋卡上細項的例外，見下方「AI 重複審核」一節（028/ADR-447）。
 >
 > **例外：`ticketPropertyConfigs` 與 `disasterTypes` 改由公開的 `ticket.view` 把關（ADR-263）。**
 > 那是民眾填的通報單表單本身，而 `ticket.disasterTypes` / `disasterDetails` 本來就匿名可讀 ——
@@ -244,6 +256,15 @@
 > 不檢查這三個權限。`view` 讀審核清單與單張卡；`review` 判定「確認重複／不是重複」並撤銷**自己**的判定；
 > 撤銷**別人**的判定另需 `revoke`，只給 super_admin（025/ADR-337、ADR-342）。待審提醒（`dedup_review_pending`）
 > 發給持有 `review` 的人（ADR-345）。
+>
+> **例外：配對卡詳情裡的細項設定（028/ADR-446、ADR-447）。** 詳情的 `tasks[].properties[]` 帶著該細項的欄位設定
+> （名稱、順序、型別、選項、單位、是否啟用），**停用的設定也給**，只要 `ai_duplicate.view`。這和
+> `taskPropertyConfigs` 的規則（`dynamic_field.view`，停用的另要 `dynamic_field.edit`，ADR-226）不同，但不衝突：
+> 這裡只給「卡上兩張單已經有的細項」那幾筆設定，不是整份欄位定義；審核員要知道一個停用欄位在畫面上怎麼顯示、
+> 怎麼編輯，才比對得了。資料檢核員因此看得到這幾筆停用設定，仍然呼叫不了 `taskPropertyConfigs`。
+>
+> 任務單上的「疑似重複」不受這三個權限管：`TicketType.verificationStatus`（025/ADR-443、ADR-455）和
+> `suspectedDuplicateOf`（025/ADR-454）有 `ticket.view` 就讀得到，也就是所有角色和訪客。
 
 ## 補充說明
 

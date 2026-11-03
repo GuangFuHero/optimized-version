@@ -215,6 +215,42 @@ jujuyuzu 2026-10-25 的 review。
 - [x] 配對卡狀態改名 `confirmed_duplicate`／`not_duplicate`（ADR-391，Chi 提議；migration `a8d3e6b1c207`），全套件 **2932 passed**，Docker 第四次從零驗證通過（`dff0b43a4`）
 - [ ] 回覆 review 與 Chi 的留言
 
+## Task 11：審核頁讀得到地址（ADR-440）
+
+DEDUP-008 交給 Jarvis 前對照 mock 時發現：選主要單要看地址，但詳情只有座標。和 Spec 025 的 Task 10 同一張 PR。
+
+- [x] `dedup_review_tickets.py`：`LocationForReview`，一條 query 讀兩張單的地點；`location` 自動算進 `version`
+- [x] schema `LocationForReviewResponse`、`TicketForReviewResponse.location`
+- [x] 測試：地址到樓室、電線桿、沒有地點、改地點 `version` 會動、改地標 `version` 不動、query 數不變、REST 形狀
+- [x] 合約檔、全套件（**3316**：3315 passed，另 1 個是 main 上 #176 修掉的時區測試，rebase 後通過）、Docker 從零驗證 19/19（`c1c4492ec`，Backend 與 rebase 後的 `ddf1ab34c` 只差 #176 那個測試檔：空 DB 跑 alembic＋seed，真實「仍要建立」產生配對卡，打 REST 驗地點、暱稱、409、通知文字、API 標籤）
+
+## Task 12：合併後人數與細項名稱（ADR-445、446）
+
+Jarvis 2026-11-01 做 DEDUP-008 時回報的兩個缺口。和 Task 11 同一張 PR（#179）。
+
+- [x] `dedup_review_tickets.py`：承接紀錄改讀 `(task_uuid, actor_uuid)`，`claim_count` 由同一批算出；詳情帶卡號時算 `claimant_keys`；細項名稱一個 query 讀完；兩者都不算進 `version`
+- [x] schema `TaskForReviewResponse.claimant_keys`、`PropertyForReviewResponse.display_label`
+- [x] 測試：同一人兩邊代號相同、聯集＝合併後人數、沒人承接沒有代號、換一張卡代號不同且不含 uuid、名稱取同需求類型的設定、沒設定或空名稱用 key、改名稱 `version` 不動、稽核員從 REST 拿得到名稱與代號；既有的「承接不動 version」「query 數不隨細項增加」照樣通過
+- [x] 合約檔、全套件 **3469 passed**、Docker 從零驗證 15/15（空 DB 跑 alembic＋seed；真的送兩筆相同求助產生配對卡；avol03 兩邊都接、avol04／05 各接一邊；稽核員讀詳情：各 2 個代號、共同 1 個、聯集 3（相加是 4）、代號不含 uuid、細項「鏟子」；稽核員 `taskPropertyConfigs` 仍 403；超管讀同一張卡代號相同；名額 3 把乙併進甲，後端接受、DB 承接 3 人、`merged` 事件記下名稱與 `people`）
+
+## Task 13：細項附上顯示與編輯用的設定（ADR-447）
+
+稽核員沒有 `dynamic_field.view`，前端讀不到細項的排序、型別、選項、單位、是否停用。`sort_order` 的做法取自 HC 的 #207（已關閉）。和 Task 11、12 同一張 PR（#179）。
+
+- [x] `dedup_review_tickets.py`：設定整列一次讀出（`(task_type, property_name)` tuple IN），`display_label` 與五個新欄位都從它來；都不算進 `version`
+- [x] schema `PropertyForReviewResponse`：`sort_order`、`data_type`、`enum_options`、`unit`、`is_active`，沒有設定時為 `null`
+- [x] 測試：取同需求類型的設定、停用的也給、沒有設定全為 `null`、改名稱／順序／型別／單位／啟用 `version` 不動、稽核員從 REST 拿得到；既有「query 數不隨細項增加」照樣通過
+- [x] 合約檔重新產生
+
+## Task 14：HC 在 #179 的 review（2026-11-01）
+
+- [x] 合併最新 main：`secondary_locations.full_address` 改成由地址各欄算出，測試改寫進 `remainder`（程式不動）
+- [x] ADR-447 與 `RBAC_RESOURCE_ROLE_MATRIX.md` 記下例外：詳情給卡上細項的停用設定，只要 `ai_duplicate.view`（`taskPropertyConfigs` 停用的仍要 `dynamic_field.edit`）
+- [x] `_PROPERTY_SKIPPED` 的註解改成涵蓋整筆欄位設定
+- [x] 儀表板「疑似重複的單」說明拿掉「AI」（ADR-442）；測試：說明含「重複審核」、不含「AI」
+- [x] `claimant_keys` 欄位說明照實寫：不含 uuid，但知道 uuid 的人可以測試；ADR-445 加補充，不加密鑰
+- [x] 測試：resolve 接受「數量＝代號聯集」、拒絕「少一個」，把頁面算法和 resolve 綁在一起
+
 ## 交給前端的 API 變更（DEDUP-008，Ethan）
 
 | 方法 | 路徑（前綴 `/api/v1/admin`） | 權限 | 成功 | 失敗 |
@@ -224,6 +260,10 @@ jujuyuzu 2026-10-25 的 review。
 | POST | `/duplicate-pairs/{uuid}/revoke` | 不變 | 不變 | 多一種 409：處理過的卡不能撤銷 |
 
 - 審核頁先讀 detail，用 `tickets.low`／`tickets.high` 並排顯示；送出 resolve 時把兩邊的 `version` 原樣帶回。
+- 2026-10-29（Jarvis）：每張單多一個 `location`（ADR-440），主要單依審核員選的地址決定。地址改了 `version` 會變。
+- 2026-11-01（Jarvis）：每項需求多一個 `claimant_keys`（ADR-445）。合併後人數＝要合在一起的需求的代號聯集數量，取代兩邊 `claim_count` 相加。代號只在同一張卡內對得上。
+- 2026-11-01（Jarvis）：每個細項多一個 `display_label`（ADR-446），直接顯示即可，不必再讀 `taskPropertyConfigs`；稽核員也拿得到。
+- 2026-11-01（ADR-447）：每個細項再多 `sort_order`、`data_type`、`enum_options`、`unit`、`is_active`，和 `display_label` 同一筆設定；沒有設定時都是 `null`。稽核員也拿得到。
 - 收到 409（`version` 對不上）→ 重新讀 detail，請審核員再比對一次。
 - request 要列出兩張單**每一項**需求、`keep`／`move` 的每一個細項（spec §3.3）。漏列會 422。
 - 「不是重複」仍用 `/reject`。

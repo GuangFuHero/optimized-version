@@ -1,8 +1,24 @@
 """Repositories for tickets, ticket tasks, task properties, and disaster-field values."""
 
 from geoalchemy2 import Geography
-from sqlalchemy import ARRAY, Row, String, and_, case, cast, delete, exists, false, func, not_, or_, select
+from sqlalchemy import (
+    ARRAY,
+    Row,
+    String,
+    and_,
+    case,
+    cast,
+    delete,
+    distinct,
+    exists,
+    false,
+    func,
+    not_,
+    or_,
+    select,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from app.core.search import like_pattern, matches, normalize_query, search_timeout
 from app.db.h3 import (
@@ -14,15 +30,19 @@ from app.db.h3 import (
     h3_centroid,
 )
 from app.infrastructure.repository.base import GenericRepository
+from app.models.geo import BaseGeometry, BuildingMapTicketMap
 from app.models.request import Tickets
 from app.models.ticket_disaster_detail import TicketDisasterDetail
 from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask
-from app.services.ticket_status import OPEN_NEED_STATUSES, OPEN_TICKET_STATUSES
+from app.services.ticket_status import OPEN_NEED_STATUSES, OPEN_TICKET_STATUSES, VOLUNTEER_NEED_TYPES
 
 # How list_active can order the tickets (TicketListOrder in app/graphql/tickets/types.py, ADR-419).
 TICKET_ORDERS = frozenset({"newest", "needs_first"})
 # The need type the site list puts first (a need's task_type, TASK_TYPES in app/services/ticket.py).
 _RESCUE = "rescue"
+# The needs a building's shortfall adds (ADR-450): people and supplies, the ones sign-ups fill. A
+# rescue's count is not one volunteers close, so the site's 缺額 leaves it out, and medical too.
+SHORTFALL_NEED_TYPES = ("hr", "supply")
 
 # The site colours a ticket urgent unless its priority, trimmed and lowercased, is one of these, or
 # it is in progress (`map/site/markers.ts` resolveTicketVariant); priority is not validated on
@@ -484,9 +504,10 @@ class TicketRepository(GenericRepository[Tickets]):
         """Counts by status and the volunteer gap over the active tickets `extra_filters` leaves.
 
         Two statements, no per-ticket work. The gap counts a need the way the board's cards do:
-        an open need (OPEN_NEED_STATUSES) with a quantity, on a ticket not completed or
-        cancelled, short of `quantity` by the people linked to it. Linked people are every
-        task_assignments row, as the `assignedCount` loader reads them.
+        an open need (OPEN_NEED_STATUSES) of a volunteer type (VOLUNTEER_NEED_TYPES) with a
+        quantity, on a ticket not completed or cancelled, short of `quantity` by the people
+        linked to it. Linked people are every task_assignments row, as the `assignedCount` loader
+        reads them. The dashboard's volunteer_gap counts by the same rule (ADR-456).
         """
         base = [self.model.delete_at.is_(None), *extra_filters]
         by_status = dict(
@@ -516,6 +537,7 @@ class TicketRepository(GenericRepository[Tickets]):
                     self.model.status.notin_(("completed", "cancelled")),
                     TicketTask.delete_at.is_(None),
                     TicketTask.status.in_(OPEN_NEED_STATUSES),
+                    TicketTask.task_type.in_(VOLUNTEER_NEED_TYPES),
                     TicketTask.quantity.is_not(None),
                     gap > 0,
                 )
@@ -530,6 +552,67 @@ class TicketRepository(GenericRepository[Tickets]):
             "gap_people": int(row[0]),
             "gap_needs": int(row[1]),
         }
+
+    async def building_counts(
+        self, db: AsyncSession, building_uuids: list[str], *, extra_filters=()
+    ) -> dict[str, tuple[int, int]]:
+        """Each building's (tickets, shortfall), for the buildings that hold any (ADR-450).
+
+        Every live ticket filed in a live building counts, completed and cancelled ones too, as
+        `buildingMapTickets` lists them; `extra_filters` narrow them as it does. The shortfall adds,
+        over the tickets still open, each pending people or supply need with a quantity: that
+        quantity less the people linked to it, never below 0, as the site's floor drawer adds it.
+        A supply need's quantity counts items, so the sum is people and supplies together. Linked
+        people are every task_assignments row, as for `stats`. One statement.
+        """
+        # Aliased: a ticket's own row in base_geometries is already in the FROM clause.
+        building = aliased(BaseGeometry)
+        tickets = (
+            select(
+                BuildingMapTicketMap.building_map_uuid.label("building_uuid"),
+                self.model.uuid.label("ticket_uuid"),
+                self.model.status.label("status"),
+            )
+            .join(self.model, self.model.uuid == BuildingMapTicketMap.ticket_uuid)
+            .join(building, building.uuid == BuildingMapTicketMap.building_map_uuid)
+            .where(
+                BuildingMapTicketMap.building_map_uuid.in_(building_uuids),
+                building.delete_at.is_(None),
+                self.model.delete_at.is_(None),
+                *extra_filters,
+            )
+            .subquery()
+        )
+        linked = (
+            select(func.count())
+            .where(TaskAssignment.task_uuid == TicketTask.uuid)
+            .correlate(TicketTask)
+            .scalar_subquery()
+        )
+        rows = await db.execute(
+            select(
+                tickets.c.building_uuid,
+                func.count(distinct(tickets.c.ticket_uuid)),
+                func.coalesce(func.sum(func.greatest(TicketTask.quantity - linked, 0)), 0),
+            )
+            .select_from(tickets)
+            .outerjoin(
+                TicketTask,
+                and_(
+                    TicketTask.ticket_uuid == tickets.c.ticket_uuid,
+                    # Closed as `stats` and the site read a ticket: completed or cancelled.
+                    tickets.c.status.notin_(("completed", "cancelled")),
+                    TicketTask.delete_at.is_(None),
+                    # Open as the site reads a need: `pending` alone.
+                    TicketTask.status == "pending",
+                    TicketTask.task_type.in_(SHORTFALL_NEED_TYPES),
+                    TicketTask.quantity > 0,
+                ),
+            )
+            .group_by(tickets.c.building_uuid)
+        )
+        # sum() over integers is numeric in Postgres, which arrives as a Decimal.
+        return {str(uuid): (count, int(short)) for uuid, count, short in rows}
 
 
 class TicketTaskRepository(GenericRepository[TicketTask]):

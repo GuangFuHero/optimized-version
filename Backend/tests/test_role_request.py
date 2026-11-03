@@ -308,6 +308,12 @@ async def test_reviewers_hear_of_a_new_application(db):
     assert notice.recipient_uuid == reviewer_uuid != citizen_uuid
     assert (notice.ref_type, notice.ref_uuid) == ("role_request", request.uuid)
     assert (notice.title, notice.body) == ("有新的管理權限申請", "王小明 申請成為「資料檢核員」。")
+    assert notice.params == {
+        "requested_role": "data_auditor",
+        "team_name": None,
+        "new_team_name": None,
+        "applicant_name": "王小明",
+    }
 
 
 @pytest.mark.asyncio
@@ -512,6 +518,10 @@ async def test_the_applicant_hears_they_were_turned_down(db, note, body):
     assert (notice.ref_type, notice.ref_uuid) == ("role_request", request_uuid)
     assert notice.title == "你的「政府單位人員」申請沒有通過"
     assert (notice.body, notice.priority) == (body, "medium")
+    assert notice.params.keys() == {"requested_role", "team_name", "new_team_name", "review_note"}
+    assert (notice.params["requested_role"], notice.params["new_team_name"]) == ("government", None)
+    assert notice.params["team_name"].startswith("隊-")
+    assert notice.params["review_note"] == note
 
 
 @pytest.mark.asyncio
@@ -538,8 +548,6 @@ async def test_the_review_list_is_oldest_first_and_names_the_applicant(db, statu
 
     assert [entry.applicant_name for entry in entries] == applicants
     assert all(entry.request.reason == REASON for entry in entries)
-
-
 
 
 @pytest.mark.asyncio
@@ -677,6 +685,7 @@ async def test_the_applicant_hears_they_were_approved(db):
     assert (notice.ref_type, notice.ref_uuid) == ("role_request", request_uuid)
     assert notice.title == "你的「資料檢核員」申請通過了"
     assert (notice.body, notice.priority) == ("右上角會出現「前往管理平台」，不需要重新登入。", "high")
+    assert notice.params == {"requested_role": "data_auditor", "team_name": None, "new_team_name": None}
 
 
 @pytest.mark.asyncio

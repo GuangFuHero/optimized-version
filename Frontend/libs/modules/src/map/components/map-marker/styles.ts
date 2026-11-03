@@ -92,6 +92,39 @@ export const rescueMapMarkerStyles = {
     overflow: 'hidden',
     textOverflow: 'ellipsis',
   },
+  // ── An open building's entry on the site's map (`RescueMapMarkerItem.building`): square-cornered,
+  // the outline of a building, apart from the round pin of a ticket and a guest's hexagon. ──
+  '.map-building': {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 6,
+    padding: '6px 10px',
+    borderRadius: `${radius.sm}px`,
+    background: color.bg.neutral.default,
+    border: `2px solid ${color.bg.primary.default}`,
+    boxShadow: shadow.md,
+    color: color.fg.neutral.default,
+    whiteSpace: 'nowrap',
+    cursor: 'pointer',
+    transition: `transform ${motion.transition.spring}`,
+  },
+  // A sentence, not a count: a size down from a number, in the body face.
+  '.map-building__text': {
+    fontFamily: typography.body[300].fontFamily,
+    ...displayTextSizeCss(12),
+    lineHeight: 1,
+    fontWeight: 600,
+  },
+  // A count, in the data face, a size up from the sentence.
+  '.map-building__count': {
+    fontFamily: typography.data[300].fontFamily,
+    ...displayTextSizeCss(13),
+    lineHeight: 1,
+    fontWeight: 700,
+  },
+  '.map-marker-wrapper:hover .map-building': {
+    transform: 'scale(1.04)',
+  },
   // ── Opt-in teardrop pin (`RescueMapMarkerItem.pin`) — admin station map only. ──
   '.map-pin-wrapper': {
     background: 'none',
@@ -125,6 +158,26 @@ export const rescueMapMarkerStyles = {
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // A ticket on the admin 互助地圖: a dot with a white ring (prototype `pinHtml`).
+  '.map-pin--dot .map-pin__drop': {
+    width: 14,
+    height: 14,
+    borderRadius: '50%',
+    transform: 'none',
+    boxShadow: `0 0 0 2px ${color.bg.neutral.default}, 0 1px 4px rgba(15, 23, 42, 0.45)`,
+  },
+  // A station there: a dark rounded square carrying its type's icon (prototype `stationHtml`).
+  '.map-pin--station .map-pin__drop': {
+    width: 24,
+    height: 24,
+    borderRadius: 7,
+    transform: 'none',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    border: `2px solid ${color.bg.neutral.default}`,
+    boxShadow: '0 2px 7px rgba(15, 23, 42, 0.4)',
+  },
   '.map-pin--dimmed .map-pin__drop': {
     opacity: 0.45,
   },
@@ -136,6 +189,12 @@ export const rescueMapMarkerStyles = {
     outlineOffset: 2,
     border: `2px solid ${color.fg.neutral.default}`,
     boxShadow: '0 10px 24px rgba(15, 23, 42, 0.34)',
+  },
+  // A dot has no border to colour: the dark ring is its selection (prototype).
+  '.map-pin--dot.map-pin--selected .map-pin__drop': {
+    outline: 'none',
+    border: 0,
+    boxShadow: `0 0 0 2px ${color.bg.neutral.default}, 0 0 0 4px ${color.fg.neutral.default}`,
   },
   '.map-pin-wrapper:hover .map-pin:not(.map-pin--selected)': {
     transform: 'translateY(-2px) scale(1.06)',

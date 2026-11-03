@@ -4,12 +4,22 @@ Reads only — no RBAC checkpoints here; the router gates every route on `rbac.v
 (checkpoint 1, super_admin only). Missing role/user raises RbacNotFoundError → 404.
 """
 
+from types import SimpleNamespace
+
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.permissions import GOV_TEAM_ONLY_PERMS, GOV_TEAM_WIDENED_PERMS, PUBLIC_PERMS, Perm
+from app.core.permissions import (
+    GOV_MEMBER_ONLY_PERMS,
+    GOV_TEAM_ONLY_PERMS,
+    GOV_TEAM_WIDENED_PERMS,
+    GOV_TEAM_ZONE_WIDENED_PERMS,
+    PUBLIC_PERMS,
+    Perm,
+)
 from app.core.rbac_scopes import Scope
+from app.core.security import resolve_scope
 from app.models.auth import User
 from app.models.rbac import UserRoleAssign
 from app.models.team import Team
@@ -72,11 +82,11 @@ def list_capabilities() -> CapabilityCatalogResponse:
                 public=perm in PUBLIC_PERMS,
                 team_gov_only=perm in GOV_TEAM_ONLY_PERMS,
                 team_gov_widened=perm in GOV_TEAM_WIDENED_PERMS,
+                team_gov_zone_widened=perm in GOV_TEAM_ZONE_WIDENED_PERMS,
+                team_gov_member_only=perm in GOV_MEMBER_ONLY_PERMS,
             )
         )
-    return CapabilityCatalogResponse(
-        scopes=[s.value for s in Scope], capabilities=capabilities
-    )
+    return CapabilityCatalogResponse(scopes=[s.value for s in Scope], capabilities=capabilities)
 
 
 async def get_matrix(db: AsyncSession) -> MatrixResponse:
@@ -88,7 +98,9 @@ async def get_matrix(db: AsyncSession) -> MatrixResponse:
     return MatrixResponse(
         roles=[
             RoleGrants(
-                uuid=role.uuid, name=role.name, kind=role.kind,
+                uuid=role.uuid,
+                name=role.name,
+                kind=role.kind,
                 grants=grants_by_role.get(str(role.uuid), {}),
             )
             for role in roles
@@ -103,6 +115,31 @@ async def get_role(db: AsyncSession, role_uuid: str) -> RoleGrants:
         raise RbacNotFoundError("Role not found")
     grants = {key: scope for _, key, scope in await role_repository.get_grants(db, role_uuid=role_uuid)}
     return RoleGrants(uuid=role.uuid, name=role.name, kind=role.kind, grants=grants)
+
+
+async def _effective_scopes(db: AsyncSession, user_uuid: str, identity) -> dict[str, Scope]:
+    """What `identity` resolves to at checkpoint 1: its grants after the gov-team rules.
+
+    The grants alone are not the answer: a gov team's `team` and `zone` grants widen to `all`
+    (GOV_TEAM_WIDENED_PERMS, GOV_TEAM_ZONE_WIDENED_PERMS), and an NGO member's GOV_MEMBER_ONLY_PERMS
+    resolve to `none`. Each grant goes through `resolve_scope`, so this view and every check agree.
+    A capability that resolves to `none` is left out, as one never granted is.
+    """
+    grants = await user_repository.get_user_permissions(db, user_uuid, identity=identity)
+    stand_in = SimpleNamespace(uuid=user_uuid, active_identity=identity)
+    cache: dict = {user_uuid: grants}
+    effective: dict[str, Scope] = {}
+    for key, granted in grants.items():
+        try:
+            perm = Perm(key)
+        except ValueError:
+            # A key no code checks (e.g. added at runtime through /admin/rbac): nothing widens it.
+            effective[key] = granted
+            continue
+        scope = await resolve_scope(stand_in, perm, db, cache)
+        if scope != Scope.NONE:
+            effective[key] = scope
+    return effective
 
 
 async def get_user_permissions_detail(db: AsyncSession, user_uuid: str) -> UserPermissionsResponse:
@@ -121,7 +158,7 @@ async def get_user_permissions_detail(db: AsyncSession, user_uuid: str) -> UserP
 
     reported = []
     for identity in identities:
-        effective = await user_repository.get_user_permissions(db, user_uuid, identity=identity)
+        effective = await _effective_scopes(db, user_uuid, identity)
         role = roles_by_uuid.get(identity.role_uuid)
         reported.append(
             IdentityPermissions(
@@ -157,15 +194,9 @@ async def set_role_permission(
 
     # ADR-061: rbac.* stays super_admin-only — it cannot be delegated to any other role.
     if cap in _RBAC_GOVERNANCE_CAPS and role.name != SUPER_ADMIN_ROLE_NAME:
-        raise RbacConflictError(
-            f"{cap.value} is super_admin-only and cannot be granted to '{role.name}'"
-        )
+        raise RbacConflictError(f"{cap.value} is super_admin-only and cannot be granted to '{role.name}'")
 
-    if (
-        role.name == SUPER_ADMIN_ROLE_NAME
-        and cap in _SUPER_ADMIN_LOCKED_CAPS
-        and scope == Scope.NONE
-    ):
+    if role.name == SUPER_ADMIN_ROLE_NAME and cap in _SUPER_ADMIN_LOCKED_CAPS and scope == Scope.NONE:
         raise RbacConflictError(f"Cannot remove {cap.value} from {SUPER_ADMIN_ROLE_NAME}")
 
     permission = await permission_repository.ensure_by_key(db, cap.value)
@@ -175,9 +206,7 @@ async def set_role_permission(
     return await get_role(db, role_uuid)
 
 
-async def revoke_role_permission(
-    db: AsyncSession, *, actor: User, role_uuid: str, cap: Perm
-) -> None:
+async def revoke_role_permission(db: AsyncSession, *, actor: User, role_uuid: str, cap: Perm) -> None:
     """Revoke one matrix cell. Checkpoint 1: rbac.edit, super_admin only. Idempotent.
 
     Guard (ADR-056): super_admin must not lose rbac.edit/rbac.assign.
@@ -194,9 +223,7 @@ async def revoke_role_permission(
     permission = await permission_repository.get_by_key(db, cap.value)
     if permission is None:
         return  # nothing registered → nothing to revoke (idempotent)
-    await role_repository.delete_grant(
-        db, role_uuid=role_uuid, permission_uuid=str(permission.uuid)
-    )
+    await role_repository.delete_grant(db, role_uuid=role_uuid, permission_uuid=str(permission.uuid))
 
 
 async def _require_team(db: AsyncSession, team_uuid: str | None) -> None:
@@ -352,14 +379,18 @@ async def unassign_user_role(
         )
 
     assignment = (
-        await db.execute(
-            select(UserRoleAssign).where(
-                UserRoleAssign.user_uuid == user_uuid,
-                UserRoleAssign.role_uuid == role_uuid,
-                UserRoleAssign.team_uuid.is_not_distinct_from(team_uuid),
+        (
+            await db.execute(
+                select(UserRoleAssign).where(
+                    UserRoleAssign.user_uuid == user_uuid,
+                    UserRoleAssign.role_uuid == role_uuid,
+                    UserRoleAssign.team_uuid.is_not_distinct_from(team_uuid),
+                )
             )
         )
-    ).scalars().first()
+        .scalars()
+        .first()
+    )
     if assignment is None:
         raise RbacNotFoundError("User is not assigned this role")
 
@@ -374,6 +405,4 @@ async def unassign_user_role(
         except AdminConflictError as err:
             raise RbacConflictError(str(err)) from err
 
-    await user_repository.unassign_role(
-        db, user_uuid=user_uuid, role_uuid=role_uuid, team_uuid=team_uuid
-    )
+    await user_repository.unassign_role(db, user_uuid=user_uuid, role_uuid=role_uuid, team_uuid=team_uuid)

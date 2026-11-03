@@ -1,11 +1,5 @@
 'use client';
 
-import AddRoundedIcon from '@mui/icons-material/AddRounded';
-import EditRoundedIcon from '@mui/icons-material/EditRounded';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import LoginRoundedIcon from '@mui/icons-material/LoginRounded';
-import VerifiedRoundedIcon from '@mui/icons-material/VerifiedRounded';
-import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded';
 import {
   Alert,
   AlertTitle,
@@ -18,6 +12,7 @@ import {
   Typography,
 } from '@mui/material';
 import {
+  Fragment,
   useEffect,
   useId,
   useRef,
@@ -27,8 +22,9 @@ import {
   type Ref,
 } from 'react';
 
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
 
+import { useBuilding } from '../../building/use-building';
 import { LocationPicker } from '../../map/components/location-picker';
 import { SiteActionDrawer } from '../../shell/site/site-action-drawer';
 import { SiteBadge } from '../../shell/site/site-badge';
@@ -46,6 +42,7 @@ import {
   type FoundDoor,
 } from '../address-lookup';
 import { PhotoLinkEditor } from '../photos';
+import { EmergencyCallNotice } from './emergency-call-notice';
 import {
   holdHelpRequestDraft,
   sessionDraftStorage,
@@ -55,12 +52,14 @@ import {
   emptyHelpRequestForm,
   emptyNeed,
   findMissingFields,
-  hasRescueNeed,
   isQuantityMissing,
   MAX_NEEDS,
+  rescueNeedRow,
   type HelpRequestForm,
   type PickedPoint,
 } from './help-request-form';
+import { BuildingPlace } from './building-place';
+import type { HelpRequestPlace } from './open-help-request';
 import { NeedDraftRow } from './need-draft-row';
 import {
   usePinAddressLookup,
@@ -86,6 +85,8 @@ interface HelpRequestDrawerProps {
   open: boolean;
   /** A point picked on the main map to start from; without one the drawer asks the device. */
   seed: PickedPoint | null;
+  /** A building's floor it was opened on, whose address and floor the form starts with. */
+  place?: HelpRequestPlace | null;
   /** Whether it starts from the draft kept in this tab: not at a point picked on the map. */
   bringsBackDraft: boolean;
   isAuthenticated: boolean;
@@ -109,6 +110,7 @@ interface HelpRequestDrawerProps {
 export function HelpRequestDrawer({
   open,
   seed,
+  place = null,
   bringsBackDraft,
   isAuthenticated,
   userId,
@@ -132,6 +134,7 @@ export function HelpRequestDrawer({
     <HelpRequestFormDrawer
       open={open}
       seed={seed}
+      place={place}
       bringsBackDraft={bringsBackDraft}
       userId={userId}
       submitting={submitting}
@@ -165,7 +168,7 @@ function GuestHelpRequestDrawer({
           </Button>
           <Button
             variant="contained"
-            startIcon={<LoginRoundedIcon />}
+            startIcon={<Icons.logIn />}
             onClick={onSignIn}
             sx={{ flex: 2 }}
           >
@@ -183,27 +186,6 @@ function GuestHelpRequestDrawer({
         <EmergencyCallNotice />
       </Stack>
     </SiteActionDrawer>
-  );
-}
-
-/**
- * Small, in the PM's words (2026-10-10): whoever reaches the site already knows to call 119, so it
- * says what the platform is for instead of leading the form.
- */
-function EmergencyCallNotice() {
-  return (
-    <Alert
-      severity="error"
-      sx={{
-        py: 0.25,
-        fontSize: displayTextSize[12],
-        lineHeight: 1.5,
-        '& .MuiAlert-icon': { py: 0.5, fontSize: 18 },
-      }}
-    >
-      緊急醫療需求請即時撥打 <strong>119</strong>{' '}
-      或當地醫院電話，平台為災害時期透明資訊、尋求志工用。
-    </Alert>
   );
 }
 
@@ -278,22 +260,22 @@ function noteLook(kind: AddressNote['kind'], error: boolean) {
     case 'confirmed':
       return {
         color: color.fg.success,
-        icon: <VerifiedRoundedIcon sx={{ fontSize: NOTE_ICON_SIZE }} />,
+        icon: <Icons.badgeCheck sx={{ fontSize: NOTE_ICON_SIZE }} />,
       };
     case 'mismatch':
       return {
         color: color.fg.warning,
-        icon: <WarningAmberRoundedIcon sx={{ fontSize: NOTE_ICON_SIZE }} />,
+        icon: <Icons.triangleAlert sx={{ fontSize: NOTE_ICON_SIZE }} />,
       };
     case 'edited':
       return {
         color: color.fg.neutral.muted,
-        icon: <EditRoundedIcon sx={{ fontSize: NOTE_ICON_SIZE }} />,
+        icon: <Icons.penLine sx={{ fontSize: NOTE_ICON_SIZE }} />,
       };
     default:
       return {
         color: error ? color.fg.danger : color.fg.neutral.muted,
-        icon: <InfoOutlinedIcon sx={{ fontSize: NOTE_ICON_SIZE }} />,
+        icon: <Icons.info sx={{ fontSize: NOTE_ICON_SIZE }} />,
       };
   }
 }
@@ -404,6 +386,7 @@ function AddressLookupNote({
 function HelpRequestFormDrawer({
   open,
   seed,
+  place = null,
   bringsBackDraft,
   userId,
   submitting,
@@ -418,7 +401,7 @@ function HelpRequestFormDrawer({
     userId ? draftHold.read(sessionDraftStorage(), userId) : null,
   );
   const [form, setForm] = useState<HelpRequestForm>(
-    () => draft ?? emptyHelpRequestForm(seed),
+    () => draft ?? emptyHelpRequestForm(seed, place),
   );
   const notesLabelId = useId();
   const addressId = useId();
@@ -457,11 +440,17 @@ function HelpRequestFormDrawer({
     }
   }, [draftHold, form, open, userId]);
 
-  const missing = findMissingFields(form);
+  // Filed in a building: its floor's areas decide whether one must be picked.
+  const placeBuilding = useBuilding(form.building);
+  const floorAreas =
+    placeBuilding.building?.floors.find((floor) => floor.label === form.floor)
+      ?.areas ?? [];
+  const missing = findMissingFields(form, floorAreas);
   const missingKeys = new Set(missing.map((field) => field.key));
   const isMissing = (key: (typeof missing)[number]['key']) =>
     touched && missingKeys.has(key);
   const lastNeed = form.needs[form.needs.length - 1];
+  const emergencyNoticeRow = rescueNeedRow(form.needs);
   const note = addressNote({
     fields: form,
     pin: form.landmark,
@@ -567,8 +556,9 @@ function HelpRequestFormDrawer({
     }
 
     host.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // A menu's own input is hidden: it is the combobox that takes the focus.
     host
-      .querySelector<HTMLElement>('input, textarea, button')
+      .querySelector<HTMLElement>('input, textarea, button, [role="combobox"]')
       ?.focus({ preventScroll: true });
   };
 
@@ -592,9 +582,9 @@ function HelpRequestFormDrawer({
     onClose();
   };
 
-  /** As a fresh opening would be — at the map's point, if it was opened at one. */
+  /** As a fresh opening would be — at the map's point, or the building's floor, if it was opened at one. */
   const startOver = () => {
-    setForm(emptyHelpRequestForm(seed));
+    setForm(emptyHelpRequestForm(seed, place));
     setCheck(null);
     setRestored(false);
     setTouched(false);
@@ -651,8 +641,6 @@ function HelpRequestFormDrawer({
           </Alert>
         ) : null}
 
-        {hasRescueNeed(form.needs) ? <EmergencyCallNotice /> : null}
-
         {/* The asterisk is hidden from screen readers, so the rule is said in words, up front. */}
         <Typography
           sx={{
@@ -689,100 +677,127 @@ function HelpRequestFormDrawer({
             />
           </Box>
 
-          {/* The point before the address: once it is marked, the address only says how to tell
-              someone where it is (designer, 2026-09-10). */}
-          <Stack data-field="landmark" spacing={1}>
-            <FieldLabel required>地標</FieldLabel>
-            <LocationPicker
-              value={form.landmark}
-              onChange={set('landmark')}
-              invalid={isMissing('landmark')}
+          {/* Filed from a building's floor: the building and the floor stand for the landmark and
+              the address, which the backend copies from it. */}
+          {form.building ? (
+            <BuildingPlace
+              building={placeBuilding.building}
+              loaded={placeBuilding.hasData}
+              failed={Boolean(placeBuilding.error)}
+              floor={form.floor}
+              areas={floorAreas}
+              areaMissing={isMissing('area')}
+              room={form.room}
+              onRoomChange={set('room')}
+              onLeave={() =>
+                setForm((current) => ({ ...current, building: null }))
+              }
             />
-            {isMissing('landmark') ? (
-              <FieldNote error>請在地圖上標記位置</FieldNote>
-            ) : (
-              <FieldNote>
-                {form.landmark
-                  ? '位置不精準沒關係，可以拖曳大頭針微調'
-                  : '先在地圖上標好位置，下面的地址就只是補充說明'}
-              </FieldNote>
-            )}
-          </Stack>
+          ) : (
+            <>
+              {/* The point before the address: once it is marked, the address only says how to tell
+              someone where it is (designer, 2026-09-10). */}
+              <Stack data-field="landmark" spacing={1}>
+                <FieldLabel required>地標</FieldLabel>
+                <LocationPicker
+                  value={form.landmark}
+                  onChange={set('landmark')}
+                  invalid={isMissing('landmark')}
+                />
+                {isMissing('landmark') ? (
+                  <FieldNote error>請在地圖上標記位置</FieldNote>
+                ) : (
+                  <FieldNote>
+                    {form.landmark
+                      ? '位置不精準沒關係，可以拖曳大頭針微調'
+                      : '先在地圖上標好位置，下面的地址就只是補充說明'}
+                  </FieldNote>
+                )}
+              </Stack>
 
-          {/* The address has a row of its own, floor and room side by side under it: the official
+              {/* The address has a row of its own, floor and room side by side under it: the official
               line a lookup puts in is long, and beside two narrow fields it would be cut off, hiding
               what the typed words became. So on a wider screen too, where the drawer is 440px across
               and the address beside them kept about 116px (designer, 2026-10-27). The note is right
               under the address, and next to it in the page, so a Tab from it goes to the note's
               button before the floor. */}
-          <Box
-            data-field="address"
-            sx={{
-              display: 'grid',
-              gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
-              gridTemplateAreas: '"address address" "note note" "floor room"',
-              // Spaced by the fields and the note, so an empty note leaves no gap.
-              columnGap: 1.5,
-              alignItems: 'start',
-            }}
-          >
-            {/* Filled in from the pin, or typed: the line goes as it stands, checked once left. This
-                and the floor and unit are where help is needed, not the reporter's home, so a phone
-                filling in the contact below is told to leave all three alone. */}
-            <TextField
-              id={addressId}
-              inputRef={addressRef}
-              label="地址"
-              required
-              size="small"
-              value={form.address}
-              onChange={(event) => set('address')(event.target.value)}
-              onBlur={leaveAddress}
-              placeholder="花蓮縣光復鄉中山路100號"
-              error={isMissing('address')}
-              helperText={addressHelper}
-              slotProps={{
-                htmlInput: {
-                  maxLength: MAX_LENGTH.address,
-                  'aria-describedby': addressDescribedBy,
-                  autoComplete: 'off',
-                },
-              }}
-              sx={{ gridArea: 'address' }}
-            />
-            <AddressLookupNote
-              ref={addressNoteRef}
-              textId={addressNoteId}
-              note={note}
-              error={isMissing('address') && addressAsked}
-              onBlur={leaveAddress}
-              onPinDoor={takePinDoor}
-              onTypedLine={takeTypedLine}
-            />
-            {/* With the unit typed in: the address is shown as typed, with no 樓 or 室 added. */}
-            <TextField
-              label="樓層"
-              size="small"
-              value={form.floor}
-              onChange={(event) => set('floor')(event.target.value)}
-              placeholder="3樓"
-              slotProps={{
-                htmlInput: { maxLength: MAX_LENGTH.floor, autoComplete: 'off' },
-              }}
-              sx={{ gridArea: 'floor', mt: 1.5 }}
-            />
-            <TextField
-              label="戶／室"
-              size="small"
-              value={form.room}
-              onChange={(event) => set('room')(event.target.value)}
-              placeholder="302室"
-              slotProps={{
-                htmlInput: { maxLength: MAX_LENGTH.room, autoComplete: 'off' },
-              }}
-              sx={{ gridArea: 'room', mt: 1.5 }}
-            />
-          </Box>
+              <Box
+                data-field="address"
+                sx={{
+                  display: 'grid',
+                  gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
+                  gridTemplateAreas:
+                    '"address address" "note note" "floor room"',
+                  // Spaced by the fields and the note, so an empty note leaves no gap.
+                  columnGap: 1.5,
+                  alignItems: 'start',
+                }}
+              >
+                {/* Filled in from the pin, or typed: the line goes as it stands, checked once left. This
+                    and the floor and unit are where help is needed, not the reporter's home, so a phone
+                    filling in the contact below is told to leave all three alone. */}
+                <TextField
+                  id={addressId}
+                  inputRef={addressRef}
+                  label="地址"
+                  required
+                  size="small"
+                  value={form.address}
+                  onChange={(event) => set('address')(event.target.value)}
+                  onBlur={leaveAddress}
+                  placeholder="花蓮縣光復鄉中山路100號"
+                  error={isMissing('address')}
+                  helperText={addressHelper}
+                  slotProps={{
+                    htmlInput: {
+                      maxLength: MAX_LENGTH.address,
+                      'aria-describedby': addressDescribedBy,
+                      autoComplete: 'off',
+                    },
+                  }}
+                  sx={{ gridArea: 'address' }}
+                />
+                <AddressLookupNote
+                  ref={addressNoteRef}
+                  textId={addressNoteId}
+                  note={note}
+                  error={isMissing('address') && addressAsked}
+                  onBlur={leaveAddress}
+                  onPinDoor={takePinDoor}
+                  onTypedLine={takeTypedLine}
+                />
+                {/* With the unit typed in: the address is shown as typed, with no 樓 or 室 added. */}
+                <TextField
+                  label="樓層"
+                  size="small"
+                  value={form.floor}
+                  onChange={(event) => set('floor')(event.target.value)}
+                  placeholder="3樓"
+                  slotProps={{
+                    htmlInput: {
+                      maxLength: MAX_LENGTH.floor,
+                      autoComplete: 'off',
+                    },
+                  }}
+                  sx={{ gridArea: 'floor', mt: 1.5 }}
+                />
+                <TextField
+                  label="戶／室"
+                  size="small"
+                  value={form.room}
+                  onChange={(event) => set('room')(event.target.value)}
+                  placeholder="302室"
+                  slotProps={{
+                    htmlInput: {
+                      maxLength: MAX_LENGTH.room,
+                      autoComplete: 'off',
+                    },
+                  }}
+                  sx={{ gridArea: 'room', mt: 1.5 }}
+                />
+              </Box>
+            </>
+          )}
 
           {/* Who to find there — often not whoever is filling this in (designer, 2026-08-11). */}
           <Box
@@ -841,29 +856,33 @@ function HelpRequestFormDrawer({
           ) : null}
           <Stack data-field="quantity" spacing={1.5}>
             {form.needs.map((row, index) => (
-              <NeedDraftRow
-                // A row has no id of its own; removing one re-keys those after it, which only
-                // remounts their two text boxes.
-                key={index}
-                row={row}
-                index={index}
-                showIndex={form.needs.length > 1}
-                canRemove={form.needs.length > 1}
-                invalid={isMissing('needs') && !row.need}
-                quantityMissing={
-                  isMissing('quantity') && isQuantityMissing(row)
-                }
-                onChange={(next) =>
-                  set('needs')(
-                    form.needs.map((current, at) =>
-                      at === index ? next : current,
-                    ),
-                  )
-                }
-                onRemove={() =>
-                  set('needs')(form.needs.filter((_, at) => at !== index))
-                }
-              />
+              // A row has no id of its own; removing one re-keys those after it, which only
+              // remounts their two text boxes.
+              <Fragment key={index}>
+                <NeedDraftRow
+                  row={row}
+                  index={index}
+                  showIndex={form.needs.length > 1}
+                  canRemove={form.needs.length > 1}
+                  invalid={isMissing('needs') && !row.need}
+                  quantityMissing={
+                    isMissing('quantity') && isQuantityMissing(row)
+                  }
+                  onChange={(next) =>
+                    set('needs')(
+                      form.needs.map((current, at) =>
+                        at === index ? next : current,
+                      ),
+                    )
+                  }
+                  onRemove={() =>
+                    set('needs')(form.needs.filter((_, at) => at !== index))
+                  }
+                />
+                {/* Right under the row that picked someone trapped or hurt: at the top of the form,
+                    or under the last row, a phone could leave it out of sight of whoever picked it. */}
+                {index === emergencyNoticeRow ? <EmergencyCallNotice /> : null}
+              </Fragment>
             ))}
           </Stack>
           {/* Offered only once the last one has its kind: not a blank second row up front. At the
@@ -884,7 +903,7 @@ function HelpRequestFormDrawer({
                 fontWeight: 500,
               }}
             >
-              <AddRoundedIcon sx={{ fontSize: 16 }} />
+              <Icons.plus sx={{ fontSize: 16 }} />
               還需要別的嗎？
             </ButtonBase>
           ) : null}

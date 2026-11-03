@@ -75,12 +75,22 @@ export type DashboardMetric =
  * A KPI card: a metric plus how the design draws it. `accent` is the left bar's colour, named by
  * token role rather than by colour so this file keeps no styling — the page resolves it against
  * `designTokens`. `emphasis` outlines one card louder than the rest (未指派, the one the design wants
- * read first).
+ * read first). `asOf` marks a running total, read at the end of the range rather than counted over
+ * it: it is asked for with the end date only and captioned 截至, not 建立. `footnote` is a second
+ * number, asked for with the same filters, that only the card's last line reads.
  */
 export type DashboardKpi = DashboardMetric & {
   accent: DashboardKpiAccent;
   emphasis?: boolean;
+  asOf?: boolean;
+  footnote?: KpiFootnote;
 };
+
+/** A number read only for a card's last line, and the line it makes. */
+export interface KpiFootnote {
+  metric: TicketMetric;
+  line: (value: number) => string;
+}
 
 /** Six cards, in the design's order. 疑似重複的單 is chart-only, so it is not a card. */
 export const TICKET_KPIS: readonly DashboardKpi[] = [
@@ -97,6 +107,56 @@ export const TICKET_KPIS: readonly DashboardKpi[] = [
   { domain: 'tickets', metric: 'completion_rate', accent: 'primary' },
 ];
 
+/**
+ * The row under the six, as the needs stood at the end of the range (the backend rebuilds past days
+ * from the audit log). The gap card turns to the warning colours while anyone is missing.
+ *
+ * Volunteer numbers count 人力 needs only, never 物資, 搜救 or 醫療: a 物資 need's quantity is things,
+ * not people (便當 84 個 would read as 84 volunteers), and the others' head counts are not something
+ * volunteers signing up can fill. 物資 does not disappear: its own card, counted in 筆, goes first,
+ * in the same accent as 志工需求人數 (both are 需求), and without the warning colours — an unclaimed
+ * 物資 need is not a missing person.
+ */
+export const VOLUNTEER_KPIS: readonly DashboardKpi[] = [
+  {
+    domain: 'tickets',
+    metric: 'supply_needs',
+    accent: 'secondary',
+    asOf: true,
+    footnote: { metric: 'supply_needs_unclaimed', line: supplyUnclaimedLine },
+  },
+  {
+    domain: 'tickets',
+    metric: 'volunteers_needed',
+    accent: 'secondary',
+    asOf: true,
+  },
+  {
+    domain: 'tickets',
+    metric: 'volunteers_matched',
+    accent: 'success',
+    asOf: true,
+  },
+  {
+    domain: 'tickets',
+    metric: 'volunteer_gap',
+    accent: 'warning',
+    asOf: true,
+    footnote: { metric: 'volunteer_gap_needs', line: gapNeedsLine },
+  },
+];
+
+/**
+ * The line under a volunteer card, shorter than the catalog's description: the whole description
+ * said too much to read on a card, and widened it. It stays in the card's title.
+ */
+export const VOLUNTEER_SHORT_LINES: Partial<
+  Record<DashboardMetric['metric'], string>
+> = {
+  volunteers_needed: '人力共要幾人（含已額滿、已結束）',
+  volunteers_matched: '已被承接的名額（一人接兩筆算 2）',
+};
+
 export const STATION_KPIS: readonly DashboardKpi[] = [
   { domain: 'stations', metric: 'station_count', accent: 'secondary' },
 ];
@@ -104,8 +164,20 @@ export const STATION_KPIS: readonly DashboardKpi[] = [
 /** Every KPI the page queries, whichever group it is drawn in. */
 export const DASHBOARD_KPIS: readonly DashboardKpi[] = [
   ...TICKET_KPIS,
+  ...VOLUNTEER_KPIS,
   ...STATION_KPIS,
 ];
+
+/**
+ * The dates a card is asked for. A running total takes the end date only: the backend ignores the
+ * start for it, and leaving it out keeps the card from asking again when only the start moves.
+ */
+export function kpiQueryRange(
+  kpi: Pick<DashboardKpi, 'asOf'>,
+  range: DashboardDateRange,
+): DashboardDateRange {
+  return kpi.asOf ? { end_date: range.end_date } : range;
+}
 
 /** `YYYY-MM-DD` for the calendar day `now` falls on in `timeZone`. */
 export function localDateString(now: Date, timeZone: string): string {
@@ -175,8 +247,9 @@ function shortDate(isoDate: string): string {
 }
 
 /**
- * Which tickets a KPI card counts, for its title. Every number is filtered by creation date, so the
- * card says so, e.g. 未指派（今日建立）.
+ * Which tickets a KPI card counts, for the line under its title. Every number is filtered by
+ * creation date, so the card says so, e.g. 今日建立. It is not put in the title in brackets: a card
+ * a sixth of the row wide would break 任務單總量（近 30 天建立） in two.
  */
 export function rangeCreatedCaption(
   range: DashboardDateRange,
@@ -190,6 +263,27 @@ export function rangeCreatedCaption(
   const end = shortDate(range.end_date ?? today);
   if (!range.start_date) return `${end} 以前建立`;
   return `${shortDate(range.start_date)}–${end} 建立`;
+}
+
+/** Which day a running total stands at, for its card: 截至今日, or 截至 10/31 for a past end date. */
+export function rangeAsOfCaption(
+  range: DashboardDateRange,
+  today: string,
+): string {
+  const end = range.end_date ?? today;
+  return end === today ? '截至今日' : `截至 ${shortDate(end)}`;
+}
+
+/** The gap card's last line, from how many needs are still short. */
+export function gapNeedsLine(needs: number): string {
+  return needs > 0
+    ? `${countFormat.format(needs)} 項需求還缺人`
+    : '目前沒有缺人的需求';
+}
+
+/** The 物資 card's last line, from how many 物資 needs nobody has taken. */
+export function supplyUnclaimedLine(needs: number): string {
+  return needs > 0 ? `還沒人接 ${countFormat.format(needs)} 筆` : '都有人接了';
 }
 
 export type KpiAvailability =
@@ -212,6 +306,42 @@ export function kpiAvailability(
     return { kind: 'needs-range', maxDays };
   }
   return { kind: 'ready' };
+}
+
+/**
+ * As `kpiAvailability`, for a chart grouped by `x`. A daily trend can be capped without needing a
+ * range (`volunteer_gap`: an open range draws the last 30 days, a range longer than
+ * `max_range_days` is a 400), so the cap holds whenever such a metric is drawn by date.
+ */
+export function chartAvailability(
+  spec: Pick<MetricSpec, 'requires_date_range' | 'max_range_days'> | undefined,
+  range: DashboardDateRange,
+  x: string,
+): KpiAvailability {
+  const maxDays = spec?.max_range_days;
+  if (x === 'date' && !spec?.requires_date_range && maxDays) {
+    const length = rangeLengthDays(range);
+    if (length !== null && length > maxDays) {
+      return { kind: 'needs-range', maxDays };
+    }
+  }
+  return kpiAvailability(spec, range);
+}
+
+/** How many days the backend draws such a trend over when the range has no start. */
+export const OPEN_TREND_DAYS = 30;
+
+/**
+ * The days a capped daily trend covers when the range is open (全部), for its card to say: the other
+ * charts start at the beginning of the event there, and this one does not. Null otherwise.
+ */
+export function openTrendDays(
+  spec: Pick<MetricSpec, 'requires_date_range' | 'max_range_days'> | undefined,
+  range: DashboardDateRange,
+  x: string,
+): number | null {
+  const capped = !spec?.requires_date_range && Boolean(spec?.max_range_days);
+  return x === 'date' && capped && !range.start_date ? OPEN_TREND_DAYS : null;
 }
 
 const countFormat = new Intl.NumberFormat('zh-TW', {

@@ -1,11 +1,14 @@
 'use client';
 
-import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
-import ExpandMoreRoundedIcon from '@mui/icons-material/ExpandMoreRounded';
 import { Box, ButtonBase, Stack, Typography } from '@mui/material';
 import { useId, useMemo } from 'react';
 
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import {
+  Button,
+  designTokens,
+  displayTextSize,
+  Icons,
+} from '@rescue-frontend/ui';
 
 import type { RescueMapMarkerItem } from '../map/types';
 import { resolveNeedClaim } from '../ticket/needs/need-claim';
@@ -296,6 +299,8 @@ interface FloorSectionProps {
   /** A line under the header, for 未定位. */
   note?: string;
   onOpenTicket: (marker: RescueMapMarkerItem) => void;
+  /** 在這一層請求協助, at the foot of the open floor; left out when not given. */
+  onRequestHelp?: () => void;
 }
 
 /**
@@ -315,6 +320,7 @@ export function FloorSection({
   isAuthenticated,
   note,
   onOpenTicket,
+  onRequestHelp,
 }: FloorSectionProps) {
   const bodyId = useId();
   const summary = summarizeTickets(tickets);
@@ -328,7 +334,7 @@ export function FloorSection({
       ? sorted
       : sorted.filter((ticket) => !isClosedTicket(ticket));
   }, [showClosed, tickets]);
-  const ChevronIcon = open ? ExpandMoreRoundedIcon : ChevronRightRoundedIcon;
+  const ChevronIcon = open ? Icons.chevronDown : Icons.chevronRight;
   const bodyText = {
     fontSize: displayTextSize[13],
     lineHeight: 1.6,
@@ -409,12 +415,12 @@ export function FloorSection({
               搜救 {summary.rescueOpen}
             </Typography>
           ) : null}
-          {summary.lack > 0 ? (
+          {summary.shortCount > 0 ? (
             <Typography
               component="span"
               sx={{ ...pill, px: 0, color: color.fg.neutral.muted }}
             >
-              缺 {summary.lack}
+              {summary.shortCount} 件缺人
             </Typography>
           ) : null}
           <Typography
@@ -462,6 +468,18 @@ export function FloorSection({
               ))}
             </Stack>
           )}
+          {onRequestHelp ? (
+            <Button
+              variant="ghost"
+              startIcon={
+                <Icons.plus sx={{ fontSize: designTokens.iconSize.md }} />
+              }
+              onClick={onRequestHelp}
+              sx={{ mt: 1 }}
+            >
+              在這一層請求協助
+            </Button>
+          ) : null}
         </Box>
       ) : null}
     </Box>

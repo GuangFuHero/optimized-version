@@ -45,23 +45,24 @@ Admin 使用獨立的 Next.js 16 app `apps/admin`，預設 port 為 3001。頁�
 
 - `page.tsx` + `admin-map-page.client.tsx` 已存在
 - 使用 `@rescue-frontend/modules` 的 `Map`
-- 已有「新增站點 / 新增任務」控制 UI
-- 依賴 `StationCreateDrawer`（共用的 `StationFormDrawer` 新增模式）、`TicketCreateSheet`（任務管理的 `TicketForm` 新增模式，以點下的位置為圖釘）
-- 只有登入狀態會顯示建立 controls
+- 顯示任務單與資源站點（可依優先級、狀態、站點類型篩選）與各種區域；右側為區域清單與詳情
+- 可圈選、編輯、調整範圍、刪除區域（危險區叫「解除危險區」），並指派責任區團隊（依 `work_zone.*` 權限）；
+  刪除、團隊與範圍的變更會先等 5 秒，期間可按「復原」
+- 地圖上不再放圖釘新增站點或任務（設計沒有這個流程）；新增任務請到任務管理
 
 ### `/stations`（資源站點管理 v2，ADMIN-026）
 
 - `page.tsx` 掛載 `StationManagementPage`（`libs/modules/src/station/admin/station-management/`），接真實 API
-- 篩選（類型、營運狀態、行政區、指派 Team、官方認定、成立、更新時間、關鍵字，存在 URL）、列表／地圖切換。列表上方的狀態統計（各營運狀態的數量卡片）照設計拿掉（糖 2026-10-31）
+- 篩選（類型、營運狀態、行政區、指派團隊、官方認定、成立、更新時間、關鍵字，存在 URL）、列表／地圖切換。列表上方一排統計：全部和三種營運狀態的數量（`stationFacets` 不帶篩選），點一格篩那個營運狀態，再點一次或點「全部」取消，跟篩選面板是同一個篩選；讀不到時格子寫「—」，上方一行小字加重試（糖 2026-11-01，STAT-101～109）
 - 列表會分頁讀完權限範圍內所有站點（上限 5,000），官方認定、更新時間篩選與排序（開設中優先、最近更新優先）在前端做
 - 站點抽屜是 `/stations` 自己的 `StationDetailSheet`（libs/ui 的 `SheetFrame` 加 `variant="admin"`，詳情與編輯是同一個 frame 裡切換的 `SheetLayout`，不會疊第二層），不用地圖的 `StationDetailDrawer`：基本資料、照片、資源、聯絡資訊（無 `station.view_pii` 時顯示遮罩值且不可改）、版本歷史；`/stations?station=<uuid>` 直接開啟，給通知連結用
 - 新增／編輯用 `station/form` 的 `StationForm`，與兩張 `/map` 的新增共用同一份表單與同一套欄位版面（設計稿 `station-drawer.jsx`）；新增都用 `StationFormDrawer`，`/stations` 傳 `variant="admin"`，編輯則把 `StationFormLayout` 放進站點抽屜；地址只在新增時送出（`UpdateStationInput` 不能改 `secondaryLocation`）
-- 刪除站點、列表上直接改營運狀態與指派 Team；後台（`/stations`、後台地圖）新增的站點帶 `source: "official"`；前台 `/map` 不能新增站點
+- 刪除站點、列表上直接改營運狀態與指派團隊；後台（`/stations`、後台地圖）新增的站點帶 `source: "official"`；前台 `/map` 不能新增站點
 - 前台修改建議審查：依欄位決定採用／不採用（可改寫入值），一次送出附一則審核備註（`mergeStationSuggestions` 只收一個 `reviewNote`；ticket 寫「每一則附備註」，為了保持一次送出不可分割，維持一則）
 - 批次匯入（試算 → 欄位對應 → 確認，失敗列可下載）與匯出（單一類型，CSV／Excel）
-- 匯入是新增站點的一種方式：放在「新增站點」的下拉，列表空的時候也在「新增站點」旁；要同時有 `station.add` 和 `station.import` 才看得到，沒有新增權限的人不顯示（糖 2026-10-31）
+- 匯入是新增站點的一種方式：放在「新增站點 ▾」的下拉，列表空的時候也是同一顆「新增站點 ▾」；要同時有 `station.add` 和 `station.import` 才看得到，沒有新增權限的人不顯示（糖 2026-10-31）
 - 匯入一律官方：後端批次匯入新增的站點一律存 `source: "official"`，不看檔案的 source 欄（CSV、Excel、貼上的內容都一樣）
-- 匯入新增的站點用預設營運狀態（營運中），和其他新增的站點一樣；更新既有站點不改營運狀態
+- 匯入新增的站點用預設營運狀態（開設中），和其他新增的站點一樣；更新既有站點不改營運狀態
 - 匯入視窗依設計稿：欄位對應一列三組、「試算結果」只列失敗的列（第幾列／欄位／原因）
 - .xlsx 表頭列上方的標題列（Numbers 匯出時會把表格名稱放在第一列）或空白列，由後端略過
 - 權限一律看後端回的 capabilities（`station.add/edit/delete/review/assign/import/export/view_history/view_pii`）
@@ -88,12 +89,13 @@ Admin 使用獨立的 Next.js 16 app `apps/admin`，預設 port 為 3001。頁�
 - 匯出只能選一種類型，不套用列表篩選
 - 站點照片只能附 URL，沒有上傳端點
 - 站點群（大場地底下掛多個子站，列表縮排、子站標「屬：○○」）：後端已有欄位（`stations.child_station_uuid`，指向母站），但 GraphQL 還沒開放，前端讀不到；開放後再做（糖 2026-10-31）
-- 營運狀態文字（開設中／暫時關閉／永久關閉）待產品確認是否改為兩態，只需改 `station/operational-status.ts`
+- 營運狀態三種：開設中／暫停服務／已關閉（`station/operational-status.ts`，跟前台同名，標籤一律淡底，糖 2026-11-01）。設計要暫停服務寫一行原因（`pauseReason`），後端還沒有這個欄位
 
 ### `/tickets`
 
 - 已有 page 檔案
 - 對應的 reusable modules 位於 `ticket/admin/*`
+- 列表上方一排統計：全部、待處理、處理中、已完成的數量（`ticketStats`），點一格篩那個狀態，再點一次或點「全部」取消，跟篩選面板是同一個篩選；志工缺口只顯示、不能點，只算還在招募的人力需求（糖 2026-11-02，ADR-456），跟儀表板的志工缺口同一個數字。已取消不另列一格：「全部」照樣算進去，有已取消的單時在「全部」寫小字「含已取消 N」，要找已取消的單用篩選面板（糖 2026-11-02 改定 STAT-107）。讀不到時格子寫「—」，上方一行小字加重試（糖 2026-11-01，STAT-101～109）
 - 任務詳情的「系統資訊」只有查核狀態（疑似重複的單才出現）；設計稿的公開範圍、自動封存沒有：後端的任務單沒有公開範圍欄位，也沒有自動封存規則與封存天數設定，等後端有了再加
 - 每項需求可寫「進度備註」（`updateTicketTask` 的 `progressNote`，要有該單的 `ticket.edit`）；清空後儲存即刪除。需求狀態仍不能手改（BE-034）
 - 地圖視圖左邊清單：範圍內有圖釘的空間排在任務單前面，點了開逐層檢視
@@ -111,7 +113,7 @@ Admin 使用獨立的 Next.js 16 app `apps/admin`，預設 port 為 3001。頁�
 - 編輯任務單不能移動地標：`UpdateTicketInput` 沒有 geometry，設計稿要求編輯時可改
 - 列表排序只有最新與需求優先（`TicketListOrder` 的 NEWEST／NEEDS_FIRST），沒有設計稿的「優先級 → 缺口 → 更新時間」
 - 篩選沒有設計稿的行政區域、組織分配、時間：`tickets` 查詢沒有這些參數
-- 指派 Team 沒有 API（ADR-049），列的 ⋯ 裡顯示「尚未開放」
+- 指派團隊 沒有 API（ADR-049），列的 ⋯ 裡顯示「尚未開放」
 - 通知連結：`/tickets?ticket=<uuid>` 會直接開抽屜，但後台頂欄的鈴鐺還沒接 `/notifications`，目前沒有東西連進來
 - 空間與任務單混排：任務單由後端分頁，空間不能照設計稿跟任務單一起排序，只能放在第一頁最前面、空間之間排序
 - `buildingMaps` 與每個空間的 `buildingMapTickets` 一次最多 200 筆；後者也不含看不到詳情的單，所以空間的件數與各樓層狀態可能偏少，畫面不會標出

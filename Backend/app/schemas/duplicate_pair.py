@@ -1,4 +1,4 @@
-"""Pydantic schemas for the AI 重複審核 queue in the back office (Spec 025 §2)."""
+"""Pydantic schemas for the 重複審核 queue in the back office (Spec 025 §2)."""
 
 from datetime import datetime
 from typing import Literal
@@ -46,6 +46,7 @@ class DuplicatePairResponse(BaseModel):
     hint_outcome: str | None
     created_at: datetime
     reviewed_by: UUID | None
+    reviewed_by_name: str | None = Field(description="The nickname of `reviewed_by` (ADR-441)")
     reviewed_at: datetime | None
     low: EntitySummaryResponse
     high: EntitySummaryResponse
@@ -66,6 +67,7 @@ class DedupEventResponse(BaseModel):
     uuid: UUID
     event_type: str
     actor_uuid: UUID | None
+    actor_name: str | None = Field(default=None, description="The nickname of `actor_uuid` (ADR-441)")
     source_layer: SourceLayer
     decision_reason: str | None
     engine_version: str | None
@@ -85,6 +87,29 @@ class PropertyForReviewResponse(BaseModel):
     quantity: int | None
     status: str | None
     comment: str | None
+    display_label: str = Field(
+        description="How the item reads: the label set for its need type, else property_name (ADR-446)"
+    )
+    sort_order: int | None = Field(
+        default=None,
+        description="The item's order among its need type's items, from the same field setting, inactive "
+        "ones included; null when there is none (ADR-447)",
+    )
+    data_type: str | None = Field(
+        default=None,
+        description="The control the item's field setting asks for (number, text, single_select, ...); "
+        "null when there is none (ADR-447)",
+    )
+    enum_options: list[str] | None = Field(
+        default=None, description="The choices of a select field; null otherwise (ADR-447)"
+    )
+    unit: str | None = Field(
+        default=None, description="A number field's unit, e.g. 箱; null otherwise (ADR-447)"
+    )
+    is_active: bool | None = Field(
+        default=None,
+        description="Whether the item's field setting is still in use; null when there is none (ADR-447)",
+    )
 
 
 class TaskForReviewResponse(BaseModel):
@@ -101,6 +126,15 @@ class TaskForReviewResponse(BaseModel):
     claim_count: int
     recruiting_stopped: bool
     properties: list[PropertyForReviewResponse]
+    claimant_keys: list[str] = Field(
+        description=(
+            "One opaque key per person on the need (ADR-445). A person on needs of both tickets has the "
+            "same key on each, so the people after a fold are the distinct keys of the needs folded "
+            "together. Keys differ on every other card and do not contain the person's uuid; they are a "
+            "plain hash, so someone who already holds the card and a person's uuid can test for that "
+            "person"
+        )
+    )
 
 
 class PhotoForReviewResponse(BaseModel):
@@ -111,6 +145,19 @@ class PhotoForReviewResponse(BaseModel):
     uuid: UUID
     url: str
     created_at: datetime | None
+
+
+class LocationForReviewResponse(BaseModel):
+    """Where a ticket is: the address down to the room, or the pole (ADR-440). Read-only here."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    location_type: str = Field(description="'address' or 'pole'")
+    full_address: str | None
+    building_section: str | None
+    floor: str | None
+    room: str | None
+    pole_id: str | None
 
 
 class TicketForReviewResponse(BaseModel):
@@ -142,6 +189,9 @@ class TicketForReviewResponse(BaseModel):
     tasks: list[TaskForReviewResponse]
     photos: list[PhotoForReviewResponse]
     disaster_details: dict[str, list[str]]
+    location: LocationForReviewResponse | None = Field(
+        description="Where the ticket is; null when it has no address or pole. A resolve cannot change it"
+    )
 
 
 class TicketsForReviewResponse(BaseModel):
@@ -266,3 +316,50 @@ class ResolveRequest(_Strict):
     photos: list[ResolvePhoto] | None = None
     disaster_details: dict[str, list[str]] | None = None
     note: str | None = None
+
+
+class DuplicateHintRatesResponse(BaseModel):
+    """提示率 and the two 誤報率 estimates for one kind (ADR-458). A rate is null when nothing was counted."""
+
+    entity_kind: Literal["ticket_task", "station"]
+    submissions: int = Field(
+        description="送出次數：民眾送出 task 或 station 的次數，跳不跳提示都算。"
+        "＝ 跳提示的次數 ＋ 這段時間沒跳提示就建立的 task 或 station 數"
+    )
+    hinted: int = Field(
+        description="跳提示的次數：跳出「可能重複」提示的次數。每一次按「仍要建立」都算一次；"
+        "沒按「仍要建立」的提示，同一個人、同一天（台灣時間）、被提示同一筆舊資料，只算一次"
+    )
+    hint_rate: float | None = Field(description="提示率 ＝ 跳提示的次數 ÷ 送出次數（hinted ÷ submissions）")
+    overridden: int = Field(
+        description="按「仍要建立」的次數：跳提示之後，民眾確認不是重複、還是把資料建起來的次數。"
+        "每一次都會開一張配對卡"
+    )
+    reviewed: int = Field(
+        description="已審的配對卡數：按「仍要建立」時開出來的配對卡裡，"
+        "資料檢核員已經判定「是重複」或「不是重複」的張數"
+    )
+    judged_not_duplicate: int = Field(
+        description="判不是重複的配對卡數：已審的配對卡裡，資料檢核員判定「不是重複」的張數"
+    )
+    false_alarm_rate_without_auditors: float | None = Field(
+        description="誤報率（不用審核結果）＝ 按「仍要建立」的次數 ÷ 跳提示的次數（overridden ÷ hinted）。"
+        "只要民眾按「仍要建立」，就當作那次提示錯了"
+    )
+    false_alarm_rate_with_auditors: float | None = Field(
+        description="誤報率（用審核結果）＝ 按「仍要建立」的次數 ×（判不是重複的配對卡數 ÷ 已審的配對卡數）"
+        "÷ 跳提示的次數（overridden × judged_not_duplicate ÷ reviewed ÷ hinted）。"
+        "假設還沒審的配對卡裡，「不是重複」的比例跟已審的一樣。還沒有配對卡審過時是 null"
+    )
+    review_coverage: float | None = Field(
+        description="已審比例 ＝ 已審的配對卡數 ÷ 按「仍要建立」的次數（reviewed ÷ overridden）。"
+        "太低的話，用審核結果的誤報率不太可靠"
+    )
+
+
+class DuplicateHintRatesPage(BaseModel):
+    """The window the metrics cover, and one entry per kind."""
+
+    since: datetime
+    until: datetime
+    items: list[DuplicateHintRatesResponse]

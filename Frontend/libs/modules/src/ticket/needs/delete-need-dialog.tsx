@@ -1,8 +1,5 @@
 'use client';
 
-import AssignmentRoundedIcon from '@mui/icons-material/AssignmentRounded';
-import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
-import GroupsRoundedIcon from '@mui/icons-material/GroupsRounded';
 import { Box, Stack, Typography } from '@mui/material';
 import { useCallback, useState, type ReactNode } from 'react';
 import { useMutation, useQuery } from 'urql';
@@ -13,7 +10,12 @@ import {
   TicketFieldsFragmentDoc,
   useFragment,
 } from '@rescue-frontend/data-access';
-import { designTokens, Dialog, displayTextSize } from '@rescue-frontend/ui';
+import {
+  designTokens,
+  Dialog,
+  displayTextSize,
+  Icons,
+} from '@rescue-frontend/ui';
 
 import { deleteNeedErrorMessage, isNeedAlreadyGone } from './claim-error';
 import { describeNeedDeletion } from './delete-need';
@@ -185,8 +187,8 @@ export function DeleteNeedDialog({
       onClose={onCancel}
       onConfirm={onConfirm}
       title="刪除這筆需求？"
-      confirmLabel={submitting ? '刪除中...' : '刪除'}
-      confirmIcon={<DeleteOutlineRoundedIcon />}
+      confirmLabel={submitting ? '刪除中…' : '刪除'}
+      confirmIcon={<Icons.trash />}
       confirmTone="danger"
       confirmDisabled={!need}
       cancelLabel={gone ? '關閉' : '取消'}
@@ -218,10 +220,10 @@ export function DeleteNeedDialog({
               spacing={0.5}
               sx={{ mt: 0.75, color: color.fg.neutral.subtle }}
             >
-              <DetailLine icon={<AssignmentRoundedIcon />}>
+              <DetailLine icon={<Icons.clipboardList />}>
                 {fields.title}
               </DetailLine>
-              <DetailLine icon={<GroupsRoundedIcon />}>{headcount}</DetailLine>
+              <DetailLine icon={<Icons.users />}>{headcount}</DetailLine>
             </Stack>
           </>
         ) : (
@@ -231,7 +233,7 @@ export function DeleteNeedDialog({
               fontSize: displayTextSize[13],
             }}
           >
-            {gone ? '找不到這筆需求，可能已經被刪除。' : '載入中...'}
+            {gone ? '找不到這筆需求，可能已經被刪除。' : '載入中…'}
           </Typography>
         )}
       </Box>

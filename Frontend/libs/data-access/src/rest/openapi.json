@@ -3854,7 +3854,7 @@
     "/api/v1/admin/duplicate-pairs": {
       "get": {
         "tags": [
-          "AI 重複審核"
+          "重複審核"
         ],
         "summary": "List Duplicate Pairs",
         "description": "Pending cards by default (ADR-339), newest first, each with both sides (ADR-340).",
@@ -4019,10 +4019,103 @@
         }
       }
     },
+    "/api/v1/admin/duplicate-hint-rates": {
+      "get": {
+        "tags": [
+          "重複審核"
+        ],
+        "summary": "Get Duplicate Hint Rates",
+        "description": "提示率 and the two 誤報率 estimates for tasks and stations (ADR-458).",
+        "operationId": "get_duplicate_hint_rates_api_v1_admin_duplicate_hint_rates_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "開始時間（含），要帶時區；預設是 until 往前 30 天",
+              "title": "Since"
+            },
+            "description": "開始時間（含），要帶時區；預設是 until 往前 30 天"
+          },
+          {
+            "name": "until",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "結束時間（不含），要帶時區；預設是現在",
+              "title": "Until"
+            },
+            "description": "結束時間（不含），要帶時區；預設是現在"
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DuplicateHintRatesPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/admin/duplicate-pairs/{pair_uuid}": {
       "get": {
         "tags": [
-          "AI 重複審核"
+          "重複審核"
         ],
         "summary": "Get Duplicate Pair",
         "description": "One card, its sides, its events (oldest first) and its two whole tickets.",
@@ -4087,7 +4180,7 @@
     "/api/v1/admin/duplicate-pairs/{pair_uuid}/confirm": {
       "post": {
         "tags": [
-          "AI 重複審核"
+          "重複審核"
         ],
         "summary": "Confirm Duplicate Pair",
         "description": "Mark a pending card a duplicate (ADR-341: only the card changes).",
@@ -4169,7 +4262,7 @@
     "/api/v1/admin/duplicate-pairs/{pair_uuid}/reject": {
       "post": {
         "tags": [
-          "AI 重複審核"
+          "重複審核"
         ],
         "summary": "Reject Duplicate Pair",
         "description": "Mark a pending card not a duplicate (ADR-341: only the card changes).",
@@ -4251,7 +4344,7 @@
     "/api/v1/admin/duplicate-pairs/{pair_uuid}/revoke": {
       "post": {
         "tags": [
-          "AI 重複審核"
+          "重複審核"
         ],
         "summary": "Revoke Duplicate Pair Verdict",
         "description": "Undo a card's verdict, back to the queue; someone else's needs ai_duplicate.revoke (ADR-342).",
@@ -4316,7 +4409,7 @@
     "/api/v1/admin/duplicate-pairs/{pair_uuid}/resolve": {
       "post": {
         "tags": [
-          "AI 重複審核"
+          "重複審核"
         ],
         "summary": "Resolve Duplicate Pair",
         "description": "Keep `primary`, fold the other ticket into it and cancel it, in one go (Spec 028, ADR-365).\n\n409 when the card is already resolved or decided, a ticket is gone, or either ticket changed\nsince the reviewer read it (send back the detail's `version`s); 422 when the request cannot be\ncarried out as sent.",
@@ -5727,6 +5820,79 @@
         }
       }
     },
+    "/api/v1/history/tickets/{uuid}/public": {
+      "get": {
+        "tags": [
+          "異動時間軸"
+        ],
+        "summary": "求助單的公開時間軸",
+        "description": "What happened to this help request, newest first, without anyone's name (ADR-421).\n\nNo sign-in: the board is public (ADR-027), and what this tells is the same to everyone. Who\nclaimed a need is a count, who acted is a role, and a change to the contact details is told\nwithout them.",
+        "operationId": "ticket_public_history_api_v1_history_tickets__uuid__public_get",
+        "parameters": [
+          {
+            "name": "uuid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Uuid"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicHistoryResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found（不存在或已刪除）"
+          },
+          "429": {
+            "description": "rate_limited"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/history/stations/{uuid}": {
       "get": {
         "tags": [
@@ -5827,7 +5993,7 @@
           "地圖圖磚"
         ],
         "summary": "Get Tile",
-        "description": "Proxy a map tile from an upstream source with 7-day Redis caching.\n\n**type** — `satellite` or `road`\n\n**source** — one of:\n- satellite: `nasa_gibs` (image/png), `eox` (image/jpeg), `nlsc` (image/png), `sinica` (image/png)\n- road: `osm` (image/png), `carto` (image/png)\n\n**z/x/y** — Standard XYZ slippy map tile coordinates (z: 0–19)\n\n**layer** — Required only for `source=sinica`. Pass the Sinica layer name\n(e.g. `EARTH`, `TAIWAN_MOSAIC`). See https://gis.sinica.edu.tw/worldmap/\nfor available layers. Ignored for all other sources.\n\nReturns the raw tile image bytes with the upstream Content-Type header.\nOn upstream error, returns a 1×1 transparent PNG.",
+        "description": "Proxy a map tile from an upstream source with 7-day Redis caching.\n\n**type** — `satellite` or `road`\n\n**source** — one of:\n- satellite: `nasa_gibs` (image/png), `eox` (image/jpeg), `nlsc` (image/jpeg), `sinica` (image/png)\n- road: `osm` (image/png), `carto` (image/png)\n\n**z/x/y** — Standard XYZ slippy map tile coordinates (z: 0–19)\n\n**layer** — Required only for `source=sinica`. Pass the Sinica layer name\n(e.g. `EARTH`, `TAIWAN_MOSAIC`). See https://gis.sinica.edu.tw/worldmap/\nfor available layers. Ignored for all other sources.\n\nReturns the raw tile image bytes with the upstream Content-Type header.\nOn upstream error, returns a 1×1 transparent PNG.",
         "operationId": "get_tile_api_v1_map_tile__type____source___z___x___y__get",
         "parameters": [
           {
@@ -6058,10 +6224,10 @@
                   "type": "null"
                 }
               ],
-              "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog.",
+              "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). For the ticket counts, completion rate and duplicate count, 'category' is the types of the ticket's live needs: a ticket counts once per type, so the categories can sum to more than the total (a deleted ticket counted through `include_deleted` uses all its needs). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog.",
               "title": "X"
             },
-            "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog."
+            "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). For the ticket counts, completion rate and duplicate count, 'category' is the types of the ticket's live needs: a ticket counts once per type, so the categories can sum to more than the total (a deleted ticket counted through `include_deleted` uses all its needs). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog."
           },
           {
             "name": "x_granularity",
@@ -6228,10 +6394,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Only tickets of this task type; the volunteer metrics read each need's own type.",
+              "description": "Only tickets with a need of this type, as the public tickets list matches it; the need-level metrics (volunteers, time to completion, need completion) read each need's own type.",
               "title": "Task Type"
             },
-            "description": "Only tickets of this task type; the volunteer metrics read each need's own type."
+            "description": "Only tickets with a need of this type, as the public tickets list matches it; the need-level metrics (volunteers, time to completion, need completion) read each need's own type."
           },
           {
             "name": "status",
@@ -6304,6 +6470,18 @@
               "title": "Village"
             },
             "description": "Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422."
+          },
+          {
+            "name": "include_deleted",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Also count deleted tickets, as 已取消 and in the total; only the ticket counts, completion rate, open-ticket age and backlog change read it. A deleted ticket matches `task_type` and groups by category through any of its needs, since they were deleted with it.",
+              "default": false,
+              "title": "Include Deleted"
+            },
+            "description": "Also count deleted tickets, as 已取消 and in the total; only the ticket counts, completion rate, open-ticket age and backlog change read it. A deleted ticket matches `task_type` and groups by category through any of its needs, since they were deleted with it."
           },
           {
             "name": "X-WG-Realm",
@@ -6383,10 +6561,10 @@
                   "type": "null"
                 }
               ],
-              "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog.",
+              "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). For the ticket counts, completion rate and duplicate count, 'category' is the types of the ticket's live needs: a ticket counts once per type, so the categories can sum to more than the total (a deleted ticket counted through `include_deleted` uses all its needs). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog.",
               "title": "X"
             },
-            "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog."
+            "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). For the ticket counts, completion rate and duplicate count, 'category' is the types of the ticket's live needs: a ticket counts once per type, so the categories can sum to more than the total (a deleted ticket counted through `include_deleted` uses all its needs). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog."
           },
           {
             "name": "x_granularity",
@@ -6461,10 +6639,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Only tickets of this task type; the volunteer metrics read each need's own type.",
+              "description": "Only tickets with a need of this type, as the public tickets list matches it; the need-level metrics (volunteers, time to completion, need completion) read each need's own type.",
               "title": "Task Type"
             },
-            "description": "Only tickets of this task type; the volunteer metrics read each need's own type."
+            "description": "Only tickets with a need of this type, as the public tickets list matches it; the need-level metrics (volunteers, time to completion, need completion) read each need's own type."
           },
           {
             "name": "status",
@@ -6539,6 +6717,18 @@
             "description": "Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422."
           },
           {
+            "name": "include_deleted",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Also count deleted tickets, as 已取消 and in the total; only the ticket counts, completion rate, open-ticket age and backlog change read it. A deleted ticket matches `task_type` and groups by category through any of its needs, since they were deleted with it.",
+              "default": false,
+              "title": "Include Deleted"
+            },
+            "description": "Also count deleted tickets, as 已取消 and in the total; only the ticket counts, completion rate, open-ticket age and backlog change read it. A deleted ticket matches `task_type` and groups by category through any of its needs, since they were deleted with it."
+          },
+          {
             "name": "X-WG-Realm",
             "in": "header",
             "required": false,
@@ -6599,9 +6789,9 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/TicketYMetric",
-              "description": "Which metric's total to return. Only single-number metrics are accepted (ticket counts, completion_rate, duplicate_count, the volunteer metrics, station_count, operating_station_count); a forced-shape or multi-series metric such as age_distribution or net_backlog_change is a 400. The number is in the metric's catalog `unit` — completion_rate is 0–100, not a fraction."
+              "description": "Which metric's total to return. Only single-number metrics are accepted (ticket counts, completion_rate, duplicate_count, the volunteer and supply-need metrics, station_count, operating_station_count); a forced-shape or multi-series metric such as age_distribution or net_backlog_change is a 400. The number is in the metric's catalog `unit` — completion_rate is 0–100, not a fraction."
             },
-            "description": "Which metric's total to return. Only single-number metrics are accepted (ticket counts, completion_rate, duplicate_count, the volunteer metrics, station_count, operating_station_count); a forced-shape or multi-series metric such as age_distribution or net_backlog_change is a 400. The number is in the metric's catalog `unit` — completion_rate is 0–100, not a fraction."
+            "description": "Which metric's total to return. Only single-number metrics are accepted (ticket counts, completion_rate, duplicate_count, the volunteer and supply-need metrics, station_count, operating_station_count); a forced-shape or multi-series metric such as age_distribution or net_backlog_change is a 400. The number is in the metric's catalog `unit` — completion_rate is 0–100, not a fraction."
           },
           {
             "name": "start_date",
@@ -6665,10 +6855,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Only tickets of this task type; the volunteer metrics read each need's own type.",
+              "description": "Only tickets with a need of this type, as the public tickets list matches it; the need-level metrics (volunteers, time to completion, need completion) read each need's own type.",
               "title": "Task Type"
             },
-            "description": "Only tickets of this task type; the volunteer metrics read each need's own type."
+            "description": "Only tickets with a need of this type, as the public tickets list matches it; the need-level metrics (volunteers, time to completion, need completion) read each need's own type."
           },
           {
             "name": "status",
@@ -6741,6 +6931,18 @@
               "title": "Village"
             },
             "description": "Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422."
+          },
+          {
+            "name": "include_deleted",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Also count deleted tickets, as 已取消 and in the total; only the ticket counts, completion rate, open-ticket age and backlog change read it. A deleted ticket matches `task_type` and groups by category through any of its needs, since they were deleted with it.",
+              "default": false,
+              "title": "Include Deleted"
+            },
+            "description": "Also count deleted tickets, as 已取消 and in the total; only the ticket counts, completion rate, open-ticket age and backlog change read it. A deleted ticket matches `task_type` and groups by category through any of its needs, since they were deleted with it."
           },
           {
             "name": "X-WG-Realm",
@@ -6820,10 +7022,10 @@
                   "type": "null"
                 }
               ],
-              "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog.",
+              "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). For the ticket counts, completion rate and duplicate count, 'category' is the types of the ticket's live needs: a ticket counts once per type, so the categories can sum to more than the total (a deleted ticket counted through `include_deleted` uses all its needs). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog.",
               "title": "X"
             },
-            "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog."
+            "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). For the ticket counts, completion rate and duplicate count, 'category' is the types of the ticket's live needs: a ticket counts once per type, so the categories can sum to more than the total (a deleted ticket counted through `include_deleted` uses all its needs). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog."
           },
           {
             "name": "x_granularity",
@@ -7145,10 +7347,10 @@
                   "type": "null"
                 }
               ],
-              "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog.",
+              "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). For the ticket counts, completion rate and duplicate count, 'category' is the types of the ticket's live needs: a ticket counts once per type, so the categories can sum to more than the total (a deleted ticket counted through `include_deleted` uses all its needs). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog.",
               "title": "X"
             },
-            "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog."
+            "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). For the ticket counts, completion rate and duplicate count, 'category' is the types of the ticket's live needs: a ticket counts once per type, so the categories can sum to more than the total (a deleted ticket counted through `include_deleted` uses all its needs). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog."
           },
           {
             "name": "x_granularity",
@@ -7361,9 +7563,9 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/StationYMetric",
-              "description": "Which metric's total to return. Only single-number metrics are accepted (ticket counts, completion_rate, duplicate_count, the volunteer metrics, station_count, operating_station_count); a forced-shape or multi-series metric such as age_distribution or net_backlog_change is a 400. The number is in the metric's catalog `unit` — completion_rate is 0–100, not a fraction."
+              "description": "Which metric's total to return. Only single-number metrics are accepted (ticket counts, completion_rate, duplicate_count, the volunteer and supply-need metrics, station_count, operating_station_count); a forced-shape or multi-series metric such as age_distribution or net_backlog_change is a 400. The number is in the metric's catalog `unit` — completion_rate is 0–100, not a fraction."
             },
-            "description": "Which metric's total to return. Only single-number metrics are accepted (ticket counts, completion_rate, duplicate_count, the volunteer metrics, station_count, operating_station_count); a forced-shape or multi-series metric such as age_distribution or net_backlog_change is a 400. The number is in the metric's catalog `unit` — completion_rate is 0–100, not a fraction."
+            "description": "Which metric's total to return. Only single-number metrics are accepted (ticket counts, completion_rate, duplicate_count, the volunteer and supply-need metrics, station_count, operating_station_count); a forced-shape or multi-series metric such as age_distribution or net_backlog_change is a 400. The number is in the metric's catalog `unit` — completion_rate is 0–100, not a fraction."
           },
           {
             "name": "start_date",
@@ -8663,6 +8865,16 @@
             "type": "boolean",
             "title": "Team Gov Widened",
             "default": false
+          },
+          "team_gov_zone_widened": {
+            "type": "boolean",
+            "title": "Team Gov Zone Widened",
+            "default": false
+          },
+          "team_gov_member_only": {
+            "type": "boolean",
+            "title": "Team Gov Member Only",
+            "default": false
           }
         },
         "type": "object",
@@ -8673,7 +8885,7 @@
           "public"
         ],
         "title": "CapabilityInfo",
-        "description": "One capability key, split for display.\n\n`public` = in PUBLIC_PERMS. `team_gov_only` (ADR-064) = held by a team-kind role it only\ntakes effect on gov-type teams (work_zone.py `_require_gov_zone_authority`), so the matrix\ngrant alone overstates what an ngo admin can do; the frontend shows a \"gov teams only\" note.\n`team_gov_widened` (ADR-285) = a `team` grant on it reaches every station when held by a gov\nteam, so the matrix's `team` understates what a gov admin can do."
+        "description": "One capability key, split for display.\n\n`public` = in PUBLIC_PERMS. `team_gov_only` (ADR-064) = held by a team-kind role it only\ntakes effect on gov-type teams (work_zone.py `_require_gov_zone_authority`), so the matrix\ngrant alone overstates what an ngo admin can do; the frontend shows a \"gov teams only\" note.\n`team_gov_widened` (ADR-285) = a `team` grant on it reaches every station when held by a gov\nteam, so the matrix's `team` understates what a gov admin can do.\n`team_gov_zone_widened` (BE-RBAC-3 B3) = the same for a `zone` grant on a ticket capability:\na gov team has no zone, so it reaches every ticket instead.\n`team_gov_member_only` (BE-RBAC-3 B3) = the team role `member` holds it for gov teams only;\nan ngo member's grant of it resolves to `none`, while an ngo admin's still counts."
       },
       "CatalogResponse": {
         "properties": {
@@ -9175,6 +9387,18 @@
             ],
             "title": "Actor Uuid"
           },
+          "actor_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Name",
+            "description": "The nickname of `actor_uuid` (ADR-441)"
+          },
           "source_layer": {
             "type": "string",
             "enum": [
@@ -9337,6 +9561,135 @@
         "title": "DomainFilters",
         "description": "The values a domain's filter params accept, drawn from the rows the caller may chart."
       },
+      "DuplicateHintRatesPage": {
+        "properties": {
+          "since": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Since"
+          },
+          "until": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Until"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DuplicateHintRatesResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "since",
+          "until",
+          "items"
+        ],
+        "title": "DuplicateHintRatesPage",
+        "description": "The window the metrics cover, and one entry per kind."
+      },
+      "DuplicateHintRatesResponse": {
+        "properties": {
+          "entity_kind": {
+            "type": "string",
+            "enum": [
+              "ticket_task",
+              "station"
+            ],
+            "title": "Entity Kind"
+          },
+          "submissions": {
+            "type": "integer",
+            "title": "Submissions",
+            "description": "送出次數：民眾送出 task 或 station 的次數，跳不跳提示都算。＝ 跳提示的次數 ＋ 這段時間沒跳提示就建立的 task 或 station 數"
+          },
+          "hinted": {
+            "type": "integer",
+            "title": "Hinted",
+            "description": "跳提示的次數：跳出「可能重複」提示的次數。每一次按「仍要建立」都算一次；沒按「仍要建立」的提示，同一個人、同一天（台灣時間）、被提示同一筆舊資料，只算一次"
+          },
+          "hint_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hint Rate",
+            "description": "提示率 ＝ 跳提示的次數 ÷ 送出次數（hinted ÷ submissions）"
+          },
+          "overridden": {
+            "type": "integer",
+            "title": "Overridden",
+            "description": "按「仍要建立」的次數：跳提示之後，民眾確認不是重複、還是把資料建起來的次數。每一次都會開一張配對卡"
+          },
+          "reviewed": {
+            "type": "integer",
+            "title": "Reviewed",
+            "description": "已審的配對卡數：按「仍要建立」時開出來的配對卡裡，資料檢核員已經判定「是重複」或「不是重複」的張數"
+          },
+          "judged_not_duplicate": {
+            "type": "integer",
+            "title": "Judged Not Duplicate",
+            "description": "判不是重複的配對卡數：已審的配對卡裡，資料檢核員判定「不是重複」的張數"
+          },
+          "false_alarm_rate_without_auditors": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "False Alarm Rate Without Auditors",
+            "description": "誤報率（不用審核結果）＝ 按「仍要建立」的次數 ÷ 跳提示的次數（overridden ÷ hinted）。只要民眾按「仍要建立」，就當作那次提示錯了"
+          },
+          "false_alarm_rate_with_auditors": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "False Alarm Rate With Auditors",
+            "description": "誤報率（用審核結果）＝ 按「仍要建立」的次數 ×（判不是重複的配對卡數 ÷ 已審的配對卡數）÷ 跳提示的次數（overridden × judged_not_duplicate ÷ reviewed ÷ hinted）。假設還沒審的配對卡裡，「不是重複」的比例跟已審的一樣。還沒有配對卡審過時是 null"
+          },
+          "review_coverage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Coverage",
+            "description": "已審比例 ＝ 已審的配對卡數 ÷ 按「仍要建立」的次數（reviewed ÷ overridden）。太低的話，用審核結果的誤報率不太可靠"
+          }
+        },
+        "type": "object",
+        "required": [
+          "entity_kind",
+          "submissions",
+          "hinted",
+          "hint_rate",
+          "overridden",
+          "reviewed",
+          "judged_not_duplicate",
+          "false_alarm_rate_without_auditors",
+          "false_alarm_rate_with_auditors",
+          "review_coverage"
+        ],
+        "title": "DuplicateHintRatesResponse",
+        "description": "提示率 and the two 誤報率 estimates for one kind (ADR-458). A rate is null when nothing was counted."
+      },
       "DuplicatePairDecision": {
         "properties": {
           "note": {
@@ -9469,6 +9822,18 @@
             ],
             "title": "Reviewed By"
           },
+          "reviewed_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed By Name",
+            "description": "The nickname of `reviewed_by` (ADR-441)"
+          },
           "reviewed_at": {
             "anyOf": [
               {
@@ -9519,6 +9884,7 @@
           "hint_outcome",
           "created_at",
           "reviewed_by",
+          "reviewed_by_name",
           "reviewed_at",
           "low",
           "high",
@@ -9664,6 +10030,18 @@
             ],
             "title": "Reviewed By"
           },
+          "reviewed_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed By Name",
+            "description": "The nickname of `reviewed_by` (ADR-441)"
+          },
           "reviewed_at": {
             "anyOf": [
               {
@@ -9697,6 +10075,7 @@
           "hint_outcome",
           "created_at",
           "reviewed_by",
+          "reviewed_by_name",
           "reviewed_at",
           "low",
           "high"
@@ -10418,6 +10797,81 @@
         "title": "LinkGoogleRequest",
         "description": "Body carrying a Google id_token to link to the current account, plus its proof.\n\nThe id_token proves the caller holds *that Google account*; it says nothing about the\naccount being linked to. `step_up` is the other half (ADR-217), and is optional in the\nschema for the same reason `DeleteContactRequest`'s is: the first call is what delivers\nthe code and answers 422 asking for it back."
       },
+      "LocationForReviewResponse": {
+        "properties": {
+          "location_type": {
+            "type": "string",
+            "title": "Location Type",
+            "description": "'address' or 'pole'"
+          },
+          "full_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Address"
+          },
+          "building_section": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Building Section"
+          },
+          "floor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Floor"
+          },
+          "room": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Room"
+          },
+          "pole_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pole Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "location_type",
+          "full_address",
+          "building_section",
+          "floor",
+          "room",
+          "pole_id"
+        ],
+        "title": "LocationForReviewResponse",
+        "description": "Where a ticket is: the address down to the room, or the pole (ADR-440). Read-only here."
+      },
       "LoginMethodOut": {
         "properties": {
           "provider": {
@@ -10562,6 +11016,19 @@
             "type": "string",
             "title": "Body",
             "description": "Notification body content"
+          },
+          "params": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Params",
+            "description": "The values this type's sentence names, keyed per type; null on older rows"
           },
           "read": {
             "type": "boolean",
@@ -11039,6 +11506,74 @@
               }
             ],
             "title": "Comment"
+          },
+          "display_label": {
+            "type": "string",
+            "title": "Display Label",
+            "description": "How the item reads: the label set for its need type, else property_name (ADR-446)"
+          },
+          "sort_order": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sort Order",
+            "description": "The item's order among its need type's items, from the same field setting, inactive ones included; null when there is none (ADR-447)"
+          },
+          "data_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Type",
+            "description": "The control the item's field setting asks for (number, text, single_select, ...); null when there is none (ADR-447)"
+          },
+          "enum_options": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enum Options",
+            "description": "The choices of a select field; null otherwise (ADR-447)"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit",
+            "description": "A number field's unit, e.g. 箱; null otherwise (ADR-447)"
+          },
+          "is_active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Active",
+            "description": "Whether the item's field setting is still in use; null when there is none (ADR-447)"
           }
         },
         "type": "object",
@@ -11048,10 +11583,139 @@
           "property_value",
           "quantity",
           "status",
-          "comment"
+          "comment",
+          "display_label"
         ],
         "title": "PropertyForReviewResponse",
         "description": "One live item under a need (Spec 028 §2)."
+      },
+      "PublicHistoryEventResponse": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "Kind",
+            "description": "ticket_created / ticket_updated / ticket_merged / need_added / need_updated / need_filled / need_stopped / need_reopened / need_removed / volunteer_joined / volunteer_left"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "At"
+          },
+          "actor_role": {
+            "type": "string",
+            "title": "Actor Role",
+            "description": "requester / volunteer / staff / system"
+          },
+          "need": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublicNeedResponse"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "這個事件的需求（需求與承接事件）"
+          },
+          "needs": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/PublicNeedResponse"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Needs",
+            "description": "建單時的需求（ticket_created）；重複審核合併帶進來的需求（ticket_merged）：整件搬過來的，和收下另一張單同類需求的，人數是合併後的"
+          },
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/ChangeResponse"
+            },
+            "type": "array",
+            "title": "Changes",
+            "description": "改了什麼。標題、說明、地點、聯絡方式、受困／危險、需求名稱、進度備註、需求細項只有 changed=true；檢核不列（ADR-421）"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "at",
+          "actor_role"
+        ],
+        "title": "PublicHistoryEventResponse",
+        "description": "What happened to a ticket, and in what role, with nobody's name (ADR-421)."
+      },
+      "PublicHistoryResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/PublicHistoryEventResponse"
+            },
+            "type": "array",
+            "title": "Data"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/HistoryMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "PublicHistoryResponse",
+        "description": "The standard envelope around a page of the public timeline."
+      },
+      "PublicNeedResponse": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name",
+            "description": "需求現在的名稱（不是當時的，ADR-421）"
+          },
+          "matched": {
+            "type": "integer",
+            "title": "Matched",
+            "description": "已承接人數"
+          },
+          "required": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Required",
+            "description": "需要人數；沒填為 null"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "matched",
+          "required"
+        ],
+        "title": "PublicNeedResponse",
+        "description": "A need in an event: its name as it is now, and how many were coming of how many asked right after."
       },
       "RefreshRequest": {
         "properties": {
@@ -12526,6 +13190,14 @@
             },
             "type": "array",
             "title": "Properties"
+          },
+          "claimant_keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Claimant Keys",
+            "description": "One opaque key per person on the need (ADR-445). A person on needs of both tickets has the same key on each, so the people after a fold are the distinct keys of the needs folded together. Keys differ on every other card and do not contain the person's uuid; they are a plain hash, so someone who already holds the card and a person's uuid can test for that person"
           }
         },
         "type": "object",
@@ -12538,7 +13210,8 @@
           "status",
           "claim_count",
           "recruiting_stopped",
-          "properties"
+          "properties",
+          "claimant_keys"
         ],
         "title": "TaskForReviewResponse",
         "description": "One live need with its headcount and items (Spec 028 §2)."
@@ -12917,6 +13590,17 @@
             },
             "type": "object",
             "title": "Disaster Details"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LocationForReviewResponse"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where the ticket is; null when it has no address or pole. A resolve cannot change it"
           }
         },
         "type": "object",
@@ -12941,7 +13625,8 @@
           "created_at",
           "tasks",
           "photos",
-          "disaster_details"
+          "disaster_details",
+          "location"
         ],
         "title": "TicketForReviewResponse",
         "description": "A whole live ticket as the reviewer compares it (Spec 028 §2, ADR-373).\n\nSend `version` back unchanged when resolving: it says what the reviewer saw (ADR-374)."
@@ -12984,7 +13669,10 @@
           "duplicate_count",
           "volunteers_needed",
           "volunteers_matched",
-          "volunteer_gap"
+          "volunteer_gap",
+          "volunteer_gap_needs",
+          "supply_needs",
+          "supply_needs_unclaimed"
         ],
         "title": "TicketYMetric",
         "description": "What to measure (the Y axis) for a ticket/task chart — see app/services/ticket_analytics.py."

@@ -2,7 +2,6 @@
 
 import { useEffect, useState, type ReactNode } from 'react';
 
-import EditRoundedIcon from '@mui/icons-material/EditRounded';
 import { Box } from '@mui/material';
 
 import { Icons } from '@rescue-frontend/ui';
@@ -23,8 +22,11 @@ import type {
 import { openStationSuggestion } from '../../../station/suggestion/open-station-suggestion';
 import { describeSupplyStatus } from '../../../station/supply-status';
 import { TicketDetailDrawer } from '../../../ticket';
+import {
+  SiteTicketDetailDrawer,
+  type SiteTicketDetailDrawerProps,
+} from '../../../ticket/site-detail/site-ticket-detail-drawer';
 import { formatTicketTypeLabel } from '../../../ticket/status';
-import type { TicketDetailDrawerProps } from '../../../ticket/ticket-detail';
 import { describeLocationCellSpan } from '../../location-cells';
 import type {
   LocationCellMembersLoader,
@@ -34,19 +36,10 @@ import type {
 import { GoneTicketDetail } from '../gone-ticket-detail';
 import { LocationCellDetail } from '../location-cell-detail';
 
-export type RescueMapTicketDetailOverrides = Partial<
-  Pick<
-    TicketDetailDrawerProps,
-    | 'summaryLine'
-    | 'headerActions'
-    | 'headerBadges'
-    | 'detailsPane'
-    | 'content'
-    | 'footerActions'
-    | 'footerLead'
-    | 'tabs'
-    | 'tabsVariant'
-  >
+/** What the page puts in a ticket's drawer: the drawer itself draws the title and the close button. */
+export type RescueMapTicketDetailOverrides = Pick<
+  SiteTicketDetailDrawerProps,
+  'headerActions' | 'badges' | 'footerLead' | 'onShare'
 > & {
   detailsContent?: ReactNode;
 };
@@ -66,6 +59,10 @@ interface RescueMapDetailDrawerProps {
   loadLocationCellMembers?: LocationCellMembersLoader;
   /** 只影響訪客提示文案（「登入後可看」），不決定遮不遮 —— 遮在後端。 */
   isAuthenticated?: boolean;
+  /**
+   * Draws a ticket in the site's drawer with this content. Without it, as on the back office's
+   * 互助地圖, the back office's drawer with the details the marker carries.
+   */
   ticketDetailOverrides?: RescueMapTicketDetailOverrides;
   stationSecondaryAction?: StationDetailActionProps;
   stationLayout?: RescueMapStationLayout;
@@ -165,6 +162,7 @@ function createTicketSummary(marker: RescueMapMarkerItem) {
       taskValue: formatTicketTypeLabel(marker.ticketMeta?.taskType),
       requesterLabel: '現場聯絡人',
       requesterValue: contactSummary.join(' / ') || '未提供',
+      requesterIcon: <Icons.user />,
       notesLabel: '任務說明',
       notesValue: marker.subtitle,
     },
@@ -177,7 +175,7 @@ function createStationEditAction(
 ): StationDetailActionProps {
   return {
     label: '修改建議',
-    icon: <EditRoundedIcon />,
+    icon: <Icons.pencilLine />,
     onClick: () => openStationSuggestion(marker.id),
   };
 }
@@ -250,11 +248,9 @@ export function RescueMapDetailDrawer({
 }: RescueMapDetailDrawerProps) {
   const [activeStationTab, setActiveStationTab] =
     useState<StationDetailTabId>('info');
-  const [activeTicketTab, setActiveTicketTab] = useState('details');
 
   useEffect(() => {
     setActiveStationTab('info');
-    setActiveTicketTab(ticketDetailOverrides?.tabs?.[0]?.id ?? 'details');
   }, [marker?.id]);
 
   const closeAction = {
@@ -291,25 +287,6 @@ export function RescueMapDetailDrawer({
     );
   }
 
-  const resolvedTicketOverrides = ticketDetailOverrides
-    ? {
-        ...ticketDetailOverrides,
-        tabsVariant: ticketDetailOverrides.tabsVariant ?? 'station',
-        tabs: ticketDetailOverrides.tabs?.map((item) => ({
-          ...item,
-          selected: item.id === activeTicketTab,
-          onClick: () => setActiveTicketTab(item.id),
-        })),
-      }
-    : undefined;
-
-  const ticketContent =
-    activeTicketTab === 'details'
-      ? resolvedTicketOverrides?.detailsContent
-      : activeTicketTab === 'operation-log'
-        ? resolvedTicketOverrides?.content
-        : undefined;
-
   return (
     <Box
       sx={{
@@ -322,16 +299,27 @@ export function RescueMapDetailDrawer({
         pointerEvents: 'auto',
       }}
     >
-      {marker.detailType === 'ticket' ? (
+      {marker.detailType === 'ticket' && ticketDetailOverrides ? (
+        <SiteTicketDetailDrawer
+          title={marker.title}
+          onClose={onClose}
+          headerActions={ticketDetailOverrides.headerActions}
+          badges={ticketDetailOverrides.badges}
+          footerLead={ticketDetailOverrides.footerLead}
+          onShare={ticketDetailOverrides.onShare}
+        >
+          {ticketDetailOverrides.detailsContent}
+        </SiteTicketDetailDrawer>
+      ) : null}
+
+      {marker.detailType === 'ticket' && !ticketDetailOverrides ? (
         <TicketDetailDrawer
           {...createTicketSummary(marker)}
-          {...resolvedTicketOverrides}
-          content={ticketContent}
           closeAction={closeAction}
           width="100%"
           height="100%"
           minHeight="100%"
-          tabsVariant={resolvedTicketOverrides?.tabsVariant ?? 'station'}
+          tabsVariant="station"
         />
       ) : null}
 

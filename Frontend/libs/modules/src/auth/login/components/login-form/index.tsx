@@ -415,6 +415,12 @@ export function LoginForm({
           '&:hover': {
             bgcolor: authPalette.primaryActionHover,
           },
+          // The design system's disabled look (libs/ui Button): grey, so a form not yet filled in
+          // reads as one that cannot be sent. The orange above would otherwise only fade.
+          '&.Mui-disabled': {
+            bgcolor: designTokens.color.bg.disable,
+            color: designTokens.color.fg.disable,
+          },
         }}
       >
         {mode === 'login'

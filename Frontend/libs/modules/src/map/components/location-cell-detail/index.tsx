@@ -374,7 +374,7 @@ function CellMembersFooter({
         color: color.fg.neutral.muted,
       }}
     >
-      載入中...
+      載入中…
     </Typography>
   );
 

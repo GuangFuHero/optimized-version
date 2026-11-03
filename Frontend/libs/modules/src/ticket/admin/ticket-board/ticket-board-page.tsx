@@ -10,6 +10,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { AdminListPageLayout } from '../../../admin/shared/admin-list-page-layout';
+import { statCountsFailed } from '../../../admin/shared/model/stat-tiles';
 import { useNow } from '../../../admin/shared/use-now';
 import { ViewSwitch, type BoardView } from '../../../admin/shared/view-switch';
 import { AdminHeaderSlot } from '../../../shell/admin/header';
@@ -51,12 +52,11 @@ import { useSpaces } from '../space/use-space-data';
 
 const { color } = designTokens;
 
-const PAGE_HELP = '檢視並處理各地點的任務單與需求';
-
 // The station page's frame: 12px 28px 28px around a centred 1200px column.
 const FRAME_GAP = '12px';
 const SECTION_SX = { px: '28px' };
 const COLUMN_SX = { maxWidth: 1200, mx: 'auto', width: '100%' };
+const LEAD_SX = { ...SECTION_SX, pt: FRAME_GAP, '& > *': COLUMN_SX };
 
 export function TicketBoardPage() {
   const router = useRouter();
@@ -205,15 +205,24 @@ export function TicketBoardPage() {
   return (
     <>
       <AdminHeaderSlot>
-        <ViewSwitch
-          count={count}
-          view={view}
-          help={PAGE_HELP}
-          onChange={setView}
-        />
+        <ViewSwitch count={count} view={view} onChange={setView} />
       </AdminHeaderSlot>
       <AdminListPageLayout
         canvasColor={color.bg.neutral.subtle}
+        // The counts scroll away with the list; the toolbar stays (STAT-101).
+        lead={
+          <Box sx={LEAD_SX}>
+            {/* A failed count is unknown, not zero: it shows as loading does, with its own 重試. */}
+            <TicketStatsStrip
+              stats={stats}
+              failed={statCountsFailed(statsQuery)}
+              retrying={statsQuery.isFetching}
+              onRetry={() => void statsQuery.refetch()}
+              status={filters.status}
+              onStatusChange={(status) => setFilters({ ...filters, status })}
+            />
+          </Box>
+        }
         header={
           <Stack
             sx={{
@@ -224,13 +233,6 @@ export function TicketBoardPage() {
               '& > *': COLUMN_SX,
             }}
           >
-            {/* A failed count is unknown, not zero: it shows as loading does, with its own 重試. */}
-            <TicketStatsStrip
-              stats={stats}
-              failed={statsQuery.error != null}
-              retrying={statsQuery.isFetching}
-              onRetry={() => void statsQuery.refetch()}
-            />
             <TicketToolbar
               caps={caps}
               query={filters.q}
@@ -322,6 +324,9 @@ export function TicketBoardPage() {
                 onOpenTicket={openTicket}
                 onDeleteTicket={setDeleting}
                 onCreate={caps.canAdd ? () => setCreating(true) : undefined}
+                onImport={
+                  caps.canImport ? () => setImportOpen(true) : undefined
+                }
                 spaces={spaceRows}
                 spaceTags={spaceTags}
                 onOpenSpace={openSpace}

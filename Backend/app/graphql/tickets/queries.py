@@ -17,7 +17,6 @@ from sqlalchemy.orm import aliased
 from app.core.permissions import Perm
 from app.core.rbac_scopes import Scope, in_scope, scope_filter
 from app.core.search import normalize_query, search_timeout, statement_ceiling
-from app.core.security import resolve_scope
 from app.db.h3 import COARSE_MAX_H3_RESOLUTION, cell_resolution, coarse_resolution, h3_is_valid_cell
 from app.db.plans import generic_plan
 from app.graphql.context import check_permission, require_authenticated
@@ -38,6 +37,7 @@ from app.graphql.tickets.types import (
     TicketStatus,
     TicketTaskType,
     TicketType,
+    ticket_detail_scope,
     ticket_detail_visible,
 )
 from app.models.geo import BaseGeometry, BuildingMapTicketMap
@@ -73,15 +73,7 @@ async def _detail_filters(info: strawberry.types.Info) -> list:
     The anonymous caller holds no grant at all, and `scope_filter(NONE)` is exactly "no row",
     so it goes through the same path rather than a special case.
     """
-    user = info.context["user"]
-    scope = (
-        Scope.NONE
-        if user is None
-        else await resolve_scope(
-            user, Perm.TICKET_VIEW_DETAIL, info.context["db"], cache=info.context["_rbac_cache"]
-        )
-    )
-    return scope_filter(scope, actor=user, model=Tickets)
+    return scope_filter(await ticket_detail_scope(info), actor=info.context["user"], model=Tickets)
 
 
 def _status_values(statuses: list[TicketStatus] | None) -> list[str] | None:
@@ -477,8 +469,9 @@ class RequestQuery:
 
         The same ticket.view gate and scope as `tickets`, computed in SQL so the board's stats
         strip does not load the board. `gapPeople` is the people still short across open needs
-        with a quantity (quantity less the people linked, never below 0); `gapNeeds` counts
-        those needs. Needs on completed or cancelled tickets add nothing.
+        of a volunteer type (VOLUNTEER_NEED_TYPES) with a quantity (quantity less the people
+        linked, never below 0); `gapNeeds` counts those needs. Needs on completed or cancelled
+        tickets add nothing. The dashboard's volunteer gap gives the same numbers (ADR-456).
 
         A guest may call it over every ticket, so it runs under the statement ceiling, as
         `ticketCells` does.

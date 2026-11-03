@@ -102,6 +102,42 @@ export function outsideCount(input: {
   return outside > 0 ? outside : null;
 }
 
+/** 有 N 張單在這個範圍外 as shown, and the framing it was worked out after. */
+export interface ShownOutside {
+  framing: number;
+  count: number | null;
+}
+
+/**
+ * What 有 N 張單在這個範圍外 shows. Only once the view a framing went home to has settled: until then
+ * the count in view is the last view's, and N worked out from it would be wrong. From then the last
+ * N stays up while a pan's count loads, so the notice holds still under the pointer. A new framing
+ * starts afresh.
+ */
+export function shownOutsideCount(
+  last: ShownOutside,
+  now: {
+    /** Which framing the map is on; each one the map applies counts up. */
+    framing: number;
+    /** The view has settled since that framing moved the map. */
+    settled: boolean;
+    wentHome: boolean;
+    /** Matching tickets in view, null while the view's load runs. */
+    inViewTotal: number | null;
+    matchingTotal: number | null;
+  },
+): ShownOutside {
+  const { framing, settled, wentHome, inViewTotal, matchingTotal } = now;
+  if (!settled || !wentHome) return { framing, count: null };
+  if (inViewTotal === null) {
+    return { framing, count: last.framing === framing ? last.count : null };
+  }
+  return {
+    framing,
+    count: outsideCount({ wentHome, inViewTotal, matchingTotal }),
+  };
+}
+
 /**
  * What a decided framing request does: move the map, then load the view once it settles there;
  * or keep the view (an open ticket, no match, no box) and load the current view straight away.

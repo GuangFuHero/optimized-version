@@ -91,11 +91,9 @@ ROLES_DATA = [
             # and the raw audit payload.
             Perm.TICKET_VIEW_HISTORY: "all",
             Perm.STATION_VIEW_HISTORY: "all",
-            # Oversight reads the whole platform, so its export reaches everything. It gets no
-            # import, because its only writes are reviews and audits: deciding and undoing
-            # station suggestions (ADR-300), and the verdict on tickets.
-            Perm.STATION_EXPORT: "all",
-            Perm.TICKET_EXPORT: "all",
+            # No export and no import (ADR-460, Carol 2026-11-03): the auditor checks data on the
+            # admin pages and takes none of it away in bulk. Its only writes are reviews and audits:
+            # deciding and undoing station suggestions (ADR-300), and the verdict on tickets.
             # A reversal of the read-only auditor (ADR-300): a merge can only write a field
             # someone suggested, and every merge records its before values so it can be undone.
             Perm.STATION_REVIEW: "all",
@@ -277,6 +275,20 @@ ROLES_DATA = [
             Perm.TEAM_MEMBER_VIEW: "team",  # Spec/026: their own team's member list
             Perm.ANN_VIEW_ADMIN: "all",  # staff read admin-page announcements
             Perm.PROJECT_VIEW: "all",  # ADR-324, see the admin role above
+            # BE-RBAC-3 B3 (Carol, 2026-11-01 to 2026-11-03): a gov member works as a gov admin does
+            # on import, export, the station review queue, 互助地圖 and 開啟空間. All of them are in
+            # GOV_MEMBER_ONLY_PERMS, so an NGO member's grant of them resolves to `none`. Scopes as
+            # the admin role's; a gov member's `zone` and `team` widen to `all`.
+            Perm.TICKET_EXPORT: "zone",
+            Perm.TICKET_IMPORT: "all",
+            Perm.STATION_EXPORT: "team",
+            Perm.STATION_IMPORT: "all",
+            Perm.STATION_REVIEW: "team",
+            Perm.ZONE_VIEW: "all",
+            Perm.ZONE_ADD: "all",
+            Perm.ZONE_EDIT: "all",
+            Perm.ZONE_ASSIGN: "all",
+            Perm.ZONE_DELETE: "all",
         },
     },
 ]

@@ -1,7 +1,5 @@
 'use client';
 
-import type { ReactNode } from 'react';
-
 import {
   Clock,
   Crosshair,
@@ -15,13 +13,14 @@ import { Box, IconButton, Stack, Typography } from '@mui/material';
 import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
 
 import type { RescueMapMarkerItem } from '../../map/types';
+import { SiteDetailRow } from '../../shell/site/detail-info';
 import { SiteBadge } from '../../shell/site/site-badge';
 import { StationDetailFooterAction } from '../admin/station-detail/station-detail-footer-action';
 import type { StationDetailActionProps } from '../admin/station-detail/types';
-import { getStationTypeIcon } from '../type-options';
+import { getStationTypeIcon } from '../station-type-icon';
 import { describeSiteStation } from './site-station-detail';
 
-const { color, radius, spacing } = designTokens;
+const { color, iconSize, radius, spacing } = designTokens;
 const CloseIcon = Icons.close;
 
 interface SiteStationDetailDrawerProps {
@@ -29,58 +28,6 @@ interface SiteStationDetailDrawerProps {
   onClose: () => void;
   editAction?: StationDetailActionProps;
   secondaryAction?: StationDetailActionProps;
-}
-
-function SectionLabel({ children }: { children: ReactNode }) {
-  return (
-    <Typography
-      sx={{
-        mb: '6px',
-        fontSize: displayTextSize[11],
-        fontWeight: 700,
-        lineHeight: 1.4,
-        letterSpacing: '.08em',
-        color: color.fg.neutral.muted,
-      }}
-    >
-      {children}
-    </Typography>
-  );
-}
-
-function InfoRow({
-  label,
-  icon,
-  children,
-}: {
-  label: string;
-  icon: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <Box>
-      <SectionLabel>{label}</SectionLabel>
-      <Stack
-        direction="row"
-        sx={{ gap: `${spacing[2]}px`, alignItems: 'flex-start' }}
-      >
-        <Box sx={{ mt: '3px', display: 'flex', color: color.fg.neutral.muted }}>
-          {icon}
-        </Box>
-        <Typography
-          sx={{
-            minWidth: 0,
-            fontSize: displayTextSize[14],
-            lineHeight: 1.6,
-            color: color.fg.neutral.default,
-            overflowWrap: 'anywhere',
-          }}
-        >
-          {children}
-        </Typography>
-      </Stack>
-    </Box>
-  );
 }
 
 /**
@@ -303,13 +250,14 @@ export function SiteStationDetailDrawer({
           </Box>
         ) : null}
 
-        <InfoRow label="位置說明" icon={<MapPin size={16} />}>
+        {/* 18, as the ticket detail's rows: the text beside them is 2px larger than the prototype's. */}
+        <SiteDetailRow label="位置說明" icon={<MapPin size={iconSize.md} />}>
           {detail.locationNote}
-        </InfoRow>
+        </SiteDetailRow>
 
-        <InfoRow label="座標" icon={<Crosshair size={16} />}>
+        <SiteDetailRow label="座標" icon={<Crosshair size={iconSize.md} />}>
           {detail.coordinates}
-        </InfoRow>
+        </SiteDetailRow>
       </Stack>
 
       <StationDetailFooterAction actions={[secondaryAction, editAction]} />

@@ -259,3 +259,41 @@ async def test_someone_who_moved_over_is_not_told_the_contact_twice(db):
     sent = await _sent(db)
     assert ids["v3"] in sent["dedup_task_merged"]
     assert sent["dedup_ticket_contact_changed"] == {ids["v1"], ids["v2"]}
+
+
+async def test_each_notice_stores_the_titles_and_needs_it_names(db):
+    """Every kind carries the kept ticket's title; the other owner's also lists where each need went."""
+    reviewer, ids = await _world(db)
+    db.add(TaskAssignment(task_uuid=ids["a2"], actor_uuid=ids["v4"]))
+    db.add(TaskAssignment(task_uuid=ids["b2"], actor_uuid=ids["v1"]))
+    await db.flush()
+    request = _example_one(ids, await _versions(db, reviewer, ids), ticket={"contact_phone": "0987654321"})
+    request.primary_tasks[1] = type(request.primary_tasks[1]).model_validate(
+        {"task": ids["a2"], "action": "cancel"}
+    )
+    request.secondary_tasks.append(type(request.secondary_tasks[0])(task=ids["b2"], action="cancel"))
+
+    await _resolve(db, reviewer, ids, request)
+
+    sent = []  # one entry per distinct notice, whoever it went to
+    for notice in await _all(db):
+        if (notice.type, notice.params) not in sent:
+            sent.append((notice.type, notice.params))
+    primary = {"primary_title": "A 一樓淹水"}
+    assert sorted(sent, key=lambda kind_params: (kind_params[0], str(kind_params[1]))) == [
+        ("dedup_task_canceled", {**primary, "task_ticket": "primary"}),
+        ("dedup_task_canceled", {**primary, "task_ticket": "secondary"}),
+        ("dedup_task_merged", primary),
+        ("dedup_ticket_contact_changed", primary),
+        (
+            "dedup_ticket_merged",
+            {
+                **primary,
+                "secondary_title": "B 一樓淹水",
+                "absorbed_tasks": ["清淤"],
+                "moved_tasks": ["便當"],
+                "canceled_tasks": ["飲用水"],
+            },
+        ),
+        ("dedup_ticket_updated", primary),
+    ]

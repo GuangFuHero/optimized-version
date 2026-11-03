@@ -1,4 +1,6 @@
-"""Back-office AI 重複審核: list the duplicate pair cards, read, decide, revoke or resolve one.
+"""Back-office 重複審核: list the duplicate pair cards, read, decide, revoke or resolve one.
+
+Also the fast layer's hint rates (提示率, 誤報率) the review page shows (ADR-458).
 
 Spec 025 §2 (ADR-338) for the queue and verdicts; Spec 028 for the whole tickets on the detail and
 the resolve. Mounted under /admin like role-requests. Endpoints stay thin (ADR-014): the capability
@@ -6,6 +8,7 @@ checks (`ai_duplicate.view` / `review` / `revoke`) and every rule live in the se
 (`dedup_review`, `dedup_resolve`).
 """
 
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -15,6 +18,8 @@ from app.core import security
 from app.models.auth import User
 from app.schemas.duplicate_pair import (
     DedupEventResponse,
+    DuplicateHintRatesPage,
+    DuplicateHintRatesResponse,
     DuplicatePairDecision,
     DuplicatePairDetail,
     DuplicatePairPage,
@@ -28,7 +33,7 @@ from app.schemas.duplicate_pair import (
     TicketForReviewResponse,
     TicketsForReviewResponse,
 )
-from app.services import dedup_resolve, dedup_review
+from app.services import dedup_resolve, dedup_review, duplicate_hint_rates
 from app.services.dedup_review import DuplicatePairConflictError, DuplicatePairNotFoundError, PairItem
 
 router = APIRouter()
@@ -50,6 +55,7 @@ def _response(item: PairItem) -> dict:
         "hint_outcome": pair.hint_outcome,
         "created_at": pair.created_at,
         "reviewed_by": pair.reviewed_by,
+        "reviewed_by_name": item.reviewed_by_name,
         "reviewed_at": pair.reviewed_at,
         "low": EntitySummaryResponse.model_validate(item.low),
         "high": EntitySummaryResponse.model_validate(item.high),
@@ -60,9 +66,16 @@ def _detail(detail) -> DuplicatePairDetail:
     """A card with its events and whole tickets, as the detail and a resolve answer it."""
     return DuplicatePairDetail(
         **_response(detail.item),
-        events=[DedupEventResponse.model_validate(event) for event in detail.events],
+        events=[_event(event, detail.actor_names) for event in detail.events],
         tickets=_tickets(detail.tickets),
     )
+
+
+def _event(event, names) -> DedupEventResponse:
+    """One event, with the nickname of whoever did it (ADR-441)."""
+    response = DedupEventResponse.model_validate(event)
+    name = names.get(str(event.actor_uuid)) if event.actor_uuid else None
+    return response.model_copy(update={"actor_name": name})
 
 
 def _tickets(tickets) -> TicketsForReviewResponse | None:
@@ -109,6 +122,43 @@ async def list_duplicate_pairs(
         raise _refusal(err) from err
     return DuplicatePairPage(
         items=[DuplicatePairResponse(**_response(i)) for i in page.items], total=page.total
+    )
+
+
+@router.get("/duplicate-hint-rates", response_model=DuplicateHintRatesPage)
+async def get_duplicate_hint_rates(
+    since: datetime | None = Query(None, description="開始時間（含），要帶時區；預設是 until 往前 30 天"),
+    until: datetime | None = Query(None, description="結束時間（不含），要帶時區；預設是現在"),
+    db: AsyncSession = Depends(security.get_db),
+    current_user: User = Depends(security.get_current_user),
+):
+    """提示率 and the two 誤報率 estimates for tasks and stations (ADR-458)."""
+    until = until or datetime.now(UTC)
+    since = since or until - timedelta(days=30)
+    try:
+        rates = await duplicate_hint_rates.duplicate_hint_rates(
+            db, actor=current_user, since=since, until=until
+        )
+    except ValueError as err:
+        raise _refusal(err) from err
+    return DuplicateHintRatesPage(
+        since=since,
+        until=until,
+        items=[
+            DuplicateHintRatesResponse(
+                entity_kind=m.entity_kind,
+                submissions=m.submissions,
+                hinted=m.hinted,
+                hint_rate=m.hint_rate,
+                overridden=m.overridden,
+                reviewed=m.reviewed,
+                judged_not_duplicate=m.judged_not_duplicate,
+                false_alarm_rate_without_auditors=m.false_alarm_rate_without_auditors,
+                false_alarm_rate_with_auditors=m.false_alarm_rate_with_auditors,
+                review_coverage=m.review_coverage,
+            )
+            for m in rates
+        ],
     )
 
 

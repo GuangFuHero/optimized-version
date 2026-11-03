@@ -86,7 +86,7 @@ export function StationFilterPanel({
         onChange={(v) => set('official', v)}
       />
       <ChipRow
-        label="指派 Team"
+        label="指派團隊"
         value={filters.team}
         options={[
           ...(teams.data ?? []).map((t) => ({ value: t.uuid, label: t.name })),

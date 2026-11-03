@@ -187,6 +187,42 @@ describe('help request draft', () => {
     expect(readHelpRequestDraft(storage, 'user-1')).toEqual(filledForm());
   });
 
+  it('brings back the building a request was filed in, so it is reopened there', () => {
+    const storage = memoryStorage();
+    const form = {
+      ...emptyHelpRequestForm(point('seed'), {
+        buildingUuid: 'building-1',
+        address: '花蓮縣光復鄉中正路二段61號',
+        floor: '3F',
+      }),
+      title: '三樓有人受困',
+      room: '閱覽室',
+    };
+
+    writeHelpRequestDraft(storage, 'user-1', form);
+
+    expect(readHelpRequestDraft(storage, 'user-1')).toEqual(form);
+    expect(readHelpRequestDraft(storage, 'user-1')?.building).toBe(
+      'building-1',
+    );
+  });
+
+  it('reads a draft without a building, or with one of another shape, as filed at its point', () => {
+    const storage = memoryStorage();
+    const older: Partial<HelpRequestForm> = filledForm();
+
+    delete older.building;
+
+    for (const form of [older, { ...filledForm(), building: 3 }]) {
+      storage.setItem(
+        helpRequestDraftKey('user-1'),
+        JSON.stringify({ v: 1, form }),
+      );
+
+      expect(readHelpRequestDraft(storage, 'user-1')).toEqual(filledForm());
+    }
+  });
+
   it('drops a lookup of another shape rather than the whole draft: the address is still there', () => {
     const storage = memoryStorage();
 

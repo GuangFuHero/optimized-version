@@ -335,6 +335,25 @@ export function useAllStations(
   return useQuery({ ...allStationsQuery(variables), enabled: options.enabled });
 }
 
+/** Counts over every station in the caller's scope, whatever the page's filters: the stats strip's. */
+export const stationFacetsQuery = () =>
+  queryOptions({
+    queryKey: ['admin', 'stations', 'facets'],
+    queryFn: ({ signal }) =>
+      adminGraphqlClient
+        .query(
+          documents.AdminStationFacetsDocument,
+          {},
+          { fetchOptions: { credentials: 'include', signal } },
+        )
+        .toPromise()
+        .then(graphqlResponseData),
+  });
+
+export function useStationFacets(options: AdminQueryOptions = {}) {
+  return useQuery({ ...stationFacetsQuery(), enabled: options.enabled });
+}
+
 export const stationQuery = (variables: documents.AdminStationQueryVariables) =>
   queryOptions({
     queryKey: ['admin', 'stations', 'station', variables],
@@ -1347,6 +1366,58 @@ export function useUpsertDisasterType() {
         .then(graphqlResponseData),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ['admin', 'config'] }),
+  });
+}
+
+export function useHazardousZoneSource(
+  variables: documents.AdminHazardousZoneSourceQueryVariables,
+  options: AdminQueryOptions = {},
+) {
+  return useQuery({
+    queryKey: ['admin', 'areas', 'hazardousZoneSource', variables],
+    queryFn: ({ signal }) =>
+      adminGraphqlClient
+        .query(documents.AdminHazardousZoneSourceDocument, variables, {
+          fetchOptions: { credentials: 'include', signal },
+        })
+        .toPromise()
+        .then(graphqlResponseData),
+    enabled: Boolean(variables.uuid) && options.enabled !== false,
+  });
+}
+
+export function useCreateArea() {
+  return useMutation({
+    mutationFn: (variables: documents.AdminCreateAreaMutationVariables) =>
+      adminGraphqlClient
+        .mutation(documents.AdminCreateAreaDocument, variables)
+        .toPromise()
+        .then(graphqlResponseData),
+  });
+}
+
+export function useUpdateArea() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (variables: documents.AdminUpdateAreaMutationVariables) =>
+      adminGraphqlClient
+        .mutation(documents.AdminUpdateAreaDocument, variables)
+        .toPromise()
+        .then(graphqlResponseData),
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: ['admin', 'areas', 'hazardousZoneSource'],
+      }),
+  });
+}
+
+export function useDeleteArea() {
+  return useMutation({
+    mutationFn: (variables: documents.AdminDeleteAreaMutationVariables) =>
+      adminGraphqlClient
+        .mutation(documents.AdminDeleteAreaDocument, variables)
+        .toPromise()
+        .then(graphqlResponseData),
   });
 }
 

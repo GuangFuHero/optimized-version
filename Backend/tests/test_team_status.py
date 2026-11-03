@@ -166,6 +166,12 @@ async def test_suspending_rejects_the_teams_pending_requests(client, db_session,
         await db_session.execute(select(Notification).where(Notification.recipient_uuid == world.applicant))
     ).scalars()
     assert notice.body == note
+    assert notice.params == {
+        "requested_role": "ngo",
+        "team_name": "光復隊",
+        "new_team_name": None,
+        "review_note": note,
+    }
 
 
 @pytest.mark.asyncio
@@ -187,9 +193,7 @@ async def test_suspending_tells_everyone_in_the_team_once(client, db_session, re
     """Spec 029 (ADR-405): the member and the team admin each get one `team_suspended`."""
     world = await World().build(db_session, redis)
     captain = (await db_session.execute(select(User.uuid).where(User.name == "隊長"))).scalar_one()
-    db_session.add(
-        UserRoleAssign(user_uuid=captain, role_uuid=world.member_role, team_uuid=world.team)
-    )
+    db_session.add(UserRoleAssign(user_uuid=captain, role_uuid=world.member_role, team_uuid=world.team))
     await db_session.commit()
 
     await world.set(client, "suspended")
@@ -202,6 +206,7 @@ async def test_suspending_tells_everyone_in_the_team_once(client, db_session, re
     assert (notice.ref_type, str(notice.ref_uuid)) == ("team", world.team)
     assert notice.title == "「光復隊」已暫停"
     assert "光復隊" in notice.body
+    assert notice.params == {"team_name": "光復隊"}
 
 
 @pytest.mark.asyncio
@@ -209,9 +214,7 @@ async def test_the_super_admin_who_suspends_is_not_told(client, db_session, redi
     """The actor never hears of their own change, even when they are in the team."""
     world = await World().build(db_session, redis)
     boss = (await db_session.execute(select(User.uuid).where(User.name == "超管"))).scalar_one()
-    db_session.add(
-        UserRoleAssign(user_uuid=boss, role_uuid=world.member_role, team_uuid=world.team)
-    )
+    db_session.add(UserRoleAssign(user_uuid=boss, role_uuid=world.member_role, team_uuid=world.team))
     await db_session.commit()
 
     await world.set(client, "suspended")

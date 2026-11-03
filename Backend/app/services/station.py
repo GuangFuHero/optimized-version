@@ -76,13 +76,20 @@ async def notify_operational_status_change(
     own write first and pass plain values, because dispatch() commits and expires ORM objects.
     """
     station = await station_repository.get_by_uuid_active(db, station_uuid)
-    station_name = (station.name if station else None) or "物資站"
+    params = {
+        "station_name": station.name if station else None,
+        "station_type": station.type if station else None,
+        "change": "status",
+        "property_name": property_name,
+    }
+    station_name = params["station_name"] or "物資站"
     recipients = await NotificationRecipientResolver.resolve_gov_and_station_team(db, station_uuid)
     await NotificationService.dispatch(
         db,
         event_type="resource_station_updated",
         title=f"🏢 資源物資站狀態更新：{station_name}",
         body=f"物資站「{station_name}」的「{property_name}」已更新，請留意最新營運狀況。",
+        params=params,
         priority="medium",
         actor_uuid=actor_uuid,
         ref_type="station",
@@ -195,6 +202,12 @@ async def announce_station_created(db: AsyncSession, *, station: Station, actor_
         event_type="resource_station_updated",
         title=f"🏢 新建物資資源站：{station.name or '物資站'}",
         body=f"新建物資資源站「{station.name or station.uuid}」，請留意物資與避難整備狀況。",
+        params={
+            "station_name": station.name,
+            "station_type": station.type,
+            "change": "created",
+            "property_name": None,
+        },
         priority="medium",
         actor_uuid=actor_uuid,
         ref_type="station",
@@ -353,6 +366,7 @@ async def assign_station(
     )
     if not station:
         raise ValueError("Station not found")
+    team = None
     if team_uuid is not None:
         # Same create-time check as assign_zone_to_team: a team that goes inactive later keeps
         # its stations until gov moves them.
@@ -370,6 +384,9 @@ async def assign_station(
     # Plain values before the write: update() and dispatch() both commit, and the test suite
     # runs with expire_on_commit=True (see update_station_property).
     station_name = station.name or "物資站"
+    params = {"station_name": station.name, "station_type": station.type}
+    new_team_name = team.name if team else None
+    old_team_name = await db.scalar(select(Team.name).where(Team.uuid == old_team)) if old_team else None
     actor_uid = actor.uuid
     updated = await station_repository.update(db, db_obj=station, obj_in={"team_uuid": team_uuid})
     team_admins = NotificationRecipientResolver.resolve_team_admin
@@ -379,6 +396,7 @@ async def assign_station(
             event_type="station_assigned",
             title=f"新指派物資站：{station_name}",
             body=f"您的團隊已獲指派負責物資站「{station_name}」。",
+            params={**params, "team_name": new_team_name},
             priority="high",
             actor_uuid=actor_uid,
             ref_type="station",
@@ -391,6 +409,7 @@ async def assign_station(
             event_type="station_unassigned",
             title=f"物資站指派已解除：{station_name}",
             body=f"您的團隊對物資站「{station_name}」的指派已解除。",
+            params={**params, "team_name": old_team_name},
             priority="medium",
             actor_uuid=actor_uid,
             ref_type="station",

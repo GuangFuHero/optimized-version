@@ -118,10 +118,11 @@ B ticket                        B ticket：已取消，replaced_by = A
 | `title`、`description`、`priority`、`task_type`、`disaster_types`、`person_trapped_reported`、`immediate_danger_reported` | 單的欄位 |
 | `contact_name`、`contact_phone`、`contact_email` | 聯絡人。需要 `ai_duplicate.view`，審核員要能比對 |
 | `longitude`、`latitude` | 單的點 |
+| `location` | 單的地點（ADR-440）：`location_type`、`full_address`、`building_section`、`floor`、`room`、`pole_id`；沒有時為 `null`。權限同聯絡人，算進 `version`，處理時不能改 |
 | `status`、`audit_status` | 唯讀 |
 | `created_by`、`created_at` | 開單者 |
-| `tasks` | 還在的需求：`uuid`、`task_type`、`task_name`、`task_description`、`quantity`、`status`、`claim_count`、`recruiting_stopped`、`properties` |
-| `tasks[].properties` | 還在的細項：`uuid`、`property_name`、`property_value`、`quantity`、`status`、`comment` |
+| `tasks` | 還在的需求：`uuid`、`task_type`、`task_name`、`task_description`、`quantity`、`status`、`claim_count`、`claimant_keys`（ADR-445：這張卡專用的承接人代號，同一人兩邊相同；不算進 `version`）、`recruiting_stopped`、`properties` |
+| `tasks[].properties` | 還在的細項：`uuid`、`property_name`、`display_label`（ADR-446：需求類型的設定名稱，沒有就用 key；不算進 `version`）、`sort_order`、`data_type`、`enum_options`、`unit`、`is_active`（ADR-447：同一筆設定的順序、型別、選項、單位、是否啟用，停用的也算，沒有設定為 `null`；不算進 `version`）、`property_value`、`quantity`、`status`、`comment` |
 | `photos` | 還在的照片：`uuid`、`url`、`created_at`（ADR-384） |
 | `disaster_details` | 災害欄位答案：`{property_name: [value, …]}`（ADR-385） |
 
@@ -240,7 +241,8 @@ B ticket                        B ticket：已取消，replaced_by = A
 | 有需求沒列到、列了兩次、或列了不屬於這兩張單的需求 | 422 |
 | `absorb` 的需求類型（`task_type`）和併入的那一項不同 | 422（ADR-370） |
 | 處理後某項需求的接單人數大於 `quantity` | 422（ADR-370） |
-| `quantity` 不合 `_validate_need_size`（rescue 以外必填、至少 1） | 422 |
+| 送來的 `quantity` 不合 `_validate_need_size`（必填、至少 1，rescue 也一樣）；沒送、原本就空白、單獨保留或搬過去的不檢查 | 422（ADR-448） |
+| 吸收別的需求的那一項沒有 `quantity`（原本空白、這次也沒填） | 422（ADR-448） |
 | `keep`／`move` 的項目漏列、重複列細項，或列了不屬於它的細項 | 422（ADR-380） |
 | 主要單處理後沒有任何需求 | 422 |
 | `priority` 超過 20 字、`task_type` 超過 50 字 | 422（ADR-381） |

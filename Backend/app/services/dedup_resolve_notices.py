@@ -56,6 +56,7 @@ def _moved(outcome) -> list[dict]:
             "body": (
                 "這筆需求和另一張重複的單合併了，聯絡人改成這張單的聯絡人，請到單上查看。你的承接照常有效。"
             ),
+            "params": {"primary_title": outcome.primary_title},
             "priority": "high",
             "explicit_recipients": moved,
         }
@@ -80,6 +81,7 @@ def _canceled(outcome) -> list[dict]:
                 "event_type": "dedup_task_canceled",
                 "title": "你承接的需求已取消",
                 "body": f"重複審核後，你承接的需求已取消，不用前往了。這件事改由「{title}」處理。",
+                "params": {"primary_title": title, "task_ticket": "secondary"},
                 "priority": "high",
                 "explicit_recipients": sorted(other),
             }
@@ -90,6 +92,7 @@ def _canceled(outcome) -> list[dict]:
                 "event_type": "dedup_task_canceled",
                 "title": "你承接的需求已取消",
                 "body": f"「{title}」和另一張重複的單合併時，你承接的這筆需求取消了，不用前往了。",
+                "params": {"primary_title": title, "task_ticket": "primary"},
                 "priority": "high",
                 "explicit_recipients": sorted(own),
             }
@@ -106,6 +109,7 @@ def _contact_changed(outcome) -> list[dict]:
             "event_type": "dedup_ticket_contact_changed",
             "title": f"「{outcome.primary_title}」的聯絡人已更新",
             "body": "這張單和另一張重複的單合併後，聯絡人有更新，請到單上查看。你的承接照常有效。",
+            "params": {"primary_title": outcome.primary_title},
             "priority": "high",
             "explicit_recipients": list(outcome.staying_people),
         }
@@ -117,11 +121,13 @@ def _owners(outcome) -> list[dict]:
     title = outcome.primary_title
     notices = []
     if outcome.secondary_owner:
+        tasks = _secondary_tasks(outcome)
         notices.append(
             {
                 "event_type": "dedup_ticket_merged",
                 "title": f"你的求助「{outcome.secondary_title}」已併入「{title}」",
-                "body": _secondary_body(outcome),
+                "body": _secondary_body(tasks),
+                "params": {"primary_title": title, "secondary_title": outcome.secondary_title, **tasks},
                 "priority": "medium",
                 "explicit_recipients": [outcome.secondary_owner],
             }
@@ -136,6 +142,7 @@ def _owners(outcome) -> list[dict]:
                 "event_type": "dedup_ticket_updated",
                 "title": f"你的求助「{title}」已因重複審核更新",
                 "body": "另一張重複的單併入了你的單，內容或需求有調整，請到單上確認。",
+                "params": {"primary_title": title},
                 "priority": "medium",
                 "explicit_recipients": [outcome.primary_owner],
             }
@@ -143,13 +150,19 @@ def _owners(outcome) -> list[dict]:
     return notices
 
 
-def _secondary_body(outcome) -> str:
-    plan = outcome.plan
+def _secondary_tasks(outcome) -> dict[str, list[str]]:
+    """The names of the other ticket's needs: folded into a kept need, moved over, and cancelled."""
+    plan, names, secondary = outcome.plan, outcome.task_names, outcome.secondary_task_uuids
+    return {
+        "absorbed_tasks": [names[uuid] for uuid in plan.absorbed],
+        "moved_tasks": [names[k.uuid] for k in plan.kept_tasks if k.moved],
+        "canceled_tasks": [names[uuid] for uuid in plan.canceled_tasks if uuid in secondary],
+    }
+
+
+def _secondary_body(tasks: dict[str, list[str]]) -> str:
     parts = []
-    names = outcome.task_names
-    folded = [names[uuid] for uuid in plan.absorbed]
-    moved = [names[k.uuid] for k in plan.kept_tasks if k.moved]
-    canceled = [names[uuid] for uuid in plan.canceled_tasks if uuid in outcome.secondary_task_uuids]
+    folded, moved, canceled = tasks["absorbed_tasks"], tasks["moved_tasks"], tasks["canceled_tasks"]
     if folded:
         parts.append(f"併入：{'、'.join(folded)}")
     if moved:

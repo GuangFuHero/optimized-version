@@ -397,6 +397,13 @@ async def test_the_requester_hears_who_claimed_their_need(db):
     [notice] = await _notices(db, requester, "task_claimed")
     assert notice.title == "陳志工 承接了你的「清淤」"
     assert notice.body == "需要清淤人力　目前 1/3 人"
+    assert notice.params == {
+        "ticket_title": "需要清淤人力",
+        "task_name": "清淤",
+        "assignee_name": "陳志工",
+        "claimed": 1,
+        "quantity": 3,
+    }
 
 
 @pytest.mark.asyncio
@@ -473,6 +480,7 @@ async def test_the_claim_that_fills_a_need_tells_the_others_already_on_it(db):
     [notice] = await _notices(db, first_uuid, "task_full")
     assert notice.title == "「清淤」已經湊齊人了"
     assert notice.body == "需要清淤人力　你仍然在名單上，時間到請照常前往。"
+    assert notice.params == {"ticket_title": "需要清淤人力", "task_name": "清淤"}
     assert await _notices(db, last_uuid, "task_full") == []
     assert await _notices(db, requester, "task_full") == []
 
@@ -595,6 +603,7 @@ async def test_everyone_on_the_need_hears_it_stopped_and_still_goes(db):
         assert notice.title == "「清淤」已停止招募"
         assert notice.body == "需要清淤人力　建單者已停止招募，你仍在名單上，時間到請照常前往。"
         assert notice.priority == "medium"
+        assert notice.params == {"ticket_title": "需要清淤人力", "task_name": "清淤"}
     assert await _notices(db, requester_uuid, "task_recruiting_stopped") == []
     assert await _claims(db, task_uuid) == 2
 
@@ -751,6 +760,7 @@ async def test_someone_removed_by_a_coordinator_is_told(db):
 
     [notice] = await _notices(db, volunteer_uuid, "task_assignment_removed")
     assert (notice.title, notice.priority) == ("你已被移出「清淤」", "high")
+    assert notice.params == {"ticket_title": "需要清淤人力", "task_name": "清淤"}
 
 
 @pytest.mark.asyncio

@@ -3,8 +3,6 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
-import AssignmentRoundedIcon from '@mui/icons-material/AssignmentRounded';
-import ShieldRoundedIcon from '@mui/icons-material/ShieldRounded';
 import {
   Avatar,
   ButtonBase,
@@ -21,6 +19,7 @@ import {
   nameInitials,
 } from '@rescue-frontend/ui';
 
+import { openMyStationReports } from '../../station/suggestion/open-my-station-reports';
 import { MyTasksDrawer } from '../../ticket/my-claims/my-tasks-drawer';
 
 const { color, radius, shadow, spacing, motion } = designTokens;
@@ -46,6 +45,11 @@ export function SiteUserMenu({ userName, onSignOut }: SiteUserMenuProps) {
   const handleOpenMyTasks = () => {
     setAnchorEl(null);
     setMyTasksOpen(true);
+  };
+
+  const handleOpenStationReports = () => {
+    setAnchorEl(null);
+    openMyStationReports();
   };
 
   const handleOpenSecurity = () => {
@@ -130,21 +134,29 @@ export function SiteUserMenu({ userName, onSignOut }: SiteUserMenuProps) {
         </MenuItem>
         <Divider />
         <MenuItem onClick={handleOpenMyTasks} sx={{ gap: 1 }}>
-          <AssignmentRoundedIcon sx={{ fontSize: 18 }} />
+          <Icons.clipboardList sx={{ fontSize: 18 }} />
           <Typography sx={{ fontSize: displayTextSize[14] }}>
             我的任務
+          </Typography>
+        </MenuItem>
+        {/* Beside 我的任務, its own entry (prototype `site-shell.jsx`): a report is public data that was
+            wrong, not someone coming or going to help. */}
+        <MenuItem onClick={handleOpenStationReports} sx={{ gap: 1 }}>
+          <Icons.clipboardCheck sx={{ fontSize: designTokens.iconSize.md }} />
+          <Typography sx={{ fontSize: displayTextSize[14] }}>
+            我回報的站點
           </Typography>
         </MenuItem>
         {/* Not in the prototype's menu, which has no such page: added after 我的任務, the site's own
             thing, and before 登出. */}
         <MenuItem onClick={handleOpenSecurity} sx={{ gap: 1 }}>
-          <ShieldRoundedIcon sx={{ fontSize: 18 }} />
+          <Icons.shieldCheck sx={{ fontSize: designTokens.iconSize.md }} />
           <Typography sx={{ fontSize: displayTextSize[14] }}>
             帳號安全
           </Typography>
         </MenuItem>
         <MenuItem onClick={handleSignOut} sx={{ gap: 1 }}>
-          <PersonIcon sx={{ fontSize: 18 }} />
+          <Icons.logOut sx={{ fontSize: 18 }} />
           <Typography sx={{ fontSize: displayTextSize[14] }}>登出</Typography>
         </MenuItem>
       </Menu>

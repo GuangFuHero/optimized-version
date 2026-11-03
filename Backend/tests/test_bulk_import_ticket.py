@@ -380,9 +380,13 @@ async def test_a_masked_phone_cannot_be_written_back(db):
 
 @pytest.mark.asyncio
 async def test_a_zone_scoped_export_comes_back_half_writable(db):
-    """The whole PII path end to end: out-of-zone rows exported masked cannot be re-imported."""
+    """The whole PII path end to end: out-of-zone rows exported masked cannot be re-imported.
+
+    An NGO team: zones are assigned to NGO teams only, and a gov team's `zone` ticket grants widen
+    to `all` (ADR-459).
+    """
     await _configs(db)
-    team = Team(name="Hualien", type="gov")
+    team = Team(name="Hualien", type="ngo")
     db.add(team)
     await db.flush()
     assigner = User(name="assigner")
@@ -428,6 +432,41 @@ async def test_a_zone_scoped_export_comes_back_half_writable(db):
     assert outcome.updated == 1
     assert outcome.failed == 1
     assert "PII" in outcome.errors[0].message
+
+
+@pytest.mark.asyncio
+async def test_a_gov_admin_s_import_updates_a_ticket_in_no_zone_at_all(db):
+    """ADR-459: a gov team holds no zone, so its `zone` ticket.edit widens to `all` for an import too.
+
+    End to end through the per-row check (`bulk_import` → `update_ticket` → `require_scope`):
+    the ticket lies in no zone of anyone's, and the gov admin's import still updates it.
+    """
+    await _configs(db)
+    author = await _importer(db)
+    raw, filename = _file([_row("區外", description="第一版")])
+    await commit_tickets(db, actor=author, raw=raw, filename=filename, task_type="rescue")
+
+    gov = Team(name="縣府", type="gov")
+    db.add(gov)
+    await db.flush()
+    gov_admin = User(name="GovAdmin")
+    db.add(gov_admin)
+    await db.flush()
+    await _grant(
+        db,
+        gov_admin,
+        (Perm.TICKET_IMPORT, "all"),
+        (Perm.TICKET_ADD, "all"),
+        (Perm.TICKET_EDIT, "zone"),
+        (Perm.TICKET_VIEW_PII, "all"),
+        team=gov,
+    )
+
+    raw, filename = _file([_row("區外", description="第二版")])
+    outcome = await commit_tickets(db, actor=gov_admin, raw=raw, filename=filename, task_type="rescue")
+
+    assert (outcome.created, outcome.updated, outcome.failed) == (0, 1, 0)
+    assert (await _ticket_titled(db, "區外")).description == "第二版"
 
 
 # --- round trip ---
@@ -600,7 +639,7 @@ async def test_a_need_for_nobody_fails_its_own_row_before_anything_is_written(db
 
 @pytest.mark.asyncio
 async def test_an_hr_need_without_a_quantity_fails_its_own_row_before_anything_is_written(db):
-    """Any need but a rescue must say how many (ADR-291 point 7): refused at preview, no ticket left."""
+    """Every need must say how many (ADR-291 point 7): refused at preview, no ticket left."""
     actor = await _importer(db)
     hr_row = {**_row("清淤"), "task_type": "hr"}
     raw, filename = _file([hr_row, {**hr_row, "title": "搬家具", "task_quantity": ""}])
@@ -627,15 +666,53 @@ async def test_a_need_of_a_kind_of_its_own_without_a_quantity_fails_its_own_row_
 
 
 @pytest.mark.asyncio
-async def test_a_rescue_need_may_still_leave_out_how_many(db):
-    """A rescue may not know how many it takes; it alone comes without a quantity."""
+async def test_a_rescue_need_must_say_how_many_too(db):
+    """A rescue asks for at least one person, as every need does, so its row fails without a quantity."""
     await _configs(db)
     actor = await _importer(db)
     raw, filename = _file([{**_row("人員受困"), "task_quantity": ""}])
 
     outcome = await commit_tickets(db, actor=actor, raw=raw, filename=filename, task_type="rescue")
 
-    assert (outcome.created, outcome.failed) == (1, 0), outcome.errors
+    assert (outcome.created, outcome.failed) == (0, 1)
+    assert await _ticket_titled(db, "人員受困") is None
+    assert "人數" in " ".join(e.message for e in outcome.errors)
+
+
+@pytest.mark.asyncio
+async def test_a_need_added_to_a_ticket_already_there_must_say_how_many_at_preview(db):
+    """The preview refuses it as it refuses one on a new ticket, in the same words, and nothing is written."""
+    await _configs(db)
+    actor = await _importer(db)
+    first, filename = _file([_row("求救", task_name="送水")])
+    await commit_tickets(db, actor=actor, raw=first, filename=filename, task_type="rescue")
+    second, filename = _file([{**_row("求救", task_name="清淤"), "task_quantity": ""}])
+
+    result = await preview_tickets(db, actor=actor, raw=second, filename=filename, task_type="rescue")
+    outcome = await commit_tickets(db, actor=actor, raw=second, filename=filename, task_type="rescue")
+
+    assert ["每個需求都要填人數" in e.message for e in result.errors] == [True]
+    assert (outcome.created, outcome.updated, outcome.failed) == (0, 0, 1)
+    assert "每個需求都要填人數" in outcome.errors[0].message
+    assert await _count(db, TicketTask) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_row_naming_a_need_its_ticket_has_may_leave_the_quantity_blank(db):
+    """It updates that need, which keeps its quantity: no need is filed without one."""
+    await _configs(db)
+    actor = await _importer(db)
+    first, filename = _file([_row("求救", task_name="送水")])
+    await commit_tickets(db, actor=actor, raw=first, filename=filename, task_type="rescue")
+    second, filename = _file([{**_row("求救", task_name="送水"), "task_quantity": ""}])
+
+    result = await preview_tickets(db, actor=actor, raw=second, filename=filename, task_type="rescue")
+    outcome = await commit_tickets(db, actor=actor, raw=second, filename=filename, task_type="rescue")
+
+    assert result.errors == ()
+    assert (outcome.updated, outcome.failed) == (1, 0), outcome.errors
+    (task,) = (await db.execute(select(TicketTask))).scalars()
+    assert task.quantity == 3
 
 
 @pytest.mark.asyncio

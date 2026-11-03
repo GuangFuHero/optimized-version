@@ -1,10 +1,9 @@
 'use client';
 
-import HelpOutlineRoundedIcon from '@mui/icons-material/HelpOutlineRounded';
 import { ButtonBase, Dialog, Popover, Tooltip } from '@mui/material';
 import { useId, useState, type MouseEvent } from 'react';
 
-import { designTokens } from '@rescue-frontend/ui';
+import { designTokens, Icons } from '@rescue-frontend/ui';
 
 import { pageHelpWidth } from './page-help';
 import { FreshDot, PageHelpPanel } from './page-help-panel';
@@ -67,7 +66,7 @@ export function PageHelpButton({ ringColor }: { ringColor: string }) {
             },
           }}
         >
-          <HelpOutlineRoundedIcon sx={{ fontSize: 26 }} />
+          <Icons.support sx={{ fontSize: 26 }} />
           {page.fresh ? <FreshDot ringColor={ringColor} /> : null}
         </ButtonBase>
       </Tooltip>
