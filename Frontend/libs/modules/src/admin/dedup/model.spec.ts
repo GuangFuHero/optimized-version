@@ -557,6 +557,27 @@ describe('the three contact rows', () => {
     });
   });
 
+  it('starts phone and Email on the ticket the name starts on, even where it left them empty', () => {
+    const pair = fixture();
+    // High is kept and has no Email; low's contact is someone else, with one.
+    both(pair).low.contact_email = 'lin@mock.test';
+    const fields = ticketFields(pair, labels);
+    const plan = defaultPlan(pair, fields);
+    expect(plan.picks['ticket:contact_name']).toBe('high');
+    expect(plan.picks['ticket:contact_phone']).toBe('high');
+    expect(plan.picks['ticket:contact_email']).toBe('high');
+    expect(
+      resultValue(fieldOf2(fields, 'ticket:contact_email'), plan),
+    ).toBeNull();
+    // Nothing of low's contact is sent unless picked.
+    expect(resolveRequest(pair, fields, plan, '').ticket).toBeNull();
+    // Picked on purpose, it is used.
+    plan.picks['ticket:contact_email'] = 'low';
+    expect(resolveRequest(pair, fields, plan, '').ticket).toEqual({
+      contact_email: 'lin@mock.test',
+    });
+  });
+
   it('refuses a blank name', () => {
     const pair = fixture();
     const fields = ticketFields(pair, labels);
