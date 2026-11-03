@@ -415,12 +415,12 @@ export function FloorSection({
               搜救 {summary.rescueOpen}
             </Typography>
           ) : null}
-          {summary.lack > 0 ? (
+          {summary.shortCount > 0 ? (
             <Typography
               component="span"
               sx={{ ...pill, px: 0, color: color.fg.neutral.muted }}
             >
-              缺 {summary.lack}
+              {summary.shortCount} 件缺人
             </Typography>
           ) : null}
           <Typography

@@ -154,19 +154,12 @@ describe("a building's entry (`building`)", () => {
     return { html: options.html, anchor: options.iconAnchor };
   }
 
-  it('says its tickets, and on red what they are still short', () => {
-    const { html } = entry(7, 3);
+  it('says its tickets and never what they are short: people and supplies do not add up', () => {
+    const { html } = entry(7, 53);
 
     expect(html).toContain('<span class="map-building__count">7 件</span>');
-    expect(html).toContain('<span class="map-building__short">缺 3</span>');
-    expect(html).not.toContain('看各樓層');
-  });
-
-  it('says only the tickets when none is short of people', () => {
-    const { html } = entry(2, 0);
-
-    expect(html).toContain('2 件');
     expect(html).not.toContain('缺');
+    expect(html).not.toContain('看各樓層');
   });
 
   it('says 看各樓層, never 0 件, for a building with none and to a guest, who is given no counts', () => {
