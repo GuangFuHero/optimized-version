@@ -27,10 +27,20 @@ describe('contentSecurityPolicy', () => {
     ]);
   });
 
-  it('keeps scripts, fetches, fonts and forms on the same origin', () => {
+  it("lets in Cloudflare's injected analytics beacon and its report, nothing else off-site", () => {
+    expect(production.get('script-src')).toEqual([
+      "'self'",
+      "'unsafe-inline'",
+      'https://static.cloudflareinsights.com',
+    ]);
+    expect(production.get('connect-src')).toEqual([
+      "'self'",
+      'https://cloudflareinsights.com',
+    ]);
+  });
+
+  it('keeps fonts, forms and everything else on the same origin', () => {
     expect(production.get('default-src')).toEqual(["'self'"]);
-    expect(production.get('script-src')).toEqual(["'self'", "'unsafe-inline'"]);
-    expect(production.get('connect-src')).toEqual(["'self'"]);
     expect(production.get('font-src')).toEqual(["'self'", 'data:']);
     expect(production.get('form-action')).toEqual(["'self'"]);
     expect(production.get('object-src')).toEqual(["'none'"]);
@@ -41,6 +51,7 @@ describe('contentSecurityPolicy', () => {
     expect(directives(contentSecurityPolicy(true)).get('script-src')).toEqual([
       "'self'",
       "'unsafe-inline'",
+      'https://static.cloudflareinsights.com',
       "'unsafe-eval'",
     ]);
   });

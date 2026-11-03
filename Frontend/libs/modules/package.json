@@ -9,7 +9,8 @@
     "./session": "./src/session/index.ts",
     "./server": "./src/server.ts",
     "./document": "./src/document-layout.tsx",
-    "./content-security-policy": "./src/http/content-security-policy.js"
+    "./content-security-policy": "./src/http/content-security-policy.js",
+    "./zod-jitless": "./src/http/zod-jitless.ts"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
