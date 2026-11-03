@@ -94,6 +94,22 @@ function Row({
   );
 }
 
+/** A 3px dot between the summary's counts: a full-width 「·」 takes 16px, which the bar cannot spare. */
+function SummaryDot() {
+  return (
+    <Box
+      aria-hidden
+      sx={{
+        width: 3,
+        height: 3,
+        flexShrink: 0,
+        borderRadius: `${radius.full}px`,
+        bgcolor: color.fg.neutral.muted,
+      }}
+    />
+  );
+}
+
 const FILTER_BAR_WIDTH = 424;
 
 /**
@@ -160,7 +176,7 @@ export function AdminMapFilterBar({
     <Box
       sx={{
         // One width, open or closed, so the bar does not jump when it opens. Wide enough for the
-        // summary (it carries 張未指派) with 清除 and 篩選 after it; the note under it wraps.
+        // summary (it carries 張未指派) with 篩選 after it; 清除 has a line of its own below (MAP-FILTER-103).
         width: FILTER_BAR_WIDTH,
         maxWidth: 'calc(100vw - 56px)',
         borderRadius: `${radius.md}px`,
@@ -170,10 +186,13 @@ export function AdminMapFilterBar({
         overflow: 'hidden',
       }}
     >
+      {/* With very large counts even the summary and 篩選 run past the width: 篩選 then wraps whole to
+          the next line, still at the right, instead of being cut off. */}
       <Stack
         direction="row"
-        spacing={1}
-        sx={{ alignItems: 'center', px: 1.5, py: 1 }}
+        spacing={0.75}
+        useFlexGap
+        sx={{ alignItems: 'center', flexWrap: 'wrap', px: 1.5, py: 1 }}
       >
         <Box
           component={MapPin}
@@ -189,13 +208,13 @@ export function AdminMapFilterBar({
             ? `${shownTickets}${ticketsMayBeMore ? '+' : ''} 張任務單`
             : '任務單已隱藏'}
         </Typography>
-        <Typography sx={{ color: color.border.default }}>·</Typography>
+        <SummaryDot />
         <Typography sx={{ ...typography.body[300], whiteSpace: 'nowrap' }}>
           {filters.layers.stations ? `${shownStations} 個站點` : '站點已隱藏'}
         </Typography>
         {unassignedTickets !== null ? (
           <>
-            <Typography sx={{ color: color.border.default }}>·</Typography>
+            <SummaryDot />
             <Typography
               sx={{
                 ...typography.body[300],
@@ -213,22 +232,12 @@ export function AdminMapFilterBar({
             </Typography>
           </>
         ) : null}
-        <Box sx={{ flex: 1 }} />
-        {active > 0 ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() =>
-              onChange({ ...DEFAULT_ADMIN_MAP_FILTERS, layers: filters.layers })
-            }
-          >
-            清除
-          </Button>
-        ) : null}
-        {/* The count sits in the button (BTN-110); open, it shows so (BTN-111). */}
+        {/* The count sits in the button (BTN-110); open, it shows so (BTN-111). It never shrinks:
+            squeezed, its icons run over whatever sits beside it. */}
         <Button
           variant="neutral"
           size="sm"
+          sx={{ flexShrink: 0, ml: 'auto' }}
           onClick={() => setOpen((current) => !current)}
           disabled={disabled}
           aria-expanded={open}
@@ -239,6 +248,25 @@ export function AdminMapFilterBar({
           篩選
         </Button>
       </Stack>
+      {/* MAP-FILTER-103: with a filter on, 清除 sits right under 篩選, on a line of its own. The summary,
+          篩選 with its count and 清除 do not fit in one line of FILTER_BAR_WIDTH, and a fixed place
+          keeps 篩選 where it was rather than letting one or the other wrap as the numbers change. */}
+      {active > 0 ? (
+        <Stack
+          direction="row"
+          sx={{ justifyContent: 'flex-end', px: 1.5, pb: 0.75, mt: '-2px' }}
+        >
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() =>
+              onChange({ ...DEFAULT_ADMIN_MAP_FILTERS, layers: filters.layers })
+            }
+          >
+            清除
+          </Button>
+        </Stack>
+      ) : null}
       {isFiltered ? (
         <Box
           sx={{

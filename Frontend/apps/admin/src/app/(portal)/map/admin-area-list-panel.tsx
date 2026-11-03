@@ -447,7 +447,7 @@ function LogList({ log }: { log: readonly AdminMapLogEntry[] }) {
           這次還沒有任何操作。
         </Typography>
         <Typography sx={{ ...typography.label[300], lineHeight: 1.6 }}>
-          正式版寫入 audit_logs，這裡只留在本頁記憶體。
+          這裡只列出你在這一頁做過的事，重新整理就會清空。
         </Typography>
       </Stack>
     );
