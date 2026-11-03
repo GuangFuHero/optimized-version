@@ -15,6 +15,7 @@ import csv
 import io
 import itertools
 import zipfile
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from openpyxl import Workbook, load_workbook
@@ -27,9 +28,7 @@ SUPPORTED_EXTENSIONS = (CSV_EXTENSION, XLSX_EXTENSION)
 # 912345678, and `contact_phone` is a ticket's match key (ADR-107) — a silently dropped
 # leading zero turns a whole round-trip into "nothing matched, everything is new". Writing
 # these as text-formatted cells is what prevents that on the way back out of Excel too.
-TEXT_COLUMNS = frozenset(
-    {"uuid", "contact_phone", "contact_name", "name", "title", "no", "floor", "room"}
-)
+TEXT_COLUMNS = frozenset({"uuid", "contact_phone", "contact_name", "name", "title", "no", "floor", "room"})
 
 _TEXT_CELL_FORMAT = "@"
 # Excel reads a BOM-less UTF-8 CSV as the local codepage, which mangles every CJK name.
@@ -58,10 +57,29 @@ class Table:
 
     `headers` is kept separately rather than derived from the first row because a header-only
     file is a legitimate import template (ADR-119) and has no first row to derive from.
+
+    `lines` holds each row's line number in the spreadsheet, as the user sees it: the blank rows
+    dropped, a title row and a label row above the header (#285) all still count. Empty when the
+    caller built the table by hand; `line_of` then falls back to "the header is line 1".
     """
 
     headers: tuple[str, ...]
     rows: tuple[dict[str, str], ...]
+    lines: tuple[int, ...] = ()
+
+    def line_of(self, index: int) -> int:
+        """The spreadsheet line of data row `index`."""
+        return self.lines[index] if index < len(self.lines) else index + 2
+
+
+# A label row (#285) is told from a code row by how many of its cells are codes: an export's code
+# row names every column, a person's Chinese labels name none. Three, so a stray `uuid` in a
+# hand-written title row does not pass for the code row.
+MIN_CODE_CELLS = 3
+
+
+def _is_code_row(row, is_code) -> bool:
+    return sum(1 for value in row if is_code(_cell_to_text(value))) >= MIN_CODE_CELLS
 
 
 def _extension_of(filename: str) -> str:
@@ -69,9 +87,7 @@ def _extension_of(filename: str) -> str:
     for extension in SUPPORTED_EXTENSIONS:
         if lowered.endswith(extension):
             return extension
-    raise TableFormatError(
-        f"不支援的檔案格式「{filename}」；請使用 {' 或 '.join(SUPPORTED_EXTENSIONS)}"
-    )
+    raise TableFormatError(f"不支援的檔案格式「{filename}」；請使用 {' 或 '.join(SUPPORTED_EXTENSIONS)}")
 
 
 def _clean_headers(raw_headers: list) -> tuple[str, ...]:
@@ -113,27 +129,47 @@ def _cell_to_text(value) -> str:
 
 
 def _rows_from(
-    headers: tuple[str, ...], raw_rows, max_rows: int | None = None
-) -> tuple[dict[str, str], ...]:
+    headers: tuple[str, ...], numbered_rows, max_rows: int | None = None
+) -> tuple[tuple[dict[str, str], ...], tuple[int, ...]]:
     """Zip each raw row onto the headers, dropping rows that are entirely blank.
 
     Spreadsheets routinely report thousands of empty rows below the data; a short row is
     padded rather than refused, since a trailing blank column is not a structural problem.
+    `numbered_rows` yields `(line, row)`; the lines of the kept rows come back beside them.
 
     `max_rows` stops the read one row past the caller's limit — enough for the caller to see
     that the file is over it, without parsing the rest (ADR-209). Blank rows do not count,
     so the trailing emptiness a spreadsheet writes out never consumes the allowance.
     """
     rows = []
-    for raw in raw_rows:
+    lines = []
+    for line, raw in numbered_rows:
         values = [_cell_to_text(v) for v in raw][: len(headers)]
         values += [""] * (len(headers) - len(values))
         if not any(values):
             continue
         rows.append(dict(zip(headers, values, strict=True)))
+        lines.append(line)
         if max_rows is not None and len(rows) > max_rows:
             break
-    return tuple(rows)
+    return tuple(rows), tuple(lines)
+
+
+def _skip_label_row(header, rest, is_code):
+    """Step past an export's label row (#285) to the code row under it, when there is one.
+
+    The label row is the header found, the row after it is a code row, and the label row is not
+    one itself. A file with only the code row, or with headers of its own, is read as before.
+    `header` and the items of `rest` are `(line, row)`.
+    """
+    if is_code is None or _is_code_row(header[1], is_code):
+        return header, rest
+    following = _next_filled(rest)
+    if following is None:
+        return header, iter(())
+    if _is_code_row(following[1], is_code):
+        return following, rest
+    return header, itertools.chain((following,), rest)
 
 
 def _looks_like_formula(value: str) -> bool:
@@ -151,21 +187,23 @@ def _looks_like_formula(value: str) -> bool:
     return False
 
 
-def _read_csv(raw: bytes, max_rows: int | None) -> Table:
+def _read_csv(raw: bytes, max_rows: int | None, is_code) -> Table:
     try:
         # utf-8-sig strips our own BOM when present and is plain UTF-8 when it is not.
         text = raw.decode("utf-8-sig")
     except UnicodeDecodeError as exc:
-        raise TableFormatError(
-            "檔案不是 UTF-8 編碼；請在試算表軟體以「CSV UTF-8」另存後再上傳"
-        ) from exc
+        raise TableFormatError("檔案不是 UTF-8 編碼；請在試算表軟體以「CSV UTF-8」另存後再上傳") from exc
 
-    reader = csv.reader(io.StringIO(text))
-    header_row = next(reader, None)
-    if header_row is None:
+    # A record is a spreadsheet row, so it is numbered as one; a quoted newline inside a cell
+    # does not start a new row.
+    numbered = enumerate(csv.reader(io.StringIO(text)), start=1)
+    header = next(numbered, None)
+    if header is None:
         raise TableFormatError("檔案是空的")
-    headers = _clean_headers(header_row)
-    return Table(headers=headers, rows=_rows_from(headers, reader, max_rows))
+    header, numbered = _skip_label_row(header, numbered, is_code)
+    headers = _clean_headers(header[1])
+    rows, lines = _rows_from(headers, numbered, max_rows)
+    return Table(headers=headers, rows=rows, lines=lines)
 
 
 def _check_uncompressed_size(raw: bytes) -> None:
@@ -189,8 +227,9 @@ def _filled_cells(row) -> int:
     return sum(1 for value in row if _cell_to_text(value))
 
 
-def _next_filled(raw_rows):
-    return next((row for row in raw_rows if _filled_cells(row)), None)
+def _next_filled(numbered_rows):
+    """The next `(line, row)` with a filled cell, or None."""
+    return next((item for item in numbered_rows if _filled_cells(item[1])), None)
 
 
 def _header_and_rest(raw_rows):
@@ -200,20 +239,20 @@ def _header_and_rest(raw_rows):
     a few rows down. Blank rows are passed over outright, and a filled row is passed over only
     while the next filled row is wider — so a single-column sheet keeps its first row as the
     header, and a blank spacer under a title does not make the title look like one. Blank rows
-    dropped here would be dropped as data rows anyway.
+    dropped here would be dropped as data rows anyway. Rows are `(line, row)`.
     """
     current = _next_filled(raw_rows)
     while current is not None:
         following = _next_filled(raw_rows)
         if following is None:
             return current, iter(())
-        if _filled_cells(current) > 1 or _filled_cells(following) <= _filled_cells(current):
+        if _filled_cells(current[1]) > 1 or _filled_cells(following[1]) <= _filled_cells(current[1]):
             return current, itertools.chain((following,), raw_rows)
         current = following
     return None, raw_rows
 
 
-def _read_xlsx(raw: bytes, max_rows: int | None) -> Table:
+def _read_xlsx(raw: bytes, max_rows: int | None, is_code) -> Table:
     _check_uncompressed_size(raw)
     try:
         workbook = load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
@@ -221,27 +260,36 @@ def _read_xlsx(raw: bytes, max_rows: int | None) -> Table:
         raise TableFormatError("無法讀取這個 .xlsx 檔") from exc
 
     sheet = workbook.active
-    header_row, raw_rows = _header_and_rest(sheet.iter_rows(values_only=True))
-    if header_row is None:
+    # The read-only sheet yields from row 1, empty rows included, so counting is numbering.
+    numbered = enumerate(sheet.iter_rows(values_only=True), start=1)
+    header, raw_rows = _header_and_rest(numbered)
+    if header is None:
         workbook.close()
         raise TableFormatError("檔案是空的")
-    headers = _clean_headers(list(header_row))
-    rows = _rows_from(headers, raw_rows, max_rows)
+    header, raw_rows = _skip_label_row(header, raw_rows, is_code)
+    headers = _clean_headers(list(header[1]))
+    rows, lines = _rows_from(headers, raw_rows, max_rows)
     workbook.close()
-    return Table(headers=headers, rows=rows)
+    return Table(headers=headers, rows=rows, lines=lines)
 
 
-def read_table(raw: bytes, filename: str, *, max_rows: int | None = None) -> Table:
+def read_table(
+    raw: bytes, filename: str, *, max_rows: int | None = None, is_code: Callable[[str], bool] | None = None
+) -> Table:
     """Parse an uploaded CSV or XLSX into headers plus rows of text.
 
     `max_rows` bounds the work: parsing stops one row past it, so the caller's own row limit
     costs a rejection rather than a full parse (ADR-209).
+
+    `is_code` says whether a header cell is one of the file type's column codes. Given, a label
+    row above the code row — the first of an export's two header rows (#285) — is skipped: see
+    `_skip_label_row`.
     """
     if not raw:
         raise TableFormatError("檔案是空的")
     if _extension_of(filename) == CSV_EXTENSION:
-        return _read_csv(raw, max_rows)
-    return _read_xlsx(raw, max_rows)
+        return _read_csv(raw, max_rows, is_code)
+    return _read_xlsx(raw, max_rows, is_code)
 
 
 def _csv_safe(value) -> str:
@@ -254,15 +302,19 @@ def _csv_safe(value) -> str:
     return _CSV_FORMULA_GUARD + text if _looks_like_formula(text) else text
 
 
-def write_csv(headers, rows) -> bytes:
+def write_csv(headers, rows, *, labels=None) -> bytes:
     """Render a table as UTF-8 CSV with a BOM, so Excel opens CJK text correctly.
 
     The BOM does not stop Excel from re-inferring cell types when the user saves — nothing in
     a CSV can. That is what `write_xlsx` is for; this format stays available because plenty
     of external sources only speak CSV.
+
+    `labels`, given, is written as a row of its own above the headers (#285).
     """
     buffer = io.StringIO()
     writer = csv.writer(buffer, lineterminator="\n")
+    if labels is not None:
+        writer.writerow([_csv_safe(label) for label in labels])
     writer.writerow([_csv_safe(header) for header in headers])
     for row in rows:
         writer.writerow([_csv_safe(row.get(header, "")) for header in headers])
@@ -288,10 +340,15 @@ def _write_row(sheet, values: list[str], text_indexes: list[int]) -> None:
             cell.number_format = _TEXT_CELL_FORMAT
 
 
-def write_xlsx(headers, rows, *, text_columns=TEXT_COLUMNS) -> bytes:
-    """Render a table as .xlsx, writing every cell as text (see `_write_row`)."""
+def write_xlsx(headers, rows, *, text_columns=TEXT_COLUMNS, labels=None) -> bytes:
+    """Render a table as .xlsx, writing every cell as text (see `_write_row`).
+
+    `labels`, given, is written as a row of its own above the headers (#285).
+    """
     workbook = Workbook()
     sheet = workbook.active
+    if labels is not None:
+        _write_row(sheet, [str(label) for label in labels], [])
     _write_row(sheet, [str(header) for header in headers], [])
 
     text_indexes = [i + 1 for i, header in enumerate(headers) if header in text_columns]

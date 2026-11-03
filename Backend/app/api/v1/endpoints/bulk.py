@@ -11,6 +11,7 @@ between the two calls gets validation errors, not a bypass.
 
 import json
 from urllib.parse import quote
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import Response
@@ -19,7 +20,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import security
 from app.core.tabular import TableFormatError
 from app.models.auth import User
-from app.schemas.bulk import BulkImportResponse, BulkPreviewResponse, TicketExportCountsResponse
+from app.schemas.bulk import (
+    BulkImportResponse,
+    BulkPreviewResponse,
+    OwnTeamResponse,
+    TicketExportCountsResponse,
+)
 from app.services import bulk_export, bulk_import
 from app.services.bulk_export import CSV_FORMAT, SUPPORTED_FORMATS, BulkExportError
 from app.services.bulk_import import BulkImportError
@@ -52,6 +58,7 @@ def _as_response(exported: bulk_export.ExportFile) -> Response:
 @router.get(
     "/stations/export",
     summary="匯出資源站點（CSV / XLSX）",
+    description="表頭兩列：第一列中文欄名，第二列欄位代號；匯入時看到第二列是代號就用它當表頭。",
     responses={403: {"description": "Permission Denied"}},
 )
 async def export_stations(
@@ -62,7 +69,10 @@ async def export_stations(
     db: AsyncSession = Depends(security.get_db),
     current_user: User = Depends(security.get_current_user),
 ):
-    """Export one station type's rows, limited to what the caller's scope reaches."""
+    """Export one station type's rows, limited to what the caller's scope reaches.
+
+    Two header rows: Chinese labels, then the field codes the importer maps by.
+    """
     try:
         exported = await bulk_export.export_stations(
             db, actor=current_user, station_type=station_type, file_format=file_format
@@ -72,54 +82,101 @@ async def export_stations(
     return _as_response(exported)
 
 
+_RESPONSIBLE_TEAM_DESCRIPTION = (
+    "組織分配：只要落在這個團隊責任區的單，跟 GraphQL `tickets` 的 responsibleTeamUuid 同一套"
+    "（匯出那一刻算）。只比對呼叫者看得到細節（ticket.view_detail）的單，其他單一律不符合"
+)
+_UNASSIGNED_DESCRIPTION = (
+    "組織分配：只要不在任何責任區的單（未指派），跟 `tickets` 的 unassignedOnly 同一套；"
+    "同樣只比對看得到細節的單。不能跟 responsible_team_uuid 一起用（400）"
+)
+
+
+def _team_params(
+    responsible_team_uuid: UUID | None = Query(None, description=_RESPONSIBLE_TEAM_DESCRIPTION),
+    unassigned_only: bool = Query(False, description=_UNASSIGNED_DESCRIPTION),
+) -> dict:
+    return {"responsible_team_uuid": responsible_team_uuid, "unassigned_only": unassigned_only}
+
+
 @router.get(
     "/tickets/export/counts",
     summary="各任務型別匯出會有幾列",
-    responses={403: {"description": "Permission Denied"}},
+    responses={
+        400: {"description": "responsible_team_uuid 和 unassigned_only 同時給"},
+        403: {"description": "Permission Denied"},
+    },
 )
 async def count_ticket_exports(
+    team: dict = Depends(_team_params),
     db: AsyncSession = Depends(security.get_db),
     current_user: User = Depends(security.get_current_user),
 ) -> TicketExportCountsResponse:
     """Count each task type's export rows in the caller's scope, with the most one export may hold.
 
-    A type with no rows is left out. A count over `max_rows` is still the real one, so a page can
-    say that type's export will be refused before anyone asks for it.
+    Narrowed by 組織分配 exactly as `/tickets/export` is. A type with no rows is left out; 全部種類
+    is their sum. A count over `max_rows` is still the real one, so a page can say that type's
+    export will be refused before anyone asks for it. `own_team` is set when the caller's
+    ticket.export reaches only their team's 責任區.
     """
+    try:
+        counts = await bulk_export.count_ticket_exports(db, actor=current_user, **team)
+    except BulkExportError as exc:
+        raise _bad_request(exc) from exc
+    own = await bulk_export.own_export_team(db, actor=current_user)
     return TicketExportCountsResponse(
-        counts=await bulk_export.count_ticket_exports(db, actor=current_user),
+        counts=counts,
         max_rows=bulk_export.MAX_EXPORT_ROWS,
+        own_team=OwnTeamResponse(uuid=own.uuid, name=own.name) if own else None,
     )
 
 
 @router.get(
     "/tickets/export",
     summary="匯出求助單（CSV / XLSX）",
-    responses={403: {"description": "Permission Denied"}},
+    description=(
+        "一列是一張單加一個需求。表頭兩列：第一列中文欄名，第二列欄位代號；匯入時看到第二列是代號"
+        "就用它當表頭。task_type=all 是全部種類一份檔，只有固定欄位、沒有各種需求自己的 prop.* 欄位。"
+        "列表的其他篩選（狀態、優先級、行政區域、時間、搜尋）不帶進匯出。"
+    ),
+    responses={
+        400: {"description": "型別或格式不對、超過上限、組織分配兩個一起給、範本選了 all"},
+        403: {"description": "Permission Denied"},
+    },
 )
 async def export_tickets(
-    task_type: str = Query(description="要匯出的任務型別，例如 rescue"),
+    task_type: str = Query(
+        description="要匯出的任務型別，例如 rescue；all 是全部種類（只有固定欄位，不能配 template）"
+    ),
     file_format: str = Query(
         CSV_FORMAT, alias="format", description=f"檔案格式：{' / '.join(SUPPORTED_FORMATS)}"
     ),
     template: bool = Query(
         False,
         description=(
-            "只回標題列，給匯入當範本：欄位跟匯出一樣、沒有資料；要 ticket.import，不要 ticket.export"
+            "只回標題列，給匯入當範本：欄位跟匯出一樣、沒有資料；要 ticket.import，不要 ticket.export。"
+            "不看組織分配"
         ),
     ),
+    team: dict = Depends(_team_params),
     db: AsyncSession = Depends(security.get_db),
     current_user: User = Depends(security.get_current_user),
 ):
-    """Export one task type's rows; contact fields are masked per row (ADR-109).
+    """Export one task type's rows, or every type's with `all`; contact fields are masked per row (ADR-109).
 
-    With `template`, the header row alone, for an importer to fill in.
+    With `template`, the two header rows alone, for an importer to fill in.
     """
-    write = bulk_export.ticket_import_template if template else bulk_export.export_tickets
     try:
-        exported = await write(db, actor=current_user, task_type=task_type, file_format=file_format)
+        if template:
+            exported = await bulk_export.ticket_import_template(
+                db, actor=current_user, task_type=task_type, file_format=file_format
+            )
+        else:
+            exported = await bulk_export.export_tickets(
+                db, actor=current_user, task_type=task_type, file_format=file_format, **team
+            )
     except BulkExportError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise _bad_request(exc) from exc
     return _as_response(exported)
 
 

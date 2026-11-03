@@ -13,12 +13,13 @@ happening to agree (ADR-119).
 
 from dataclasses import dataclass
 from datetime import datetime
+from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions import Perm
-from app.core.rbac_scopes import Scope, in_scope, scope_filter
+from app.core.rbac_scopes import Scope, active_team, in_scope, scope_filter
 from app.core.security import resolve_scope
 from app.core.tabular import TEXT_COLUMNS, write_csv, write_xlsx
 from app.graphql.masking import mask_email, mask_name, mask_phone
@@ -31,8 +32,9 @@ from app.models.secondary_location import SecondaryLocation
 from app.models.station_property import StationProperty
 from app.models.ticket_task import TaskProperty, TicketTask
 from app.services.authz import require_scope, stable_actor
-from app.services.bulk_columns import station_columns, ticket_columns
+from app.services.bulk_columns import TICKET_COLUMNS, label_of, station_columns, ticket_columns
 from app.services.ticket import TASK_TYPES
+from app.services.ticket_zones import detail_guarded, responsible_team_conditions
 
 CSV_FORMAT = "csv"
 XLSX_FORMAT = "xlsx"
@@ -54,6 +56,10 @@ MAX_EXPORT_ROWS = 10_000
 # header-only file is the import template (ADR-119). `'all'` is the config's wildcard bucket,
 # never a type of its own.
 _CONFIG_WILDCARD = "all"
+
+# `task_type` meaning every kind of need in one file (#285). The same word as the config's
+# wildcard, which is never a type of its own, so no real type can be shadowed by it.
+ALL_TASK_TYPES = "all"
 
 
 class BulkExportError(ValueError):
@@ -139,12 +145,18 @@ def _require_not_truncated(fetched: int, *, narrow_by: str) -> None:
 
 
 def _render(columns, rows, *, stem: str, file_format: str) -> ExportFile:
+    """Write the file with two header rows (#285): Chinese labels for people, then the codes.
+
+    The importer maps by the code row and skips the label row above it (`read_table`'s
+    `is_code`), so the file still goes straight back in.
+    """
     _require_supported_format(file_format)
     headers = tuple(column.header for column in columns)
+    labels = tuple(label_of(column) for column in columns)
     content = (
-        write_csv(headers, rows)
+        write_csv(headers, rows, labels=labels)
         if file_format == CSV_FORMAT
-        else write_xlsx(headers, rows, text_columns=TEXT_COLUMNS)
+        else write_xlsx(headers, rows, text_columns=TEXT_COLUMNS, labels=labels)
     )
     return ExportFile(
         content=content,
@@ -323,14 +335,44 @@ def _contact_fields(ticket: Tickets, *, visible: bool) -> dict[str, str]:
     }
 
 
-async def count_ticket_exports(db: AsyncSession, *, actor: User) -> dict[str, int]:
+async def _team_filters(
+    db: AsyncSession, actor: User, *, responsible_team_uuid: UUID | None, unassigned_only: bool
+) -> list:
+    """組織分配 as the board applies it (`tickets`' `responsibleTeamUuid` / `unassignedOnly`, #285).
+
+    Matched now, from the ticket's point, and only on rows the caller sees in detail (ADR-281):
+    on any other the team would tell where the withheld point is. Both at once is a BulkExportError.
+    """
+    try:
+        conditions = responsible_team_conditions(
+            responsible_team_uuid=responsible_team_uuid, unassigned_only=unassigned_only
+        )
+    except ValueError as exc:
+        raise BulkExportError("responsible_team_uuid 和 unassigned_only 只能擇一") from exc
+    if not conditions:
+        return []
+    detail_scope = await resolve_scope(actor, Perm.TICKET_VIEW_DETAIL, db)
+    return detail_guarded(conditions, scope_filter(detail_scope, actor=actor, model=Tickets))
+
+
+async def count_ticket_exports(
+    db: AsyncSession,
+    *,
+    actor: User,
+    responsible_team_uuid: UUID | None = None,
+    unassigned_only: bool = False,
+) -> dict[str, int]:
     """Count the rows each task type's export would hold, so a page can show them first.
 
     The same rows `export_tickets` writes — one per (ticket, task) pair in the caller's
-    ticket.export scope — grouped by `task_type`; a type with no rows is left out.
+    ticket.export scope, narrowed by 組織分配 as the export is — grouped by `task_type`; a type
+    with no rows is left out. `task_type=all`'s count is their sum.
     """
     async with stable_actor(db, actor):
         scope = await require_scope(actor, Perm.TICKET_EXPORT, db)
+        team_filters = await _team_filters(
+            db, actor, responsible_team_uuid=responsible_team_uuid, unassigned_only=unassigned_only
+        )
         rows = await db.execute(
             select(TicketTask.task_type, func.count())
             .join(Tickets, Tickets.uuid == TicketTask.ticket_uuid)
@@ -338,26 +380,72 @@ async def count_ticket_exports(db: AsyncSession, *, actor: User) -> dict[str, in
                 TicketTask.delete_at.is_(None),
                 Tickets.delete_at.is_(None),
                 *scope_filter(scope, actor=actor, model=Tickets),
+                *team_filters,
             )
             .group_by(TicketTask.task_type)
         )
         return {task_type: count for task_type, count in rows.all()}
 
 
+@dataclass(frozen=True)
+class OwnTeam:
+    """The team an export is limited to, as the 匯出 popover names it."""
+
+    uuid: str
+    name: str | None
+
+
+async def own_export_team(db: AsyncSession, *, actor: User) -> OwnTeam | None:
+    """The acting team, when the caller's ticket.export reaches only that team's 責任區 (`zone`).
+
+    Read from the scope, never from a role name or team type: a gov team's `zone` widens to
+    `all` (`resolve_scope`), and `all` — or any other scope — gives None. The page then fixes
+    組織分配 to this team, since nothing outside it is in the file anyway.
+    """
+    async with stable_actor(db, actor):
+        if await resolve_scope(actor, Perm.TICKET_EXPORT, db) != Scope.ZONE:
+            return None
+        team_uuid = active_team(actor)
+        if team_uuid is None:
+            return None
+        identity = actor.active_identity
+        return OwnTeam(uuid=str(team_uuid), name=identity.team_name)
+
+
 async def export_tickets(
-    db: AsyncSession, *, actor: User, task_type: str, file_format: str = CSV_FORMAT
+    db: AsyncSession,
+    *,
+    actor: User,
+    task_type: str,
+    file_format: str = CSV_FORMAT,
+    responsible_team_uuid: UUID | None = None,
+    unassigned_only: bool = False,
 ) -> ExportFile:
-    """Render one row per (ticket, task) pair of `task_type` the caller may see (ADR-120)."""
+    """Render one row per (ticket, task) pair of `task_type` the caller may see (ADR-120).
+
+    `task_type=all` (`ALL_TASK_TYPES`) puts every kind of need in one file, with the fixed
+    columns only: each kind's own fields would leave most of a row blank (#285). The
+    `task_type` column says which kind each row is.
+
+    `responsible_team_uuid` / `unassigned_only` narrow it as 組織分配 does the board: see
+    `_team_filters`. No other board filter applies to an export.
+    """
     _require_supported_format(file_format)
+    every_type = task_type == ALL_TASK_TYPES
     async with stable_actor(db, actor):
         scope = await require_scope(actor, Perm.TICKET_EXPORT, db)
-        await _require_known_type(
-            db,
-            task_type,
-            data_column=TicketTask.task_type,
-            config_column=TaskPropertyConfig.task_type,
+        if not every_type:
+            await _require_known_type(
+                db,
+                task_type,
+                data_column=TicketTask.task_type,
+                config_column=TaskPropertyConfig.task_type,
+            )
+        team_filters = await _team_filters(
+            db, actor, responsible_team_uuid=responsible_team_uuid, unassigned_only=unassigned_only
         )
-        columns = await ticket_columns(db, task_type)
+        columns = TICKET_COLUMNS if every_type else await ticket_columns(db, task_type)
+        type_filter = [] if every_type else [TicketTask.task_type == task_type]
         may_see_pii = await _row_decider(db, actor, Perm.TICKET_VIEW_PII)
         may_see_detail = await _row_decider(db, actor, Perm.TICKET_VIEW_DETAIL)
 
@@ -369,8 +457,9 @@ async def export_tickets(
                     .where(
                         TicketTask.delete_at.is_(None),
                         Tickets.delete_at.is_(None),
-                        TicketTask.task_type == task_type,
+                        *type_filter,
                         *scope_filter(scope, actor=actor, model=Tickets),
+                        *team_filters,
                     )
                     .order_by(TicketTask.created_at)
                     .limit(MAX_EXPORT_ROWS + 1)
@@ -382,7 +471,7 @@ async def export_tickets(
 
         task_uuids = [str(task.uuid) for task, _ in pairs]
         properties: dict[str, dict[str, TaskProperty]] = {}
-        if task_uuids:
+        if task_uuids and not every_type:
             for row in (
                 await db.execute(
                     select(TaskProperty).where(
@@ -449,8 +538,11 @@ async def ticket_import_template(
 
     The export's columns, which the importer reads (ADR-119), so it needs `ticket.import` and not
     `ticket.export`: it holds no data. A kind of need nobody has filed or configured yet still has one.
+    `task_type=all` has none: an import file is one kind of need.
     """
     _require_supported_format(file_format)
+    if task_type == ALL_TASK_TYPES:
+        raise BulkExportError("匯入範本要選一種需求種類，不能是全部種類（all）")
     async with stable_actor(db, actor):
         await require_scope(actor, Perm.TICKET_IMPORT, db)
         await _require_known_type(
