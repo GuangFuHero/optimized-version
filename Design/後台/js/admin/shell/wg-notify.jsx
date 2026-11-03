@@ -1,4 +1,7 @@
-// wg-notify.jsx — 通知鈴鐺：頂欄鈴鐺 → 未讀數字 → 點開的通知清單（後台各頁共用）
+// wg-notify.jsx — 通知鈴鐺：頂欄鈴鐺 → 新通知數字 → 點開的通知清單（後台各頁共用）
+// 🔒 用字：鈴鐺數字＝上次打開清單之後新來的（程式裡叫 seen）；「未讀」只指還沒點開的那一則（read）。
+//    中文分不出「看過／讀過」，所以畫面與報讀文字一律只用「新通知」「未讀」，不要寫「看過」，
+//    也不要把鈴鐺數字叫「未讀」—— 打開清單後鈴鐺歸零，清單卻還寫「6 則未讀」，同一個詞兩個數字。
 // 🔒 2026-11-03 Sucre：這個功能叫「通知鈴鐺」，不叫抽屜。
 //
 // 正典：identity-and-account / IAM-FEAT-002（AC-01、02、05、06、07、08、10）
@@ -409,7 +412,7 @@
 
     return (
       <React.Fragment>
-        <button type="button" onClick={openDrawer} aria-label={unseen ? `通知，${unseen} 則未讀` : "通知"}
+        <button type="button" onClick={openDrawer} aria-label={unseen ? `通知，${unseen} 則新通知` : "通知"}
           title="通知"
           style={{ position: "relative", border: "none", background: "transparent", cursor: "pointer", lineHeight: 0, padding: 4, borderRadius: "var(--radius-sm)" }}>
           <span style={{ display: "inline-flex", animation: nudge ? "wgBellNudge 0.6s ease" : "none" }}>
