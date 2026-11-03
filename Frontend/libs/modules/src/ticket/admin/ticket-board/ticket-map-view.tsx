@@ -86,6 +86,8 @@ const LEGEND = ticketPriorityLegend(ticketPriorityLabel);
 interface TicketMapViewProps {
   /** The board's filters: the map loads only matching tickets inside its view. */
   filters: TicketFilters;
+  /** Where the 時間 filter cuts: the board's, taken with the filters, so every load agrees. */
+  cutAt: number;
   /** These filters came with the page, by a link or a reload, rather than being changed on it. */
   filtersFromLink: boolean;
   selectedUuid: string | null;
@@ -106,6 +108,7 @@ const NO_SPACES: readonly SpaceListRow[] = [];
  */
 export function TicketMapView({
   filters,
+  cutAt,
   filtersFromLink,
   selectedUuid,
   onOpenTicket,
@@ -122,15 +125,15 @@ export function TicketMapView({
       filtersFromLink &&
       readShownFilters('ticket-board') !== ticketFiltersKey(filters),
   );
-  const framing = useFrameMatching(leafletMap, filters, selectedUuid, {
+  const framing = useFrameMatching(leafletMap, filters, cutAt, selectedUuid, {
     restoredRef,
     arrivedWithNewFilters,
   });
   // The first load waits for the first framing, so it is of the framed view and not the default.
   const viewport = useMapViewport(framing.ready ? leafletMap : null);
   const variables = useMemo(
-    () => (viewport ? toMapVariables(filters, viewport) : {}),
-    [filters, viewport],
+    () => (viewport ? toMapVariables(filters, viewport, cutAt) : {}),
+    [filters, viewport, cutAt],
   );
   const tickets = useTicketPins(variables, { enabled: viewport !== null });
   const rows = tickets.pins;
@@ -293,13 +296,17 @@ export function TicketMapView({
 function useFrameMatching(
   map: LeafletMap | null,
   filters: TicketFilters,
+  cutAt: number,
   selectedUuid: string | null,
   {
     restoredRef,
     arrivedWithNewFilters,
   }: { restoredRef: RefObject<boolean>; arrivedWithNewFilters: boolean },
 ) {
-  const variables = useMemo(() => toExtentVariables(filters), [filters]);
+  const variables = useMemo(
+    () => toExtentVariables(filters, cutAt),
+    [filters, cutAt],
+  );
   const extent = useTicketsExtent(variables);
   const [ready, setReady] = useState(false);
   const [wentHome, setWentHome] = useState(false);

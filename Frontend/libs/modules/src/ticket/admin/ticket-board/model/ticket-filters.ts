@@ -239,14 +239,18 @@ export function parseTicketPage(params: URLSearchParams): number {
   return Number.isFinite(page) && page >= 1 ? page : 1;
 }
 
-/** One board page: the filters plus that page's window. Pages count from 1. */
+/**
+ * One board page: the filters plus that page's window. Pages count from 1. `now` sets where the 時間
+ * filter cuts, as in toServerVariables.
+ */
 export function toPageVariables(
   filters: TicketFilters,
   page: number,
+  now: number = Date.now(),
 ): AdminTicketsQueryVariables {
   const index = Math.max(1, Math.trunc(page) || 1) - 1;
   return {
-    ...toServerVariables(filters),
+    ...toServerVariables(filters, now),
     skip: index * TICKET_PAGE_SIZE,
     limit: TICKET_PAGE_SIZE,
   };
@@ -305,8 +309,9 @@ const up = (value: number) => Math.ceil(value * SNAP) / SNAP;
  */
 export function toExtentVariables(
   filters: TicketFilters,
+  now: number = Date.now(),
 ): AdminTicketsExtentQueryVariables {
-  return toServerVariables(filters);
+  return toServerVariables(filters, now);
 }
 
 /**
@@ -321,13 +326,18 @@ export function ticketFiltersKey(filters: TicketFilters): string {
   });
 }
 
-/** The tickets inside `viewport` that match the filters, up to the map's limit. */
+/**
+ * The tickets inside `viewport` that match the filters, up to the map's limit. `now` is the board's
+ * cut, taken with the filters: read afresh on each pan, a pan past a 5-minute step would load other
+ * tickets rather than only another area.
+ */
 export function toMapVariables(
   filters: TicketFilters,
   viewport: MapViewport,
+  now: number = Date.now(),
 ): AdminTicketMapPinsQueryVariables {
   return {
-    ...toServerVariables(filters),
+    ...toServerVariables(filters, now),
     bounds: {
       minLat: clamp(down(viewport.south), -90, 90),
       maxLat: clamp(up(viewport.north), -90, 90),

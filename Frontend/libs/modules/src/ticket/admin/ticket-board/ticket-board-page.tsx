@@ -75,6 +75,10 @@ export function TicketBoardPage() {
   const page = parseTicketPage(params);
   const caps = useTicketCapabilities();
   const now = useNow();
+  // Where the 時間 filter cuts, taken once with the filters so the list, the count, the map's pins
+  // and the spaces all load at the same cut, however long the board stays open. Keyed on the
+  // filters alone: paging or opening a ticket keeps it.
+  const cutAt = useMemo(() => Date.now(), [filtersKey]);
   const [filterOpen, setFilterOpen] = useState(false);
 
   const replaceParams = useCallback(
@@ -102,15 +106,18 @@ export function TicketBoardPage() {
 
   // One page from the server, for the table only.
   const pageVariables = useMemo(
-    () => toPageVariables(filters, page),
-    [filters, page],
+    () => toPageVariables(filters, page, cutAt),
+    [filters, page, cutAt],
   );
   const tickets = useTicketRows(pageVariables, {
     enabled: view === 'table',
     keepAcross: TICKET_PAGE_KEYS,
   });
   // The map counts by the extent it frames: the same query as the map's, so no second request.
-  const extentVariables = useMemo(() => toExtentVariables(filters), [filters]);
+  const extentVariables = useMemo(
+    () => toExtentVariables(filters, cutAt),
+    [filters, cutAt],
+  );
   const extent = useTicketsExtent(extentVariables, {
     enabled: view === 'map',
   });
@@ -180,8 +187,8 @@ export function TicketBoardPage() {
   // 開啟空間 (BE-036): every space, listed and pinned beside the tickets the filters let through.
   const spaceData = useSpaces();
   const spaceRows = useMemo(
-    () => visibleSpaceRows(spaceData.spaces, filters),
-    [spaceData.spaces, filters],
+    () => visibleSpaceRows(spaceData.spaces, filters, cutAt),
+    [spaceData.spaces, filters, cutAt],
   );
   const spaceTags = useMemo(
     () =>
@@ -291,6 +298,7 @@ export function TicketBoardPage() {
             {view === 'map' ? (
               <TicketMapView
                 filters={filters}
+                cutAt={cutAt}
                 filtersFromLink={filtersKey === openedFiltersKey}
                 selectedUuid={viewedUuid}
                 onOpenTicket={openTicket}

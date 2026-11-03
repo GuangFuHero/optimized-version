@@ -74,6 +74,7 @@ export function visibleSpaceRows(
     tickets: readonly SpaceTicket[] | null;
   }[],
   filters: TicketFilters,
+  now: number = Date.now(),
 ): SpaceListRow[] {
   const hasFilters = countActiveFilters(filters) > 0;
   return sortSpaceRows(
@@ -85,7 +86,7 @@ export function visibleSpaceRows(
           hasFilters,
           anyTicketPasses:
             space.tickets === null ||
-            space.tickets.some((ticket) => spaceTicketPasses(ticket, filters)),
+            space.tickets.some((ticket) => spaceTicketPasses(ticket, filters, now)),
         }),
       )
       .map((space) => space.row),
