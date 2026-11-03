@@ -59,11 +59,13 @@ interface AdminNoticeEntry {
  * decides it is for the back office.
  */
 const ADMIN_NOTICE_TYPES: Partial<Record<string, AdminNoticeEntry>> = {
-  // The ref is the suggestion, not the station, so it opens the list and cannot pick a station.
+  // Opens the station to review it. A notice sent before the backend reffed the station (it reffed
+  // the suggestion, which no route reads) opens the list.
   station_suggestion_created: {
     kind: 'suggestion',
     group: 'act',
     page: '/stations',
+    opens: 'station',
   },
   dedup_review_pending: { kind: 'dedup', group: 'act', page: '/audit' },
   // A platform role, or a new team, is the super admin's to decide (成員與權限); joining a team is

@@ -155,6 +155,16 @@ describe('adminNoticeHref', () => {
     ).toBe('/map');
   });
 
+  it('opens the station a suggestion is on, for review', () => {
+    expect(
+      adminNoticeHref({
+        type: 'station_suggestion_created',
+        ref_type: 'station',
+        ref_uuid: 's1',
+      }),
+    ).toBe('/stations?station=s1');
+  });
+
   it('opens the station list without a station uuid', () => {
     expect(
       adminNoticeHref({
@@ -166,6 +176,7 @@ describe('adminNoticeHref', () => {
     expect(
       adminNoticeHref({
         type: 'station_suggestion_created',
+        // Sent before the backend reffed the station.
         ref_type: 'station_suggestion',
         ref_uuid: 's1',
       }),

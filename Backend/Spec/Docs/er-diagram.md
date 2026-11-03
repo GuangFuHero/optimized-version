@@ -378,6 +378,8 @@ notifications {
 }
 %% ref_type/ref_uuid keep the frontend URL out of the row: the client resolves the target
 %% itself, so a route change doesn't invalidate stored notifications.
+%% station_suggestion_created refs the station (a property's suggestion, its parent station):
+%% the reviewer opens the station. The outcome notices to the submitter ref the suggestion.
 %% params lets the client write each sentence itself; a row whose params is NULL shows title/body.
 %% Every key listed for a type is present, null when the row lacks the value
 %% (NotificationService.PARAM_KEYS enforces the list):
