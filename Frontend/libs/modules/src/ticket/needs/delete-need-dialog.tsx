@@ -187,7 +187,7 @@ export function DeleteNeedDialog({
       onClose={onCancel}
       onConfirm={onConfirm}
       title="刪除這筆需求？"
-      confirmLabel={submitting ? '刪除中...' : '刪除'}
+      confirmLabel={submitting ? '刪除中…' : '刪除'}
       confirmIcon={<Icons.trash />}
       confirmTone="danger"
       confirmDisabled={!need}
@@ -233,7 +233,7 @@ export function DeleteNeedDialog({
               fontSize: displayTextSize[13],
             }}
           >
-            {gone ? '找不到這筆需求，可能已經被刪除。' : '載入中...'}
+            {gone ? '找不到這筆需求，可能已經被刪除。' : '載入中…'}
           </Typography>
         )}
       </Box>

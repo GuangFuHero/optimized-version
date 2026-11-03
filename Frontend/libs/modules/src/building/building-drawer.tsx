@@ -412,7 +412,7 @@ export function BuildingDrawer({
     content = error ? (
       <Alert severity="error">這一棟的資料載入失敗。</Alert>
     ) : (
-      <Typography sx={bodyText}>{fetching ? '載入中...' : null}</Typography>
+      <Typography sx={bodyText}>{fetching ? '載入中…' : null}</Typography>
     );
   } else if (!building || !uuid) {
     content = (

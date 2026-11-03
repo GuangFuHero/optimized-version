@@ -182,7 +182,7 @@ export function StopRecruitingDialog({
       onClose={onCancel}
       onConfirm={onConfirm}
       title="停止招募這筆需求？"
-      confirmLabel={submitting ? '停止中...' : '停止招募'}
+      confirmLabel={submitting ? '停止中…' : '停止招募'}
       confirmIcon={<Icons.userX />}
       confirmDisabled={!need || settled}
       cancelLabel={settled || dialog.box === 'gone' ? '關閉' : '取消'}
@@ -228,7 +228,7 @@ export function StopRecruitingDialog({
           >
             {/* Deleted between the tap and the load: say so rather than load forever. */}
             {dialog.box === 'loading'
-              ? '載入中...'
+              ? '載入中…'
               : '找不到這筆需求，可能已經被刪除。'}
           </Typography>
         )}

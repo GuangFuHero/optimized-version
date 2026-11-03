@@ -61,7 +61,7 @@ import type {
 
 const { color, primitives, radius, shadow } = designTokens;
 
-const MAP_LOADING_MESSAGE = '救災寶加載地圖中...';
+const MAP_LOADING_MESSAGE = '救災寶加載地圖中…';
 
 const RescueMapCanvas = dynamic(
   () =>
