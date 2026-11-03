@@ -4,9 +4,16 @@
  * its sentence names, shows the backend's own text, so the bell never reads 「null」 or 「」.
  */
 
-import { ROLE_DISPLAY_NAMES } from '../constants/roles';
+import {
+  ROLE_DISPLAY_NAMES,
+  TEAM_TYPE_DISPLAY_NAMES,
+} from '../constants/roles';
 import { ROLE_REQUEST_LABELS } from '../role-request/form';
 import { suggestionFieldLabel } from '../station/suggestion/fields';
+import {
+  normalizeStationType,
+  STATION_TYPE_OPTIONS,
+} from '../station/type-options';
 import type { NotificationRow } from './site-notices';
 
 type Params = Record<string, unknown>;
@@ -14,6 +21,17 @@ type Text = { summary: string; detail: string | null };
 
 /** The roles an applicant asks for, by name; any other code is not one this sentence knows. */
 const REQUESTED_ROLES: Partial<Record<string, string>> = ROLE_REQUEST_LABELS;
+
+/** A request to join a team names the team's kind as the back office does (政府、非政府組織). */
+const JOIN_KINDS: Partial<Record<string, string>> = {
+  government: TEAM_TYPE_DISPLAY_NAMES.get('gov'),
+  ngo: TEAM_TYPE_DISPLAY_NAMES.get('ngo'),
+};
+
+/** A station type by name (加水); a type outside the list says none. */
+const STATION_TYPES: ReadonlyMap<string, string> = new Map(
+  STATION_TYPE_OPTIONS.map((option) => [option.value, option.label]),
+);
 
 /** A team role by name (成員、管理員); a role this list lacks shows its code. */
 const MEMBER_ROLES: ReadonlyMap<string, string> = ROLE_DISPLAY_NAMES;
@@ -56,99 +74,106 @@ function write(type: string, params: Params): Text | null {
       }
 
       const station = named(params, 'station_name');
-      // A suggestion on one of the station's items says which: 「礦泉水」的數量.
+      // A live-status item is named (要改：可收治量); any other item has no name here but its field's.
       const item = named(params, 'property_name');
-      const fieldLabel = suggestionFieldLabel(field);
+      const liveStatus = item === null ? undefined : LIVE_STATUS_LABELS[item];
 
       return {
         summary:
           station === null
             ? '有一筆站點修改建議待審'
-            : `「${station}」有一筆修改建議待審`,
-        detail:
-          item === null
-            ? fieldLabel
-            : `「${LIVE_STATUS_LABELS[item] ?? item}」的${fieldLabel}`,
+            : `站點「${station}」有一筆修改建議待審`,
+        detail: `要改：${liveStatus ?? suggestionFieldLabel(field)}`,
       };
     }
     case 'dedup_review_pending': {
+      // The count is of pairs, hence 組; the backend does not say whether they are tickets or stations.
       const count = named(params, 'count');
 
       return count === null
         ? null
         : {
-            summary: `${count} 筆資料疑似重複，待審核`,
-            detail: '照樣建立的資料和既有的項目很像，請到「重複審核」判斷',
+            summary: `有 ${count} 組資料疑似重複，待審`,
+            detail: '可能是任務單或站點，到「重複審核」判斷',
           };
     }
     case 'role_request_submitted': {
       const applicant = named(params, 'applicant_name');
       const role = named(params, 'requested_role');
-      const roleLabel = role === null ? undefined : REQUESTED_ROLES[role];
 
-      if (applicant === null || roleLabel === undefined) {
+      if (applicant === null || role === null) {
         return null;
       }
 
       const team = named(params, 'team_name');
-      const newTeam = named(params, 'new_team_name');
-      let detail: string | null = null;
+      const kind = JOIN_KINDS[role];
 
-      if (team !== null) {
-        detail = `申請加入：${team}`;
-      } else if (newTeam !== null) {
-        // Not in the prototype; for the designer to confirm.
-        detail = `申請成立團隊：${newTeam}`;
+      // Mostly that team's admins read it, so it says which team first.
+      if (team !== null && kind !== undefined) {
+        return {
+          summary: `${applicant}申請加入團隊「${team}」`,
+          detail: `身分：${kind}`,
+        };
       }
 
-      return {
-        summary: `${applicant}申請成為${roleLabel}`,
-        detail,
-      };
-    }
-    case 'station_assigned': {
-      const station = named(params, 'station_name');
+      const newTeam = named(params, 'new_team_name');
 
-      return station === null
+      if (newTeam !== null) {
+        return {
+          summary: `${applicant}申請成立團隊「${newTeam}」`,
+          detail: '通過後他是這一隊的管理員',
+        };
+      }
+
+      const roleLabel = REQUESTED_ROLES[role];
+
+      return roleLabel === undefined
         ? null
-        : {
-            summary: `你的團隊被指派負責站點「${station}」`,
-            detail: '可以編輯這個站點、處理它的修改建議',
-          };
+        : { summary: `${applicant}申請成為${roleLabel}`, detail: null };
     }
+    // The team by name, not 你的團隊: one person can be in several, and the bell is not per identity.
+    case 'station_assigned':
     case 'station_unassigned': {
       const station = named(params, 'station_name');
+      const team = named(params, 'team_name');
 
-      return station === null
-        ? null
-        : { summary: `你的團隊不再負責站點「${station}」`, detail: null };
-    }
-    case 'zone_assigned': {
-      const zone = named(params, 'zone_name');
+      if (station === null || team === null) {
+        return null;
+      }
 
-      return zone === null
-        ? null
-        : {
-            summary: `你的團隊被指派負責責任區「${zone}」`,
-            detail: '請到任務管理篩選你的團隊，看區域內的任務',
-          };
+      return type === 'station_assigned'
+        ? {
+            summary: `「${team}」被指派負責站點「${station}」`,
+            detail: '可以編輯這個站點、審修改建議',
+          }
+        : { summary: `「${team}」不再負責站點「${station}」`, detail: null };
     }
+    case 'zone_assigned':
     case 'zone_unassigned': {
       const zone = named(params, 'zone_name');
+      const team = named(params, 'team_name');
 
-      return zone === null
-        ? null
-        : { summary: `你的團隊不再負責責任區「${zone}」`, detail: null };
+      if (zone === null || team === null) {
+        return null;
+      }
+
+      return type === 'zone_assigned'
+        ? {
+            summary: `「${team}」被指派負責責任區「${zone}」`,
+            detail: '點這裡看範圍',
+          }
+        : { summary: `「${team}」不再負責責任區「${zone}」`, detail: null };
     }
     case 'team_member_added': {
       const team = named(params, 'team_name');
       const role = named(params, 'role');
 
+      // Someone already in another team sees this one only after switching to it.
       return team === null || role === null
         ? null
         : {
-            summary: `歡迎加入團隊「${team}」`,
-            detail: `你的身分：${MEMBER_ROLES.get(role) ?? role}`,
+            summary: `你已加入團隊「${team}」，身分是${MEMBER_ROLES.get(role) ?? role}`,
+            detail: '從右上角的名字切換到這一隊',
           };
     }
     case 'team_suspended': {
@@ -156,7 +181,10 @@ function write(type: string, params: Params): Text | null {
 
       return team === null
         ? null
-        : { summary: `團隊「${team}」已暫停`, detail: null };
+        : {
+            summary: `團隊「${team}」已暫停`,
+            detail: '你在這一隊的身分暫時不能用',
+          };
     }
     case 'resource_station_updated': {
       const station = named(params, 'station_name');
@@ -171,18 +199,25 @@ function write(type: string, params: Params): Text | null {
         const label =
           property === null ? undefined : LIVE_STATUS_LABELS[property];
 
-        // 🚨 Not the prototype's 「營運狀態更新」: what changed is one of these properties.
         return {
-          summary: label
-            ? `「${station}」的「${label}」已更新`
-            : `「${station}」狀態更新`,
+          summary: `站點「${station}」的${label ?? '狀態'}有更新`,
           detail: null,
         };
       }
 
-      return change === 'created'
-        ? { summary: `新建站點「${station}」`, detail: null }
-        : null;
+      if (change !== 'created') {
+        return null;
+      }
+
+      const stationType = normalizeStationType(named(params, 'station_type'));
+      const typeLabel = stationType
+        ? STATION_TYPES.get(stationType)
+        : undefined;
+
+      return {
+        summary: `新增了站點「${station}」`,
+        detail: typeLabel === undefined ? null : `類型：${typeLabel}`,
+      };
     }
     default:
       return null;

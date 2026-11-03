@@ -33,12 +33,12 @@ describe('readAdminNotices', () => {
         type: 'zone_assigned',
         title: '後端標題',
         body: '後端內文',
-        params: { zone_name: '大平村' },
+        params: { zone_name: '大平村', team_name: '慈濟' },
       }),
     ]);
 
-    expect(notice.summary).toBe('你的團隊被指派負責責任區「大平村」');
-    expect(notice.detail).toBe('請到任務管理篩選你的團隊，看區域內的任務');
+    expect(notice.summary).toBe('「慈濟」被指派負責責任區「大平村」');
+    expect(notice.detail).toBe('點這裡看範圍');
   });
 
   it('drops site-only types', () => {
