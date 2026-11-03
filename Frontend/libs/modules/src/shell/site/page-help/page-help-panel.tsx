@@ -116,7 +116,7 @@ function markWord(mark: PermissionMark, own: string): string {
  * above. 超級管理員 has every action, so it is said in the legend rather than given a row.
  */
 function PermissionTable({ permissions }: { permissions: PagePermissions }) {
-  const { actions, own, groups } = permissions;
+  const { actions, own, groups, footnote } = permissions;
   // Eight columns have to fit a phone: the cells keep only a hair of padding, the heads stay on one
   // line, and the identity column wraps there instead (資料檢核員 over two lines).
   const cellSx = {
@@ -242,6 +242,18 @@ function PermissionTable({ permissions }: { permissions: PagePermissions }) {
           ))}
         </tbody>
       </Box>
+      {footnote ? (
+        <Typography
+          sx={{
+            mt: 0.75,
+            color: color.fg.neutral.muted,
+            fontSize: displayTextSize[11],
+            lineHeight: 1.6,
+          }}
+        >
+          {footnote}
+        </Typography>
+      ) : null}
     </Box>
   );
 }

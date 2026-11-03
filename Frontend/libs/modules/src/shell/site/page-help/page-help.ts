@@ -25,6 +25,8 @@ export interface PagePermissions {
   actions: readonly string[];
   /** What ◐ stands for on this page: 本隊責任區 for tickets, 本隊站點 for stations. */
   own: string;
+  /** A line under the table for what one mark cannot say, such as an import whose updates are scoped. */
+  footnote?: string;
   groups: ReadonlyArray<{
     title: string;
     /** One mark per action, in the order of `actions`. */

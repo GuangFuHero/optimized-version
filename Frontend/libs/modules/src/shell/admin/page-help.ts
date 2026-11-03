@@ -75,15 +75,18 @@ export const ADMIN_PAGE_HELP: Partial<Record<string, PageHelp>> = {
     ],
     // As decided: 責任區 go to NGO teams only, so an NGO team works the tickets inside its own; the
     // 政府隊's members import, export and open spaces as its admins do. Import and export: super
-    // admins, the 政府隊 and NGO admins only — not NGO members, not data auditors. A member's ✕
-    // under 刪除 is about others' tickets: deleting the one they created goes without saying.
+    // admins, the 政府隊 and NGO admins only — not NGO members, not data auditors. An NGO admin's
+    // import adds tickets anywhere but updates only those inside; the footnote says the second half.
+    // A member's ✕ under 刪除 is about others' tickets: deleting the one they created goes without
+    // saying.
     permissions: {
       actions: ['新增', '修改', '刪除', '匯入', '匯出', '開啟空間'],
       own: '本隊責任區',
+      footnote: '匯入更新既有任務只限本隊責任區。',
       groups: identityGroups(
         [Y, Y, Y, Y, Y, Y],
         [Y, Y, N, Y, Y, Y],
-        [Y, O, O, O, O, N],
+        [Y, O, O, Y, O, N],
         [Y, O, N, N, N, N],
         [N, N, N, N, N, N],
       ),
@@ -106,10 +109,12 @@ export const ADMIN_PAGE_HELP: Partial<Record<string, PageHelp>> = {
       },
     ],
     // As decided: the 政府隊's members review every station's suggestions too; only its admins
-    // delete any station. An NGO admin imports new stations anywhere and exports only their own.
+    // delete any station. An NGO admin's import adds stations anywhere but updates only its own, as the
+    // footnote says; it exports only its own.
     permissions: {
       actions: ['新增', '編輯', '刪除', '指派', '審核', '撤銷', '匯入', '匯出'],
       own: '本隊站點',
+      footnote: '匯入更新既有站點只限本隊站點。',
       groups: identityGroups(
         [Y, Y, Y, Y, Y, N, Y, Y],
         [Y, Y, N, Y, Y, N, Y, Y],
