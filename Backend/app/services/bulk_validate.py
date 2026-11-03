@@ -44,7 +44,7 @@ class RowError:
 
 
 def _line_of(index: int) -> int:
-    """Spreadsheet line number for a zero-based data-row index (the header is line 1)."""
+    """A zero-based data-row index's spreadsheet line when none is given: the header is line 1."""
     return index + 2
 
 

@@ -4343,7 +4343,7 @@ export interface components {
     RowErrorResponse: {
       /**
        * Line
-       * @description 試算表的列號，表頭是第 1 列
+       * @description 試算表上的列號，從第 1 列算起
        */
       line: number;
       /**
@@ -4475,7 +4475,7 @@ export interface components {
     SuspectedRowResponse: {
       /**
        * Line
-       * @description 試算表的列號，表頭是第 1 列
+       * @description 試算表上的列號，從第 1 列算起
        */
       line: number;
       /**

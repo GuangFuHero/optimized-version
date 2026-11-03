@@ -34,7 +34,7 @@ class TicketExportCountsResponse(BaseModel):
 class RowErrorResponse(BaseModel):
     """One problem with one row, addressed the way the user sees the file."""
 
-    line: int = Field(description="試算表的列號，表頭是第 1 列")
+    line: int = Field(description="試算表上的列號，從第 1 列算起")
     column: str = Field(description="出問題的欄位；`-` 代表整列層級的問題")
     message: str
 
@@ -42,7 +42,7 @@ class RowErrorResponse(BaseModel):
 class SuspectedRowResponse(BaseModel):
     """A row that looks like something already there (ADR-398). No similarity, no contact details."""
 
-    line: int = Field(description="試算表的列號，表頭是第 1 列")
+    line: int = Field(description="試算表上的列號，從第 1 列算起")
     row_title: str | None = Field(
         description="這一列自己的站點名稱或單標題，照檔案寫的；加到既有單的任務，是那張單的標題"
     )

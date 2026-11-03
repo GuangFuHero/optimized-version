@@ -171,11 +171,11 @@ async def match_task(db: AsyncSession, *, ticket_uuid: str, task_type: str, task
 def duplicate_key_rows(keys: list[tuple], line_of=None) -> dict[int, tuple[int, ...]]:
     """Map each row index sharing a key with another to the row numbers it collides with.
 
-    Rows are numbered as the user sees them in a spreadsheet: the header is line 1, so the
-    first data row is line 2. All colliding rows fail — the last one does not win. "Two rows
-    with the same name" is very often two genuinely different stations, and silently keeping
-    one of them would throw the other away (ADR-113). `line_of` (`Table.line_of`) numbers them
-    as the file does when a label row or blank rows shift them.
+    Rows are numbered as the user sees them in a spreadsheet, from line 1: `line_of`
+    (`Table.line_of`) numbers them as the file does, label row and blank rows included; without
+    it the header is taken to be line 1. All colliding rows fail — the last one does not win.
+    "Two rows with the same name" is very often two genuinely different stations, and silently
+    keeping one of them would throw the other away (ADR-113).
     """
     line_of = line_of or (lambda index: index + 2)
     positions: dict[tuple, list[int]] = {}
