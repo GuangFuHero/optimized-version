@@ -13,7 +13,8 @@
 --   avol02@mock.test  志工:我的任務 › 我承接的有 4 筆——開著的、人數已湊滿的(這兩筆可以釋出)、
 --                     建單者停止招募的(不能釋出)、單已完成的
 --   avol03@mock.test  剛註冊的人:我的任務是空的,可以第一次接、自己送「申請成為後台人員」
---   avol04@mock.test  角色申請審核中(政府單位人員);撤回後要重跑 seed 才回得來
+--   avol04@mock.test  角色申請審核中(申請加入光復鄉公所-災防課,asuper01、agov01 都能核准);
+--                     核准或撤回後要重跑 seed 才回得來
 --   avol05@mock.test  角色申請未通過,卡片上有審核回覆(社福團體人員)
 --   agov01@mock.test  光復鄉公所的團隊管理員:右上角有「前往後台」
 --   asuper01@mock.test  平台的超級管理員(super_admin),不屬於哪個情境:測管理平台用
@@ -23,7 +24,8 @@
 --                     重跑這支 seed 不會刪掉這兩個帳號和它們的密碼
 --   (不用登入)        行前資訊 /briefing:一份已發布的,裝備可以勾;另有一個土石流範本給後台用
 --   (登入任一帳號)    現場分區:光復一帶點開中正路二段61號的任一張單 › 看各樓層,一層一框;
---                     上一張/下一張在同一棟裡走。訪客看不到「看各樓層」
+--                     上一張/下一張在同一棟裡走。訪客從單點進去沒有「看各樓層」,但地圖的大樓
+--                     標記、/list 上方「這些大樓可以看各樓層」看得到大樓與樓層(看不到件數和單)
 --   (疑似重複)        asuper01、aaudit01 在任務管理看得到 6 張單標「疑似重複」:第 4c 節三張配對卡各一種狀態
 --
 -- 規則(第 11 節會檢查,不符就整個回滾):
@@ -1134,9 +1136,12 @@ UPDATE project_settings SET map_center_lat = 23.67, map_center_lng = 121.418, ma
  WHERE map_zoom IS NULL;
 
 -- 9. 角色申請(功能 019):一筆審核中、一筆未通過附回覆,讓抽屜的兩種卡片一登入就看得到。
---    兩個帳號都只有 user 身分;一個人同時只能有一筆審核中。審核人是 1e 的 asuper01。
-INSERT INTO role_requests (uuid, requested_role, reason, contact, status, created_by, created_at, updated_at) VALUES
- ('60000000-0000-4000-8000-000000000001','government',
+--    兩個帳號都只有 user 身分;一個人同時只能有一筆審核中。
+--    審核中那筆申請加入光復鄉公所-災防課(理由和聯絡方式都是公所的):沒指名團隊的申請核准不了(回 409)。
+--    核准就是把 avol04 加進公所當 member,1e 的 asuper01 和公所的團隊管理員 agov01 都能審。
+INSERT INTO role_requests
+ (uuid, requested_role, team_uuid, reason, contact, status, created_by, created_at, updated_at) VALUES
+ ('60000000-0000-4000-8000-000000000001','government','10000000-0000-4000-8000-000000000005',
   '我是光復鄉公所約聘的災防人員，負責整理各村回報的災情和物資需求。希望有後台權限，幫忙更新站點資料、合併重複的任務單。',
   '光復鄉公所災防課 03-870-1234 分機 215','pending','c0000000-0000-4000-8000-000000000004',
   now() - interval '1 day', now() - interval '1 day');

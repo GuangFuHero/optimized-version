@@ -1,6 +1,7 @@
 """Pydantic schemas for notifications API requests and responses."""
 
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -20,6 +21,10 @@ class NotificationItem(BaseModel):
     ref_uuid: UUID | None = Field(None, description="Polymorphic entity UUID")
     title: str = Field(..., description="Notification title")
     body: str = Field(..., description="Notification body content")
+    params: dict[str, Any] | None = Field(
+        None,
+        description="The values this type's sentence names, keyed per type; null on older rows",
+    )
     read: bool = Field(..., description="Read status")
     read_at: datetime | None = Field(None, description="Timestamp when read")
     created_at: datetime | None = Field(None, description="Creation timestamp")

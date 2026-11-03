@@ -23,6 +23,9 @@ from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssi
 from app.services.bulk_import import MAX_ROWS
 from tests.conftest import auth_headers_for
 
+# Each test defines the dynamic fields it is about, so the ones the migrations seed must not be there.
+pytestmark = pytest.mark.empty_db
+
 BASE = "/api/v1/bulk"
 HEADERS = ("name", "type", "latitude", "longitude", "address")
 

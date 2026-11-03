@@ -60,7 +60,7 @@ async def _actor(db, *perms: Perm) -> User:
         db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope="all"))
     db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid))
     acting_as(user, role)  # before the commit expires `role`
-    seed_disaster_types(db)
+    await seed_disaster_types(db)
     await db.commit()
     await db.refresh(user)
     return user
@@ -230,6 +230,12 @@ async def test_create_station_behaves_as_before_and_still_notifies(db, monkeypat
     assert await _rows(db, SecondaryLocation) == 1
     assert [n["event_type"] for n in sent] == ["resource_station_updated"]
     assert sent[0]["ref_uuid"] == stored.uuid
+    assert sent[0]["params"] == {
+        "station_name": "光復國小臨時收容所",
+        "station_type": "shelter",
+        "change": "created",
+        "property_name": None,
+    }
 
 
 async def test_create_station_keeps_its_signature():

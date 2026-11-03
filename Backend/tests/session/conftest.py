@@ -13,33 +13,29 @@ os.environ["ENV"] = "testing"
 
 from app.core.redis import get_redis
 from app.core.security import generate_salt, get_password_hash
-from app.db.session import Base
 from app.main import app
-from app.models.rbac import Role
 from app.services.auth_account import create_account
-from tests.conftest import TEST_DB_URL, TEST_REDIS_URL, schema_has_role  # per-worker under xdist
+from tests import db_reset
+from tests.conftest import TEST_DB_URL, TEST_REDIS_URL, ensure_role  # per-worker under xdist
 
 
-async def _ensure_db():
-    """Build the schema and the default 'user' role unless another test left them in place."""
-    if await schema_has_role("user"):
-        return
+async def _reset_db():
+    """Reset the DB and seed the default 'user' role, so no earlier test's rows leak in."""
     eng = create_async_engine(TEST_DB_URL, echo=False)
-    async with eng.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-        await conn.run_sync(Base.metadata.create_all)
+    await db_reset.reset(eng)
     factory = sessionmaker(eng, class_=AsyncSession, expire_on_commit=True)
     async with factory() as db:
-        db.add(Role(name="user", kind="platform"))
+        await ensure_role(db, "user")
         await db.commit()
     await eng.dispose()
 
 
 @pytest_asyncio.fixture(autouse=True)
 async def setup_db():
-    """Ensure schema + default 'user' platform role exist; reset app engine pool per test."""
-    await _ensure_db()
+    """Start each test on a reset DB holding the default 'user' role; reset the app engine pool."""
+    await _reset_db()
     from app.db.session import engine as app_engine
+
     await app_engine.dispose()
 
 
@@ -62,6 +58,7 @@ def make_user():
     Plain @pytest.fixture (NOT @pytest_asyncio.fixture): the fixture body is synchronous and
     returns an async callable; the test awaits the callable, not the fixture.
     """
+
     async def _make(name: str | None = None, password: str = "hashed_pw_123"):
         name = name or f"u_{uuid_mod.uuid4().hex[:8]}"
         salt = generate_salt()
@@ -69,10 +66,14 @@ def make_user():
         factory = sessionmaker(eng, class_=AsyncSession, expire_on_commit=True)
         async with factory() as db:
             user = await create_account(
-                db, contact_type="email", value=f"{name}@t.local",
-                password_hash=get_password_hash(password, salt), name=name,
+                db,
+                contact_type="email",
+                value=f"{name}@t.local",
+                password_hash=get_password_hash(password, salt),
+                name=name,
             )
             uid = str(user.uuid)
         await eng.dispose()
         return uid, password, f"{name}@t.local"
+
     return _make

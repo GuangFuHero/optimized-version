@@ -10,7 +10,7 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 
 from app.core.permissions import Perm
-from app.db.triggers import AUDIT_TRIGGER_FUNC_SQL, AUDITED_TABLES, get_audit_trigger_sql
+from app.db.triggers import AUDITED_TABLES
 from app.models.auth import User
 from app.models.project_settings import ProjectSettings
 from app.models.property_config import (
@@ -407,9 +407,6 @@ async def test_a_citizen_identity_still_cannot_read_the_settings(client, db_sess
 
 async def test_project_settings_changes_are_audited(client, db_session, redis):
     """project_settings is in AUDITED_TABLES, so edits land in audit_logs (ADR-090)."""
-    await db_session.execute(text(AUDIT_TRIGGER_FUNC_SQL))
-    await db_session.execute(text(get_audit_trigger_sql("project_settings")))
-    await db_session.commit()
     admin_uuid, role_uuid = await _make_project_admin(db_session)
 
     await client.patch(
@@ -493,7 +490,12 @@ async def test_mixed_case_settings_still_match_config(client, db_session, redis)
 
     types = await project_settings_repository.get_current_disaster_types(db_session)
     rows = await station_property_config_repository.list_by_type(db_session, "shelter", disaster_types=types)
-    assert [r.property_name for r in rows] == ["淹水深度"]
+    # The migrations seed shelter fields too: the mis-cased setting must list what the right case does.
+    cased = await station_property_config_repository.list_by_type(
+        db_session, "shelter", disaster_types=["flood"]
+    )
+    assert "淹水深度" in [r.property_name for r in rows]
+    assert [r.property_name for r in rows] == [r.property_name for r in cased]
 
 
 async def test_empty_disaster_types_survives_normalization(db):

@@ -34,6 +34,9 @@ from app.services.bulk_import import (
 )
 from tests.conftest import acting_as
 
+# Each test defines the dynamic fields it is about, so the ones the migrations seed must not be there.
+pytestmark = pytest.mark.empty_db
+
 IN_ZONE = Point(121.50, 25.00)
 
 CAPACITY = f"{DYNAMIC_PREFIX}capacity_total"

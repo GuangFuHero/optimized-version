@@ -9,10 +9,9 @@ request only: never an identity they do not hold, and nothing stored changes.
 from datetime import UTC, datetime
 
 import pytest
-from sqlalchemy import delete, select, text
+from sqlalchemy import delete, select
 
 from app.core.permissions import Perm
-from app.db.triggers import AUDIT_TRIGGER_FUNC_SQL, get_audit_trigger_sql
 from app.models.announcement import Announcement
 from app.models.audit import AuditLog
 from app.models.auth import User
@@ -96,9 +95,6 @@ async def test_the_site_marker_lasts_one_request(client, db_session, redis):
 
 async def test_what_the_site_changes_is_recorded_under_user(client, db_session, redis):
     """The audit trail names the identity the change was actually made under (ADR-076)."""
-    await db_session.execute(text(AUDIT_TRIGGER_FUNC_SQL))
-    await db_session.execute(text(get_audit_trigger_sql("users")))
-    await db_session.commit()
     account_uuid, _, headers = await _auditor(db_session, redis)
 
     response = await client.patch("/api/v1/users/me", json={"name": "改名"}, headers={**headers, **SITE})

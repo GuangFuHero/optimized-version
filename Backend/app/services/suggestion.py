@@ -88,6 +88,15 @@ async def create_station_suggestion(
     # the field is validated as suggestable: no other attribute of the row is ever copied out.
     current = getattr(target, field_name)
     previous = "" if current is None else str(current)
+    station = target
+    if target_type == "station_property":
+        station = await station_repository.get_by_uuid_active(db, station_uuid)
+    # Read before the commit expires the rows.
+    params = {
+        **_station_params(station),
+        "field": field_name,
+        "property_name": target.property_name if target_type == "station_property" else None,
+    }
 
     # xmax = 0 only on a freshly inserted row, which tells an insert from a resubmit.
     suggestion_uuid, inserted = (
@@ -126,11 +135,13 @@ async def create_station_suggestion(
     recipients = await NotificationRecipientResolver.resolve_permission(
         db, Perm.STATION_REVIEW.value, station_uuid=station_uuid
     )
+    label = _FIELD_LABELS.get(field_name, field_name)
     await NotificationService.dispatch(
         db,
         event_type="station_suggestion_created",
         title="📝 新的站點修改建議",
-        body=f"「{field_name}」有一筆新的修改建議待審核。",
+        body=f"{_where(params['station_name'])}「{label}」有一筆新的修改建議待審核。",
+        params=params,
         priority="medium",
         actor_uuid=actor_uid,
         ref_type="station_suggestion",
@@ -272,7 +283,7 @@ async def merge_station_suggestions(
     # The database's clock, read under the station's lock; every stamp this merge writes carries it.
     decided_at = await db.scalar(select(func.clock_timestamp()))
     # The name the suggesters knew, read before a merge that renames the station writes the new one.
-    station_name = station.name
+    station_params = _station_params(station)
     changes, touched = await _apply_decisions(db, station, decisions, rows_by_field, decided_at)
     if changes:
         # An approval is an update at its own time, even one that wrote a property or an unchanged value.
@@ -298,16 +309,19 @@ async def merge_station_suggestions(
             row.review_note = review_note
             row.merge_uuid = merge.uuid
     # Read before the commit expires the rows.
+    decided = [
+        row for decision in decisions for row in rows_by_field[(decision.target_uuid, decision.field_name)]
+    ]
+    property_names = await _property_names(db, decided)
     outcomes = [
-        (row.created_by, row.uuid, row.field_name, row.status)
-        for decision in decisions
-        for row in rows_by_field[(decision.target_uuid, decision.field_name)]
+        (row.created_by, row.uuid, row.field_name, property_names.get(row.target_uuid), row.status)
+        for row in decided
     ]
 
     operational = _operational_changes(touched, changes)
     await db.commit()
     await _notify_operational(db, operational, actor_uid)
-    await _notify_suggesters(db, station_name, outcomes, actor_uid)
+    await _notify_suggesters(db, station_params, outcomes, actor_uid)
     # Refresh last: the commits above expire the merge.
     await db.refresh(merge)
     return merge
@@ -467,13 +481,37 @@ _FIELD_LABELS = {
 }
 
 
-async def _notify_suggesters(db: AsyncSession, station_name: str | None, outcomes, actor_uid: str):
+def _where(station_name: str | None) -> str:
+    """The 「station」的 a notification opens with, or nothing for a station without a name."""
+    return f"「{station_name}」的" if station_name else ""
+
+
+def _station_params(station: Station | None) -> dict:
+    """The station values a suggestion notice stores in its params."""
+    return {
+        "station_name": station.name if station else None,
+        "station_type": station.type if station else None,
+    }
+
+
+async def _property_names(db: AsyncSession, rows: list[StationUpdateSuggestion]) -> dict[str, str]:
+    """The property_name of each station property these suggestions are on, by its uuid."""
+    uuids = {row.target_uuid for row in rows if row.target_type == "station_property"}
+    if not uuids:
+        return {}
+    found = await db.execute(
+        select(StationProperty.uuid, StationProperty.property_name).where(StationProperty.uuid.in_(uuids))
+    )
+    return {str(uuid): name for uuid, name in found}
+
+
+async def _notify_suggesters(db: AsyncSession, station_params: dict, outcomes, actor_uid: str):
     """Tell each suggester whether their suggestion was adopted, adopted with edits, or not adopted.
 
     Not adopted covers both not_adopted and rejected rows, which read the same to a suggester.
     """
-    where = f"「{station_name}」的" if station_name else ""
-    for recipient, suggestion_uuid, field_name, status in outcomes:
+    where = _where(station_params["station_name"])
+    for recipient, suggestion_uuid, field_name, property_name, status in outcomes:
         field = f"「{_FIELD_LABELS.get(field_name, field_name)}」"
         if status == "adopted_edited":
             event_type, title = "station_suggestion_adopted_edited", "📝 站點修改建議已納入參考"
@@ -490,6 +528,7 @@ async def _notify_suggesters(db: AsyncSession, station_name: str | None, outcome
             event_type=event_type,
             title=title,
             body=body,
+            params={**station_params, "field": field_name, "property_name": property_name},
             actor_uuid=actor_uid,
             ref_type="station_suggestion",
             ref_uuid=suggestion_uuid,

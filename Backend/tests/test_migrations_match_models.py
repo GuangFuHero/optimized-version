@@ -1,10 +1,11 @@
 """Guard that `alembic upgrade head` and `Base.metadata` describe the same tables and columns.
 
-Every other test builds its schema with `Base.metadata.create_all` (see conftest's `db` and
-`db_session`), so the suite has no way to see a column that exists in one and not the other.
-That is exactly how `users.password` survived: `d19cda4d9871` was the expand half of an
-expand/contract pair whose contract stage was never written, so migration-built databases
-carried a column the models had already dropped, and nothing failed.
+The rest of the suite runs on the migrated schema, where a column the models lack is invisible
+to the ORM and one the migrations lack fails only the tests that touch it; with
+`TEST_SCHEMA=models` it runs on the models alone. That is how `users.password` survived:
+`d19cda4d9871` was the expand half of an expand/contract pair whose contract stage was never
+written, so migration-built databases carried a column the models had already dropped, and
+nothing failed.
 
 This runs the real migrations against a throwaway database and diffs the result, so the next
 divergence is caught here rather than by hand. Only table and column *names* are compared —

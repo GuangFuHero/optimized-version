@@ -34,7 +34,8 @@ const QUERY_CONTEXT = { suspense: false } as const;
 /**
  * One report (prototype `StationReportsDrawer`): when it was sent, the station, how it came out,
  * and the field as 「現值 → 建議值」 — the suggested value alone would not tell, a while later, what
- * was changed from what was there. No 優先送審 tag: the backend keeps no such thing.
+ * was changed from what was there. 已參考修改 adds the value the station took, which is not the one
+ * suggested. No 優先送審 tag: the backend keeps no such thing.
  */
 function StationReportRow({
   report,
@@ -155,6 +156,30 @@ function StationReportRow({
           </Typography>
         </Stack>
       </Stack>
+
+      {report.applied !== null ? (
+        <Typography
+          sx={{
+            mt: 0.5,
+            color: color.fg.neutral.subtle,
+            fontSize: displayTextSize[13],
+            lineHeight: 1.6,
+            textWrap: 'pretty',
+          }}
+        >
+          審核後改成：
+          <Typography
+            component="span"
+            sx={{
+              color: color.fg.neutral.default,
+              fontSize: 'inherit',
+              fontWeight: 700,
+            }}
+          >
+            {report.applied}
+          </Typography>
+        </Typography>
+      ) : null}
 
       {report.comment ? (
         <Typography

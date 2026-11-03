@@ -39,8 +39,13 @@ async def _ticket(db, *, status: str = "pending") -> Tickets:
     db.add(requester)
     await db.flush()
     ticket = Tickets(
-        uuid=uuidlib.uuid4(), property_name="request", created_by=str(requester.uuid),
-        title=TITLE, contact_name="王阿嬤", status=status, priority="medium",
+        uuid=uuidlib.uuid4(),
+        property_name="request",
+        created_by=str(requester.uuid),
+        title=TITLE,
+        contact_name="王阿嬤",
+        status=status,
+        priority="medium",
     )
     db.add(ticket)
     await db.flush()
@@ -48,13 +53,23 @@ async def _ticket(db, *, status: str = "pending") -> Tickets:
 
 
 async def _need(
-    db, ticket: Tickets, name: str = "清淤", *, status: str = "pending", claims: tuple[str, ...] = (),
+    db,
+    ticket: Tickets,
+    name: str = "清淤",
+    *,
+    status: str = "pending",
+    claims: tuple[str, ...] = (),
     created_by: str | None = None,
 ) -> TicketTask:
     """A need on `ticket`, with one volunteer on it per name in `claims`."""
     task = TicketTask(
-        uuid=uuidlib.uuid4(), ticket_uuid=str(ticket.uuid), task_type="hr", task_name=name,
-        quantity=5, status=status, created_by=created_by or ticket.created_by,
+        uuid=uuidlib.uuid4(),
+        ticket_uuid=str(ticket.uuid),
+        task_type="hr",
+        task_name=name,
+        quantity=5,
+        status=status,
+        created_by=created_by or ticket.created_by,
         completed_at=datetime.now(UTC) if status == "fulfilled" else None,
     )
     db.add(task)
@@ -240,6 +255,7 @@ async def test_everyone_on_the_need_hears_they_need_not_go(db):
         [notice] = await _notices(db, volunteer_uuid)
         assert notice.title == "你承接的「清淤」已刪除"
         assert notice.body == f"{TITLE}　這筆需求已經刪除，不用前往了。"
+        assert notice.params == {"ticket_title": TITLE, "task_name": "清淤"}
         assert notice.priority == "high"
     assert await _notices(db, on_sibling[0]) == []
     assert await _notices(db, requester_uuid) == []

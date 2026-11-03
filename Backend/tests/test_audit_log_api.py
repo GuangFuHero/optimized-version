@@ -1,7 +1,7 @@
 """The audit-log read API (Spec/026 Task 10, ADR-358).
 
 Rows are written directly in the shape the audit trigger leaves (`to_jsonb(row)`, uuids as
-strings): the test schema is built from the models and carries no triggers.
+strings), after clearing what the triggers logged of the setup.
 """
 
 import uuid
@@ -16,7 +16,7 @@ from app.models.auth import User
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.models.team import Team
 from scripts.seed_rbac import ROLES_DATA
-from tests.conftest import auth_headers_for
+from tests.conftest import auth_headers_for, clear_audit_trail
 
 URL = "/api/v1/admin/audit-logs"
 
@@ -86,9 +86,6 @@ class World:
             "station": _row("stations", new={"team_uuid": ta}, ago=0),
             "user": _row("users", new={"name": "x"}, ago=0),
         }
-        db.add_all(rows.values())
-        await db.flush()
-        self.rows = {str(row.uuid): name for name, row in rows.items()}
         admin = await _role(db, "admin", "team", _seeded("admin", Perm.TEAM_AUDIT_VIEW, Perm.AUDIT_VIEW))
         member = await _role(db, "member", "team", _seeded("member", Perm.TEAM_AUDIT_VIEW, Perm.AUDIT_VIEW))
         auditor = await _role(db, "data_auditor", "platform", _seeded("data_auditor", Perm.AUDIT_VIEW))
@@ -114,6 +111,10 @@ class World:
                 )
             )
             identities[who] = (user.uuid, role.uuid, team.uuid if team else None)
+        await clear_audit_trail(db)
+        db.add_all(rows.values())
+        await db.flush()
+        self.rows = {str(row.uuid): name for name, row in rows.items()}
         await db.commit()
         self.headers = {who: await auth_headers_for(redis, *ids) for who, ids in identities.items()}
         return self

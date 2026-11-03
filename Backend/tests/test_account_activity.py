@@ -12,7 +12,6 @@ from sqlalchemy import select, text
 
 from app.core.permissions import Perm
 from app.core.security import generate_salt, get_password_hash
-from app.db.triggers import AUDIT_TRIGGER_FUNC_SQL, get_audit_trigger_sql
 from app.models.auth import User, UserContact, UserIdentity
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from tests.conftest import auth_headers_for
@@ -42,9 +41,7 @@ async def _make_admin(db):
     permission = Permission(key=Perm.USER_VIEW.value)
     db.add_all([role, permission])
     await db.flush()
-    db.add(RolePermissionAssign(
-        role_uuid=role.uuid, permission_uuid=permission.uuid, scope="all"
-    ))
+    db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope="all"))
     user = User(name="Super Admin")
     db.add(user)
     await db.flush()
@@ -60,22 +57,23 @@ async def _make_login_user(db, email: str = "activity@example.com") -> str:
     db.add(user)
     await db.flush()
     user_uuid = str(user.uuid)
-    db.add_all([
-        UserContact(user_uuid=user.uuid, type="email", value=email, verified=True),
-        UserIdentity(
-            user_uuid=user.uuid, provider="password",
-            password_hash=get_password_hash(_PASSWORD, generate_salt()),
-        ),
-    ])
+    db.add_all(
+        [
+            UserContact(user_uuid=user.uuid, type="email", value=email, verified=True),
+            UserIdentity(
+                user_uuid=user.uuid,
+                provider="password",
+                password_hash=get_password_hash(_PASSWORD, generate_salt()),
+            ),
+        ]
+    )
     await db.commit()
     return user_uuid
 
 
 async def _login(client, email: str = "activity@example.com") -> dict:
     """Log in and return the token pair body."""
-    resp = await client.post(
-        "/api/v1/auth/login", data={"username": email, "password": _PASSWORD}
-    )
+    resp = await client.post("/api/v1/auth/login", data={"username": email, "password": _PASSWORD})
     assert resp.status_code == 200, resp.text
     return resp.json()
 
@@ -99,9 +97,7 @@ async def test_refresh_updates_last_activity(client, db_session):
     user_uuid = await _make_login_user(db_session)
     tokens = await _login(client)
 
-    resp = await client.post(
-        "/api/v1/auth/refresh", json={"refresh_token": tokens["refresh_token"]}
-    )
+    resp = await client.post("/api/v1/auth/refresh", json={"refresh_token": tokens["refresh_token"]})
 
     assert resp.status_code == 200, resp.text
     assert await _last_activity(db_session, user_uuid) is not None
@@ -200,38 +196,34 @@ async def test_the_refresh_activity_write_names_an_actor(client, db_session):
     `user_uuid = NULL`, and the PR's claim that audit rows land "with an actor" is untrue for
     exactly the rows this feature adds.
     """
-    await db_session.execute(text(AUDIT_TRIGGER_FUNC_SQL))
-    await db_session.execute(text(get_audit_trigger_sql("users")))
-    await db_session.commit()
     user_uuid = await _make_login_user(db_session)
     tokens = await _login(client)
 
-    resp = await client.post(
-        "/api/v1/auth/refresh", json={"refresh_token": tokens["refresh_token"]}
-    )
+    resp = await client.post("/api/v1/auth/refresh", json={"refresh_token": tokens["refresh_token"]})
     assert resp.status_code == 200, resp.text
 
-    actor = await db_session.scalar(text(
-        "SELECT user_uuid FROM audit_logs WHERE table_name = 'users' AND action = 'UPDATE' "
-        "ORDER BY created_at DESC LIMIT 1"
-    ))
+    actor = await db_session.scalar(
+        text(
+            "SELECT user_uuid FROM audit_logs WHERE table_name = 'users' AND action = 'UPDATE' "
+            "ORDER BY created_at DESC LIMIT 1"
+        )
+    )
     assert actor is not None, "the refresh audit row has no actor"
     assert str(actor) == user_uuid
 
 
 async def test_the_login_write_names_an_actor_too(client, db_session):
     """Same gap on the password path: /auth/login stamps last_login_at with no token either."""
-    await db_session.execute(text(AUDIT_TRIGGER_FUNC_SQL))
-    await db_session.execute(text(get_audit_trigger_sql("users")))
-    await db_session.commit()
     user_uuid = await _make_login_user(db_session)
 
     await _login(client)
 
-    actor = await db_session.scalar(text(
-        "SELECT user_uuid FROM audit_logs WHERE table_name = 'users' AND action = 'UPDATE' "
-        "ORDER BY created_at DESC LIMIT 1"
-    ))
+    actor = await db_session.scalar(
+        text(
+            "SELECT user_uuid FROM audit_logs WHERE table_name = 'users' AND action = 'UPDATE' "
+            "ORDER BY created_at DESC LIMIT 1"
+        )
+    )
     assert actor is not None, "the login audit row has no actor"
     assert str(actor) == user_uuid
 
@@ -269,9 +261,9 @@ async def test_a_session_count_bug_is_not_reported_as_a_redis_outage(caplog):
     with caplog.at_level(logging.WARNING), pytest.raises(ValueError):
         await _session_counts(_FakeRedis(), ["11111111-1111-1111-1111-111111111111"])
 
-    assert not [
-        r for r in caplog.records if "Redis unavailable" in r.message
-    ], "a programming error was filed as a Redis outage"
+    assert not [r for r in caplog.records if "Redis unavailable" in r.message], (
+        "a programming error was filed as a Redis outage"
+    )
 
 
 async def test_redis_being_down_still_degrades_quietly(caplog):

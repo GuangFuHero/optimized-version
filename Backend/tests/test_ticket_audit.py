@@ -11,14 +11,12 @@ import uuid as uuidlib
 from datetime import UTC, datetime
 
 import pytest
-import pytest_asyncio
 from fastapi import HTTPException
-from sqlalchemy import select, text
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.core.permissions import Perm
-from app.db.triggers import AUDIT_TRIGGER_FUNC_SQL, AUDITED_TABLES, get_audit_trigger_sql
 from app.models.auth import User
 from app.models.notification import Notification
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
@@ -358,7 +356,7 @@ async def test_the_version_check_never_lets_a_change_through_unseen(db, change, 
 @pytest.mark.asyncio
 async def test_the_same_disaster_types_in_another_order_are_no_change(db):
     """A row written out of order, as seed data can be, then saved through the form in order."""
-    seed_disaster_types(db)
+    await seed_disaster_types(db)
     ticket = await _ticket(db)
     ticket.disaster_types = ["landslide", "flood"]
     ticket_uuid = str(ticket.uuid)
@@ -612,6 +610,12 @@ async def test_an_issue_is_told_to_the_requester_and_the_volunteers_without_the_
         volunteer_uuid: "你報名的求助單「一樓客廳積泥需要幫忙清」資料可能有誤，出發前請先跟開單者確認。",
     }
     assert not any("電話打不通" in body for body in notices.values())
+    rows = await db.execute(select(Notification).where(Notification.type == "ticket_audit_issue"))
+    title = "一樓客廳積泥需要幫忙清"
+    assert {str(n.recipient_uuid): n.params for n in rows.scalars()} == {
+        requester_uuid: {"ticket_title": title, "recipient": "requester"},
+        volunteer_uuid: {"ticket_title": title, "recipient": "volunteer"},
+    }
 
 
 @pytest.mark.asyncio
@@ -694,17 +698,8 @@ async def test_a_new_verdict_starts_the_comparison_over(db):
 # --- the audit history, from the change log ---
 
 
-@pytest_asyncio.fixture
-async def audit_triggers(db):
-    """The change log's triggers, which `create_all` does not install."""
-    await db.execute(text(AUDIT_TRIGGER_FUNC_SQL))
-    for table in AUDITED_TABLES:
-        await db.execute(text(get_audit_trigger_sql(table)))
-    await db.commit()
-
-
 @pytest.mark.asyncio
-async def test_the_history_tells_verdicts_scan_flags_and_voiding_apart(db, audit_triggers):
+async def test_the_history_tells_verdicts_scan_flags_and_voiding_apart(db):
     """Read from the change log, newest first."""
     ticket = await _ticket(db)
     ticket_uuid = str(ticket.uuid)

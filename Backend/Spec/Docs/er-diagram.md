@@ -352,7 +352,8 @@ users ||--o{ announcements : "last published"
 %%   dedup_review_pending,
 %%   dedup_task_merged, dedup_task_canceled, dedup_ticket_merged, dedup_ticket_updated,
 %%   dedup_ticket_contact_changed,
-%%   role_request_submitted, role_request_approved, role_request_rejected, team_suspended
+%%   role_request_submitted, role_request_approved, role_request_rejected, team_suspended,
+%%   ticket_audit_issue
 %% (team_suspended goes to everyone in a team a super admin suspends, Spec 029 ADR-405.)
 %% (The five dedup_* after dedup_review_pending are sent once a reviewer resolves a pair card, Spec 028 ADR-379, 389.)
 %% (ticket_task_status_update is gone: a need's status is no longer edited by hand, ADR-293.)
@@ -368,6 +369,7 @@ notifications {
     uuid ref_uuid "nullable, uuid of the ref_type row — no DB FK, same polymorphic pattern as photos"
     string title "String(200)"
     text body
+    jsonb params "nullable; the values the type's sentence names, keys per type below; NULL on older rows"
     boolean read "default false; CHECK read = (read_at IS NOT NULL) (ADR-439)"
     timestamp read_at "nullable"
     timestamp created_at
@@ -376,6 +378,27 @@ notifications {
 }
 %% ref_type/ref_uuid keep the frontend URL out of the row: the client resolves the target
 %% itself, so a route change doesn't invalidate stored notifications.
+%% params lets the client write each sentence itself; a row whose params is NULL shows title/body.
+%% Every key listed for a type is present, null when the row lacks the value
+%% (NotificationService.PARAM_KEYS enforces the list):
+%%   station_suggestion_created / _adopted / _adopted_edited / _not_adopted:
+%%     station_name, station_type, field (column code), property_name (null for a station field)
+%%   resource_station_updated: station_name, station_type, change ("created" | "status"),
+%%     property_name (the live-status property that changed; null when created)
+%%   station_assigned, station_unassigned: station_name, station_type, team_name
+%%   zone_assigned, zone_unassigned: zone_name, team_name
+%%   team_member_added: team_name, role (team role granted) · team_suspended: team_name
+%%   role_request_submitted: requested_role, team_name, new_team_name, applicant_name
+%%   role_request_approved: requested_role, team_name, new_team_name
+%%   role_request_rejected: requested_role, team_name, new_team_name, review_note
+%%   announcement_published: placement · dedup_review_pending: count
+%%   dedup_task_merged, dedup_ticket_contact_changed, dedup_ticket_updated: primary_title
+%%   dedup_task_canceled: primary_title, task_ticket ("secondary" | "primary")
+%%   dedup_ticket_merged: primary_title, secondary_title, absorbed_tasks, moved_tasks, canceled_tasks
+%%   ticket_deleted: ticket_title · ticket_audit_issue: ticket_title, recipient ("requester" | "volunteer")
+%%   task_deleted, task_assignment_created, task_assignment_removed, task_full,
+%%     task_recruiting_stopped: ticket_title, task_name
+%%   task_claimed: ticket_title, task_name, assignee_name, claimed, quantity (null when uncapped)
 %% INDEX: ix_notifications_recipient_unread  ON (recipient_uuid, read, delete_at) -- unread badge count
 %% INDEX: ix_notifications_recipient_created ON (recipient_uuid, created_at)      -- feed pagination
 users ||--o{ notifications : "receives"
@@ -557,7 +580,7 @@ area_polygons {
     uuid uuid PK, FK "PK is also FK to base_geometries"
     string name "String(100), nullable"
     string note "nullable"
-    boolean is_public "default false; always true except for mark_zone"
+    boolean is_public "default false; always true except for mark_zone; a guest sees no team_zone"
 }
 base_geometries ||--|| area_polygons : "inherits as"
 
@@ -569,7 +592,7 @@ hazardous_zones {
 }
 area_polygons ||--|| hazardous_zones : "inherits as"
 
-%% 責任區: always public with its teams' names, and the only area team_zone_assign can point at.
+%% 責任區: public with its teams' names to anyone signed in, never to a guest; the only area team_zone_assign can point at.
 team_zones {
     uuid uuid PK, FK "PK is also FK to area_polygons"
 }

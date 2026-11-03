@@ -11017,6 +11017,19 @@
             "title": "Body",
             "description": "Notification body content"
           },
+          "params": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Params",
+            "description": "The values this type's sentence names, keyed per type; null on older rows"
+          },
           "read": {
             "type": "boolean",
             "title": "Read",

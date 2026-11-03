@@ -4,8 +4,8 @@ One definition serves both directions, so an exported file is by construction a 
 template. These tests pin the three things that makes true: which dynamic fields become
 columns, which columns may be written on create versus update, and a stable order.
 
-Config rows are created per test rather than relying on the migration's seed — the `db`
-fixture builds the schema with `create_all`, so migration seed data is not there.
+Config rows are created per test rather than relying on the migrations' seed, so every
+test here starts from empty tables (`empty_db`).
 """
 
 import os
@@ -23,6 +23,9 @@ from app.services.bulk_columns import (
     ticket_columns,
 )
 from app.services.bulk_validate import coerce
+
+# Each test defines the dynamic fields it is about, so the ones the migrations seed must not be there.
+pytestmark = pytest.mark.empty_db
 
 
 async def _station_configs(db, rows: list[tuple[str, str, str]], **kwargs) -> None:

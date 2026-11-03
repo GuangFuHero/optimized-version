@@ -257,6 +257,9 @@ async def test_admin_page_needs_view_admin(client, redis, content_admin_auth, lo
     assert "admin only" not in notified[staff_uuid]
     assert notified[staff_uuid] == "管理平台有一則新公告。"
     assert user_uuid not in notified
+    async with _test_db() as db:
+        params = await db.scalar(select(Notification.params).where(Notification.ref_uuid == UUID(admin_only)))
+    assert params == {"placement": "admin_page"}
 
 
 @pytest.mark.asyncio

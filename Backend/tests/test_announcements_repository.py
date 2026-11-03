@@ -166,11 +166,11 @@ async def test_publish_notification_leaves_out_the_publisher(db):
     ua = await _draft(db, uid, "a")
     await repo.set_active(db, uuid=ua, active=True, actor_uuid=uid)
     rows = await db.execute(
-        select(Notification.recipient_uuid, Notification.actor_uuid).where(
+        select(Notification.recipient_uuid, Notification.actor_uuid, Notification.params).where(
             Notification.ref_uuid == uuid_mod.UUID(ua)
         )
     )
-    assert [(str(r), a) for r, a in rows] == [(reader, None)]
+    assert [(str(r), a, params) for r, a, params in rows] == [(reader, None, {"placement": "all"})]
 
 
 @pytest.mark.asyncio

@@ -75,7 +75,7 @@ const KIND_CARDS: Record<
     example: '例：堤防潰口、土石流警戒',
   },
   team_zone: {
-    description: '交給一個單位負責，區內任務單歸他。一律公開到前台',
+    description: '交給一個單位負責，區內任務單歸他。前台只給登入的人看',
     example: '例：大平村交給慈濟基金會',
   },
   mark_zone: {
@@ -501,7 +501,9 @@ export function AdminAreaFormPanel({
             placeholder={
               kind === 'mark_zone' && !values.isPublic
                 ? '這一區的狀況、要注意什麼。'
-                : '這一區的狀況、要注意什麼。這一區公開到前台，民眾也看得到。'
+                : kind === 'team_zone'
+                  ? '這一區的狀況、要注意什麼。登入的人在前台也看得到。'
+                  : '這一區的狀況、要注意什麼。這一區公開到前台，民眾也看得到。'
             }
           />
           {kind === 'hazardous_zone' ? (

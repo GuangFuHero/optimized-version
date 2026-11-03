@@ -77,6 +77,7 @@ async def test_assign_zone_triggers_notification(mock_actor):
         mock_dispatch.assert_called_once()
         call_kwargs = mock_dispatch.call_args.kwargs
         assert call_kwargs["event_type"] == "zone_assigned"
+        assert call_kwargs["params"] == {"zone_name": "花蓮第一搜救區", "team_name": "慈濟搜救隊"}
         assert call_kwargs["priority"] == "urgent"
         assert call_kwargs["ref_type"] == "work_zone"
         assert call_kwargs["ref_uuid"] == zone_id
@@ -143,12 +144,20 @@ async def test_task_assignment_triggers_notification(mock_actor):
         assert mock_dispatch.call_count == 2
         call_kwargs = mock_dispatch.call_args_list[0].kwargs
         assert call_kwargs["event_type"] == "task_assignment_created"
+        assert call_kwargs["params"] == {"ticket_title": "物資需求", "task_name": "物資配送任務"}
         assert call_kwargs["priority"] == "high"
         assert call_kwargs["ref_type"] == "ticket_task"
         assert call_kwargs["ref_uuid"] == mock_task.uuid
         assert call_kwargs["explicit_recipients"] == [target_assignee_id]
         requester_kwargs = mock_dispatch.call_args_list[1].kwargs
         assert requester_kwargs["event_type"] == "task_claimed"
+        assert requester_kwargs["params"] == {
+            "ticket_title": "物資需求",
+            "task_name": "物資配送任務",
+            "assignee_name": "Assignee",
+            "claimed": 1,
+            "quantity": None,
+        }
         assert requester_kwargs["explicit_recipients"] == [str(mock_ticket.created_by)]
 
 
@@ -199,6 +208,7 @@ async def test_add_team_member_triggers_notification(mock_actor):
         mock_dispatch.assert_called_once()
         call_kwargs = mock_dispatch.call_args.kwargs
         assert call_kwargs["event_type"] == "team_member_added"
+        assert call_kwargs["params"] == {"team_name": "紅十字搜救第一隊", "role": "ngo_member"}
         assert call_kwargs["priority"] == "high"
         assert call_kwargs["ref_type"] == "team"
         assert call_kwargs["explicit_recipients"] == [user_id]

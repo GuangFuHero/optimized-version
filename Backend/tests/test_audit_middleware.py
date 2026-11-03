@@ -8,30 +8,14 @@ access cookie, and the real middleware) instead.
 """
 
 import pytest
-import pytest_asyncio
-from sqlalchemy import select, text
+from sqlalchemy import select
 
 from app.core import auth_cookies
 from app.core.config import settings
-from app.db.triggers import AUDIT_TRIGGER_FUNC_SQL, get_audit_trigger_sql
 from app.models.audit import AuditLog
 from app.models.auth import User
 from tests.conftest import token_for
 from tests.cookies import cookie_header
-
-
-@pytest_asyncio.fixture(autouse=True)
-async def _install_audit_trigger_on_users(db_session):
-    """Install the real trigger onto the `users` table for this test's schema instance.
-
-    `db_session`'s schema is dropped/recreated per test (tests/conftest.py), which drops any
-    trigger along with the table — so this has to run fresh every test, same as
-    tests/test_audit.py's own fixture does for the `db` fixture's schema.
-    """
-    await db_session.execute(text(AUDIT_TRIGGER_FUNC_SQL))
-    await db_session.execute(text(get_audit_trigger_sql("users")))
-    await db_session.commit()
-
 
 SITE = "https://site.test"
 
@@ -72,13 +56,17 @@ async def test_authenticated_request_attributes_audit_log_to_the_real_caller(
     assert resp.status_code == 200, resp.json()
 
     logs = (
-        await db_session.execute(
-            select(AuditLog).where(
-                AuditLog.table_name == "users",
-                AuditLog.row_id == actor_uuid,
-                AuditLog.action == "UPDATE",
+        (
+            await db_session.execute(
+                select(AuditLog).where(
+                    AuditLog.table_name == "users",
+                    AuditLog.row_id == actor_uuid,
+                    AuditLog.action == "UPDATE",
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     assert len(logs) == 1
     assert str(logs[0].user_uuid) == actor_uuid

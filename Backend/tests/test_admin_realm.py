@@ -9,11 +9,10 @@ grant the caller holds, and changes nothing stored. An account holding nothing b
 import uuid
 
 import pytest
-from sqlalchemy import delete, select, text
+from sqlalchemy import delete, select
 
 from app.core import auth_cookies
 from app.core.permissions import Perm
-from app.db.triggers import AUDIT_TRIGGER_FUNC_SQL, get_audit_trigger_sql
 from app.models.audit import AuditLog
 from app.models.auth import User
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
@@ -211,9 +210,6 @@ async def test_the_marker_does_not_stand_in_for_a_revoked_identity(client, db_se
 
 async def test_what_the_back_office_changes_is_recorded_under_its_identity(client, db_session, redis):
     """The audit trail names the identity the change was actually made under (ADR-076)."""
-    await db_session.execute(text(AUDIT_TRIGGER_FUNC_SQL))
-    await db_session.execute(text(get_audit_trigger_sql("users")))
-    await db_session.commit()
     account = await _account(db_session, (await _role(db_session, "data_auditor"), None))
     headers = {**await _signed_in_as_user(db_session, redis, account), **BACK_OFFICE}
 

@@ -16,7 +16,7 @@ GraphQL endpoint at `/graphql` serves map domain data (stations, map areas, tick
 | Q2 | `station` | `uuid` | `StationType \| null` | US1/US5 |
 | Q3 | `hazardousZones` | `bounds?`, `skip=0`, `limit=50` | `HazardousZoneConnection` | US7 |
 | Q4 | `hazardousZone` | `uuid` | `HazardousZoneType \| null` | US7 |
-| Q3a | `areas` | `bounds?`, `includePrivate=false` (needs `work_zone.view`), `skip=0`, `limit=50` | `AreaConnection` (every hazard and team zone, plus public mark zones; `assignedTeams` names a team zone's teams) | ADR-311 |
+| Q3a | `areas` | `bounds?`, `includePrivate=false` (needs `work_zone.view`), `skip=0`, `limit=50` | `AreaConnection` (every hazard and the public mark zones, plus every team zone to a signed-in caller only: a guest gets no team zone at all; `assignedTeams` names a team zone's teams) | ADR-311 |
 | Q5 | `tickets` | `bounds?`, `status?`, `priority?`, `skip=0`, `limit=50` | `TicketConnection` | US2 |
 | Q6 | `ticket` | `uuid` | `TicketType \| null` | US2 |
 

@@ -105,6 +105,7 @@ class AnnouncementRepository(GenericRepository[Announcement]):
             event_type="announcement_published",
             title=title,
             body=body,
+            params={"placement": ann.placement},
             priority="medium",
             ref_type="announcement",
             ref_uuid=ann.uuid,

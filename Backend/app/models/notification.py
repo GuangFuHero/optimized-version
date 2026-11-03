@@ -4,7 +4,7 @@ import uuid as _uuid
 from datetime import datetime
 
 from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, String, Text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin, UUIDPKMixin
@@ -62,6 +62,11 @@ class Notification(Base, UUIDPKMixin, TimestampMixin):
         Text,
         nullable=False,
         comment="通知內文",
+    )
+    params: Mapped[dict | None] = mapped_column(
+        JSONB,
+        nullable=True,
+        comment="前端組句子用的值，各 type 的 key 見 PARAM_KEYS；舊通知為 NULL，照 title/body 顯示",
     )
 
     read: Mapped[bool] = mapped_column(

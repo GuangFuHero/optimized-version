@@ -39,8 +39,13 @@ async def _ticket(db, *, status: str = "pending") -> Tickets:
     db.add(requester)
     await db.flush()
     ticket = Tickets(
-        uuid=uuidlib.uuid4(), property_name="request", created_by=str(requester.uuid),
-        title=TITLE, contact_name="王阿嬤", status=status, priority="medium",
+        uuid=uuidlib.uuid4(),
+        property_name="request",
+        created_by=str(requester.uuid),
+        title=TITLE,
+        contact_name="王阿嬤",
+        status=status,
+        priority="medium",
     )
     db.add(ticket)
     await db.flush()
@@ -55,15 +60,26 @@ async def _person(db, name: str) -> str:
 
 
 async def _need(
-    db, ticket: Tickets, name: str = "清淤", *, status: str = "pending", on_it: tuple[str, ...] = (),
+    db,
+    ticket: Tickets,
+    name: str = "清淤",
+    *,
+    status: str = "pending",
+    on_it: tuple[str, ...] = (),
     deleted: bool = False,
 ) -> str:
     """A need on `ticket` with the people in `on_it` (user uuids) on it; returns its uuid."""
     task = TicketTask(
-        uuid=uuidlib.uuid4(), ticket_uuid=str(ticket.uuid), task_type="hr", task_name=name,
-        quantity=5, status="canceled" if deleted else status, created_by=ticket.created_by,
+        uuid=uuidlib.uuid4(),
+        ticket_uuid=str(ticket.uuid),
+        task_type="hr",
+        task_name=name,
+        quantity=5,
+        status="canceled" if deleted else status,
+        created_by=ticket.created_by,
         completed_at=datetime.now(UTC) if status == "fulfilled" else None,
-        canceled_at=LONG_AGO if deleted else None, delete_at=LONG_AGO if deleted else None,
+        canceled_at=LONG_AGO if deleted else None,
+        delete_at=LONG_AGO if deleted else None,
     )
     db.add(task)
     await db.flush()
@@ -213,6 +229,7 @@ async def test_everyone_on_its_needs_hears_once(db):
         [notice] = await _notices(db, person)
         assert notice.title == f"你承接的求助「{TITLE}」已刪除"
         assert notice.body == "整張求助單已經刪除，你承接的需求都不用前往了。"
+        assert notice.params == {"ticket_title": TITLE}
         assert notice.priority == "high"
         assert (notice.ref_type, str(notice.ref_uuid)) == ("ticket", ticket_uuid)
     assert await _notices(db, told_before) == []

@@ -83,6 +83,10 @@ const KIND_LOOKS: Record<SiteNoticeKind, { icon: ReactNode; tone: string }> = {
     icon: <Icons.clipboardCheck />,
     tone: color.fg.success,
   },
+  'suggestion-consulted': {
+    icon: <Icons.clipboardList />,
+    tone: color.brand.secondary.subtle,
+  },
   'suggestion-not-adopted': {
     icon: <Icons.clipboardX />,
     tone: color.fg.neutral.subtle,

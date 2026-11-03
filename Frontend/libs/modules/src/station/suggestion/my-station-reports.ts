@@ -22,28 +22,39 @@ type SuggestionRow = MyStationSuggestionsQuery['myStationSuggestions'][number];
 
 /**
  * A card answers one thing: how the viewer's report came out, not what the station became after.
- * The backend's six statuses read as three. Approved, adopted with the reviewer's own wording, and
- * revoked all read 已採用: the report was taken, and a value put back later is the station's
- * business, which 看這個站點 shows. Rejected and not adopted (another person's value was taken)
- * both read 未採用: in the second case the station changed anyway, and the station shows it.
+ * The backend's six statuses read as four. 已採用 only when the value written is the viewer's own
+ * (approved). A value the reviewer wrote that matches no suggestion (adopted_edited) reads
+ * 已參考修改, with that value on the card: calling it 已採用 would tell the viewer the station
+ * holds what they sent when it does not. Rejected and not adopted (another person's value was
+ * taken) both read 未採用: in the second case the station changed anyway, and the station shows it.
+ *
+ * Revoked keeps the result it had before. A revoke follows the site, not the report: a 加水站 ran
+ * dry, someone reported 暫停服務 and it was taken; the next day water arrived and the reviewer
+ * revoked it to put 開設中 back. The report was right, so the card does not change. The backend
+ * turns both approved and adopted_edited into revoked, and still gives the value written, so the
+ * two are told apart by it: a value other than the viewer's own was the reviewer's (已參考修改).
  */
-export type StationReportOutcome = 'pending' | 'adopted' | 'not-adopted';
+export type StationReportOutcome =
+  | 'pending'
+  | 'adopted'
+  | 'consulted'
+  | 'not-adopted';
 
 const OUTCOMES: Partial<Record<string, StationReportOutcome>> = {
   pending: 'pending',
   approved: 'adopted',
-  adopted_edited: 'adopted',
-  revoked: 'adopted',
+  adopted_edited: 'consulted',
   rejected: 'not-adopted',
   not_adopted: 'not-adopted',
 };
 
 export const STATION_REPORT_OUTCOME_LOOKS: Record<
   StationReportOutcome,
-  { label: string; tone: 'warning' | 'success' | 'neutral' }
+  { label: string; tone: 'warning' | 'success' | 'secondary' | 'neutral' }
 > = {
   pending: { label: '等待審核', tone: 'warning' },
   adopted: { label: '已採用', tone: 'success' },
+  consulted: { label: '已參考修改', tone: 'secondary' },
   'not-adopted': { label: '未採用', tone: 'neutral' },
 };
 
@@ -51,8 +62,16 @@ export const STATION_REPORT_OUTCOME_LOOKS: Record<
  * A status the site does not know yet reads as still waiting, rather than as a result nobody
  * gave.
  */
-export function stationReportOutcome(status: string): StationReportOutcome {
-  return OUTCOMES[status] ?? 'pending';
+export function stationReportOutcome(
+  row: Pick<SuggestionRow, 'status' | 'newValue' | 'appliedValue'>,
+): StationReportOutcome {
+  if (row.status === 'revoked') {
+    return row.appliedValue != null && row.appliedValue !== row.newValue
+      ? 'consulted'
+      : 'adopted';
+  }
+
+  return OUTCOMES[row.status] ?? 'pending';
 }
 
 // A station property's fields: the backend takes them, the site's form does not offer them. Named
@@ -90,6 +109,8 @@ export interface StationReport {
    */
   previous: string | null;
   suggested: string;
+  /** 已參考修改 only: the value the reviewer wrote, which is what the station took. */
+  applied: string | null;
   comment: string | null;
   outcome: StationReportOutcome;
   /** 「3 天前送出」, or null for a time that cannot be read. */
@@ -103,6 +124,7 @@ export function readMyStationReports(
   return rows.map((row) => {
     const field = suggestionField(row.fieldName);
     const ago = timeAgo(row.submittedAt, now);
+    const outcome = stationReportOutcome(row);
 
     return {
       uuid: row.uuid,
@@ -115,8 +137,12 @@ export function readMyStationReports(
           ? null
           : describeValue(field, row.previousValue),
       suggested: describeValue(field, row.newValue),
+      applied:
+        outcome === 'consulted' && row.appliedValue != null
+          ? describeValue(field, row.appliedValue)
+          : null,
       comment: row.comment?.trim() || null,
-      outcome: stationReportOutcome(row.status),
+      outcome,
       sentAgo: ago ? `${ago}送出` : null,
     };
   });
