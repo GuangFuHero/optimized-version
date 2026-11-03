@@ -97,6 +97,14 @@ export interface RescueMapOverlayLayerConfig {
   icon: LucideIcon;
   sourceLabel?: string;
   disabledReason?: string;
+  /**
+   * What the public site's layer panel says to someone not signed in, when the layer draws less
+   * for them. The 責任區與標示區 layer draws no 責任區 for a guest (`areas` returns none), so it
+   * is named and described as the 標示區 it shows, with a line saying 責任區 needs signing in.
+   */
+  guestLabel?: string;
+  guestDescription?: string;
+  guestNote?: string;
 }
 
 export interface RescueMapTaskHeatZone {
@@ -152,7 +160,7 @@ export type RescueMapClosureArea = RescueMapArea;
 /** A 責任區, or a 標示區 switched to public, on the 責任區與標示區 layer. */
 export interface RescueMapPublicZone extends RescueMapArea {
   kind: 'team_zone' | 'mark_zone';
-  /** The teams a 責任區 is assigned to, public since ADR-311's 10-11 revision; none for a 標示區. */
+  /** The teams a 責任區 is assigned to; none for a 標示區. A guest gets no 責任區 at all (ADR-311 point 8). */
   teams: readonly string[];
   /** The same teams by uuid, in the same order, for the admin 互助地圖 to add and remove them by. */
   teamUuids?: readonly string[];

@@ -500,8 +500,8 @@ const PRIORITY_COLORS: Record<string, string> = Object.fromEntries(
 const VISIBILITY_NOTES: Record<RescueMapAreaKind, string> = {
   hazardous_zone:
     '危險區一律公開。民眾與志工在前台地圖看得到這一區的名稱、範圍與備註。',
-  team_zone:
-    '責任區一律公開。民眾與志工在前台地圖看得到這一區的名稱、範圍、備註與負責單位。',
+  // A guest gets no team zone from `areas`; only people signed in see it on the public map.
+  team_zone: '沒登入的人看不到責任區。',
   mark_zone: '',
 };
 
@@ -694,7 +694,11 @@ export function AdminAreaDetailPanel({
                 sx={{ width: 16, height: 16 }}
               />
               <Typography sx={{ ...typography.label[400] }}>
-                {item.isPublic ? '公開到前台' : '只有後台'}
+                {item.kind === 'team_zone'
+                  ? '前台只給登入的人看'
+                  : item.isPublic
+                    ? '公開到前台'
+                    : '只有後台'}
               </Typography>
             </Stack>
           )}

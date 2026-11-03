@@ -285,6 +285,11 @@ interface MapProps {
   /** 只用於訪客提示文案（「登入後可看」）；遮不遮由後端決定。 */
   isAuthenticated?: boolean;
   /**
+   * The layer panel uses a layer's guest wording. Only the public site passes it, for someone not
+   * signed in; the back office leaves `isAuthenticated` unset, so that alone cannot decide it.
+   */
+  guestLayerCopy?: boolean;
+  /**
    * Opt-in: selecting a marker opens no detail drawer, and the map keeps its full width. The
    * caller shows the selection itself (`controller.selectedMarkerId`). Default: the drawer opens.
    */
@@ -340,6 +345,7 @@ export const Map = memo(function Map({
   publicZones,
   viewportStore,
   isAuthenticated = false,
+  guestLayerCopy = false,
   hideDetailDrawer = false,
   showZoomControl = false,
   clusterAppearance,
@@ -621,7 +627,10 @@ export const Map = memo(function Map({
           </Box>
         )}
       </Box>
-      <RescueMapLayerPanel controller={controller} />
+      <RescueMapLayerPanel
+        controller={controller}
+        guestLayerCopy={guestLayerCopy}
+      />
       {hideDetailDrawer ? null : (
         <Drawer
           anchor="right"

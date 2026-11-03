@@ -45,10 +45,13 @@ const SHEET_TOP_CLEARANCE =
 
 interface RescueMapLayerPanelProps {
   controller: RescueMapControllerValue;
+  /** Use a layer's guest wording (`guestLabel`, `guestDescription`, `guestNote`). */
+  guestLayerCopy?: boolean;
 }
 
 function RescueMapLayerPanelContent({
   controller,
+  guestLayerCopy = false,
   mobile,
 }: RescueMapLayerPanelProps & { mobile: boolean }) {
   // SAFETY: BASE_LAYER_CONFIG is a complete Record keyed only by RescueMapBaseLayer.
@@ -295,7 +298,7 @@ function RescueMapLayerPanelContent({
                         color: color.fg.neutral.default,
                       }}
                     >
-                      {value.label}
+                      {(guestLayerCopy && value.guestLabel) || value.label}
                     </Typography>
                     <Typography
                       sx={{
@@ -304,8 +307,21 @@ function RescueMapLayerPanelContent({
                         color: color.fg.neutral.subtle,
                       }}
                     >
-                      {value.disabledReason ?? value.description}
+                      {value.disabledReason ??
+                        ((guestLayerCopy && value.guestDescription) ||
+                          value.description)}
                     </Typography>
+                    {guestLayerCopy && value.guestNote ? (
+                      <Typography
+                        sx={{
+                          mt: 0.35,
+                          fontSize: displayTextSize[12],
+                          color: color.fg.neutral.muted,
+                        }}
+                      >
+                        {value.guestNote}
+                      </Typography>
+                    ) : null}
                   </Box>
 
                   {active ? (
@@ -321,7 +337,10 @@ function RescueMapLayerPanelContent({
   );
 }
 
-export function RescueMapLayerPanel({ controller }: RescueMapLayerPanelProps) {
+export function RescueMapLayerPanel({
+  controller,
+  guestLayerCopy,
+}: RescueMapLayerPanelProps) {
   // Each drawer opens at its own width only. One hidden by CSS is still an open modal, the top one,
   // so MUI hid the other from screen readers and only the hidden one heard Esc.
   const isPhone = useMediaQuery((theme) => theme.breakpoints.down('tablet'));
@@ -371,7 +390,11 @@ export function RescueMapLayerPanel({ controller }: RescueMapLayerPanelProps) {
           },
         }}
       >
-        <RescueMapLayerPanelContent controller={controller} mobile />
+        <RescueMapLayerPanelContent
+          controller={controller}
+          guestLayerCopy={guestLayerCopy}
+          mobile
+        />
       </SwipeableDrawer>
 
       <Drawer
@@ -402,7 +425,11 @@ export function RescueMapLayerPanel({ controller }: RescueMapLayerPanelProps) {
           },
         }}
       >
-        <RescueMapLayerPanelContent controller={controller} mobile={false} />
+        <RescueMapLayerPanelContent
+          controller={controller}
+          guestLayerCopy={guestLayerCopy}
+          mobile={false}
+        />
       </Drawer>
     </>
   );

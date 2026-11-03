@@ -102,8 +102,8 @@ query GetStation($uuid: UUID!) {
   }
 }
 
-# The public map's areas, all three kinds at once (ADR-311): every 危險區 and 責任區, and the 標示區
-# switched to public. A team zone names its teams (ADR-311 point 8).
+# The public map's areas, all three kinds at once (ADR-311): every 危險區, the 標示區 switched to
+# public, and, for someone signed in, every 責任區 with its teams. A guest gets no 責任區 (ADR-311 point 8).
 # `includePrivate` adds the 標示區 not switched to public; it needs `work_zone.view` (the admin 互助地圖).
 query GetMapAreas(
   $bounds: BoundsInput

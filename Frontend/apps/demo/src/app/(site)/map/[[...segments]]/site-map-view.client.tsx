@@ -485,6 +485,7 @@ function SiteMapViewportDataLayer({
             showScale
             viewportStore={viewportStore}
             isAuthenticated={isAuthenticated}
+            guestLayerCopy={!isAuthenticated}
             renderControls={renderControls}
             onMapClick={handleMapClick}
             draftPoint={draftPoint}
