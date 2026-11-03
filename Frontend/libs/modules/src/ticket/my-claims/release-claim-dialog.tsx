@@ -46,7 +46,7 @@ export function ReleaseClaimDialog({
       onClose={onCancel}
       onConfirm={onConfirm}
       title="釋出這個名額？"
-      confirmLabel={submitting ? '釋出中...' : '釋出名額'}
+      confirmLabel={submitting ? '釋出中…' : '釋出名額'}
       confirmIcon={<Icons.userMinus />}
       confirmDisabled={settled || !claim}
       cancelLabel={settled ? '關閉' : '取消'}
