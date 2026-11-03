@@ -142,7 +142,7 @@ export TEST_REDIS_URL="redis://localhost:6394/15"
 **Tests:** `tests/test_graphql/test_role_request_teams.py`（新）
 - 未登入 → 401；登入的一般使用者看得到全部啟用中團隊
 - 停用、已刪除的團隊不出現；`type` 篩選正確
-- 回應欄位只有 `uuid`／`name`／`type`
+- 回應欄位只有 `uuid`／`name`／`type`／`contactName`／`contactPhone`；聯絡人給團隊成員、團隊管理員、超級管理員，沒有團隊身分、只在停用或已刪除團隊裡的人拿到 null
 
 ## Task 3: 送出申請帶團隊與申請人資料
 
