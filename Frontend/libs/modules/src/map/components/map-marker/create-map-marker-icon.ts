@@ -119,8 +119,9 @@ export function shownBuildingTickets(item: RescueMapMarkerItem): number {
 }
 
 /**
- * An open building's entry (`item.building`, prototype `createBuildingIcon`): 「N 件」 and, while its
- * tickets are short of people, 「缺 M」 on red — the one number a volunteer decides on. With no ticket,
+ * An open building's entry (`item.building`, prototype `createBuildingIcon`): 「N 件」 and no 「缺 M」 —
+ * the building's shortfall adds people and supplies together, a number with no unit; which floor is
+ * short is in the drawer, as 「N 件缺人」. With no ticket,
  * or to a guest, 看各樓層, never 0 件: it is the way in to file the first one, so it says what a tap
  * does. Without a count the card stands above the point, clear of the 「N 求助」 a guest's cell shows
  * there; with one, it stands on it.
@@ -130,14 +131,9 @@ function createBuildingIcon(
   leaflet: typeof import('leaflet'),
 ): import('leaflet').DivIcon {
   const tickets = shownBuildingTickets(item);
-  const short = item.building?.shortfall ?? 0;
   const counts =
     tickets > 0
-      ? `<span class="map-building__count">${tickets} 件</span>${
-          short > 0
-            ? `<span class="map-building__short">缺 ${short}</span>`
-            : ''
-        }`
+      ? `<span class="map-building__count">${tickets} 件</span>`
       : '<span class="map-building__text">看各樓層</span>';
 
   return leaflet.divIcon({

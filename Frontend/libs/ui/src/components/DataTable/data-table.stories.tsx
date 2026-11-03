@@ -119,7 +119,7 @@ const COLUMNS = columnHelper.columns([
     ),
   }),
   columnHelper.accessor('team', {
-    header: '指派 Team',
+    header: '指派團隊',
     meta: { width: 'minmax(0, 1fr)' },
     cell: ({ getValue }) => (
       <Typography

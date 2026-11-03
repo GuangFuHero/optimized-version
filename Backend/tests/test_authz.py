@@ -36,8 +36,12 @@ from tests.conftest import acting_as
 def _ticket(point: Point, creator: User) -> Tickets:
     """A ticket at `point` — what `zone` scope governs since stations moved to `team` (ADR-285)."""
     return Tickets(
-        geometry=from_shape(point, srid=4326), created_by=str(creator.uuid),
-        title="t", contact_name="c", status="pending", priority="normal",
+        geometry=from_shape(point, srid=4326),
+        created_by=str(creator.uuid),
+        title="t",
+        contact_name="c",
+        status="pending",
+        priority="normal",
     )
 
 
@@ -146,11 +150,7 @@ async def _assign_zone(db, team, polygon: Polygon) -> None:
     zone = TeamZone(name="Z", geometry=from_shape(polygon, srid=4326))
     db.add(zone)
     await db.flush()
-    db.add(
-        TeamZoneAssign(
-            team_uuid=team.uuid, zone_uuid=zone.uuid, assigned_by=str(assigner.uuid)
-        )
-    )
+    db.add(TeamZoneAssign(team_uuid=team.uuid, zone_uuid=zone.uuid, assigned_by=str(assigner.uuid)))
     await db.flush()
 
 
@@ -160,7 +160,7 @@ _ZONE_POLY = Polygon([(121.0, 24.0), (121.0, 25.0), (122.0, 25.0), (122.0, 24.0)
 @pytest.mark.asyncio
 async def test_require_scope_zone_mismatch_is_404_not_403(db):
     """A zone-boundary denial 404s so a cross-zone resource's existence isn't confirmed (ADR-023/049)."""
-    team = Team(name="T1", type="gov")
+    team = Team(name="T1", type="ngo")
     db.add(team)
     await db.flush()
     actor = User(name="Actor")
@@ -179,7 +179,7 @@ async def test_require_scope_zone_mismatch_is_404_not_403(db):
 @pytest.mark.asyncio
 async def test_require_scope_zone_match_passes(db):
     """Zone scope passes checkpoint 2 for a resource inside the team's zone the actor didn't create."""
-    team = Team(name="T1", type="gov")
+    team = Team(name="T1", type="ngo")
     db.add(team)
     await db.flush()
     actor = User(name="Actor")
@@ -192,6 +192,39 @@ async def test_require_scope_zone_match_passes(db):
     resource = _ticket(Point(121.5, 24.5), other)
     scope = await require_scope(actor, Perm.TICKET_EDIT, db, resource=resource)
     assert scope == Scope.ZONE
+
+
+@pytest.mark.asyncio
+async def test_a_gov_team_s_zone_ticket_grant_reaches_every_ticket(db):
+    """BE-RBAC-3 B3: zones go to NGO teams only, so a gov team's `zone` ticket grant widens to `all`.
+
+    Without it a gov team, holding no zone, could edit no ticket at all. The ticket here lies in no
+    zone of the team's, and the gov team still passes.
+    """
+    team = Team(name="G1", type="gov")
+    db.add(team)
+    await db.flush()
+    actor = User(name="Actor")
+    other = User(name="Other")
+    db.add_all([actor, other])
+    await db.flush()
+    await _grant(db, actor, Perm.TICKET_EDIT, "zone", "role-edit", team=team)
+    resource = _ticket(Point(123.5, 24.5), other)
+    scope = await require_scope(actor, Perm.TICKET_EDIT, db, resource=resource)
+    assert scope == Scope.ALL
+
+
+@pytest.mark.asyncio
+async def test_a_zone_grant_outside_the_ticket_capabilities_does_not_widen_for_gov(db):
+    """Only GOV_TEAM_ZONE_WIDENED_PERMS widen: `ticket.audit` stays `zone` (content check cancelled)."""
+    team = Team(name="G1", type="gov")
+    db.add(team)
+    await db.flush()
+    actor = User(name="Actor")
+    db.add(actor)
+    await db.flush()
+    await _grant(db, actor, Perm.TICKET_AUDIT, "zone", "role-audit", team=team)
+    assert await require_scope(actor, Perm.TICKET_AUDIT, db) == Scope.ZONE
 
 
 @pytest.mark.asyncio
@@ -270,6 +303,7 @@ async def test_require_scope_403s_for_an_actor_with_no_active_identity(db):
     with pytest.raises(HTTPException) as exc:
         await require_scope(actor, Perm.STATION_EDIT, db)
     assert exc.value.status_code == 403
+
 
 @pytest.mark.asyncio
 async def test_a_team_identity_does_not_inherit_the_platform_role_grant(db):

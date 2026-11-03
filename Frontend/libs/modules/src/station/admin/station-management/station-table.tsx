@@ -115,7 +115,7 @@ export function StationTable({
     },
     {
       id: 'team',
-      header: '指派 Team',
+      header: '指派團隊',
       meta: { width: '138px' },
       cell: ({ row }) =>
         renderTeam ? (

@@ -2,10 +2,12 @@
 
 const { composePlugins, withNx } = require('@nx/next');
 const path = require('path');
+const {
+  contentSecurityPolicy,
+} = require('@rescue-frontend/modules/content-security-policy');
 
 // On every response, the API's and the static files' too; the admin app sends the same
-// (apps/admin/next.config.ts). No Content-Security-Policy yet: it has to let the map's tiles and
-// the fonts through first.
+// (apps/admin/next.config.ts).
 const securityHeaders = [
   // HTTPS only on this host and those under it, for a week: a browser keeps to it that long, with no
   // way to take it back sooner. A year once every host under the domain is known to be HTTPS only.
@@ -17,6 +19,8 @@ const securityHeaders = [
   // No other site frames these pages; SAMEORIGIN rather than DENY leaves their own frames working.
   { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
   { key: 'X-Content-Type-Options', value: 'nosniff' },
+  // Where scripts, styles, images and fetches may come from; libs/modules/src/http says why each.
+  { key: 'Content-Security-Policy', value: contentSecurityPolicy() },
 ];
 
 /**

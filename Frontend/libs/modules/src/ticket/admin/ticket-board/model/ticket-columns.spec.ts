@@ -25,7 +25,7 @@ describe('ticket columns', () => {
       needs: '需求 · 承接進度',
       updated: '更新時間',
       status: '狀態',
-      team: '指派 Team',
+      team: '指派團隊',
     });
   });
 

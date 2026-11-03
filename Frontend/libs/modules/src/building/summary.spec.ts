@@ -163,10 +163,32 @@ describe('summarizeTickets', () => {
 
     expect(summary).toEqual({
       lack: 2,
+      shortCount: 1,
       rescueOpen: 1,
       closedCount: 2,
       ticketCount: 4,
     });
+  });
+});
+
+describe('summarizeTickets shortCount', () => {
+  it('counts tickets short, not people and supplies added up', () => {
+    const summary = summarizeTickets([
+      ticket('a', {
+        needs: [
+          need({ quantity: 3, assignedCount: 0 }),
+          need({ taskType: 'supply', quantity: 50, assignedCount: 0 }),
+        ],
+      }),
+      ticket('b', { needs: [need({ quantity: 2, assignedCount: 2 })] }),
+      ticket('c', {
+        status: 'completed',
+        needs: [need({ quantity: 4, assignedCount: 0 })],
+      }),
+    ]);
+
+    expect(summary.lack).toBe(53);
+    expect(summary.shortCount).toBe(1);
   });
 });
 

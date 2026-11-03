@@ -297,6 +297,57 @@ async def test_new_suggestion_notifies_only_reviewers_who_can_act(db: AsyncSessi
 
 
 @pytest.mark.asyncio
+async def test_new_suggestion_reaches_gov_members_but_not_ngo_members(db: AsyncSession):
+    """BE-RBAC-3 B3: the team role `member` reviews station suggestions for gov teams only.
+
+    So a new suggestion is told to an active gov team's members (any station, gov widening), but not
+    to the members of the NGO team that runs the station, nor to a suspended gov team's members:
+    the notice follows who can review, as resolve_scope decides it. The NGO team's admin still hears.
+    """
+    from app.services.notification_resolver import NotificationRecipientResolver
+
+    review = Permission(key=Perm.STATION_REVIEW.value)
+    admin_role = Role(name="admin", kind="team")
+    member_role = Role(name="member", kind="team")
+    ngo = Team(name="負責的NGO", type="ngo")
+    gov = Team(name="縣府", type="gov")
+    suspended_gov = Team(name="停權的縣府", type="gov", status="suspended")
+    db.add_all([review, admin_role, member_role, ngo, gov, suspended_gov])
+    await db.flush()
+    db.add_all(
+        [
+            RolePermissionAssign(role_uuid=admin_role.uuid, permission_uuid=review.uuid, scope="team"),
+            RolePermissionAssign(role_uuid=member_role.uuid, permission_uuid=review.uuid, scope="team"),
+        ]
+    )
+    users = [User(name=n) for n in ("NGO管理員", "NGO成員", "政府成員", "停權政府成員")]
+    db.add_all(users)
+    await db.flush()
+    ids = {u.name: str(u.uuid) for u in users}
+    db.add_all(
+        [
+            UserRoleAssign(user_uuid=ids["NGO管理員"], role_uuid=admin_role.uuid, team_uuid=ngo.uuid),
+            UserRoleAssign(user_uuid=ids["NGO成員"], role_uuid=member_role.uuid, team_uuid=ngo.uuid),
+            UserRoleAssign(user_uuid=ids["政府成員"], role_uuid=member_role.uuid, team_uuid=gov.uuid),
+            UserRoleAssign(
+                user_uuid=ids["停權政府成員"], role_uuid=member_role.uuid, team_uuid=suspended_gov.uuid
+            ),
+        ]
+    )
+    station = Station(
+        name="站", geometry=WKTElement("SRID=4326;POINT(121.42 23.66)", srid=4326), team_uuid=ngo.uuid
+    )
+    db.add(station)
+    await db.flush()
+
+    recipients = await NotificationRecipientResolver.resolve_permission(
+        db, Perm.STATION_REVIEW.value, station_uuid=station.uuid
+    )
+
+    assert sorted(recipients) == sorted([ids["NGO管理員"], ids["政府成員"]])
+
+
+@pytest.mark.asyncio
 async def test_notification_dispatch_persists_across_sessions(db: AsyncSession):
     """Verify notifications dispatched are committed and persist after the session is closed."""
     recipient = User(name="Recipient User")

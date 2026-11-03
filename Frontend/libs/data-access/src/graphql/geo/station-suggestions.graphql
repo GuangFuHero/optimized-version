@@ -23,3 +23,23 @@ mutation CreateStationSuggestion($input: CreateStationSuggestionInput!) {
     status
   }
 }
+
+# 我回報的站點: the caller's own suggestions, latest activity first. Neither the reviewer nor the
+# review note: those are for the review record.
+query MyStationSuggestions {
+  myStationSuggestions {
+    uuid
+    targetType
+    station {
+      uuid
+      name
+    }
+    fieldName
+    previousValue
+    newValue
+    comment
+    status
+    submittedAt
+    decidedAt
+  }
+}

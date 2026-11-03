@@ -5,7 +5,13 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import select
 
-from app.core.permissions import GOV_TEAM_ONLY_PERMS, GOV_TEAM_WIDENED_PERMS, Perm
+from app.core.permissions import (
+    GOV_MEMBER_ONLY_PERMS,
+    GOV_TEAM_ONLY_PERMS,
+    GOV_TEAM_WIDENED_PERMS,
+    GOV_TEAM_ZONE_WIDENED_PERMS,
+    Perm,
+)
 from app.models.auth import User
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserPermissionAssign, UserRoleAssign
 from app.models.team import Team
@@ -54,9 +60,7 @@ async def _make_plain_user(db) -> str:
 async def test_capabilities_lists_catalog_for_super_admin(client, db_session, redis):
     """A super_admin holding only rbac.view sees the full capability catalog + scopes."""
     admin_uuid = await _make_rbac_admin(db_session)
-    resp = await client.get(
-        "/api/v1/admin/rbac/capabilities", headers=await _auth_header(redis, admin_uuid)
-    )
+    resp = await client.get("/api/v1/admin/rbac/capabilities", headers=await _auth_header(redis, admin_uuid))
     assert resp.status_code == 200, resp.json()
     body = resp.json()
     assert "none" in body["scopes"] and "all" in body["scopes"]
@@ -79,9 +83,7 @@ async def test_capabilities_flag_work_zone_caps_as_gov_team_only(client, db_sess
     synchronised sources of truth.
     """
     admin_uuid = await _make_rbac_admin(db_session)
-    resp = await client.get(
-        "/api/v1/admin/rbac/capabilities", headers=await _auth_header(redis, admin_uuid)
-    )
+    resp = await client.get("/api/v1/admin/rbac/capabilities", headers=await _auth_header(redis, admin_uuid))
     assert resp.status_code == 200, resp.json()
     by_key = {c["key"]: c for c in resp.json()["capabilities"]}
 
@@ -103,9 +105,7 @@ async def test_capabilities_flag_station_caps_whose_team_scope_widens_for_gov(cl
     while `resolve_scope` actually hands them all of them.
     """
     admin_uuid = await _make_rbac_admin(db_session)
-    resp = await client.get(
-        "/api/v1/admin/rbac/capabilities", headers=await _auth_header(redis, admin_uuid)
-    )
+    resp = await client.get("/api/v1/admin/rbac/capabilities", headers=await _auth_header(redis, admin_uuid))
     assert resp.status_code == 200, resp.json()
     by_key = {c["key"]: c for c in resp.json()["capabilities"]}
 
@@ -116,14 +116,18 @@ async def test_capabilities_flag_station_caps_whose_team_scope_widens_for_gov(cl
     flagged = {key for key, cap in by_key.items() if cap["team_gov_widened"] is True}
     assert flagged == {p.value for p in GOV_TEAM_WIDENED_PERMS}
 
+    # BE-RBAC-3 B3: the zone widening for gov tickets, and the gov-member-only fence.
+    zone_widened = {key for key, cap in by_key.items() if cap["team_gov_zone_widened"] is True}
+    assert zone_widened == {p.value for p in GOV_TEAM_ZONE_WIDENED_PERMS}
+    member_only = {key for key, cap in by_key.items() if cap["team_gov_member_only"] is True}
+    assert member_only == {p.value for p in GOV_MEMBER_ONLY_PERMS}
+
 
 @pytest.mark.asyncio
 async def test_capabilities_denied_without_rbac_view(client, db_session, redis):
     """A caller without rbac.view is denied — checkpoint 1 only, but still enforced."""
     plain_uuid = await _make_plain_user(db_session)
-    resp = await client.get(
-        "/api/v1/admin/rbac/capabilities", headers=await _auth_header(redis, plain_uuid)
-    )
+    resp = await client.get("/api/v1/admin/rbac/capabilities", headers=await _auth_header(redis, plain_uuid))
     assert resp.status_code == 403
 
 
@@ -204,9 +208,7 @@ async def test_user_permissions_merges_role_and_direct_widest_wins(client, db_se
     target_uuid = str(target.uuid)
     db_session.add(UserRoleAssign(user_uuid=target.uuid, role_uuid=role.uuid))
     perm = perm_cache[Perm.TICKET_VIEW.value]
-    db_session.add(
-        UserPermissionAssign(user_uuid=target.uuid, permission_uuid=perm.uuid, scope="all")
-    )
+    db_session.add(UserPermissionAssign(user_uuid=target.uuid, permission_uuid=perm.uuid, scope="all"))
     await db_session.commit()
 
     resp = await client.get(
@@ -214,11 +216,48 @@ async def test_user_permissions_merges_role_and_direct_widest_wins(client, db_se
     )
     assert resp.status_code == 200, resp.json()
     body = resp.json()
-    assert body["direct_grants"] == [
-        {"capability": "ticket.view", "scope": "all", "team_uuid": None}
-    ]
+    assert body["direct_grants"] == [{"capability": "ticket.view", "scope": "all", "team_uuid": None}]
     viewer = next(i for i in body["identities"] if i["role"] == "viewer")
     assert viewer["effective"]["ticket.view"] == "all"  # widest(team, all) == all
+
+
+@pytest.mark.asyncio
+async def test_user_permissions_effective_applies_the_gov_team_rules(client, db_session, redis):
+    """`effective` is what each identity resolves to, not its raw grants (BE-RBAC-3 B3).
+
+    One user, `member` of an NGO team and of a gov team: on the gov team the `zone` ticket grant and
+    the `team` review grant widen to `all`; on the NGO team the review grant, gov members' only,
+    is gone and the ticket grant stays `zone`.
+    """
+    admin_uuid = await _make_rbac_admin(db_session)
+    member = Role(name="member", kind="team")
+    ngo, gov = Team(name="NGO", type="ngo"), Team(name="縣府", type="gov")
+    db_session.add_all([member, ngo, gov])
+    await db_session.flush()
+    perm_cache: dict = {}
+    await _grant(db_session, member, perm_cache, Perm.TICKET_EDIT, "zone")
+    await _grant(db_session, member, perm_cache, Perm.STATION_REVIEW, "team")
+    target = User(name="Target")
+    db_session.add(target)
+    await db_session.flush()
+    target_uuid = str(target.uuid)
+    db_session.add_all(
+        [
+            UserRoleAssign(user_uuid=target.uuid, role_uuid=member.uuid, team_uuid=ngo.uuid),
+            UserRoleAssign(user_uuid=target.uuid, role_uuid=member.uuid, team_uuid=gov.uuid),
+        ]
+    )
+    await db_session.commit()
+
+    resp = await client.get(
+        f"/api/v1/admin/users/{target_uuid}/permissions", headers=await _auth_header(redis, admin_uuid)
+    )
+    assert resp.status_code == 200, resp.json()
+    by_team = {i["team"]: i["effective"] for i in resp.json()["identities"] if i["team"]}
+    assert by_team["縣府"]["ticket.edit"] == "all"
+    assert by_team["縣府"]["station.review"] == "all"
+    assert by_team["NGO"]["ticket.edit"] == "zone"
+    assert "station.review" not in by_team["NGO"]
 
 
 # --- Phase 2: matrix write (PUT / DELETE a cell) ---------------------------------------
@@ -281,12 +320,16 @@ async def test_put_grant_updates_existing_cell_without_duplicating(client, db_se
     assert resp.json()["grants"]["ticket.edit"] == "zone"
 
     rows = (
-        await db_session.execute(
-            select(RolePermissionAssign)
-            .join(Permission, Permission.uuid == RolePermissionAssign.permission_uuid)
-            .where(RolePermissionAssign.role_uuid == role_uuid, Permission.key == "ticket.edit")
+        (
+            await db_session.execute(
+                select(RolePermissionAssign)
+                .join(Permission, Permission.uuid == RolePermissionAssign.permission_uuid)
+                .where(RolePermissionAssign.role_uuid == role_uuid, Permission.key == "ticket.edit")
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     assert len(rows) == 1
 
 
@@ -436,9 +479,7 @@ async def test_put_user_grant_adds_direct_grant(client, db_session, redis):
     )
     assert resp.status_code == 200, resp.json()
     body = resp.json()
-    assert body["direct_grants"] == [
-        {"capability": "ticket.export", "scope": "all", "team_uuid": None}
-    ]
+    assert body["direct_grants"] == [{"capability": "ticket.export", "scope": "all", "team_uuid": None}]
     # The grant binds to the platform identity, so that is the identity it shows up under.
     platform = next(i for i in body["identities"] if i["team_uuid"] is None)
     assert platform["effective"]["ticket.export"] == "all"
@@ -459,12 +500,16 @@ async def test_put_user_grant_upserts_not_duplicates(client, db_session, redis):
     ]
 
     rows = (
-        await db_session.execute(
-            select(UserPermissionAssign)
-            .join(Permission, Permission.uuid == UserPermissionAssign.permission_uuid)
-            .where(UserPermissionAssign.user_uuid == target, Permission.key == "ticket.export")
+        (
+            await db_session.execute(
+                select(UserPermissionAssign)
+                .join(Permission, Permission.uuid == UserPermissionAssign.permission_uuid)
+                .where(UserPermissionAssign.user_uuid == target, Permission.key == "ticket.export")
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     assert len(rows) == 1
 
 
@@ -612,7 +657,8 @@ async def test_delete_role_with_grants_succeeds(client, db_session, redis):
     hdr = await _auth_header(redis, admin_uuid)
     await client.put(
         f"/api/v1/admin/rbac/roles/{role_uuid}/permissions/ticket.edit",
-        json={"scope": "own"}, headers=hdr,
+        json={"scope": "own"},
+        headers=hdr,
     )
     resp = await client.delete(f"/api/v1/admin/rbac/roles/{role_uuid}", headers=hdr)
     assert resp.status_code == 204, resp.text
@@ -904,13 +950,17 @@ async def test_a_platform_role_cannot_be_unassigned(client, db_session, redis):
     assert resp.status_code == 409, resp.text
     assert "only replaced" in resp.json()["detail"]
     still_held = (
-        await db_session.execute(
-            select(UserRoleAssign).where(
-                UserRoleAssign.user_uuid == target_uuid,
-                UserRoleAssign.team_uuid.is_(None),
+        (
+            await db_session.execute(
+                select(UserRoleAssign).where(
+                    UserRoleAssign.user_uuid == target_uuid,
+                    UserRoleAssign.team_uuid.is_(None),
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     assert len(still_held) == 1
 
 
@@ -930,10 +980,12 @@ async def test_a_team_identity_can_still_be_unassigned(client, db_session, redis
     team = Team(name="TeamZ", type="ngo", status="active")
     db_session.add(team)
     await db_session.flush()
-    db_session.add_all([
-        UserRoleAssign(user_uuid=target.uuid, role_uuid=plain.uuid),
-        UserRoleAssign(user_uuid=target.uuid, role_uuid=team_role.uuid, team_uuid=team.uuid),
-    ])
+    db_session.add_all(
+        [
+            UserRoleAssign(user_uuid=target.uuid, role_uuid=plain.uuid),
+            UserRoleAssign(user_uuid=target.uuid, role_uuid=team_role.uuid, team_uuid=team.uuid),
+        ]
+    )
     target_uuid, team_role_uuid, team_uuid = str(target.uuid), str(team_role.uuid), str(team.uuid)
     await db_session.commit()
 
@@ -945,9 +997,9 @@ async def test_a_team_identity_can_still_be_unassigned(client, db_session, redis
 
     assert resp.status_code == 204, resp.text
     remaining = (
-        await db_session.execute(
-            select(UserRoleAssign).where(UserRoleAssign.user_uuid == target_uuid)
-        )
-    ).scalars().all()
+        (await db_session.execute(select(UserRoleAssign).where(UserRoleAssign.user_uuid == target_uuid)))
+        .scalars()
+        .all()
+    )
     assert len(remaining) == 1  # the platform identity survives
     assert remaining[0].team_uuid is None

@@ -27,14 +27,16 @@ export type SiteNoticeKind =
   | 'merged'
   | 'audit-issue'
   | 'role-approved'
-  | 'role-rejected';
+  | 'role-rejected'
+  | 'suggestion-adopted'
+  | 'suggestion-not-adopted';
 
 /**
  * What a click on a notice opens. `need`: the ticket of the need it names, while that need is still
  * on the viewer's lists — one they filed, or one they are on. `ticket`: the ticket it names, which
- * is still there. Neither, for a need called off or gone, and for an application, which is no need.
+ * is still there. `station-reports`: 我回報的站點, where the suggestion it names is. Neither, for a need called off or gone, and for an application, which is no need.
  */
-type Opens = 'need' | 'ticket';
+type Opens = 'need' | 'ticket' | 'station-reports';
 
 /**
  * The backend's event types the site shows, how each reads, and what it opens. A list of what to
@@ -42,7 +44,17 @@ type Opens = 'need' | 'ticket';
  * about the viewer.
  */
 const SITE_NOTICE_TYPES: Partial<
-  Record<string, { kind: SiteNoticeKind; opens?: Opens }>
+  Record<
+    string,
+    {
+      kind: SiteNoticeKind;
+      opens?: Opens;
+      reword?: (row: Pick<NotificationRow, 'title' | 'body'>) => {
+        title: string;
+        body: string;
+      };
+    }
+  >
 > = {
   // To the requester: someone is coming, and who.
   task_claimed: { kind: 'claimed', opens: 'need' },
@@ -73,7 +85,43 @@ const SITE_NOTICE_TYPES: Partial<
   // To the applicant, a team application's answer included.
   role_request_approved: { kind: 'role-approved' },
   role_request_rejected: { kind: 'role-rejected' },
+  // To whoever sent a station a suggestion: how the review came out, read as 我回報的站點 reads it.
+  station_suggestion_adopted: {
+    kind: 'suggestion-adopted',
+    opens: 'station-reports',
+  },
+  // The reviewer wrote the value in their own words: 已採用 on the site, as the report's card says,
+  // where the backend says 已參考你的建議修改.
+  station_suggestion_adopted_edited: {
+    kind: 'suggestion-adopted',
+    opens: 'station-reports',
+    reword: rewordAdoptedEdited,
+  },
+  // Rejected, and another person's value taken, read the same.
+  station_suggestion_not_adopted: {
+    kind: 'suggestion-not-adopted',
+    opens: 'station-reports',
+  },
 };
+
+const ADOPTED_EDITED_ENDING = '已參考你的建議修改。';
+
+/**
+ * 「「站名」的「服務時間」已參考你的建議修改。」 as an adopted one reads: 「你對「站名」的「服務時間」的修改
+ * 建議已採用。」 A body worded otherwise keeps its words, under the adopted title.
+ */
+export function rewordAdoptedEdited({
+  body,
+}: Pick<NotificationRow, 'title' | 'body'>): { title: string; body: string } {
+  const where = body.endsWith(ADOPTED_EDITED_ENDING)
+    ? body.slice(0, -ADOPTED_EDITED_ENDING.length)
+    : null;
+
+  return {
+    title: '📝 站點修改建議已採用',
+    body: where ? `你對${where}的修改建議已採用。` : body,
+  };
+}
 
 /** A notice as the drawer shows it: four of the row's fields as they come, the rest the site's own. */
 export interface SiteNotice
@@ -85,6 +133,8 @@ export interface SiteNotice
   needUuid: string | null;
   /** The ticket a click opens, named by the notice itself. */
   ticketUuid: string | null;
+  /** A click opens 我回報的站點. */
+  opensStationReports: boolean;
 }
 
 /** The notices the site shows, in the order the server sends them. */
@@ -103,16 +153,19 @@ export function readSiteNotices(
         ? (row.ref_uuid ?? null)
         : null;
 
+    const { title, body } = type.reword ? type.reword(row) : row;
+
     return [
       {
         uuid: row.uuid,
         kind: type.kind,
-        title: row.title,
-        body: row.body,
+        title,
+        body,
         read: row.read,
         at: formatTaiwanTime(row.created_at),
         needUuid: names('need', 'ticket_task'),
         ticketUuid: names('ticket', 'ticket'),
+        opensStationReports: type.opens === 'station-reports',
       },
     ];
   });

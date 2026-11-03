@@ -10,7 +10,7 @@ import pytest
 from fastapi import HTTPException
 from sqlalchemy import event, select
 
-from app.core.permissions import GOV_TEAM_ONLY_PERMS, PUBLIC_PERMS, Perm
+from app.core.permissions import GOV_MEMBER_ONLY_PERMS, GOV_TEAM_ONLY_PERMS, PUBLIC_PERMS, Perm
 from app.models.auth import User
 from app.models.rbac import (
     Permission,
@@ -129,6 +129,42 @@ async def test_gov_only_capabilities_answer_as_require_gov_team_does(
             await authz.require_gov_team(db, actor, detail="fenced")
     else:
         await authz.require_gov_team(db, actor, detail="fenced")
+
+
+@pytest.mark.parametrize(
+    ("role_name", "team_type", "team_status", "expected"),
+    [
+        # Gov members work as gov admins do (BE-RBAC-3 B3): every GOV_MEMBER_ONLY capability.
+        ("member", "gov", "active", GOV_MEMBER_ONLY_PERMS),
+        # NGO members hold none of them; neither does a suspended gov team's member.
+        ("member", "ngo", "active", frozenset()),
+        ("member", "gov", "suspended", frozenset()),
+        # The fence is the member's alone: an NGO admin keeps import, export, review and zone view.
+        # Drawing and assigning zones stay gov-only for every team role (GOV_TEAM_ONLY_PERMS).
+        ("admin", "ngo", "active", GOV_MEMBER_ONLY_PERMS - GOV_TEAM_ONLY_PERMS),
+        ("admin", "gov", "active", GOV_MEMBER_ONLY_PERMS),
+    ],
+    ids=["gov-member", "ngo-member", "suspended-gov-member", "ngo-admin", "gov-admin"],
+)
+async def test_gov_member_only_capabilities_follow_role_and_team_type(
+    db, role_name, team_type, team_status, expected
+):
+    """Import, export, the station review queue, 互助地圖 and 開啟空間: gov members yes, NGO members no."""
+    assert set(GRANTS["member"]) >= GOV_MEMBER_ONLY_PERMS, "the seed no longer grants member all of them"
+    team = Team(name="隊", type=team_type, status=team_status)
+    db.add(team)
+    await db.flush()
+    actor = await _acting(db, await _seed_role(db, role_name), team)
+
+    capabilities = set(await authz.capabilities(actor, db))
+
+    assert capabilities & GOV_MEMBER_ONLY_PERMS == set(expected)
+    if role_name == "member":
+        # The member fence sits in resolve_scope, so every check refuses as the list does. (An NGO
+        # admin's gov-only ones are refused later, by require_gov_team in the service.)
+        for perm in GOV_MEMBER_ONLY_PERMS - expected:
+            with pytest.raises(HTTPException):
+                await authz.require_scope(actor, perm, db)
 
 
 async def test_public_capabilities_are_listed_with_no_grant_and_with_a_none_grant(db):

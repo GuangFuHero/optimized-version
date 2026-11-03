@@ -18,6 +18,7 @@ import {
 import type { ApplyReturn } from '../../role-request/apply-return';
 import { RoleRequestReturn } from '../../role-request/role-request-return';
 import { SiteRouteProvider } from '../../route/use-site-route-state';
+import { MyStationReportsHost } from '../../station/suggestion/my-station-reports-drawer';
 import { StationSuggestionHost } from '../../station/suggestion/station-suggestion-host';
 import { HelpRequestHost } from '../../ticket/help-request/help-request-host';
 import { MobileRequestHelpFab } from '../../ticket/help-request/mobile-request-help';
@@ -243,6 +244,9 @@ export function SiteShell({
 
       {/* Opened from a station's detail, on the map or the list (`openStationSuggestion`). */}
       <StationSuggestionHost isAuthenticated={isAuthenticated} />
+
+      {/* Opened from the account menu and from a notice of a review's result (`openMyStationReports`). */}
+      {isAuthenticated ? <MyStationReportsHost /> : null}
     </Box>
   );
 

@@ -191,7 +191,7 @@ export function TaskMatchTicketDetailsPanel({
             <Typography
               sx={{ ...secondaryLine, fontSize: displayTextSize[13] }}
             >
-              {isTicketFetching ? '載入需求中...' : '這張單目前沒有需求。'}
+              {isTicketFetching ? '載入需求中…' : '這張單目前沒有需求。'}
             </Typography>
           )}
           {canAddNeed ? (

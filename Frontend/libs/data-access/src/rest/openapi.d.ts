@@ -1222,6 +1222,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/admin/duplicate-hint-rates': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Duplicate Hint Rates
+     * @description 提示率 and the two 誤報率 estimates for tasks and stations (ADR-458).
+     */
+    get: operations['get_duplicate_hint_rates_api_v1_admin_duplicate_hint_rates_get'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/admin/duplicate-pairs/{pair_uuid}': {
     parameters: {
       query?: never;
@@ -2504,6 +2524,10 @@ export interface components {
      *     grant alone overstates what an ngo admin can do; the frontend shows a "gov teams only" note.
      *     `team_gov_widened` (ADR-285) = a `team` grant on it reaches every station when held by a gov
      *     team, so the matrix's `team` understates what a gov admin can do.
+     *     `team_gov_zone_widened` (BE-RBAC-3 B3) = the same for a `zone` grant on a ticket capability:
+     *     a gov team has no zone, so it reaches every ticket instead.
+     *     `team_gov_member_only` (BE-RBAC-3 B3) = the team role `member` holds it for gov teams only;
+     *     an ngo member's grant of it resolves to `none`, while an ngo admin's still counts.
      */
     CapabilityInfo: {
       /** Key */
@@ -2524,6 +2548,16 @@ export interface components {
        * @default false
        */
       team_gov_widened: boolean;
+      /**
+       * Team Gov Zone Widened
+       * @default false
+       */
+      team_gov_zone_widened: boolean;
+      /**
+       * Team Gov Member Only
+       * @default false
+       */
+      team_gov_member_only: boolean;
     };
     /**
      * CatalogResponse
@@ -2912,6 +2946,80 @@ export interface components {
        * @description Values for `county`, `town` and `village`. A 村里 name can repeat across towns, so send `town` (and `county`) with it to pin one.
        */
       areas: components['schemas']['AreaCounty'][];
+    };
+    /**
+     * DuplicateHintRatesPage
+     * @description The window the metrics cover, and one entry per kind.
+     */
+    DuplicateHintRatesPage: {
+      /**
+       * Since
+       * Format: date-time
+       */
+      since: string;
+      /**
+       * Until
+       * Format: date-time
+       */
+      until: string;
+      /** Items */
+      items: components['schemas']['DuplicateHintRatesResponse'][];
+    };
+    /**
+     * DuplicateHintRatesResponse
+     * @description 提示率 and the two 誤報率 estimates for one kind (ADR-458). A rate is null when nothing was counted.
+     */
+    DuplicateHintRatesResponse: {
+      /**
+       * Entity Kind
+       * @enum {string}
+       */
+      entity_kind: 'ticket_task' | 'station';
+      /**
+       * Submissions
+       * @description 送出次數：民眾送出 task 或 station 的次數，跳不跳提示都算。＝ 跳提示的次數 ＋ 這段時間沒跳提示就建立的 task 或 station 數
+       */
+      submissions: number;
+      /**
+       * Hinted
+       * @description 跳提示的次數：跳出「可能重複」提示的次數。每一次按「仍要建立」都算一次；沒按「仍要建立」的提示，同一個人、同一天（台灣時間）、被提示同一筆舊資料，只算一次
+       */
+      hinted: number;
+      /**
+       * Hint Rate
+       * @description 提示率 ＝ 跳提示的次數 ÷ 送出次數（hinted ÷ submissions）
+       */
+      hint_rate: number | null;
+      /**
+       * Overridden
+       * @description 按「仍要建立」的次數：跳提示之後，民眾確認不是重複、還是把資料建起來的次數。每一次都會開一張配對卡
+       */
+      overridden: number;
+      /**
+       * Reviewed
+       * @description 已審的配對卡數：按「仍要建立」時開出來的配對卡裡，資料檢核員已經判定「是重複」或「不是重複」的張數
+       */
+      reviewed: number;
+      /**
+       * Judged Not Duplicate
+       * @description 判不是重複的配對卡數：已審的配對卡裡，資料檢核員判定「不是重複」的張數
+       */
+      judged_not_duplicate: number;
+      /**
+       * False Alarm Rate Without Auditors
+       * @description 誤報率（不用審核結果）＝ 按「仍要建立」的次數 ÷ 跳提示的次數（overridden ÷ hinted）。只要民眾按「仍要建立」，就當作那次提示錯了
+       */
+      false_alarm_rate_without_auditors: number | null;
+      /**
+       * False Alarm Rate With Auditors
+       * @description 誤報率（用審核結果）＝ 按「仍要建立」的次數 ×（判不是重複的配對卡數 ÷ 已審的配對卡數）÷ 跳提示的次數（overridden × judged_not_duplicate ÷ reviewed ÷ hinted）。假設還沒審的配對卡裡，「不是重複」的比例跟已審的一樣。還沒有配對卡審過時是 null
+       */
+      false_alarm_rate_with_auditors: number | null;
+      /**
+       * Review Coverage
+       * @description 已審比例 ＝ 已審的配對卡數 ÷ 按「仍要建立」的次數（reviewed ÷ overridden）。太低的話，用審核結果的誤報率不太可靠
+       */
+      review_coverage: number | null;
     };
     /**
      * DuplicatePairDecision
@@ -7052,6 +7160,42 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['DuplicatePairPage'];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  get_duplicate_hint_rates_api_v1_admin_duplicate_hint_rates_get: {
+    parameters: {
+      query?: {
+        /** @description 開始時間（含），要帶時區；預設是 until 往前 30 天 */
+        since?: string | null;
+        /** @description 結束時間（不含），要帶時區；預設是現在 */
+        until?: string | null;
+      };
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DuplicateHintRatesPage'];
         };
       };
       /** @description Validation Error */

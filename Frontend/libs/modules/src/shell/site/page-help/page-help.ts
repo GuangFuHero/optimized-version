@@ -13,6 +13,29 @@ export interface PageHelpSection {
   items?: readonly string[];
 }
 
+/** One cell of the 權限 table: ● every one, ◐ only within the team's own, ✕ none. */
+export type PermissionMark = 'all' | 'own' | 'none';
+
+/**
+ * The 權限 table. Its rows are grouped as the account menu names an identity — 政府, 非政府組織,
+ * 平台身分 — so a reader finds their own row by what the menu shows them.
+ */
+export interface PagePermissions {
+  /** The page's actions, as the column heads, in the words of its buttons. */
+  actions: readonly string[];
+  /** What ◐ stands for on this page: 本隊責任區 for tickets, 本隊站點 for stations. */
+  own: string;
+  /** A line under the table for what one mark cannot say, such as an import whose updates are scoped. */
+  footnote?: string;
+  groups: ReadonlyArray<{
+    title: string;
+    /** One mark per action, in the order of `actions`. */
+    rows: ReadonlyArray<
+      readonly [role: string, marks: readonly PermissionMark[]]
+    >;
+  }>;
+}
+
 /**
  * Its sentences and list items (not the titles) may set words in bold between `**`, as the
  * prototype's `rich` does.
@@ -24,6 +47,8 @@ export interface PageHelp {
   /** 你可以 — what a person can do here. */
   can: readonly string[];
   sections?: readonly PageHelpSection[];
+  /** 權限: which identity may use which of the page's actions, as a table. */
+  permissions?: PagePermissions;
   /** 注意, in a grey box at the foot. */
   note?: string;
 }
@@ -82,9 +107,12 @@ export function helpTextRuns(text: string): HelpTextRun[] {
     .filter((run) => run.text !== '');
 }
 
-/** As wide as the prototype's panel: 400 when a section holds a list, 340 otherwise. */
+/** As wide as the prototype's panel: 400 with a 權限 table or a section holding a list, 340 otherwise. */
 export function pageHelpWidth(help: PageHelp): number {
-  return help.sections?.some((section) => section.items?.length) ? 400 : 340;
+  return help.permissions ||
+    help.sections?.some((section) => section.items?.length)
+    ? 400
+    : 340;
 }
 
 /** The page an address is on, if it has words of its own: the account pages do not. */
@@ -102,7 +130,7 @@ export function pageHelpKey(pathname: string): SitePageHelpKey | null {
 /** The parts of `Storage` the marks use: `localStorage` on the site, a stand-in in tests. */
 export type SeenStorage = Pick<Storage, 'getItem' | 'setItem'>;
 
-/** On this device, which pages' help was opened: `{ "site:map": 1, … }`. */
+/** On this device, which pages' help was opened: `{ "site:map": 1, "/tickets": 1, … }`. */
 export const PAGE_HELP_SEEN_KEY = 'wg:page-help-seen';
 
 /** Null where the browser will not hand it over (site data blocked); reading it can throw. */
@@ -131,14 +159,14 @@ function readSeen(storage: SeenStorage | null): Record<string, unknown> {
 /** False when it cannot be read: the dot then stays, which only means it shows once too often. */
 export function hasSeenPageHelp(
   storage: SeenStorage | null,
-  key: SitePageHelpKey,
+  key: string,
 ): boolean {
   return readSeen(storage)[key] === 1;
 }
 
 export function markPageHelpSeen(
   storage: SeenStorage | null,
-  key: SitePageHelpKey,
+  key: string,
 ): void {
   try {
     storage?.setItem(

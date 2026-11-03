@@ -167,7 +167,7 @@ export function DeleteTicketDialog({
         onClose={onCancel}
         onConfirm={() => fields && onConfirm(fields.title)}
         title="刪除整張單？"
-        confirmLabel={submitting ? '刪除中...' : '刪除'}
+        confirmLabel={submitting ? '刪除中…' : '刪除'}
         confirmIcon={<Icons.trash />}
         confirmTone="danger"
         confirmDisabled={!fields}
@@ -232,7 +232,7 @@ export function DeleteTicketDialog({
                 fontSize: displayTextSize[13],
               }}
             >
-              {gone ? '找不到這張單，可能已經被刪除。' : '載入中...'}
+              {gone ? '找不到這張單，可能已經被刪除。' : '載入中…'}
             </Typography>
           )}
         </Box>

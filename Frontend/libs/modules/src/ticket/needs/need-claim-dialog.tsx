@@ -108,7 +108,7 @@ export function NeedClaimDialog({
       onClose={onCancel}
       onConfirm={onConfirm}
       title="確認承接這一筆？"
-      confirmLabel={submitting ? '承接中...' : '確認承接'}
+      confirmLabel={submitting ? '承接中…' : '確認承接'}
       confirmIcon={<Icons.heartHandshake />}
       confirmDisabled={!claim || settled}
       cancelLabel={settled || dialog.box === 'gone' ? '關閉' : '取消'}
@@ -150,7 +150,7 @@ export function NeedClaimDialog({
         ) : (
           <Typography sx={{ color: color.fg.neutral.muted, fontSize: displayTextSize[13] }}>
             {/* Deleted between the tap and the load: say so rather than load forever. */}
-            {dialog.box === 'loading' ? '載入中...' : '找不到這筆需求，可能已經被刪除。'}
+            {dialog.box === 'loading' ? '載入中…' : '找不到這筆需求，可能已經被刪除。'}
           </Typography>
         )}
       </Box>

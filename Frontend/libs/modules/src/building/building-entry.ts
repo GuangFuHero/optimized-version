@@ -5,9 +5,10 @@ export const BUILDING_ENTRY_LIMIT = 3;
 
 /**
  * The buildings at the top of the list's 任務 (prototype `SpaceEntryList`): those whose name or address
- * holds the search the tickets were searched with (`q`, none under two characters). Those still short
- * of the most people first, then those with tickets, then those nobody has asked for help in yet
- * (SPACE-FE-103); in name order among equals. How many tickets does not order them: the count holds
+ * holds the search the tickets were searched with (`q`, none under two characters). As the tickets
+ * below are ordered (`ticketRank`): those still short first, then those with tickets, then those
+ * nobody has asked for help in yet; in name order among equals. Whether short, not by how much: the
+ * shortfall adds people and supplies together (3 people and 50 lunch boxes are 「缺 53」). How many tickets does not order them: the count holds
  * closed ones too (ADR-450), and a building whose tickets are all done would go above one still being
  * helped. A guest is given no counts, so a guest's are in name order alone.
  */
@@ -27,7 +28,7 @@ export function buildingEntries(
     )
     .sort(
       (x, y) =>
-        (y.shortfall ?? 0) - (x.shortfall ?? 0) ||
+        Number((y.shortfall ?? 0) > 0) - Number((x.shortfall ?? 0) > 0) ||
         Number((y.ticketCount ?? 0) > 0) - Number((x.ticketCount ?? 0) > 0) ||
         x.name.localeCompare(y.name, 'zh-Hant'),
     );
@@ -35,21 +36,17 @@ export function buildingEntries(
 
 /**
  * What a building's row says on its right, as its map entry does: its tickets, closed ones too
- * (ADR-450), and the red 「缺 M」 when they are still short of people. 0 tickets is 還沒有求助; a
- * guest, given no counts (SPACE-FE-104), gets 看各樓層 and no 缺.
+ * (ADR-450), and no 「缺 M」 (see `buildingEntries`); which floor is short is in the drawer, as
+ * 「N 件缺人」. 0 tickets is 還沒有求助; a guest, given no counts (SPACE-FE-104), gets 看各樓層.
  */
-export function buildingEntryWords(
-  building: Pick<BuildingMapEntry, 'ticketCount' | 'shortfall'>,
-): { count: string; short: string | null } {
-  const { ticketCount, shortfall } = building;
+export function buildingEntryCount(
+  building: Pick<BuildingMapEntry, 'ticketCount'>,
+): string {
+  const { ticketCount } = building;
 
-  return {
-    count:
-      ticketCount === null
-        ? '看各樓層'
-        : ticketCount === 0
-          ? '還沒有求助'
-          : `${ticketCount} 件`,
-    short: shortfall && shortfall > 0 ? `缺 ${shortfall}` : null,
-  };
+  return ticketCount === null
+    ? '看各樓層'
+    : ticketCount === 0
+      ? '還沒有求助'
+      : `${ticketCount} 件`;
 }

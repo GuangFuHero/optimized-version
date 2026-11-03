@@ -26,6 +26,7 @@ import {
 
 import { useSiteRouteState } from '../route';
 import { SiteActionDrawer } from '../shell/site/site-action-drawer';
+import { openMyStationReports } from '../station/suggestion/open-my-station-reports';
 import {
   myClaimTicketHref,
   openClaimedTicket,
@@ -74,6 +75,16 @@ const KIND_LOOKS: Record<SiteNoticeKind, { icon: ReactNode; tone: string }> = {
   'role-approved': { icon: <Icons.badgeCheck />, tone: color.fg.success },
   'role-rejected': {
     icon: <Icons.badgeX />,
+    tone: color.fg.neutral.subtle,
+  },
+  // Not in the prototype, which has no notice for a station suggestion. Grey when not adopted, as an
+  // application turned down is.
+  'suggestion-adopted': {
+    icon: <Icons.clipboardCheck />,
+    tone: color.fg.success,
+  },
+  'suggestion-not-adopted': {
+    icon: <Icons.clipboardX />,
     tone: color.fg.neutral.subtle,
   },
 };
@@ -130,6 +141,7 @@ const EMPTY_REASONS = [
   { icon: Icons.handHeart, text: '有人承接了你建立的求助' },
   { icon: Icons.circleMinus, text: '你承接的任務有異動' },
   { icon: Icons.badgeCheck, text: '你的申請有審核結果' },
+  { icon: Icons.clipboardCheck, text: '你回報的站點有審核結果' },
 ];
 
 /**
@@ -283,7 +295,12 @@ function SiteNoticeRow({
       {content}
     </ButtonBase>
   ) : (
-    <ButtonBase disabled={notice.read} onClick={onClick} sx={sx}>
+    // A notice that opens 我回報的站點 stays a button once read; the rest have nothing more to do.
+    <ButtonBase
+      disabled={notice.read && !notice.opensStationReports}
+      onClick={onClick}
+      sx={sx}
+    >
       {content}
     </ButtonBase>
   );
@@ -409,6 +426,12 @@ function SiteNotifyContent({
       markRead.mutate([notice.uuid]);
     }
 
+    if (notice.opensStationReports) {
+      onClose();
+      openMyStationReports();
+      return;
+    }
+
     if (!ticketUuid) {
       return;
     }
@@ -505,7 +528,7 @@ export function SiteNotifyDrawer({ open, onClose }: SiteNotifyDrawerProps) {
       subtitle={
         empty
           ? undefined
-          : '有人承接你的需求、你承接的任務有異動、申請審核有結果，都會出現在這裡。'
+          : '有人承接你的需求、你承接的任務有異動、申請或站點回報有審核結果，都會出現在這裡。'
       }
       onClose={onClose}
     >

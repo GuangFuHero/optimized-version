@@ -80,7 +80,9 @@ async def _grant(db, user: User, perm: Perm, scope: str, role_name: str, *, team
 
 
 async def _zoned_team(db) -> Team:
-    team = Team(name="Hualien", type="gov")
+    # NGO: zones are assigned to NGO teams only, and a gov team's `zone` ticket grants widen to `all`
+    # (BE-RBAC-3 B3), so a zone-scoped export is an NGO team's.
+    team = Team(name="Hualien", type="ngo")
     db.add(team)
     await db.flush()
     assigner = User(name="zone-assigner")
@@ -279,6 +281,26 @@ async def test_ticket_export_counts_are_the_rows_each_type_s_file_would_hold(db)
     assert counts == {"rescue": 1, "supply": 1}
     table = _parse(await export_tickets(db, actor=actor, task_type="rescue"))
     assert len(table.rows) == counts["rescue"]
+
+
+@pytest.mark.asyncio
+async def test_a_gov_team_s_zone_scoped_ticket_export_reaches_every_ticket(db):
+    """BE-RBAC-3 B3: a gov team holds no zone, so its `zone` ticket export widens to every ticket."""
+    await _configs(db)
+    team = Team(name="縣府", type="gov")
+    db.add(team)
+    await db.flush()
+    actor = User(name="GovAdmin")
+    author = User(name="Someone")
+    db.add_all([actor, author])
+    await db.flush()
+    await _grant(db, actor, Perm.TICKET_EXPORT, "zone", "gov-exporter", team=team)
+    await _ticket_with_task(db, title="區內", point=IN_ZONE, creator=author)
+    await _ticket_with_task(db, title="區外", point=OUT_OF_ZONE, creator=author)
+
+    table = _parse(await export_tickets(db, actor=actor, task_type="rescue"))
+
+    assert sorted(row["title"] for row in table.rows) == ["區內", "區外"]
 
 
 @pytest.mark.asyncio
