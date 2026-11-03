@@ -3,7 +3,6 @@
 import {
   Alert,
   Box,
-  Button,
   Container,
   Stack,
   TextField,
@@ -14,7 +13,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { ApiError } from '@rescue-frontend/data-access';
 import type { components } from '@rescue-frontend/data-access/openapi';
-import { designTokens } from '@rescue-frontend/ui';
+import { Button, designTokens } from '@rescue-frontend/ui';
 
 import { getCurrentUserAsync } from '../auth/api/client';
 import { authHref } from '../auth/login/utils/auth-href';
@@ -107,11 +106,11 @@ export function TeamInvitePage({ token }: { token: string }) {
                 登入後就會看到是哪一個團隊，再決定要不要申請。
               </Typography>
             </Box>
-            <Button variant="contained" href={authLink}>
+            <Button variant="primary" href={authLink}>
               登入
             </Button>
             <Button
-              variant="outlined"
+              variant="outline"
               href={authHref('/register', { callbackUrl })}
             >
               註冊帳號
@@ -133,6 +132,7 @@ export function TeamInvitePage({ token }: { token: string }) {
               {inviteError(invite.error ?? applicant.error)}
             </Alert>
             <Button
+              variant="ghost"
               onClick={() => {
                 void invite.refetch();
                 void applicant.refetch();
@@ -144,7 +144,9 @@ export function TeamInvitePage({ token }: { token: string }) {
               invite.error.status === 401) ||
             (applicant.error instanceof ApiError &&
               applicant.error.status === 401) ? (
-              <Button href={authLink}>重新登入</Button>
+              <Button variant="ghost" href={authLink}>
+                重新登入
+              </Button>
             ) : null}
             <BackToSite />
           </>
@@ -169,7 +171,7 @@ const APPLY_HREF = '/map?apply=1';
 
 function BackToSite({ label = '回到前台' }: { label?: string }) {
   return (
-    <Button href={SITE_HREF} variant="text">
+    <Button href={SITE_HREF} variant="ghost">
       {label}
     </Button>
   );
@@ -191,7 +193,7 @@ function InviteUnusable() {
           小時，或是被收回了。請跟給你邀請的人要一個新的，再掃一次。
         </Typography>
       </Box>
-      <Button variant="contained" href={APPLY_HREF}>
+      <Button variant="primary" href={APPLY_HREF}>
         自己申請加入團隊
       </Button>
       <BackToSite />
@@ -253,7 +255,7 @@ function InviteDetails({
               不用再申請。要做團隊的事，請到管理平台。
             </Typography>
           </Box>
-          <Button variant="contained" href={BACK_OFFICE_HREF}>
+          <Button variant="primary" href={BACK_OFFICE_HREF}>
             前往管理平台
           </Button>
           <BackToSite />
@@ -269,14 +271,15 @@ function InviteDetails({
                 <>
                   <Typography>確定撤回這筆申請？撤回後需重新送出。</Typography>
                   <Button
-                    color="error"
-                    variant="outlined"
+                    variant="outline"
+                    tone="danger"
                     disabled={withdraw.submitting}
                     onClick={() => void withdraw.confirm(myRequest.uuid)}
                   >
                     確定撤回
                   </Button>
                   <Button
+                    variant="ghost"
                     disabled={withdraw.submitting}
                     onClick={withdraw.cancel}
                   >
@@ -284,7 +287,9 @@ function InviteDetails({
                   </Button>
                 </>
               ) : (
-                <Button onClick={withdraw.request}>撤回申請</Button>
+                <Button variant="ghost" onClick={withdraw.request}>
+                  撤回申請
+                </Button>
               )}
               {withdraw.error ? (
                 <Alert severity="error">{withdraw.error}</Alert>
@@ -346,19 +351,23 @@ function PendingElsewhere({
         <>
           <Typography>撤回「{other}」那一筆？</Typography>
           <Button
-            variant="contained"
+            variant="primary"
             disabled={withdraw.submitting}
             onClick={() => void withdraw.confirm(pending.uuid)}
           >
             撤回，改申請{teamName}
           </Button>
-          <Button disabled={withdraw.submitting} onClick={withdraw.cancel}>
+          <Button
+            variant="ghost"
+            disabled={withdraw.submitting}
+            onClick={withdraw.cancel}
+          >
             不撤回
           </Button>
         </>
       ) : (
         <>
-          <Button variant="contained" onClick={withdraw.request}>
+          <Button variant="primary" onClick={withdraw.request}>
             撤回那一筆，改申請{teamName}
           </Button>
           <BackToSite label="先不要，回到前台" />
@@ -551,13 +560,13 @@ function InviteForm({
         </Alert>
       ) : null}
       {lapsed ? (
-        <Button variant="contained" onClick={applyOnOwn}>
+        <Button variant="primary" onClick={applyOnOwn}>
           改成自己申請
         </Button>
       ) : (
         <Button
           type="submit"
-          variant="contained"
+          variant="primary"
           disabled={busy || verification.busy}
         >
           {busy ? '送出中…' : '送出加入申請'}
