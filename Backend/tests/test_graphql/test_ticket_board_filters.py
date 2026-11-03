@@ -49,10 +49,10 @@ DETAIL = [(Perm.TICKET_VIEW, "all"), (Perm.TICKET_VIEW_DETAIL, "all")]
 
 
 async def _tagged(
-    point: Point, tag: str, *, county=None, town=None, location_type="address", updated_at=None
+    point: Point, tag: str, *, county=None, town=None, location_type="address", updated_at=None, by=None
 ) -> str:
-    """A ticket at `point` titled with `tag`, so `q` finds this test's tickets alone."""
-    uuid = await _ticket_at(point)
+    """A ticket at `point` titled with `tag`, so `q` finds this test's tickets alone; filed by `by`."""
+    uuid = await _ticket_at(point, by=by)
     async with open_db() as db:
         ticket = await db.get(Tickets, uuid)
         ticket.title = f"{tag} 民宅清淤"
@@ -182,6 +182,40 @@ async def test_without_the_detail_area_and_team_match_nothing(client, redis):
     assert await _listed(client, token, q=tag, team=alpha) == set()
     assert await _listed(client, token, q=tag, none=True) == set()
     assert await _listed(client, token, q=tag, county="花蓮縣") == set()
+
+
+async def test_with_the_detail_at_own_area_and_team_match_only_own_tickets(client, redis):
+    """Between `all` and none, the detail gate decides row by row.
+
+    Another's ticket in the same zone and county matches no filter, and its town and team are not offered.
+    """
+    user, token = await _actor(redis, [(Perm.TICKET_VIEW, "all"), (Perm.TICKET_VIEW_DETAIL, "own")])
+    place, tag = _place(), _tag()
+    county = f"測試縣{tag}"
+    alpha = await _team(f"A {tag}")
+    await _zone(place.township, alpha)
+    mine = await _tagged(place.here, tag, county=county, town="光復鄉", by=user)
+    await _tagged(place.here, tag, county=county, town="光復鄉")
+    hidden = await _team(f"B {tag}")
+    await _zone(place.far, hidden)
+    await _tagged(Point(place.here.x + 0.025, place.here.y), tag, county=county, town="玉里鎮")
+    mine_unassigned = await _tagged(place.elsewhere, tag, county=county, town="鳳林鎮", by=user)
+    await _tagged(place.elsewhere, tag, county=county, town="瑞穗鄉")
+
+    assert await _listed(client, token, q=tag, team=alpha) == {mine}
+    assert await _listed(client, token, q=tag, team=hidden) == set()
+    assert await _listed(client, token, q=tag, none=True) == {mine_unassigned}
+    assert await _listed(client, token, q=tag, county=county) == {mine, mine_unassigned}
+    assert await _listed(client, token, q=tag, county=county, town="光復鄉") == {mine}
+
+    facets = (await _gql(client, FACETS, {}, token))["ticketFacets"]
+    assert [a for a in facets["areas"] if a["county"] == county] == [
+        {"county": county, "town": "光復鄉"},
+        {"county": county, "town": "鳳林鎮"},
+    ]
+    teams = {team["uuid"] for team in facets["teams"]}
+    assert alpha in teams
+    assert hidden not in teams
 
 
 async def test_facets_list_the_areas_and_the_zone_teams(client, redis):

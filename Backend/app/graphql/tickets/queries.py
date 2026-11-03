@@ -12,7 +12,7 @@ from typing import Annotated
 from uuid import UUID
 
 import strawberry
-from sqlalchemy import and_, false, func, not_, select
+from sqlalchemy import and_, false, func, select
 from sqlalchemy.orm import aliased
 
 from app.core.permissions import Perm
@@ -145,21 +145,23 @@ _UPDATED_AFTER_DESCRIPTION = "Only tickets last updated (`updatedAt`) at or afte
 _UPDATED_BEFORE_DESCRIPTION = "Only tickets last updated (`updatedAt`) before this moment"
 
 
-def _zone_teams_over_ticket():
-    """The live teams of the live 責任區 the ticket's point lies in, as `responsibleTeams` reads them.
+def _tickets_in_zones():
+    """The points lying in a live 責任區 of a live team, as `responsibleTeams` reads them, by uuid.
 
-    Correlated on `Tickets`. The zone is aliased flat: zones and tickets share base_geometries.
+    Run zone first, so each zone finds its points in the spatial index: correlated on the ticket
+    instead (EXISTS per row), every ticket was tested against every zone, which took seconds at
+    20,000 tickets. Narrow it by `TeamZoneAssign.team_uuid`. The zone is aliased flat: zones and
+    tickets share base_geometries. The uuid is base_geometries' key, so `NOT IN` never meets a NULL.
     """
     zone = aliased(TeamZone, flat=True)
+    point = aliased(BaseGeometry)
     return (
-        select(TeamZoneAssign.team_uuid)
+        select(point.uuid)
+        .select_from(TeamZoneAssign)
         .join(Team, Team.uuid == TeamZoneAssign.team_uuid)
         .join(zone, zone.uuid == TeamZoneAssign.zone_uuid)
-        .where(
-            zone.delete_at.is_(None),
-            Team.delete_at.is_(None),
-            func.ST_Contains(zone.geometry, Tickets.geometry),
-        )
+        .join(point, func.ST_Contains(zone.geometry, point.geometry))
+        .where(zone.delete_at.is_(None), Team.delete_at.is_(None))
     )
 
 
@@ -187,10 +189,10 @@ def _board_filters(
     detailed = in_area(Tickets.uuid, county=county, town=town, village=None)
     if responsible_team_uuid is not None:
         detailed.append(
-            _zone_teams_over_ticket().where(TeamZoneAssign.team_uuid == responsible_team_uuid).exists()
+            Tickets.uuid.in_(_tickets_in_zones().where(TeamZoneAssign.team_uuid == responsible_team_uuid))
         )
     if unassigned_only:
-        detailed.append(not_(_zone_teams_over_ticket().exists()))
+        detailed.append(Tickets.uuid.not_in(_tickets_in_zones()))
     conditions = []
     if detailed:
         if detail_filters:
@@ -616,9 +618,9 @@ class RequestQuery:
         # The addresses the analytics catalog reads (address_rows): live rows, `address` locations only.
         # A town is required, as picking a county alone matches every town in it.
         addresses = address_rows(Tickets, listed).where(SecondaryLocation.town.is_not(None)).subquery()
-        # The teams `responsibleTeams` names on the listed tickets: the test _zone_teams_over_ticket
-        # makes, run zone first, so each live zone finds its tickets in the spatial index. Asked per
-        # team instead (EXISTS over the tickets), it probed every ticket for each team holding none.
+        # The teams `responsibleTeams` names on the listed tickets: the test _tickets_in_zones makes,
+        # run zone first, so each live zone finds its tickets in the spatial index. Asked per team
+        # instead (EXISTS over the tickets), it probed every ticket for each team holding none.
         zone = aliased(TeamZone, flat=True)
         holding = (
             select(TeamZoneAssign.team_uuid)
