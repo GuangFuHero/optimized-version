@@ -52,11 +52,11 @@ Admin 使用獨立的 Next.js 16 app `apps/admin`，預設 port 為 3001。頁�
 ### `/stations`（資源站點管理 v2，ADMIN-026）
 
 - `page.tsx` 掛載 `StationManagementPage`（`libs/modules/src/station/admin/station-management/`），接真實 API
-- 篩選（類型、營運狀態、行政區、指派 Team、官方認定、成立、更新時間、關鍵字，存在 URL）、列表／地圖切換。列表上方一排統計：全部和三種營運狀態的數量（`stationFacets` 不帶篩選），點一格篩那個營運狀態，再點一次或點「全部」取消，跟篩選面板是同一個篩選；讀不到時格子寫「—」，上方一行小字加重試（糖 2026-11-01，STAT-101～109）
+- 篩選（類型、營運狀態、行政區、指派團隊、官方認定、成立、更新時間、關鍵字，存在 URL）、列表／地圖切換。列表上方一排統計：全部和三種營運狀態的數量（`stationFacets` 不帶篩選），點一格篩那個營運狀態，再點一次或點「全部」取消，跟篩選面板是同一個篩選；讀不到時格子寫「—」，上方一行小字加重試（糖 2026-11-01，STAT-101～109）
 - 列表會分頁讀完權限範圍內所有站點（上限 5,000），官方認定、更新時間篩選與排序（開設中優先、最近更新優先）在前端做
 - 站點抽屜是 `/stations` 自己的 `StationDetailSheet`（libs/ui 的 `SheetFrame` 加 `variant="admin"`，詳情與編輯是同一個 frame 裡切換的 `SheetLayout`，不會疊第二層），不用地圖的 `StationDetailDrawer`：基本資料、照片、資源、聯絡資訊（無 `station.view_pii` 時顯示遮罩值且不可改）、版本歷史；`/stations?station=<uuid>` 直接開啟，給通知連結用
 - 新增／編輯用 `station/form` 的 `StationForm`，與兩張 `/map` 的新增共用同一份表單與同一套欄位版面（設計稿 `station-drawer.jsx`）；新增都用 `StationFormDrawer`，`/stations` 傳 `variant="admin"`，編輯則把 `StationFormLayout` 放進站點抽屜；地址只在新增時送出（`UpdateStationInput` 不能改 `secondaryLocation`）
-- 刪除站點、列表上直接改營運狀態與指派 Team；後台（`/stations`、後台地圖）新增的站點帶 `source: "official"`；前台 `/map` 不能新增站點
+- 刪除站點、列表上直接改營運狀態與指派團隊；後台（`/stations`、後台地圖）新增的站點帶 `source: "official"`；前台 `/map` 不能新增站點
 - 前台修改建議審查：依欄位決定採用／不採用（可改寫入值），一次送出附一則審核備註（`mergeStationSuggestions` 只收一個 `reviewNote`；ticket 寫「每一則附備註」，為了保持一次送出不可分割，維持一則）
 - 批次匯入（試算 → 欄位對應 → 確認，失敗列可下載）與匯出（單一類型，CSV／Excel）
 - 匯入是新增站點的一種方式：放在「新增站點 ▾」的下拉，列表空的時候也是同一顆「新增站點 ▾」；要同時有 `station.add` 和 `station.import` 才看得到，沒有新增權限的人不顯示（糖 2026-10-31）
@@ -112,7 +112,7 @@ Admin 使用獨立的 Next.js 16 app `apps/admin`，預設 port 為 3001。頁�
 - 編輯任務單不能移動地標：`UpdateTicketInput` 沒有 geometry，設計稿要求編輯時可改
 - 列表排序只有最新與需求優先（`TicketListOrder` 的 NEWEST／NEEDS_FIRST），沒有設計稿的「優先級 → 缺口 → 更新時間」
 - 篩選沒有設計稿的行政區域、組織分配、時間：`tickets` 查詢沒有這些參數
-- 指派 Team 沒有 API（ADR-049），列的 ⋯ 裡顯示「尚未開放」
+- 指派團隊 沒有 API（ADR-049），列的 ⋯ 裡顯示「尚未開放」
 - 通知連結：`/tickets?ticket=<uuid>` 會直接開抽屜，但後台頂欄的鈴鐺還沒接 `/notifications`，目前沒有東西連進來
 - 空間與任務單混排：任務單由後端分頁，空間不能照設計稿跟任務單一起排序，只能放在第一頁最前面、空間之間排序
 - `buildingMaps` 與每個空間的 `buildingMapTickets` 一次最多 200 筆；後者也不含看不到詳情的單，所以空間的件數與各樓層狀態可能偏少，畫面不會標出

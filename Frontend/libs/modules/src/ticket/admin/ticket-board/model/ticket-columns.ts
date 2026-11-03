@@ -32,7 +32,7 @@ export const TICKET_COLUMNS: readonly TicketColumn[] = [
   },
   { id: 'updated', label: '更新時間', width: '92px', visible: true },
   { id: 'status', label: '狀態', width: '92px', visible: true },
-  { id: 'team', label: '指派 Team', width: 'minmax(0, 1fr)', visible: true },
+  { id: 'team', label: '指派團隊', width: 'minmax(0, 1fr)', visible: true },
   { id: 'menu', label: '', width: '44px', visible: true },
 ];
 

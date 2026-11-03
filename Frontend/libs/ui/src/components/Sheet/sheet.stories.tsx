@@ -36,7 +36,7 @@ const meta = {
         <Button variant="secondary" size="sm">
           關閉
         </Button>
-        <Button size="sm">指派 Team</Button>
+        <Button size="sm">指派團隊</Button>
       </>
     ),
     children: (
@@ -44,7 +44,7 @@ const meta = {
         rows={[
           { label: '需求類型', value: '清淤、物資搬運' },
           { label: '聯絡人', value: '王小明 · 0912-345-678' },
-          { label: '指派 Team', value: null },
+          { label: '指派團隊', value: null },
         ]}
       />
     ),

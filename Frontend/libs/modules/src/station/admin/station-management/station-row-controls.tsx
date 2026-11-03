@@ -208,7 +208,7 @@ export function TeamAssignCell({ row }: { row: StationRow }) {
   };
   return (
     <CellMenu
-      label={row.teamName ? '變更指派 Team' : '指派 Team'}
+      label={row.teamName ? '變更指派團隊' : '指派團隊'}
       width={180}
       trigger={<TeamText name={row.teamName} />}
     >

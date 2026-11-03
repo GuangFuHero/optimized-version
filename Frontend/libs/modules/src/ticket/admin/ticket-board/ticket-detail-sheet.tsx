@@ -554,7 +554,7 @@ function TicketInfo({
 
 /**
  * The card at the top: priority, status and 查核中 · 疑似重複 on a suspected duplicate, 承接進度
- * over its bar; when it last changed, and 指派 Team — the 責任區 teams, read-only (a team gets a
+ * over its bar; when it last changed, and 指派團隊 — the 責任區 teams, read-only (a team gets a
  * ticket by its zone).
  */
 function SummaryCard({
@@ -644,7 +644,7 @@ function SummaryCard({
             更新
           </Typography>
         </Box>
-        <InfoRow label="指派 Team">
+        <InfoRow label="指派團隊">
           {view.teamNames === null ? (
             <Muted inline>無權限檢視</Muted>
           ) : view.teamNames.length ? (

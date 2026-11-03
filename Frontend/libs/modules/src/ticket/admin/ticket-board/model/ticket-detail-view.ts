@@ -56,7 +56,7 @@ export interface TicketDetailView {
   /** The subtitle, 「建立於 06/13 09:12」 in Taiwan time; null without a creation time. */
   createdLabel: string | null;
   /**
-   * 指派 Team: the 責任區 teams' names (`responsibleTeams`), empty when none; null when withheld
+   * 指派團隊: the 責任區 teams' names (`responsibleTeams`), empty when none; null when withheld
    * (a coarse ticket), which is not the same as none.
    */
   teamNames: string[] | null;
