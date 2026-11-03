@@ -38,7 +38,7 @@ def _area_parts(county: str | None, town: str | None, village: str | None) -> li
     ]
 
 
-def _in_area(geometry_uuid, *, county: str | None, town: str | None, village: str | None) -> list:
+def in_area(geometry_uuid, *, county: str | None, town: str | None, village: str | None) -> list:
     """The address filter: the row's address has all the parts given.
 
     EXISTS, not a join, so a row with two address rows still counts once.
@@ -105,7 +105,7 @@ def ticket_filters(
             if status.value == "cancelled"
             else and_(Tickets.delete_at.is_(None), stored)
         )
-    return [*clauses, *_in_area(Tickets.uuid, county=county, town=town, village=village)]
+    return [*clauses, *in_area(Tickets.uuid, county=county, town=town, village=village)]
 
 
 def station_filters(
@@ -122,14 +122,14 @@ def station_filters(
         clauses.append(Station.type == station_type)
     if status is not None:
         clauses.append(Station.operational_status == status.value)
-    return [*clauses, *_in_area(Station.uuid, county=county, town=town, village=village)]
+    return [*clauses, *in_area(Station.uuid, county=county, town=town, village=village)]
 
 
 def _options(values) -> list[FilterOption]:
     return [FilterOption(value=v, label=display_name(v)) for v in values]
 
 
-def _address_rows(model, scope: list):
+def address_rows(model, scope: list):
     """The 縣市, 鄉鎮市區 and 村里 of the addresses of the live rows of `model` inside `scope`.
 
     The catalog's area list and the area check both read these rows, so they cannot disagree.
@@ -155,13 +155,13 @@ async def area_in_catalog(
         return True
     if village:
         parts.append(SecondaryLocation.town.is_not(None))  # the list only shows a 村里 under its town
-    return bool(await db.scalar(select(_address_rows(model, scope).where(*parts).exists())))
+    return bool(await db.scalar(select(address_rows(model, scope).where(*parts).exists())))
 
 
 async def _areas(db: AsyncSession, model, scope: list) -> list[AreaCounty]:
     """The 縣市 > 鄉鎮市區 > 村里 of the addresses of the live rows of `model` inside `scope`."""
     rows = await db.execute(
-        _address_rows(model, scope)
+        address_rows(model, scope)
         .distinct()
         .order_by(SecondaryLocation.county, SecondaryLocation.town, SecondaryLocation.village)
     )

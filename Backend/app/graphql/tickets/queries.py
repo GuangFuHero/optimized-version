@@ -7,11 +7,12 @@ task_properties are sub-resources of an already-gated ticket and only need check
 (Spec/008-rbac-authorization/decisions.md §7) — see app/graphql/tickets/types.py for PII field redaction.
 """
 
+from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
 import strawberry
-from sqlalchemy import select
+from sqlalchemy import and_, false, func, not_, select
 from sqlalchemy.orm import aliased
 
 from app.core.permissions import Perm
@@ -19,6 +20,7 @@ from app.core.rbac_scopes import Scope, in_scope, scope_filter
 from app.core.search import normalize_query, search_timeout, statement_ceiling
 from app.db.h3 import COARSE_MAX_H3_RESOLUTION, cell_resolution, coarse_resolution, h3_is_valid_cell
 from app.db.plans import generic_plan
+from app.graphql.area.types import AssignedTeamType
 from app.graphql.context import check_permission, require_authenticated
 from app.graphql.geo.types import BoundsInput
 from app.graphql.shared import PageInfo
@@ -27,10 +29,12 @@ from app.graphql.tickets.types import (
     MyTaskAssignmentType,
     TaskAssignmentType,
     TaskPropertyType,
+    TicketAreaType,
     TicketAvailability,
     TicketAvailabilityType,
     TicketCellType,
     TicketConnection,
+    TicketFacetsType,
     TicketListOrder,
     TicketsExtentType,
     TicketStatsType,
@@ -42,6 +46,8 @@ from app.graphql.tickets.types import (
 )
 from app.models.geo import BaseGeometry, BuildingMapTicketMap
 from app.models.request import Tickets
+from app.models.secondary_location import SecondaryLocation
+from app.models.team import Team, TeamZone, TeamZoneAssign
 from app.models.ticket_task import TicketTask
 from app.repositories.tickets_repository import (
     task_property_repository,
@@ -49,6 +55,7 @@ from app.repositories.tickets_repository import (
     ticket_task_repository,
 )
 from app.services import ticket as ticket_service
+from app.services.analytics_filters import address_rows, in_area
 from app.services.ticket_status import OPEN_NEED_STATUSES
 
 _ZOOM_DESCRIPTION = (
@@ -115,6 +122,84 @@ def _list_filters(
         conditions.append(need.exists())
     if audit_status is not None:
         conditions.append(Tickets.audit_status == audit_status.value)
+    return conditions
+
+
+_RESPONSIBLE_TEAM_DESCRIPTION = (
+    "Only tickets in a 責任區 of this team, as `responsibleTeams` names them (ADR-422). Matched on the "
+    "exact point, so a ticket the caller is shown as a cell never matches"
+)
+_UNASSIGNED_DESCRIPTION = (
+    "Only tickets in no 責任區: those whose `responsibleTeams` is empty. As `responsibleTeamUuid`, a "
+    "ticket the caller is shown as a cell never matches"
+)
+_COUNTY_DESCRIPTION = (
+    "Only tickets whose address is in this 縣市. The address is detail (ADR-281): a ticket the caller "
+    "is shown as a cell never matches"
+)
+_TOWN_DESCRIPTION = (
+    "Only tickets whose address is in this 鄉鎮市區 of `county`, which it needs: 鄉鎮 names repeat across "
+    "counties. As `county`, never one shown as a cell"
+)
+_UPDATED_AFTER_DESCRIPTION = "Only tickets last updated (`updatedAt`) at or after this moment"
+_UPDATED_BEFORE_DESCRIPTION = "Only tickets last updated (`updatedAt`) before this moment"
+
+
+def _zone_teams_over_ticket():
+    """The live teams of the live 責任區 the ticket's point lies in, as `responsibleTeams` reads them.
+
+    Correlated on `Tickets`. The zone is aliased flat: zones and tickets share base_geometries.
+    """
+    zone = aliased(TeamZone, flat=True)
+    return (
+        select(TeamZoneAssign.team_uuid)
+        .join(Team, Team.uuid == TeamZoneAssign.team_uuid)
+        .join(zone, zone.uuid == TeamZoneAssign.zone_uuid)
+        .where(
+            zone.delete_at.is_(None),
+            Team.delete_at.is_(None),
+            func.ST_Contains(zone.geometry, Tickets.geometry),
+        )
+    )
+
+
+def _board_filters(
+    *,
+    responsible_team_uuid: UUID | None,
+    unassigned_only: bool,
+    county: str | None,
+    town: str | None,
+    updated_after: datetime | None,
+    updated_before: datetime | None,
+    detail_filters: list,
+) -> list:
+    """The board's 組織分配, 行政區域 and 時間 filters, as conditions on Tickets.
+
+    The team and the area are worked out from the exact point and the address, so they match only a
+    row whose detail the caller sees (`detail_filters`, ADR-281): on any other they would tell what the
+    cell withholds. The time reads `updated_at`, which every caller sees. As `stations`
+    does, a town alone and a team with 未指派 are refused rather than read some way.
+    """
+    if town is not None and county is None:
+        raise ValueError("town needs county")
+    if responsible_team_uuid is not None and unassigned_only:
+        raise ValueError("responsibleTeamUuid and unassignedOnly cannot be combined")
+    detailed = in_area(Tickets.uuid, county=county, town=town, village=None)
+    if responsible_team_uuid is not None:
+        detailed.append(
+            _zone_teams_over_ticket().where(TeamZoneAssign.team_uuid == responsible_team_uuid).exists()
+        )
+    if unassigned_only:
+        detailed.append(not_(_zone_teams_over_ticket().exists()))
+    conditions = []
+    if detailed:
+        if detail_filters:
+            conditions.append(func.coalesce(and_(*detail_filters), false()))
+        conditions += detailed
+    if updated_after is not None:
+        conditions.append(Tickets.updated_at >= updated_after)
+    if updated_before is not None:
+        conditions.append(Tickets.updated_at < updated_before)
     return conditions
 
 
@@ -212,6 +297,18 @@ class RequestQuery:
                 )
             ),
         ] = None,
+        responsible_team_uuid: Annotated[
+            UUID | None, strawberry.argument(description=_RESPONSIBLE_TEAM_DESCRIPTION)
+        ] = None,
+        unassigned_only: Annotated[bool, strawberry.argument(description=_UNASSIGNED_DESCRIPTION)] = False,
+        county: Annotated[str | None, strawberry.argument(description=_COUNTY_DESCRIPTION)] = None,
+        town: Annotated[str | None, strawberry.argument(description=_TOWN_DESCRIPTION)] = None,
+        updated_after: Annotated[
+            datetime | None, strawberry.argument(description=_UPDATED_AFTER_DESCRIPTION)
+        ] = None,
+        updated_before: Annotated[
+            datetime | None, strawberry.argument(description=_UPDATED_BEFORE_DESCRIPTION)
+        ] = None,
     ) -> TicketConnection:
         """List tickets with optional bbox, status, priority, need-type, audit, disaster and keyword filters.
 
@@ -264,11 +361,20 @@ class RequestQuery:
         user = info.context["user"]
         location_cell, resolution = await _location_cell(db, location_cell, coarse_resolution(zoom))
         scope = await check_permission(info, Perm.TICKET_VIEW)
+        detail_filters = await _detail_filters(info)
         extra_filters = [
             *scope_filter(scope, actor=info.context["user"], model=Tickets),
             *_list_filters(need_type, open_needs_only, audit_status),
+            *_board_filters(
+                responsible_team_uuid=responsible_team_uuid,
+                unassigned_only=unassigned_only,
+                county=county,
+                town=town,
+                updated_after=updated_after,
+                updated_before=updated_before,
+                detail_filters=detail_filters,
+            ),
         ]
-        detail_filters = await _detail_filters(info)
         status_values = _status_values(statuses)
         # One ceiling for the whole request, not one per statement (ADR-176). count and
         # list are two halves of the same search, and search_timeout() is nesting-aware
@@ -429,6 +535,18 @@ class RequestQuery:
                 description="Only tickets filed under this disaster type (a disaster_types key)"
             ),
         ] = None,
+        responsible_team_uuid: Annotated[
+            UUID | None, strawberry.argument(description=_RESPONSIBLE_TEAM_DESCRIPTION)
+        ] = None,
+        unassigned_only: Annotated[bool, strawberry.argument(description=_UNASSIGNED_DESCRIPTION)] = False,
+        county: Annotated[str | None, strawberry.argument(description=_COUNTY_DESCRIPTION)] = None,
+        town: Annotated[str | None, strawberry.argument(description=_TOWN_DESCRIPTION)] = None,
+        updated_after: Annotated[
+            datetime | None, strawberry.argument(description=_UPDATED_AFTER_DESCRIPTION)
+        ] = None,
+        updated_before: Annotated[
+            datetime | None, strawberry.argument(description=_UPDATED_BEFORE_DESCRIPTION)
+        ] = None,
     ) -> TicketsExtentType:
         """How many tickets `tickets` would list for these filters, and the box their points span.
 
@@ -454,6 +572,15 @@ class RequestQuery:
                 extra_filters=[
                     *scope_filter(scope, actor=info.context["user"], model=Tickets),
                     *_list_filters(need_type, open_needs_only),
+                    *_board_filters(
+                        responsible_team_uuid=responsible_team_uuid,
+                        unassigned_only=unassigned_only,
+                        county=county,
+                        town=town,
+                        updated_after=updated_after,
+                        updated_before=updated_before,
+                        detail_filters=detail_filters,
+                    ),
                 ],
                 detail_filters=detail_filters,
                 coarse_resolution=resolution,
@@ -461,6 +588,59 @@ class RequestQuery:
             )
         return TicketsExtentType(
             count=count, min_lat=min_lat, max_lat=max_lat, min_lng=min_lng, max_lng=max_lng
+        )
+
+    @strawberry.field(
+        description=(
+            "The choices of the ticket board's 行政區域 and 組織分配 filters: the areas the addresses of the "
+            "tickets the caller sees in detail name, and the teams holding a 責任區. Both empty to a caller "
+            "without ticket.view_detail, as the filters then match nothing"
+        )
+    )
+    async def ticket_facets(self, info: strawberry.types.Info) -> TicketFacetsType:
+        """The filter panel's choices, under `tickets`' gate and scope.
+
+        The areas come from the addresses, which are detail (ADR-281), so only those of rows the caller
+        sees in detail are read. Each is a county with its town: an address naming only its county is
+        left out, as picking that county would match every town in it, not just those addresses. The
+        teams are the ones `responsibleTeams` names on those same rows: live teams on a live 責任區
+        holding at least one of them, so no team is offered that the filter would find nothing for.
+        Neither is told to a caller who sees no ticket's detail.
+        """
+        db = info.context["db"]
+        scope = await check_permission(info, Perm.TICKET_VIEW)
+        if await ticket_detail_scope(info) == Scope.NONE:
+            return TicketFacetsType(areas=[], teams=[])
+        detail_filters = await _detail_filters(info)
+        listed = [*scope_filter(scope, actor=info.context["user"], model=Tickets), *detail_filters]
+        # The addresses the analytics catalog reads (address_rows): live rows, `address` locations only.
+        # A town is required, as picking a county alone matches every town in it.
+        addresses = address_rows(Tickets, listed).where(SecondaryLocation.town.is_not(None)).subquery()
+        # The teams `responsibleTeams` names on the listed tickets: the test _zone_teams_over_ticket
+        # makes, run zone first, so each live zone finds its tickets in the spatial index. Asked per
+        # team instead (EXISTS over the tickets), it probed every ticket for each team holding none.
+        zone = aliased(TeamZone, flat=True)
+        holding = (
+            select(TeamZoneAssign.team_uuid)
+            .join(zone, zone.uuid == TeamZoneAssign.zone_uuid)
+            .join(Tickets, func.ST_Contains(zone.geometry, Tickets.geometry))
+            .where(zone.delete_at.is_(None), Tickets.delete_at.is_(None), *listed)
+            .distinct()
+        )
+        async with statement_ceiling(db, refusal="讀取篩選選項逾時已中止，請稍後再試"):
+            areas = await db.execute(
+                select(addresses.c.county, addresses.c.town)
+                .distinct()
+                .order_by(addresses.c.county, addresses.c.town)
+            )
+            teams = await db.scalars(
+                select(Team)
+                .where(Team.delete_at.is_(None), Team.uuid.in_(holding))
+                .order_by(Team.name, Team.uuid)
+            )
+        return TicketFacetsType(
+            areas=[TicketAreaType(county=county, town=town) for county, town in areas],
+            teams=[AssignedTeamType.from_model(team) for team in teams],
         )
 
     @strawberry.field
