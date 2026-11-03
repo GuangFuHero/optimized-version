@@ -99,10 +99,6 @@ const MAP_STATIC_GLOBAL_STYLES = {
   '.leaflet-control-zoom': {
     display: 'none',
   },
-  '.leaflet-control-scale': {
-    marginBottom: '16px',
-    marginRight: '16px',
-  },
   '.map-marker-cluster-wrapper': {
     background: 'transparent',
     border: 'none',
@@ -548,7 +544,10 @@ export const Map = memo(function Map({
                   boxShadow: shadow.md,
                   ...(zoomControlTop === undefined
                     ? {}
-                    : { marginTop: `${zoomControlTop}px`, marginRight: '16px' }),
+                    : {
+                        marginTop: `${zoomControlTop}px`,
+                        marginRight: '16px',
+                      }),
                 },
                 '& .leaflet-control-zoom a': {
                   width: 44,

@@ -20,7 +20,15 @@ import { SiteDataTypeToggle } from '../../route/controls/data-type-toggle';
 import { SiteSubTypeFilter } from '../../route/controls/sub-type-filter';
 import { SiteViewSwitch } from '../../route/controls/view-switch';
 
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import {
+  designTokens,
+  displayTextSize,
+  siteMapControls,
+  siteMapLeftControlsMaxWidth,
+} from '@rescue-frontend/ui';
+
+/** A phone too narrow for the controls' one row. */
+const NARROW_PHONE = `@media (max-width: ${siteMapControls.oneRowMinWidth - 0.05}px)`;
 
 const { color } = designTokens;
 
@@ -264,15 +272,37 @@ export function SiteMapControls({ controller }: SiteMapControlsProps) {
           position: 'absolute',
           // 12 on a phone, as the prototype: at 16 the one row (站點／任務, 篩選, 列表, 圖層) is 5px
           // too wide for a 375px screen.
-          top: { mobile: 12, tablet: 16 },
-          left: { mobile: 12, tablet: 24 },
+          top: siteMapControls.top,
+          left: siteMapControls.left,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'flex-start',
           gap: 1,
           width: 'fit-content',
-          // Clear of the buttons on the right: 列表 and 圖層 side by side on a phone, 圖層 alone above.
-          maxWidth: { mobile: 'calc(100vw - 128px)', tablet: 'calc(100vw - 112px)' },
+          // Clear of the buttons on the right: 列表 and 圖層 side by side on a phone, one column on a
+          // phone too narrow for that row, 圖層 alone from 768px up.
+          maxWidth: {
+            mobile: siteMapLeftControlsMaxWidth({
+              left: siteMapControls.left.mobile,
+              right: siteMapControls.right.mobile,
+              columns: 2,
+              clearance: siteMapControls.gap,
+            }),
+            tablet: siteMapLeftControlsMaxWidth({
+              left: siteMapControls.left.tablet,
+              right: siteMapControls.right.tablet,
+              columns: 1,
+              clearance: 28,
+            }),
+          },
+          [NARROW_PHONE]: {
+            maxWidth: siteMapLeftControlsMaxWidth({
+              left: siteMapControls.left.mobile,
+              right: siteMapControls.right.mobile,
+              columns: 1,
+              clearance: siteMapControls.gap,
+            }),
+          },
           pointerEvents: 'auto',
         }}
       >
@@ -308,13 +338,16 @@ export function SiteMapControls({ controller }: SiteMapControlsProps) {
       <Box
         sx={{
           position: 'absolute',
-          top: { mobile: 12, tablet: 16 },
-          right: { mobile: 12, tablet: 16 },
+          top: siteMapControls.top,
+          right: siteMapControls.right,
           display: 'flex',
           // A phone's controls are one row: 站點／任務, 篩選, 列表, 圖層. The 篩選 beside them is its icon
           // alone there, so 列表 fits beside 圖層 rather than hanging in a second row under it.
           flexDirection: { mobile: 'row', tablet: 'column' },
-          gap: 1,
+          // Narrower than that row (a 360px Android, a 320px iPhone SE, or a phone set to show things
+          // larger), 列表 goes back under 圖層, so it covers neither 篩選 nor its count.
+          [NARROW_PHONE]: { flexDirection: 'column-reverse' },
+          gap: `${siteMapControls.gap}px`,
           pointerEvents: 'auto',
         }}
       >
