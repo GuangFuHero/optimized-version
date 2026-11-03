@@ -721,13 +721,8 @@
       // 🔒 ZONE-COLOR-101：後端沒有顏色欄位，照類型固定（與後台同一支 wgZoneColor）
       color: z.kind === 'hazard' ? null : (window.wgZoneColor ? window.wgZoneColor(z.kind) : null),
       kind: z.kind, polygons: [[z.ring]],
-      /* 🔒 ZONE-TEAM-101（2026-11-03 Carol）責任區的負責單位**只給登入的人看**，訪客拿到 null。
-         推翻 10-23「前後台都公布被指派的單位」（ADR-311 第 8 點）；跟任務單詳情的負責團隊（ADR-422）同一條：
-         訪客在地圖、在單上都看不到是哪個單位負責。
-         `teamHidden` 只是讓畫面知道「這一區有負責單位、但不給你看」，好寫「登入後看得到負責單位」。
-         ❌ 不可以：只在畫面上不畫、資料照樣帶 team —— 正式版由後端看 token 回空的，前端拿到的就已經遮好了。 */
-      team: isAssign && isAuthenticated ? (z.team || null) : null,
-      teamHidden: isAssign && !isAuthenticated && !!z.team,
+      // 責任區只會給登入的人（見 queryPublicZones 的 ZONE-TEAM-101），所以這裡照樣帶 team
+      team: isAssign ? (z.team || null) : null,
     };
   }
 
@@ -740,8 +735,12 @@
   }
 
   /** 前台可見的非危險區域（志工休息區等）。⚠️ 後端尚無對應 query。 */
+  /* 🔒 ZONE-TEAM-101（2026-11-03 Carol）**沒登入的人整個看不到責任區**：範圍、名稱、負責團隊都不給。
+       理由：被指派的政府與 NGO 不希望責任區的範圍公開。推翻 10-23「前後台都公布」（後端 ADR-311 第 8 點已改，PR #268）。
+       危險區照舊公開；標示區照它自己的「公開到前台」開關；登入的人看到的不變。
+       ❌ 不可以：資料照樣給訪客、只在畫面上不畫 —— 正式版後端 `areas` 對訪客就不回責任區（連筆數都不算）。 */
   function queryPublicZones({ isAuthenticated = false } = {}) {
-    const items = readBridgeZones().filter((z) => z.kind !== 'hazard')
+    const items = readBridgeZones().filter((z) => z.kind !== 'hazard' && (isAuthenticated || z.kind !== 'assign'))
       .map((z) => mapWorkZoneToOverlay(z, isAuthenticated)).filter(Boolean);
     return { items, pageInfo: { totalCount: items.length, hasNextPage: false, hasPreviousPage: false } };
   }

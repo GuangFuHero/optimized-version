@@ -275,9 +275,12 @@
       color: 'var(--color-bg-warning-hover)', fillColor: 'var(--color-bg-warning)', tone: 'warning',
       sourceLabel: 'closure_areas.geometry via base_geometries',
     },
-    /* 🚨 圖層名稱「標示區域」與說明文字是我取的，未經裁示。 */
+    /* 名稱與說明跟正式版一樣（「責任區與標示區」）。
+       🔒 ZONE-TEAM-101（2026-11-03）沒登入的人看不到責任區，這一層只會畫標示區 → 圖層面板改用 guest* 三個字串，
+       並多一行淡色小字說責任區要登入才看得到（不然訪客會以為這一場沒有責任區）。🚨 訪客版文字是設計端擬的。 */
     'public-zones': {
-      label: '標示區域', description: '志工休息區、集合點等由後台標示的範圍', icon: 'MapPinned',
+      label: '責任區與標示區', description: '團隊負責的範圍，和志工休息區、集合點等', icon: 'MapPinned',
+      guestLabel: '標示區', guestDescription: '志工休息區、集合點等', guestNote: '責任區要登入才看得到',
       color: 'var(--color-fg-success)', tone: 'success',
       sourceLabel: 'work_zones（前台可見）',
     },

@@ -280,7 +280,7 @@
   }
 
   /* ── 圖層面板 ──────────────────────────────────────────────────────────── */
-  function RescueMapLayerPanel({ controller }) {
+  function RescueMapLayerPanel({ controller, guest }) {
     if (!controller.layerPanelOpen) return null;
     const entries = Object.entries(R.BASE_LAYER_CONFIG).filter(([, v]) => !v.hidden);
     return (
@@ -350,10 +350,13 @@
                     <WGIcon n={cfg.icon} s={18} />
                   </span>
                   <span style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ display: 'block', font: '700 var(--fs-14)/1.35 var(--font-latin)', color: 'var(--color-fg-neutral-default)' }}>{cfg.label}</span>
+                    <span style={{ display: 'block', font: '700 var(--fs-14)/1.35 var(--font-latin)', color: 'var(--color-fg-neutral-default)' }}>{guest && cfg.guestLabel || cfg.label}</span>
                     <span style={{ display: 'block', marginTop: 2, font: '400 var(--fs-12)/1.5 var(--font-body)', color: 'var(--color-fg-neutral-subtle)' }}>
-                      {cfg.disabledReason || cfg.description}
+                      {cfg.disabledReason || (guest && cfg.guestDescription) || cfg.description}
                     </span>
+                    {guest && cfg.guestNote ? (
+                      <span style={{ display: 'block', marginTop: 2, font: '400 var(--fs-12)/1.5 var(--font-body)', color: 'var(--color-fg-neutral-muted)' }}>{cfg.guestNote}</span>
+                    ) : null}
                     <span style={{ display: 'block', marginTop: 4, font: '400 var(--fs-10)/1.4 var(--font-data)', color: 'var(--color-fg-neutral-muted)' }}>
                       {meta.itemCount || 0} 筆 · {cfg.sourceLabel}
                     </span>
@@ -821,13 +824,8 @@
          🔒 ZONE-COLOR-101 顏色照類型：責任區靛、標示區綠（wg-hazard.js 的 wgZoneColor）。
          🔄 2026-10-23 PM 裁示（照後端 ADR-311 10-11 修訂）：責任區前後台都公布被指派的單位（推翻 09-25 不顯示）。
             常駐標籤只放「類型・名稱」（標籤太長會蓋住站點）；點標籤跳出「負責：單位」與備註（ZONE-CLICK-101）。
-         🔄 ZONE-TEAM-101（2026-11-03 Carol）負責單位**只給登入的人看**（資料層 site-data.js 就不給訪客 team）。
-            訪客點責任區標籤多一顆「登入看負責單位」—— 不寫的話，沒有備註的責任區點了只剩標題，看起來像壞掉。
-         🔒 ZONE-TEAM-102（2026-11-03 Sucre）那一行**一定要能按**：按了走 SiteAuth.goSignIn()，
-            登入完帶整個網址回來（地圖停在原本的位置）。
-            ❌ 不可以寫成純文字提示 —— 讀起來像在叫人去登入卻按不到，地圖上「看得到就要按得到」。
-            觸控範圍 44px（看起來是一行字，上下內距用負外距抵掉，跳出框不會變高）。
-         🚨「登入看負責單位」這幾個字是設計端擬的。 */
+         🔄 ZONE-TEAM-101（2026-11-03 Carol）**沒登入的人整個看不到責任區**（資料層 site-data.js 就不給），
+            這裡畫的責任區一定是登入的人在看，所以「負責：單位」照常寫。 */
       const KIND_LABEL = { assign: '責任區', mark: '標示區' };
       (controller.publicZones || []).forEach((area) => {
         const col = area.color || resolveCssToken(R.OVERLAY_LAYER_CONFIG['public-zones'].color);
@@ -838,20 +836,7 @@
           const lines = [escHtml(kind + '・' + area.label)];
           if (area.kind === 'assign' && area.team) lines.push(escHtml('負責：' + area.team));
           if (area.comment) lines.push(escHtml(area.comment));
-          if (area.teamHidden) {
-            lines.push('<button type="button" data-zone-team-login style="display:inline-flex;align-items:center;gap:2px;'
-              + 'min-height:44px;margin:-12px 0 -14px;padding:0;border:0;background:none;cursor:pointer;'
-              + 'font-family:inherit;font-size:13px;font-weight:700;line-height:1.4;'
-              /* 字色用 orange-600（#9D4F11，白底 6.4:1）：品牌橘 #E3791E 在白底只有 2.9:1，13px 字讀不清 */
-              + 'color:var(--prim-color-orange-600)">登入看負責單位 ›</button>');
-          }
           if (lines.length > 1) poly.bindPopup(lines.join('<br>'));
-          if (area.teamHidden) {
-            poly.on('popupopen', (e) => {
-              const btn = e.popup.getElement() && e.popup.getElement().querySelector('[data-zone-team-login]');
-              if (btn) btn.onclick = () => { if (window.SiteAuth) window.SiteAuth.goSignIn(); };
-            });
-          }
           poly.addTo(layer);
           addLabel(poly, kind, area.label, area.kind === 'assign' ? 1 : 2);
         });
@@ -1382,7 +1367,7 @@
           </WGPortal>
         ) : null}
 
-        <RescueMapLayerPanel controller={controller} />
+        <RescueMapLayerPanel controller={controller} guest={!session.isAuthenticated} />
         <SiteStationReportDrawer open={Boolean(reportStation)} station={reportStation}
           reports={reportStation ? reportsByStationId[reportStation.id] : []}
           onClose={() => setReportStation(null)}

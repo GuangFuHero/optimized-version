@@ -113,8 +113,8 @@
   function kindLabel(k) { const d = ZONE_KINDS.find((x) => x.value === k); return d ? d.label : k; }
 
   /** 寫給前台的形狀：只有前台需要的欄位。責任區帶 team（🔄 2026-10-23 PM 裁示（照後端 ADR-311 10-11 修訂）：責任區前後台都公布被指派的單位）。
-   *  🔄 ZONE-TEAM-101（2026-11-03 Carol）：負責單位**只給登入的人看** —— 這裡照樣帶 team，訪客拿到的由前台 site-data.js 遮成 null
-   *  （正式版由後端看 token 回空的）。
+   *  🔄 ZONE-TEAM-101（2026-11-03 Carol）：**沒登入的人整個看不到責任區** —— 這裡照樣帶，訪客由前台 site-data.js 濾掉
+   *  （正式版後端 `areas` 對訪客不回責任區，PR #268）。
    *  ❌ 不帶區內任務單歸屬（那仍是後台的派工資訊）。 */
   function toPublicZone(z) {
     // 🔒 不帶 color：後端沒有這個欄位，前台照類型用 wgZoneColor(kind)（ZONE-COLOR-102）
