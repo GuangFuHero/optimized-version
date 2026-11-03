@@ -8772,6 +8772,16 @@
             "type": "boolean",
             "title": "Team Gov Widened",
             "default": false
+          },
+          "team_gov_zone_widened": {
+            "type": "boolean",
+            "title": "Team Gov Zone Widened",
+            "default": false
+          },
+          "team_gov_member_only": {
+            "type": "boolean",
+            "title": "Team Gov Member Only",
+            "default": false
           }
         },
         "type": "object",
@@ -8782,7 +8792,7 @@
           "public"
         ],
         "title": "CapabilityInfo",
-        "description": "One capability key, split for display.\n\n`public` = in PUBLIC_PERMS. `team_gov_only` (ADR-064) = held by a team-kind role it only\ntakes effect on gov-type teams (work_zone.py `_require_gov_zone_authority`), so the matrix\ngrant alone overstates what an ngo admin can do; the frontend shows a \"gov teams only\" note.\n`team_gov_widened` (ADR-285) = a `team` grant on it reaches every station when held by a gov\nteam, so the matrix's `team` understates what a gov admin can do."
+        "description": "One capability key, split for display.\n\n`public` = in PUBLIC_PERMS. `team_gov_only` (ADR-064) = held by a team-kind role it only\ntakes effect on gov-type teams (work_zone.py `_require_gov_zone_authority`), so the matrix\ngrant alone overstates what an ngo admin can do; the frontend shows a \"gov teams only\" note.\n`team_gov_widened` (ADR-285) = a `team` grant on it reaches every station when held by a gov\nteam, so the matrix's `team` understates what a gov admin can do.\n`team_gov_zone_widened` (BE-RBAC-3 B3) = the same for a `zone` grant on a ticket capability:\na gov team has no zone, so it reaches every ticket instead.\n`team_gov_member_only` (BE-RBAC-3 B3) = the team role `member` holds it for gov teams only;\nan ngo member's grant of it resolves to `none`, while an ngo admin's still counts."
       },
       "CatalogResponse": {
         "properties": {

@@ -6,7 +6,7 @@ from typing import Any
 from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.permissions import GOV_TEAM_WIDENED_PERMS
+from app.core.permissions import GOV_MEMBER_ONLY_PERMS, GOV_TEAM_WIDENED_PERMS, TEAM_MEMBER_ROLE_NAME
 from app.models.auth import User
 from app.models.geo import Station
 from app.models.rbac import (
@@ -24,6 +24,15 @@ def _team_reaches_station(team_uuid_col, station_uuid: str, gov_widened: bool):
     runs_it = Team.uuid == select(Station.team_uuid).where(Station.uuid == station_uuid).scalar_subquery()
     reach = (runs_it | (Team.type == "gov")) if gov_widened else runs_it
     return exists(select(1).where(Team.uuid == team_uuid_col, Team.delete_at.is_(None), reach))
+
+
+def _active_gov_team(team_uuid_col):
+    """EXISTS clause: the grant's team is a live, active gov team, as `security._acts_for_gov_team`."""
+    return exists(
+        select(1).where(
+            Team.uuid == team_uuid_col, Team.delete_at.is_(None), Team.type == "gov", Team.status == "active"
+        )
+    )
 
 
 def _to_uuid_str(val: Any) -> str | None:
@@ -178,9 +187,16 @@ class NotificationRecipientResolver:
                 (UserPermissionAssign.scope == "team")
                 & _team_reaches_station(UserPermissionAssign.team_uuid, station_uid_str, gov_widened)
             )
+        if capability_key in {p.value for p in GOV_MEMBER_ONLY_PERMS}:
+            # As resolve_scope: the team role `member` holds these for a live, active gov team only,
+            # so an NGO member who could not act on the station is not told about it either.
+            role_granted = role_granted & (
+                (Role.name != TEAM_MEMBER_ROLE_NAME) | _active_gov_team(UserRoleAssign.team_uuid)
+            )
         stmt = (
             select(User.uuid)
             .outerjoin(UserRoleAssign, UserRoleAssign.user_uuid == User.uuid)
+            .outerjoin(Role, Role.uuid == UserRoleAssign.role_uuid)
             .outerjoin(
                 RolePermissionAssign,
                 RolePermissionAssign.role_uuid == UserRoleAssign.role_uuid,
