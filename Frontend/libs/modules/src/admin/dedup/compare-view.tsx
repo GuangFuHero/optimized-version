@@ -715,18 +715,20 @@ function CompareTable({
           />
         ) : (
           sides.map((side, i) => {
-            // A row typed over on the right has neither cell chosen: picking one gives that up.
+            // A row typed over on the right has neither cell chosen: picking one gives that up. A
+            // combined row takes both, so neither is picked.
             const chosen =
               Boolean(plan) &&
               !edited &&
+              !field.combined &&
               pickedSide(field, plan as MergePlan) === side;
             return (
               <Box
                 key={side}
                 component="button"
                 type="button"
-                disabled={!editable}
-                aria-pressed={chosen}
+                disabled={!editable || field.combined}
+                aria-pressed={field.combined ? undefined : chosen}
                 onClick={() => onPick(field, side)}
                 data-dedup-cell={`${field.id}=${letter(i)}`}
                 sx={{
@@ -737,7 +739,7 @@ function CompareTable({
                   p: '8px 10px',
                   ...typography.body[300],
                   color: color.fg.neutral.default,
-                  cursor: editable ? 'pointer' : 'default',
+                  cursor: editable && !field.combined ? 'pointer' : 'default',
                   borderRadius: `${radius.sm}px`,
                   border: `1px solid ${chosen ? color.bg.primary.default : color.border.default}`,
                   bgcolor: chosen
@@ -752,6 +754,7 @@ function CompareTable({
                   component="span"
                   aria-hidden
                   sx={{
+                    display: field.combined ? 'none' : 'block',
                     width: 16,
                     height: 16,
                     mt: '2px',
@@ -1096,7 +1099,7 @@ function CompareTable({
           </>
         )}
 
-        {hiddenSame > 0 || (fields?.empty.length ?? 0) > 0 ? (
+        {hiddenSame > 0 ? (
           <Stack
             sx={{
               gridColumn: '1 / -1',
@@ -1106,12 +1109,7 @@ function CompareTable({
               ...muted,
             }}
           >
-            {hiddenSame > 0 ? (
-              <span>已隱藏 {hiddenSame} 個兩張相同的欄位</span>
-            ) : null}
-            {fields?.empty.length ? (
-              <span>兩張都沒填、所以沒列出來：{fields.empty.join('、')}</span>
-            ) : null}
+            <span>已隱藏 {hiddenSame} 個兩張相同的欄位</span>
           </Stack>
         ) : null}
       </Box>
@@ -1236,6 +1234,11 @@ function ResultField({
         {field.primary && editable ? (
           <Box component="span" sx={{ ...typography.data[300], ...muted }}>
             · 在左邊選
+          </Box>
+        ) : null}
+        {field.combined ? (
+          <Box component="span" sx={{ ...typography.data[300], ...muted }}>
+            · 兩張合併
           </Box>
         ) : null}
         {edited ? <Chip tone="warning">已修改</Chip> : null}
@@ -1712,6 +1715,13 @@ function MergePreview({
     const which = previewTag(field, plan);
     if (which === 'edited') return <Chip tone="warning">已修改</Chip>;
     if (!which) return null;
+    if (which === 'combined') {
+      return (
+        <Box component="span" sx={{ ...typography.data[300], ...muted }}>
+          兩張合併
+        </Box>
+      );
+    }
     return (
       <Box component="span" sx={{ ...typography.data[300], ...muted }}>
         用 {letter(sides.indexOf(which))} 的

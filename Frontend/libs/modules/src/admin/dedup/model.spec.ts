@@ -7,7 +7,6 @@ import type {
 } from '@rescue-frontend/data-access/admin';
 
 import {
-  addressText,
   byLatestCreated,
   defaultPlan,
   decidedSides,
@@ -20,7 +19,6 @@ import {
   orderedSides,
   outcomeOf,
   pairSignals,
-  parseContact,
   previewTag,
   resolveRequest,
   resultValue,
@@ -306,12 +304,15 @@ describe('fields', () => {
     expect(items[0].show('3')).toBe('3 人');
   });
 
-  it('lists only rows one side filled, and names the empty ones', () => {
+  it('lists only rows one side filled, and names no empty one', () => {
     const fields = ticketFields(fixture(), labels);
     const ids = fields.ticket.map((f) => f.id);
     expect(ids).toContain('ticket:description');
-    expect(ids).toContain('ticket:contact');
-    expect(fields.empty).toContain('有人受困');
+    expect(ids).toContain('ticket:contact_name');
+    // Neither ticket says whether someone is trapped, nor has an email: no row, and nothing else.
+    expect(ids).not.toContain('ticket:person_trapped_reported');
+    expect(ids).not.toContain('ticket:contact_email');
+    expect(Object.keys(fields)).toEqual(['ticket', 'task']);
     // Disaster answers follow the settings order: water_depth (1) before road_access (2).
     expect(ids.filter((id) => id.startsWith('disaster:'))).toEqual([
       'disaster:water_depth',
@@ -447,101 +448,156 @@ describe('resolveRequest', () => {
   });
 });
 
-describe('the address row', () => {
-  const place = (full_address: string, room: string | null = null) => ({
+describe('the place rows', () => {
+  const place = (
+    full_address: string | null,
+    parts: Partial<NonNullable<TicketForReview['location']>> = {},
+  ) => ({
     location_type: 'address',
     full_address,
     building_section: null,
     floor: null,
-    room,
+    room: null,
     pole_id: null,
+    ...parts,
   });
+  const placeIds = (fields: PairFields) =>
+    fields.ticket
+      .map((f) => f.id)
+      .filter((id) => id.startsWith('ticket:location:'));
 
-  it('reads the address down to the room, or the pole', () => {
-    expect(addressText(place('光復鄉大進街12號', '2室'))).toBe(
-      '光復鄉大進街12號 2室',
-    );
-    expect(addressText({ ...place(''), pole_id: 'P-12' })).toBe('P-12');
-    expect(addressText(null)).toBeNull();
-  });
-
-  it('keeps the ticket whose address was picked, and moves no other row', () => {
+  it('lists each part of the place either ticket has, floor and room apart', () => {
     const pair = fixture();
-    both(pair).low.location = place('光復鄉大進街12號');
-    both(pair).high.location = place('光復鄉大進街14號');
+    both(pair).low.location = place('光復鄉大進街12號', { floor: '2F' });
+    both(pair).high.location = place('光復鄉大進街12號', {
+      floor: '3F',
+      room: '301',
+    });
+    const fields = ticketFields(pair, labels);
+    expect(placeIds(fields)).toEqual([
+      'ticket:location:full_address',
+      'ticket:location:floor',
+      'ticket:location:room',
+    ]);
+    expect(fieldOf2(fields, 'ticket:location:floor').label).toBe('樓層');
+    expect(fieldOf2(fields, 'ticket:location:room').label).toBe('戶／室');
+  });
+
+  it('keeps the ticket picked on any of its rows, and moves no other row', () => {
+    const pair = fixture();
+    both(pair).low.location = place('光復鄉大進街12號', { floor: '2F' });
+    both(pair).high.location = place('光復鄉大進街14號', { floor: '3F' });
     const fields = ticketFields(pair, labels);
     const plan = defaultPlan(pair, fields);
     const picks = { ...plan.picks };
     expect(plan.primary).toBe('high');
-    expect(fieldOf2(fields, 'ticket:location').label).toBe('地址');
-    expect(resultValue(fieldOf2(fields, 'ticket:location'), plan)).toBe(
-      '光復鄉大進街14號',
+    expect(resultValue(fieldOf2(fields, 'ticket:location:floor'), plan)).toBe(
+      '3F',
     );
     const next = { ...plan, primary: 'low' as const };
     expect(next.picks).toEqual(picks);
-    expect(resultValue(fieldOf2(fields, 'ticket:location'), next)).toBe(
-      '光復鄉大進街12號',
+    expect(
+      resultValue(fieldOf2(fields, 'ticket:location:full_address'), next),
+    ).toBe('光復鄉大進街12號');
+    expect(resultValue(fieldOf2(fields, 'ticket:location:floor'), next)).toBe(
+      '2F',
     );
     expect(resolveRequest(pair, fields, next, '').primary).toBe('low');
   });
 
-  it('drops the row when neither ticket has an address', () => {
-    const fields = ticketFields(fixture(), labels);
-    expect(fields.ticket.map((f) => f.id)).not.toContain('ticket:location');
-    expect(fields.empty).toContain('地址');
+  it('lists the pole where there is no address', () => {
+    const pair = fixture();
+    both(pair).low.location = {
+      ...place(null, { pole_id: 'P-12' }),
+      location_type: 'pole',
+    };
+    const fields = ticketFields(pair, labels);
+    expect(placeIds(fields)).toEqual(['ticket:location:pole_id']);
+  });
+
+  it('lists no place row when neither ticket has a place', () => {
+    expect(placeIds(ticketFields(fixture(), labels))).toEqual([]);
   });
 });
 
-describe('the one 聯絡人 row', () => {
-  it('splits back into name, phone and email', () => {
-    expect(parseContact('陳太太 0921-000-771 a@b.c')).toEqual({
-      contact_name: '陳太太',
-      contact_phone: '0921-000-771',
-      contact_email: 'a@b.c',
-    });
-    expect(parseContact('村長室')).toEqual({
-      contact_name: '村長室',
-      contact_phone: null,
-      contact_email: null,
-    });
+describe('the three contact rows', () => {
+  it('lists name and phone apart, as the ticket form asks', () => {
+    const fields = ticketFields(fixture(), labels);
+    expect(fieldOf2(fields, 'ticket:contact_name').label).toBe('現場聯絡人');
+    expect(fieldOf2(fields, 'ticket:contact_phone').label).toBe('聯絡電話');
+    expect(fieldOf2(fields, 'ticket:contact_name').read('low')).toBe('陳太太');
   });
 
-  it('sends the picked side as three columns, and what was typed over', () => {
+  it('sends each row on its own: a name from one ticket, a phone from the other', () => {
     const pair = fixture();
     const fields = ticketFields(pair, labels);
     const plan = defaultPlan(pair, fields);
-    expect(fieldOf2(fields, 'ticket:contact').read('low')).toBe(
-      '陳太太 0921000771',
-    );
-    plan.picks['ticket:contact'] = 'low';
+    // High is kept; take only low's phone.
+    plan.picks['ticket:contact_phone'] = 'low';
     expect(resolveRequest(pair, fields, plan, '').ticket).toEqual({
-      contact_name: '陳太太',
       contact_phone: '0921000771',
     });
-    plan.edits['ticket:contact'] = '林小姐';
+    plan.edits['ticket:contact_name'] = '林小姐';
     expect(resolveRequest(pair, fields, plan, '').ticket).toEqual({
       contact_name: '林小姐',
-      contact_phone: null,
-    });
-    plan.edits['ticket:contact'] = '0921000771';
-    expect(mergeProblems(pair, fields, plan)).toContainEqual({
-      field: 'ticket:contact',
-      message: '聯絡人不能空白',
+      contact_phone: '0921000771',
     });
   });
-});
 
-describe('an untouched 聯絡人 row', () => {
-  it("sends the picked side's columns as they are, so a LINE ID stays the phone", () => {
+  it('sends a LINE ID as the phone it is', () => {
     const pair = fixture();
     both(pair).low.contact_phone = 'line: chen0921';
     const fields = ticketFields(pair, labels);
     const plan = defaultPlan(pair, fields);
-    plan.picks['ticket:contact'] = 'low';
+    plan.picks['ticket:contact_name'] = 'low';
+    plan.picks['ticket:contact_phone'] = 'low';
     expect(resolveRequest(pair, fields, plan, '').ticket).toEqual({
       contact_name: '陳太太',
       contact_phone: 'line: chen0921',
     });
+  });
+
+  it('refuses a blank name', () => {
+    const pair = fixture();
+    const fields = ticketFields(pair, labels);
+    const plan = defaultPlan(pair, fields);
+    plan.edits['ticket:contact_name'] = ' ';
+    expect(mergeProblems(pair, fields, plan)).toContainEqual({
+      field: 'ticket:contact_name',
+      message: '現場聯絡人不能空白',
+    });
+  });
+});
+
+describe('災害類型', () => {
+  it("takes both tickets' types, with nothing to pick", () => {
+    const pair = fixture();
+    both(pair).low.disaster_types = ['flood', 'landslide'];
+    both(pair).high.disaster_types = ['collapse', 'flood'];
+    const fields = ticketFields(pair, labels);
+    const field = fieldOf2(fields, 'ticket:disaster_types');
+    expect(field.combined).toBe(true);
+    const plan = defaultPlan(pair, fields);
+    expect(plan.picks['ticket:disaster_types']).toBeUndefined();
+    // The kept ticket's first, then the other's not already there.
+    expect(resultValue(field, plan)).toEqual([
+      'collapse',
+      'flood',
+      'landslide',
+    ]);
+    expect(resolveRequest(pair, fields, plan, '').ticket).toMatchObject({
+      disaster_types: ['collapse', 'flood', 'landslide'],
+    });
+    expect(previewTag(field, plan)).toBe('combined');
+  });
+
+  it('sends nothing when the other ticket adds no type', () => {
+    const pair = fixture();
+    const fields = ticketFields(pair, labels);
+    const plan = defaultPlan(pair, fields);
+    expect(
+      resolveRequest(pair, fields, plan, '').ticket?.disaster_types,
+    ).toBeUndefined();
   });
 });
 
@@ -643,7 +699,6 @@ describe('mergeProblems', () => {
     const fields = ticketFields(pair, labels);
     // Both sides blank: the row is still listed, so it can be filled.
     expect(fields.task.map((f) => f.id)).toContain('task:quantity');
-    expect(fields.empty).not.toContain('數量');
     const plan = defaultPlan(pair, fields);
     expect(mergeProblems(pair, fields, plan)).toEqual([
       { field: 'task:quantity', message: '請填數量' },

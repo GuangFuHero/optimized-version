@@ -148,6 +148,8 @@ export interface MergeField {
   locked?: boolean;
   /** Picking this row picks the ticket that is kept (DUP-BE-431). */
   primary?: boolean;
+  /** Not picked: the merged ticket takes both tickets' values together (災害類型). */
+  combined?: boolean;
   inactive?: boolean;
   read: (side: Side) => FieldValue;
   show: (value: FieldValue) => string;
@@ -196,37 +198,6 @@ export interface FieldLabels {
   disaster: (name: string) => FieldConfig;
   disasterType: (key: string) => string;
   taskType: (key: string) => string;
-}
-
-/** A ticket's place as one line: the address down to the room, or the pole. */
-export function addressText(
-  location: TicketForReview['location'],
-): string | null {
-  if (!location) return null;
-  const text = [
-    location.full_address,
-    location.building_section,
-    location.floor,
-    location.room,
-    location.pole_id,
-  ]
-    .filter(Boolean)
-    .join(' ');
-  return text || null;
-}
-
-/**
- * The one 聯絡人 row back into the API's three columns: an email and a phone are recognised by their
- * shape, and what is left is the name.
- */
-export function parseContact(text: string) {
-  const email = text.match(/[^\s、,，]+@[^\s、,，]+/)?.[0] ?? null;
-  const withoutEmail = email ? text.replace(email, ' ') : text;
-  const phone = withoutEmail.match(/\+?\d[\d\s()-]{5,}\d/)?.[0]?.trim() ?? null;
-  const name = (phone ? withoutEmail.replace(phone, ' ') : withoutEmail)
-    .replace(/[\s、,，]+/g, ' ')
-    .trim();
-  return { contact_name: name, contact_phone: phone, contact_email: email };
 }
 
 /** How a configured field is typed in, by its data type (`docs/重複審核.md`, DUP-BE-432). */
@@ -303,21 +274,31 @@ function itemGroups(task: TaskForReview) {
   return groups;
 }
 
+/** A ticket's place, part by part, as the forms ask for it; the pole is where there is no address. */
+const LOCATION_PARTS = [
+  ['full_address', '地址'],
+  ['building_section', '區'],
+  ['floor', '樓層'],
+  ['room', '戶／室'],
+  ['pole_id', '電線桿編號'],
+] as const;
+
 export interface PairFields {
   ticket: MergeField[];
   task: MergeField[];
-  /** Labels of rows both sides left empty: listed under the table, not as rows (DUP-BE-410). */
-  empty: string[];
 }
 
-/** The rows of a ticket or need card. Rows both sides left empty are dropped. */
+/**
+ * The rows of a ticket or need card: only what either ticket has filled in and the backend holds.
+ * A row both sides left empty is not listed, nor named anywhere: many fields have
+ * no place to be filled in yet, and the fields grow as the forms ask more (動態欄位).
+ */
 export function ticketFields(
   pair: DuplicatePairDetail,
   labels: FieldLabels,
 ): PairFields {
   const tickets = pair.tickets;
-  const empty: string[] = [];
-  if (!tickets?.low || !tickets.high) return { ticket: [], task: [], empty };
+  if (!tickets?.low || !tickets.high) return { ticket: [], task: [] };
   const t = (side: Side) => tickets[side] as TicketForReview;
   const col = (
     id: string,
@@ -338,12 +319,11 @@ export function ticketFields(
     col('ticket:description', '描述', (x) => x.description ?? null, {
       input: 'long',
     }),
-    // One row, as the design has it (`dd-data.js:103`); the API keeps three columns.
-    col('ticket:contact', '聯絡人', (x) =>
-      [x.contact_name, x.contact_phone, x.contact_email]
-        .filter(Boolean)
-        .join(' '),
-    ),
+    // Three rows, as the ticket form asks and the API keeps them: each is picked or typed on its own,
+    // so a LINE ID in 聯絡電話 never has to be told apart from a name.
+    col('ticket:contact_name', '現場聯絡人', (x) => x.contact_name),
+    col('ticket:contact_phone', '聯絡電話', (x) => x.contact_phone ?? null),
+    col('ticket:contact_email', 'Email', (x) => x.contact_email ?? null),
     col('ticket:priority', '優先級', (x) => x.priority, {
       input: 'select',
       options: PRIORITY_OPTIONS,
@@ -369,18 +349,25 @@ export function ticketFields(
         show: optionShow(TRIAGE_OPTIONS),
       },
     ),
+    // Both tickets' types together: a 淹水 and a 倒塌 report of one place lose
+    // neither, and there is nothing to pick.
     col('ticket:disaster_types', '災害類型', (x) => x.disaster_types, {
       locked: true,
+      combined: true,
       show: (v) =>
         isEmptyValue(v)
           ? '（未填）'
           : (v as string[]).map(labels.disasterType).join('、'),
     }),
-    // DUP-BE-431: the address is not edited (ADR-367); the side picked here is the one kept.
-    col('ticket:location', '地址', (x) => addressText(x.location), {
-      locked: true,
-      primary: true,
-    }),
+    // DUP-BE-431: the place is not edited (ADR-367), and the side picked on any of its rows is the
+    // ticket kept. One row per part, so floor and room, which tell two households of one building
+    // apart, are read side by side.
+    ...LOCATION_PARTS.map(([key, label]) =>
+      col(`ticket:location:${key}`, label, (x) => x.location?.[key] ?? null, {
+        locked: true,
+        primary: true,
+      }),
+    ),
   ];
 
   const names = [
@@ -495,12 +482,11 @@ export function ticketFields(
     fields.filter((field) => {
       // The merged need's quantity is always asked for (ADR-448), even when both sides left it blank.
       if (field.id === 'task:quantity') return true;
-      const has =
-        !isEmptyValue(field.read('low')) || !isEmptyValue(field.read('high'));
-      if (!has) empty.push(field.label);
-      return has;
+      return (
+        !isEmptyValue(field.read('low')) || !isEmptyValue(field.read('high'))
+      );
     });
-  return { ticket: keep([...ticket, ...disaster]), task: keep(task), empty };
+  return { ticket: keep([...ticket, ...disaster]), task: keep(task) };
 }
 
 // ── The merge plan ──────────────────────────────────────────────────────────────────────────
@@ -535,7 +521,7 @@ export function defaultPlan(
   const primary = defaultPrimary(pair);
   const picks: Record<string, Side> = {};
   for (const field of [...fields.ticket, ...fields.task]) {
-    if (field.primary) continue;
+    if (field.primary || field.combined) continue;
     picks[field.id] =
       isEmptyValue(field.read(primary)) &&
       !isEmptyValue(field.read(other(primary)))
@@ -571,6 +557,17 @@ export const isEdited = (field: MergeField, plan: MergePlan) =>
 
 /** The value the merged ticket ends up with: typed over, or the side picked on the left. */
 export function resultValue(field: MergeField, plan: MergePlan): FieldValue {
+  if (field.combined) {
+    const values = [plan.primary, other(plan.primary)].flatMap((side) => {
+      const value = field.read(side);
+      return isEmptyValue(value)
+        ? []
+        : Array.isArray(value)
+          ? value
+          : [String(value)];
+    });
+    return [...new Set(values)];
+  }
   const picked = field.read(pickedSide(field, plan));
   if (field.locked || plan.edits[field.id] == null) return picked;
   return fromText(field, plan.edits[field.id]);
@@ -619,9 +616,10 @@ export function photoRows(pair: DuplicatePairDetail, plan: MergePlan) {
 export function previewTag(
   field: MergeField,
   plan: MergePlan,
-): 'edited' | Side | null {
+): 'edited' | 'combined' | Side | null {
   if (isEdited(field, plan)) return 'edited';
   if (toText(field.read('low')) === toText(field.read('high'))) return null;
+  if (field.combined) return 'combined';
   return pickedSide(field, plan);
 }
 
@@ -718,12 +716,12 @@ export function mergeProblems(
   if (title && isEmptyValue(resultValue(title, plan))) {
     problems.push({ field: 'ticket:title', message: '標題不能空白' });
   }
-  const contact = fields.ticket.find((f) => f.id === 'ticket:contact');
-  if (
-    contact &&
-    !parseContact(String(resultValue(contact, plan) ?? '')).contact_name
-  ) {
-    problems.push({ field: 'ticket:contact', message: '聯絡人不能空白' });
+  const contact = fields.ticket.find((f) => f.id === 'ticket:contact_name');
+  if (contact && isEmptyValue(resultValue(contact, plan))) {
+    problems.push({
+      field: 'ticket:contact_name',
+      message: '現場聯絡人不能空白',
+    });
   }
   return problems;
 }
@@ -733,6 +731,9 @@ export function mergeProblems(
 const TICKET_KEYS = [
   'title',
   'description',
+  'contact_name',
+  'contact_phone',
+  'contact_email',
   'priority',
   'person_trapped_reported',
   'immediate_danger_reported',
@@ -770,22 +771,6 @@ export function resolveRequest(
   for (const key of TICKET_KEYS) {
     const next = value(`ticket:${key}`);
     if (next !== undefined && !same(next, kept[key])) ticket[key] = next;
-  }
-  // An untouched 聯絡人 row takes the picked side's three columns as they are: splitting it by shape
-  // would move a LINE ID in contact_phone into the name.
-  const contactField = byId.get('ticket:contact');
-  if (contactField) {
-    const contact = isEdited(contactField, plan)
-      ? parseContact(String(resultValue(contactField, plan) ?? ''))
-      : (tickets[pickedSide(contactField, plan)] as TicketForReview);
-    for (const key of [
-      'contact_name',
-      'contact_phone',
-      'contact_email',
-    ] as const) {
-      const next = contact[key] ?? null;
-      if (!same(next, kept[key] ?? null)) ticket[key] = next;
-    }
   }
   const disasterTypes = value('ticket:disaster_types');
   if (
