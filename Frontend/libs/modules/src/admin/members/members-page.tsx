@@ -50,7 +50,7 @@ import {
   type TeamMembership,
 } from './roster';
 
-const { color, typography } = designTokens;
+const { color, radius, typography } = designTokens;
 
 type Perm = components['schemas']['Perm'];
 
@@ -473,7 +473,7 @@ function PeopleDirectory({
                   height: 26,
                   pl: '10px',
                   pr: '8px',
-                  borderRadius: '999px',
+                  borderRadius: `${radius.full}px`,
                   bgcolor: color.bg.neutral.subtle,
                   border: `1px solid ${color.border.default}`,
                 }}
