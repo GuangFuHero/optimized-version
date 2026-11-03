@@ -20,7 +20,7 @@ import type { StationDetailActionProps } from '../admin/station-detail/types';
 import { getStationTypeIcon } from '../station-type-icon';
 import { describeSiteStation } from './site-station-detail';
 
-const { color, radius, spacing } = designTokens;
+const { color, iconSize, radius, spacing } = designTokens;
 const CloseIcon = Icons.close;
 
 interface SiteStationDetailDrawerProps {
@@ -250,11 +250,12 @@ export function SiteStationDetailDrawer({
           </Box>
         ) : null}
 
-        <SiteDetailRow label="位置說明" icon={<MapPin size={16} />}>
+        {/* 18, as the ticket detail's rows: the text beside them is 2px larger than the prototype's. */}
+        <SiteDetailRow label="位置說明" icon={<MapPin size={iconSize.md} />}>
           {detail.locationNote}
         </SiteDetailRow>
 
-        <SiteDetailRow label="座標" icon={<Crosshair size={16} />}>
+        <SiteDetailRow label="座標" icon={<Crosshair size={iconSize.md} />}>
           {detail.coordinates}
         </SiteDetailRow>
       </Stack>
