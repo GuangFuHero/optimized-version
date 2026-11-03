@@ -6,6 +6,8 @@ import {
   listsEveryTicket,
   NEED_FILTER_TYPES,
   EMPTY_TICKET_FILTERS,
+  isUnlistedArea,
+  isUnlistedTeam,
   pageCountOf,
   parseTicketFilters,
   parseTicketPage,
@@ -299,6 +301,42 @@ describe('ticket filters', () => {
     expect(
       toExtentVariables({ ...EMPTY_TICKET_FILTERS, status: 'pending' }),
     ).toEqual({ status: 'pending' });
+  });
+});
+
+describe('isUnlistedTeam', () => {
+  const team = '10000000-0000-4000-8000-000000000002';
+
+  it('clears a team the facets do not list, once they have loaded', () => {
+    expect(isUnlistedTeam(team, true, [])).toBe(true);
+    expect(isUnlistedTeam(team, true, [team])).toBe(false);
+    expect(isUnlistedTeam(team, true, undefined)).toBe(false);
+  });
+
+  it('keeps 未指派 and no choice', () => {
+    expect(isUnlistedTeam(UNASSIGNED_TEAM, true, [])).toBe(false);
+    expect(isUnlistedTeam(null, true, [])).toBe(false);
+  });
+
+  it('clears any team for a caller without the 組織分配 row', () => {
+    expect(isUnlistedTeam(team, false, undefined)).toBe(true);
+    expect(isUnlistedTeam(UNASSIGNED_TEAM, false, undefined)).toBe(true);
+  });
+});
+
+describe('isUnlistedArea', () => {
+  const listed = [{ county: '花蓮縣', town: '光復鄉' }];
+
+  it('keeps a listed town, and every choice until the facets load', () => {
+    expect(isUnlistedArea('花蓮縣', '光復鄉', true, listed)).toBe(false);
+    expect(isUnlistedArea('花蓮縣', '鳳林鎮', true, undefined)).toBe(false);
+    expect(isUnlistedArea(null, null, true, [])).toBe(false);
+  });
+
+  it('clears a town not listed, a county alone, and any place without the row', () => {
+    expect(isUnlistedArea('花蓮縣', '鳳林鎮', true, listed)).toBe(true);
+    expect(isUnlistedArea('花蓮縣', null, true, listed)).toBe(true);
+    expect(isUnlistedArea('花蓮縣', '光復鄉', false, undefined)).toBe(true);
   });
 });
 

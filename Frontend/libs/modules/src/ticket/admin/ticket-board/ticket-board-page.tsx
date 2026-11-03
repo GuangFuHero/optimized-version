@@ -2,6 +2,7 @@
 
 import { Box, Stack } from '@mui/material';
 import {
+  useTicketFacets,
   useTicketsExtent,
   useTicketStats,
 } from '@rescue-frontend/data-access/admin';
@@ -19,6 +20,8 @@ import { useTicketRows } from './hooks/use-ticket-rows';
 import {
   countActiveFilters,
   EMPTY_TICKET_FILTERS,
+  isUnlistedArea,
+  isUnlistedTeam,
   listsEveryTicket,
   pageCountOf,
   parseTicketFilters,
@@ -131,6 +134,31 @@ export function TicketBoardPage() {
     pageCount,
     setParam,
   ]);
+  // A 行政區域 or 組織分配 choice the panel has no chip for (a link naming a place or a team with
+  // no ticket the caller sees) is cleared, so the board never filters by something it cannot show.
+  const facets = useTicketFacets({
+    enabled: caps.canViewDetail && Boolean(filters.team || filters.county),
+  });
+  const listed = facets.isSuccess ? facets.data.ticketFacets : undefined;
+  const clearTeam = isUnlistedTeam(
+    filters.team,
+    caps.canViewDetail,
+    listed?.teams.map((t) => t.uuid),
+  );
+  const clearArea = isUnlistedArea(
+    filters.county,
+    filters.town,
+    caps.canViewDetail,
+    listed?.areas,
+  );
+  useEffect(() => {
+    if (!clearTeam && !clearArea) return;
+    setFilters({
+      ...filters,
+      ...(clearTeam ? { team: null } : {}),
+      ...(clearArea ? { county: null, town: null } : {}),
+    });
+  }, [clearTeam, clearArea, filters, setFilters]);
   // The stats strip counts the whole board in the caller's scope, whatever the filters.
   const statsQuery = useTicketStats();
   const stats = useMemo(
