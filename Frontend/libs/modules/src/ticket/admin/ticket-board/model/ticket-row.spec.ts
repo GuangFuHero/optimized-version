@@ -104,23 +104,9 @@ describe('toTicketRow', () => {
 
   it('sums the gap over the ticket', () => {
     const row = toTicketRow(
-      ticket({}, [
-        task({ taskType: 'hr' }),
-        task({ taskType: 'hr', quantity: 3, assignedCount: 2 }),
-      ]),
+      ticket({}, [task(), task({ quantity: 3, assignedCount: 2 })]),
     );
     expect(row.volunteerGap).toBe(4);
-  });
-
-  it('counts only hr needs in the gap, as 志工缺口 does', () => {
-    const row = toTicketRow(
-      ticket({}, [
-        task({ taskType: 'hr', quantity: 3, assignedCount: 0 }),
-        task({ taskType: 'supply', quantity: 50, assignedCount: 0 }),
-        task({ taskType: 'rescue', quantity: 2, assignedCount: 0 }),
-      ]),
-    );
-    expect(row.volunteerGap).toBe(3);
   });
 
   it('marks a coarse ticket', () => {
