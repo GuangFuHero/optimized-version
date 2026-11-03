@@ -150,6 +150,7 @@ export function AdminShell({
         >
           <AdminHeader
             title={pageTitle}
+            pageHelp={!forbidden && !notFound}
             onOpenNavigation={() => setOpenedOn(pathname)}
             navigationOpen={mobileOpen}
           />

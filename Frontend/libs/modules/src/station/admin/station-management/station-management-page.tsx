@@ -49,7 +49,6 @@ const COLUMN_SX = { maxWidth: 1200, mx: 'auto', width: '100%' };
 const LEAD_SX = { ...SECTION_SX, pt: FRAME_GAP, '& > *': COLUMN_SX };
 
 /** What the header's ? explains: the page in one line. */
-const PAGE_HELP = '維護資源站點並審查民眾送來的修改建議';
 
 const PENDING_FILTERS: StationFilters = { ...EMPTY_FILTERS, pending: true };
 
@@ -142,7 +141,6 @@ export function StationManagementPage() {
         <ViewSwitch
           count={rows.length}
           view={view}
-          help={PAGE_HELP}
           onChange={(next) => setParam('view', next === 'map' ? 'map' : null)}
         />
       </AdminHeaderSlot>
