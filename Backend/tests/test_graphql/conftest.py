@@ -24,6 +24,7 @@ from app.models.request import Tickets
 from app.models.station_property import StationProperty
 from app.models.ticket_task import TicketTask
 from app.repositories.session_repository import SessionRepository
+from tests import db_reset
 from tests.conftest import TEST_DB_URL, schema_has_role  # env-driven, per-worker under xdist
 
 
@@ -82,7 +83,7 @@ async def _ensure_platform_role(name: str, grants) -> None:
 
 
 async def _ensure_db():
-    """Seed the RBAC roles below, unless they survived since the last `db` or `db_session` reset.
+    """Reset the DB and seed the RBAC roles below, unless they survived since the last seeding.
 
     The roles below are committed together, so finding the first one means all are there.
     """
@@ -90,6 +91,7 @@ async def _ensure_db():
         return
 
     eng = create_async_engine(TEST_DB_URL, echo=False)
+    await db_reset.reset(eng)
     factory = sessionmaker(eng, class_=AsyncSession, expire_on_commit=True)
     async with factory() as db:
         login_role = Role(name="Login User", kind="platform")

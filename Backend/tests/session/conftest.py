@@ -16,14 +16,16 @@ from app.core.security import generate_salt, get_password_hash
 from app.main import app
 from app.models.rbac import Role
 from app.services.auth_account import create_account
+from tests import db_reset
 from tests.conftest import TEST_DB_URL, TEST_REDIS_URL, schema_has_role  # per-worker under xdist
 
 
 async def _ensure_db():
-    """Seed the default 'user' role unless it survived since the last `db` or `db_session` reset."""
+    """Reset the DB and seed the default 'user' role, unless the role is already there."""
     if await schema_has_role("user"):
         return
     eng = create_async_engine(TEST_DB_URL, echo=False)
+    await db_reset.reset(eng)
     factory = sessionmaker(eng, class_=AsyncSession, expire_on_commit=True)
     async with factory() as db:
         db.add(Role(name="user", kind="platform"))
