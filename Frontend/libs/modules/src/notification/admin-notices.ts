@@ -6,6 +6,7 @@
  */
 
 import { timeAgo } from '../time';
+import { adminNoticeText } from './admin-notice-text';
 import type { NotificationRow } from './site-notices';
 
 /** The kinds of notice the back office shows, each with its own icon. */
@@ -127,6 +128,7 @@ export function readAdminNotices(
   return rows.flatMap((row) => {
     const entry = ADMIN_NOTICE_TYPES[row.type];
     const href = adminNoticeHref(row);
+    const text = adminNoticeText(row);
 
     if (!entry || href === null) {
       return [];
@@ -137,8 +139,8 @@ export function readAdminNotices(
         uuid: row.uuid,
         kind: entry.kind,
         group: entry.group,
-        summary: row.title,
-        detail: row.body,
+        summary: text.summary,
+        detail: text.detail,
         read: row.read,
         createdAt: row.created_at ?? null,
         ago: timeAgo(row.created_at, now),
