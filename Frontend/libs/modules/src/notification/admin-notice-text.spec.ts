@@ -25,6 +25,30 @@ describe('adminNoticeText', () => {
     });
   });
 
+  it('suggestion on a property names the item', () => {
+    expect(
+      adminNoticeText(
+        notice('station_suggestion_created', {
+          station_name: '糖廠加水站',
+          field: 'quantity',
+          property_name: '礦泉水',
+        }),
+      ).detail,
+    ).toBe('「礦泉水」的數量');
+  });
+
+  it('suggestion on a live-status property names it as the backend does', () => {
+    expect(
+      adminNoticeText(
+        notice('station_suggestion_created', {
+          station_name: '光復鄉衛生所醫療站',
+          field: 'quantity',
+          property_name: 'beds_available',
+        }),
+      ).detail,
+    ).toBe('「剩餘床位」的數量');
+  });
+
   it('suggestion on an unnamed station', () => {
     expect(
       adminNoticeText(

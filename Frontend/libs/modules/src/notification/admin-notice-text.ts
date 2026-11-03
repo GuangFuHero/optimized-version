@@ -56,13 +56,19 @@ function write(type: string, params: Params): Text | null {
       }
 
       const station = named(params, 'station_name');
+      // A suggestion on one of the station's items says which: 「礦泉水」的數量.
+      const item = named(params, 'property_name');
+      const fieldLabel = suggestionFieldLabel(field);
 
       return {
         summary:
           station === null
             ? '有一筆站點修改建議待審'
             : `「${station}」有一筆修改建議待審`,
-        detail: suggestionFieldLabel(field),
+        detail:
+          item === null
+            ? fieldLabel
+            : `「${LIVE_STATUS_LABELS[item] ?? item}」的${fieldLabel}`,
       };
     }
     case 'dedup_review_pending': {
