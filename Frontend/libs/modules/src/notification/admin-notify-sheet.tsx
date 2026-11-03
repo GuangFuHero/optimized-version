@@ -59,10 +59,6 @@ const VISUALLY_HIDDEN = {
 /** The sheet's own body padding (`flushBody` hands it to the content): 16px on mobile, 24px above. */
 const BODY_PADDING = { mobile: 2, tablet: 3 } as const;
 
-// The caption under the title returns when the bell's number ships; until then staff never see the
-// number it explains. Kept as-is so it can be restored:
-// 開啟這份清單只會清掉鈴鐺上的數字，不會把任何一則標成已讀。
-
 type Tone = 'warning' | 'info' | 'neutral';
 
 /** Each kind's label, icon and colour (prototype `TYPES`). */
@@ -387,6 +383,11 @@ function AdminNotifyContent({ onClose }: { onClose: () => void }) {
       headerContent={
         notices && notices.length > 0 ? (
           <Stack direction="row" sx={{ alignItems: 'center', gap: '10px' }}>
+            <Typography
+              sx={{ ...typography.body[300], color: color.fg.neutral.muted }}
+            >
+              開啟這份清單只會清掉鈴鐺上的數字，不會把任何一則標成已讀。
+            </Typography>
             <Button
               variant="outline"
               size="sm"
