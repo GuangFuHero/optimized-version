@@ -285,6 +285,12 @@ async def submit(
         event_type="role_request_submitted",
         title="有新的管理權限申請",
         body=body,
+        params={
+            "requested_role": requested_role,
+            "team_name": team_name,
+            "new_team_name": target.new_team_name,
+            "applicant_name": applicant_name,
+        },
         actor_uuid=applicant_uuid,
         ref_type="role_request",
         ref_uuid=request_uuid,
@@ -413,6 +419,15 @@ async def reject(db: AsyncSession, *, actor: User, request_uuid: uuid.UUID, note
     request.review_note = note
     request.closed_at = datetime.now(UTC)
     applicant_uuid, label = request.created_by, ROLE_LABELS[request.requested_role]
+    team_name = None
+    if request.team_uuid is not None:
+        team_name = await db.scalar(select(Team.name).where(Team.uuid == request.team_uuid))
+    params = {
+        "requested_role": request.requested_role,
+        "team_name": team_name,
+        "new_team_name": request.new_team_name,
+        "review_note": note,
+    }
     await db.commit()
 
     await NotificationService.dispatch(
@@ -420,6 +435,7 @@ async def reject(db: AsyncSession, *, actor: User, request_uuid: uuid.UUID, note
         event_type="role_request_rejected",
         title=f"你的「{label}」申請沒有通過",
         body=note,
+        params=params,
         actor_uuid=reviewer_uuid,
         ref_type="role_request",
         ref_uuid=request_uuid,
@@ -539,6 +555,11 @@ async def approve(db: AsyncSession, *, actor: User, request_uuid: uuid.UUID, not
     request.reviewed_by = reviewer_uuid
     request.review_note = note
     request.closed_at = datetime.now(UTC)
+    params = {
+        "requested_role": request.requested_role,
+        "team_name": team_name if request.team_uuid is not None else None,
+        "new_team_name": request.new_team_name,
+    }
     await db.commit()
 
     await NotificationService.dispatch(
@@ -546,6 +567,7 @@ async def approve(db: AsyncSession, *, actor: User, request_uuid: uuid.UUID, not
         event_type="role_request_approved",
         title=f"你的「{label}」申請通過了",
         body=body,
+        params=params,
         priority="high",
         actor_uuid=reviewer_uuid,
         ref_type="role_request",

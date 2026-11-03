@@ -276,16 +276,22 @@ async def audit_ticket(
         notices = [
             (
                 [requester] if requester and str(requester) != str(actor_uid) else [],
+                "requester",
                 f"協調人員正在確認你的求助單「{title}」，有需要會跟你聯絡。",
             ),
-            (list(volunteers), f"你報名的求助單「{title}」資料可能有誤，出發前請先跟開單者確認。"),
+            (
+                list(volunteers),
+                "volunteer",
+                f"你報名的求助單「{title}」資料可能有誤，出發前請先跟開單者確認。",
+            ),
         ]
-        for recipients, body in notices:
+        for recipients, recipient, body in notices:
             await NotificationService.dispatch(
                 db,
                 event_type="ticket_audit_issue",
                 title=f"求助單內容待確認：{title}",
                 body=body,
+                params={"ticket_title": title, "recipient": recipient},
                 priority="high",
                 # No actor: who audited is staff-only, and the notice reaches the requester.
                 actor_uuid=None,

@@ -301,7 +301,9 @@ async def test_a_property_suggestion_is_merged_by_the_stations_team(db):
     await _grant(db, reviewer, Perm.STATION_REVIEW, "team", "role-review", team=ngo)
 
     await merge_station_suggestions(
-        db, actor=reviewer, station_uuid=str(station.uuid),
+        db,
+        actor=reviewer,
+        station_uuid=str(station.uuid),
         decisions=[SuggestionDecision(str(prop.uuid), "property_name", True, "bottled water")],
     )
 
@@ -316,8 +318,12 @@ async def test_a_station_photo_is_moderated_by_the_stations_team(db):
     author = await _user(db, "Author")
     reviewer = await _user(db, "Reviewer")
     station = await _station(db, created_by=author, team=ngo)
-    photo = Photo(ref_uuid=station.uuid, ref_type="geometry", url="https://example.test/a.jpg",
-                  created_by=str(author.uuid))
+    photo = Photo(
+        ref_uuid=station.uuid,
+        ref_type="geometry",
+        url="https://example.test/a.jpg",
+        created_by=str(author.uuid),
+    )
     db.add(photo)
     await db.flush()
     photo_uuid = str(photo.uuid)
@@ -341,9 +347,15 @@ async def test_the_timeline_names_the_team_a_station_was_assigned_to(db):
     station = await _station(db, created_by=author, team=ngo)
     db.add(
         AuditLog(
-            uuid=uuidlib.uuid4(), table_name="stations", action="UPDATE", row_id=station.uuid,
-            old_values={"team_uuid": None}, new_values={"team_uuid": str(ngo.uuid)},
-            user_uuid=author.uuid, client_ip="10.0.0.1", created_at=datetime.now(UTC),
+            uuid=uuidlib.uuid4(),
+            table_name="stations",
+            action="UPDATE",
+            row_id=station.uuid,
+            old_values={"team_uuid": None},
+            new_values={"team_uuid": str(ngo.uuid)},
+            user_uuid=author.uuid,
+            client_ip="10.0.0.1",
+            created_at=datetime.now(UTC),
         )
     )
     await db.flush()
@@ -387,9 +399,15 @@ async def test_a_teams_timeline_contacts_follow_the_assignment(db, whose, expect
     station = await _station(db, created_by=author, team=ngo if whose == "own" else other)
     db.add(
         AuditLog(
-            uuid=uuidlib.uuid4(), table_name="stations", action="UPDATE", row_id=station.uuid,
-            old_values={"contact_phone": None}, new_values={"contact_phone": "0912345678"},
-            user_uuid=author.uuid, client_ip="10.0.0.1", created_at=datetime.now(UTC),
+            uuid=uuidlib.uuid4(),
+            table_name="stations",
+            action="UPDATE",
+            row_id=station.uuid,
+            old_values={"contact_phone": None},
+            new_values={"contact_phone": "0912345678"},
+            user_uuid=author.uuid,
+            client_ip="10.0.0.1",
+            created_at=datetime.now(UTC),
         )
     )
     await db.flush()
@@ -635,6 +653,11 @@ async def test_reassigning_tells_both_teams(db):
 
     assert await _notification_types(db, old_admin) == ["station_unassigned"]
     assert await _notification_types(db, new_admin) == ["station_assigned"]
+    sent = dict((await db.execute(select(Notification.type, Notification.params))).all())
+    assert sent == {
+        "station_assigned": {"station_name": "old name", "station_type": None, "team_name": "New NGO"},
+        "station_unassigned": {"station_name": "old name", "station_type": None, "team_name": "Old NGO"},
+    }
 
 
 @pytest.mark.asyncio
@@ -699,6 +722,7 @@ async def test_two_concurrent_reassignments_tell_every_team_once(db, monkeypatch
     engines = [create_async_engine(TEST_DB_URL) for _ in range(2)]
     sessions = [sessionmaker(engine, class_=AsyncSession, expire_on_commit=True)() for engine in engines]
     try:
+
         async def move_to(session, key):
             actor = await session.get(User, assigner_uuid)
             actor.active_identity = identity
