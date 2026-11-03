@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   adminNoticeHref,
   groupAdminNotices,
+  noticeHrefFrom,
   readAdminNotices,
 } from './admin-notices';
 import type { NotificationRow } from './site-notices';
@@ -211,5 +212,27 @@ describe('groupAdminNotices', () => {
     expect(groupAdminNotices(notices.slice(0, 1)).map((g) => g.group)).toEqual([
       'team',
     ]);
+  });
+});
+
+describe('noticeHrefFrom', () => {
+  it('keeps the filters and view when already on the page', () => {
+    expect(
+      noticeHrefFrom(
+        '/stations?station=s-2',
+        '/stations',
+        '?view=map&type=water&station=s-1',
+      ),
+    ).toBe('/stations?view=map&type=water&station=s-2');
+  });
+
+  it('opens the link as it is from another page', () => {
+    expect(noticeHrefFrom('/stations?station=s-2', '/map', '?zone=z-1')).toBe(
+      '/stations?station=s-2',
+    );
+  });
+
+  it('opens a link without a query as it is', () => {
+    expect(noticeHrefFrom('/audit', '/audit', '?tab=done')).toBe('/audit');
   });
 });

@@ -27,6 +27,7 @@ import {
 import {
   groupAdminNotices,
   ADMIN_NOTICE_GROUPS,
+  noticeHrefFrom,
   readAdminNotices,
   type AdminNotice,
   type AdminNoticeGroup,
@@ -295,7 +296,13 @@ function AdminNotifyContent({ onClose }: { onClose: () => void }) {
     }
 
     onClose();
-    router.push(notice.href);
+    router.push(
+      noticeHrefFrom(
+        notice.href,
+        window.location.pathname,
+        window.location.search,
+      ),
+    );
   };
 
   return (

@@ -139,6 +139,31 @@ function hrefOf(
 }
 
 /** A notice as the bell shows it. */
+/**
+ * Where a notice's link goes from the page the viewer is on. Already on the page it links to, its
+ * query is laid over the one there, so a station opens on 資源站點管理 without resetting the
+ * filters or the view, as the prototype opens it in place. A link without a query opens as it is.
+ */
+export function noticeHrefFrom(
+  href: string,
+  pathname: string,
+  search: string,
+): string {
+  const [path, query] = href.split('?', 2);
+
+  if (path !== pathname || !query) {
+    return href;
+  }
+
+  const merged = new URLSearchParams(search);
+
+  for (const [key, value] of new URLSearchParams(query)) {
+    merged.set(key, value);
+  }
+
+  return `${path}?${merged.toString()}`;
+}
+
 export interface AdminNotice {
   uuid: string;
   kind: AdminNoticeKind;
