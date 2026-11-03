@@ -50,22 +50,34 @@ class AreaType:
     )
     note: str | None = None
     is_public: bool = strawberry.field(
-        default=False, description="Shown on the public map; always true except for a mark zone"
+        default=False,
+        description=(
+            "Shown on the public map, a team zone only to those signed in; always true except for a mark zone"
+        ),
     )
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
     @strawberry.field(description="Teams a team zone is assigned to; empty for the other kinds")
     async def assigned_teams(self, info: strawberry.types.Info) -> list[AssignedTeamType]:
-        """Resolve the zone's teams via the per-request DataLoader; a team's name and type are public."""
+        """Resolve the zone's teams via the per-request DataLoader.
+
+        Only signed-in readers get team zones, so a guest never gets their teams.
+        """
         return await info.context["loaders"]["teams_by_zone"].load(str(self.uuid))
 
     @classmethod
     def from_model(cls, m) -> "AreaType":
         """Build from an AreaPolygon model instance of any kind."""
         return cls(
-            uuid=m.uuid, type=m.property_name, name=m.name, geometry=geom_to_geojson(m.geometry),
-            note=m.note, is_public=m.is_public, created_at=m.created_at, updated_at=m.updated_at,
+            uuid=m.uuid,
+            type=m.property_name,
+            name=m.name,
+            geometry=geom_to_geojson(m.geometry),
+            note=m.note,
+            is_public=m.is_public,
+            created_at=m.created_at,
+            updated_at=m.updated_at,
         )
 
 
@@ -88,7 +100,8 @@ class TeamZoneType:
     )
     note: str | None = None
     is_public: bool = strawberry.field(
-        default=True, description="Always true: a team zone and its teams are shown on the public map"
+        default=True,
+        description="Always true: a team zone and its teams are shown on the public map to those signed in",
     )
     created_by: str | None = strawberry.field(
         default=None, description="UUID of the gov user who drew this zone"
@@ -109,9 +122,14 @@ class TeamZoneType:
     def from_model(cls, m) -> "TeamZoneType":
         """Build from a TeamZone model instance."""
         return cls(
-            uuid=m.uuid, name=m.name, geometry=geom_to_geojson(m.geometry), note=m.note,
-            is_public=m.is_public, created_by=m.created_by,
-            created_at=m.created_at, updated_at=m.updated_at,
+            uuid=m.uuid,
+            name=m.name,
+            geometry=geom_to_geojson(m.geometry),
+            note=m.note,
+            is_public=m.is_public,
+            created_by=m.created_by,
+            created_at=m.created_at,
+            updated_at=m.updated_at,
         )
 
 
@@ -151,9 +169,7 @@ class CreateAreaInput:
     """Input for drawing a map area of any kind."""
 
     type: AreaKind
-    geometry: GeoJSON = strawberry.field(
-        description="GeoJSON Polygon or MultiPolygon — must not be a Point"
-    )
+    geometry: GeoJSON = strawberry.field(description="GeoJSON Polygon or MultiPolygon — must not be a Point")
     name: str | None = None
     note: str | None = None
     is_public: bool | None = strawberry.field(
