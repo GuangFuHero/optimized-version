@@ -88,23 +88,26 @@ export function exportScopeParams(org: ExportOrg): {
 const UNSAFE_FILENAME = /[\\/:*?"<>|]/g;
 
 /**
- * 任務單-{type}-{yyyymmdd}, as before, with 全部種類 for every type, and the organisation after
- * the type when the export is not 全部組織 (`orgLabel` null).
+ * The prototype's name (tk-import.jsx): 任務單_{type}[_{organisation}]_{yyyymmdd-HHmm}_{n}筆, in
+ * Taipei time, as the station export stamps its files. The organisation is left out for 全部組織
+ * (`orgLabel` null). The count says on paper how many rows the file holds.
  */
 export function ticketExportFilename(
   taskType: ExportType,
   format: 'csv' | 'xlsx',
   now: Date,
-  orgLabel: string | null = null,
+  orgLabel: string | null,
+  count: number,
 ): string {
-  const { year, month, day } = taiwanDateParts(now);
+  const { year, month, day, hour, minute } = taiwanDateParts(now);
   const parts = [
     '任務單',
     exportTypeLabel(taskType),
     ...(orgLabel ? [orgLabel.replace(UNSAFE_FILENAME, '_')] : []),
-    `${year}${month}${day}`,
+    `${year}${month}${day}-${hour}${minute}`,
+    `${count}筆`,
   ];
-  return `${parts.join('-')}.${format}`;
+  return `${parts.join('_')}.${format}`;
 }
 
 /** The note under the choices (BK-8b, BK-8c, BK-8d). */

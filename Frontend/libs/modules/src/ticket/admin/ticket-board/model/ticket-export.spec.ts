@@ -23,47 +23,40 @@ const TEAM = '5b0c6a2e-0c1f-4f7a-9a51-0f4b8f1f2c3d';
 const teams = [{ uuid: TEAM, name: '光復救援隊' }];
 
 describe('ticketExportFilename', () => {
-  it('names the export by type and Taipei date', () => {
-    expect(
-      ticketExportFilename('supply', 'csv', new Date('2026-10-27T17:00:00Z')),
-    ).toBe('任務單-物資-20261028.csv');
+  // 2026-10-28 01:05 in Taipei.
+  const now = new Date('2026-10-27T17:05:00Z');
+
+  it('names the export as the prototype does: type, Taipei time, rows', () => {
+    expect(ticketExportFilename('supply', 'csv', now, null, 5)).toBe(
+      '任務單_物資_20261028-0105_5筆.csv',
+    );
   });
 
   it('uses the format as the extension', () => {
-    expect(
-      ticketExportFilename('rescue', 'xlsx', new Date('2026-10-27T15:59:00Z')),
-    ).toBe('任務單-搜救-20261027.xlsx');
+    expect(ticketExportFilename('rescue', 'xlsx', now, null, 3)).toBe(
+      '任務單_搜救_20261028-0105_3筆.xlsx',
+    );
   });
 
   it('says 全部種類 for every type', () => {
-    expect(
-      ticketExportFilename(
-        ALL_NEED_TYPES,
-        'csv',
-        new Date('2026-10-27T17:00:00Z'),
-      ),
-    ).toBe('任務單-全部種類-20261028.csv');
+    expect(ticketExportFilename(ALL_NEED_TYPES, 'csv', now, null, 12)).toBe(
+      '任務單_全部種類_20261028-0105_12筆.csv',
+    );
   });
 
   it('names the organisation after the type, when it is not 全部組織', () => {
-    const now = new Date('2026-10-27T17:00:00Z');
-    expect(ticketExportFilename('hr', 'xlsx', now, '光復救援隊')).toBe(
-      '任務單-人力-光復救援隊-20261028.xlsx',
+    expect(ticketExportFilename('hr', 'xlsx', now, '光復救援隊', 4)).toBe(
+      '任務單_人力_光復救援隊_20261028-0105_4筆.xlsx',
     );
-    expect(ticketExportFilename(ALL_NEED_TYPES, 'csv', now, '未指派')).toBe(
-      '任務單-全部種類-未指派-20261028.csv',
+    expect(ticketExportFilename(ALL_NEED_TYPES, 'csv', now, '未指派', 0)).toBe(
+      '任務單_全部種類_未指派_20261028-0105_0筆.csv',
     );
   });
 
   it('keeps a team name from breaking the file name', () => {
-    expect(
-      ticketExportFilename(
-        'rescue',
-        'csv',
-        new Date('2026-10-27T17:00:00Z'),
-        'A/B隊',
-      ),
-    ).toBe('任務單-搜救-A_B隊-20261028.csv');
+    expect(ticketExportFilename('rescue', 'csv', now, 'A/B隊', 1)).toBe(
+      '任務單_搜救_A_B隊_20261028-0105_1筆.csv',
+    );
   });
 
   it('exports the four task types', () => {

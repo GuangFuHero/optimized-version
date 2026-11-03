@@ -128,6 +128,7 @@ export function TicketExportMenu({ team, taskType }: TicketExportMenuProps) {
               format,
               new Date(),
               chosen === ALL_TEAMS && !ownTeam ? null : orgLabel,
+              count ?? 0,
             ),
           );
           toast.success(exportToast(orgLabel, exportType, count ?? 0));
