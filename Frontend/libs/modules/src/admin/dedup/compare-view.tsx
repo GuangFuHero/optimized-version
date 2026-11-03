@@ -208,7 +208,7 @@ function IconButton({
         justifyContent: 'center',
         opacity: onClick ? 1 : 0.35,
         p: '1px 6px',
-        color: '#000',
+        color: color.fg.neutral.default,
         '&:hover:not(:disabled)': { bgcolor: color.bg.neutral.subtle },
       }}
     >

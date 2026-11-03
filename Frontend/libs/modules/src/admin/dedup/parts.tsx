@@ -15,7 +15,7 @@ export const scrollbarSx = {
   '&::-webkit-scrollbar': { width: 10, height: 10 },
   '&::-webkit-scrollbar-thumb': {
     bgcolor: color.bg.neutral.sunken,
-    borderRadius: '999px',
+    borderRadius: `${radius.full}px`,
   },
 } as const;
 
