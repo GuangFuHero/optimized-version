@@ -4,28 +4,19 @@
  * its sentence names, shows the backend's own text, so the bell never reads 「null」 or 「」.
  */
 
+import { ROLE_DISPLAY_NAMES } from '../constants/roles';
 import { ROLE_REQUEST_LABELS } from '../role-request/form';
+import { suggestionFieldLabel } from '../station/suggestion/fields';
 import type { NotificationRow } from './site-notices';
 
 type Params = Record<string, unknown>;
 type Text = { summary: string; detail: string | null };
 
-/** The backend's `_FIELD_LABELS` for a suggestion's field (`Backend/app/services/suggestion.py`). */
-const FIELD_LABELS: Record<string, string> = {
-  operational_status: '營運狀態',
-  op_hour: '服務時間',
-  name: '站點名稱',
-  description: '地址／位置說明',
-  type: '站點類型',
-  supply_status: '目前缺少',
-  property_name: '項目名稱',
-  quantity: '數量',
-};
+/** The roles an applicant asks for, by name; any other code is not one this sentence knows. */
+const REQUESTED_ROLES: Partial<Record<string, string>> = ROLE_REQUEST_LABELS;
 
-const MEMBER_ROLE_LABELS: Record<string, string> = {
-  member: '成員',
-  admin: '管理員',
-};
+/** A team role by name (成員、管理員); a role this list lacks shows its code. */
+const MEMBER_ROLES: ReadonlyMap<string, string> = ROLE_DISPLAY_NAMES;
 
 /** A value a sentence may name: a non-empty string or a finite number. Anything else is null. */
 function named(params: Params, key: string): string | null {
@@ -38,10 +29,6 @@ function named(params: Params, key: string): string | null {
   return typeof value === 'number' && Number.isFinite(value)
     ? String(value)
     : null;
-}
-
-function has(map: Record<string, string>, key: string): boolean {
-  return Object.prototype.hasOwnProperty.call(map, key);
 }
 
 /** The sentence for a type, or null when `params` lacks what it names. */
@@ -61,7 +48,7 @@ function write(type: string, params: Params): Text | null {
           station === null
             ? '有一筆站點修改建議待審'
             : `「${station}」有一筆修改建議待審`,
-        detail: has(FIELD_LABELS, field) ? FIELD_LABELS[field] : field,
+        detail: suggestionFieldLabel(field),
       };
     }
     case 'dedup_review_pending': {
@@ -77,12 +64,9 @@ function write(type: string, params: Params): Text | null {
     case 'role_request_submitted': {
       const applicant = named(params, 'applicant_name');
       const role = named(params, 'requested_role');
+      const roleLabel = role === null ? undefined : REQUESTED_ROLES[role];
 
-      if (
-        applicant === null ||
-        role === null ||
-        !has(ROLE_REQUEST_LABELS, role)
-      ) {
+      if (applicant === null || roleLabel === undefined) {
         return null;
       }
 
@@ -98,7 +82,7 @@ function write(type: string, params: Params): Text | null {
       }
 
       return {
-        summary: `${applicant}申請成為${ROLE_REQUEST_LABELS[role as keyof typeof ROLE_REQUEST_LABELS]}`,
+        summary: `${applicant}申請成為${roleLabel}`,
         detail,
       };
     }
@@ -144,7 +128,7 @@ function write(type: string, params: Params): Text | null {
         ? null
         : {
             summary: `歡迎加入團隊「${team}」`,
-            detail: `你的身分：${has(MEMBER_ROLE_LABELS, role) ? MEMBER_ROLE_LABELS[role] : role}`,
+            detail: `你的身分：${MEMBER_ROLES.get(role) ?? role}`,
           };
     }
     case 'team_suspended': {

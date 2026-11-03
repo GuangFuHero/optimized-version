@@ -14,9 +14,9 @@ import {
 
 import { designTokens, Icons } from '@rescue-frontend/ui';
 
+import { localDeviceStorage } from '../../storage';
 import {
   hasSeenPageHelp,
-  localSeenStorage,
   markPageHelpSeen,
   pageHelpWidth,
 } from '../site/page-help/page-help';
@@ -64,7 +64,7 @@ export function AdminPageHelpButton() {
     () =>
       key === null ||
       seenThisVisit.has(key) ||
-      hasSeenPageHelp(localSeenStorage(), key),
+      hasSeenPageHelp(localDeviceStorage(), key),
     // Seen, on the server and while hydrating: the device's record is read only once on it.
     () => true,
   );
@@ -75,7 +75,7 @@ export function AdminPageHelpButton() {
     }
 
     seenThisVisit.add(key);
-    markPageHelpSeen(localSeenStorage(), key);
+    markPageHelpSeen(localDeviceStorage(), key);
     listeners.forEach((listener) => listener());
   }, [key]);
 

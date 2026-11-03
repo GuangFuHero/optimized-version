@@ -114,6 +114,11 @@ export interface SheetLayoutProps {
   leading?: ReactNode;
   actions?: ReactNode;
   headerContent?: ReactNode;
+  /**
+   * A bar between the header and the body that does not scroll with it, with its own light rule
+   * (the admin 通知 list's 全部標為已讀 row, `wg-notify.jsx`).
+   */
+  toolbar?: ReactNode;
   footer?: ReactNode;
   /** The close button; the frame's `onClose` unless the content needs to guard it. */
   onClose?: () => void;
@@ -136,6 +141,7 @@ export function SheetLayout({
   leading,
   actions,
   headerContent,
+  toolbar,
   footer,
   onClose,
   closeLabel = '關閉',
@@ -225,6 +231,18 @@ export function SheetLayout({
         </Stack>
         {headerContent ? <Box sx={{ mt: '12px' }}>{headerContent}</Box> : null}
       </Box>
+
+      {toolbar ? (
+        <Box
+          sx={{
+            flexShrink: 0,
+            p: '9px 16px',
+            borderBottom: `1px solid ${color.bg.neutral.sunken}`,
+          }}
+        >
+          {toolbar}
+        </Box>
+      ) : null}
 
       <Box
         sx={{ flex: 1, minHeight: 0, overflowY: 'auto', p: flushBody ? 0 : px }}

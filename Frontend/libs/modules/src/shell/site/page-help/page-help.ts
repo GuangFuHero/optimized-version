@@ -4,6 +4,8 @@
  * gets no ？ at all.
  */
 
+import type { DeviceStorage } from '../../../storage';
+
 export type SitePageHelpKey = 'site:map' | 'site:list' | 'site:briefing';
 
 /** A titled part between 你可以 and 注意: a paragraph, a list, or both. */
@@ -128,19 +130,10 @@ export function pageHelpKey(pathname: string): SitePageHelpKey | null {
 }
 
 /** The parts of `Storage` the marks use: `localStorage` on the site, a stand-in in tests. */
-export type SeenStorage = Pick<Storage, 'getItem' | 'setItem'>;
+export type SeenStorage = DeviceStorage;
 
 /** On this device, which pages' help was opened: `{ "site:map": 1, "/tickets": 1, … }`. */
 export const PAGE_HELP_SEEN_KEY = 'wg:page-help-seen';
-
-/** Null where the browser will not hand it over (site data blocked); reading it can throw. */
-export function localSeenStorage(): SeenStorage | null {
-  try {
-    return window.localStorage;
-  } catch {
-    return null;
-  }
-}
 
 function readSeen(storage: SeenStorage | null): Record<string, unknown> {
   try {

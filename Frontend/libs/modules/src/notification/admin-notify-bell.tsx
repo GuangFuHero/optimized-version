@@ -6,8 +6,8 @@ import { useState } from 'react';
 
 import { CountBadge, designTokens } from '@rescue-frontend/ui';
 
-import { bellNewLabel } from './admin-notify-seen';
 import { AdminNotifySheet } from './admin-notify-sheet';
+import { bellLabel } from './site-notices';
 import { useAdminNotifyBadge } from './use-admin-notify-badge';
 
 const { color } = designTokens;
@@ -23,7 +23,7 @@ export function AdminNotifyBell() {
   return (
     <>
       <IconButton
-        aria-label={bellNewLabel(count)}
+        aria-label={bellLabel(count, '新通知')}
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={() => {

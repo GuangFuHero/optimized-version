@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { useCurrentUser } from '@rescue-frontend/data-access/admin';
 
+import { localDeviceStorage } from '../storage';
 import { readAdminNotices, type AdminNotice } from './admin-notices';
 import {
   countNewAdminNotices,
@@ -13,18 +14,7 @@ import {
   seenAtKey,
   writeSeenAt,
 } from './admin-notify-seen';
-import { adminNotificationKeys, listNotificationsAsync } from './api';
-
-/** Nothing is pushed, so the bell asks again each minute while the tab is in view, as the site's does. */
-const POLL_INTERVAL_MS = 60_000;
-
-function browserStorage(): Storage | null {
-  try {
-    return typeof window === 'undefined' ? null : window.localStorage;
-  } catch {
-    return null;
-  }
-}
+import { adminNotificationKeys, unreadNotificationsQuery } from './api';
 
 /**
  * The bell's number: unread back-office notices that came in since this account last opened the
@@ -40,15 +30,11 @@ export function useAdminNotifyBadge(): {
   const userUuid = user?.uuid ?? null;
 
   const unread = useQuery({
-    queryKey: adminNotificationKeys.unread,
-    // The 100 newest unread at most, site notices among them: past 99 the badge says 99+ anyway.
-    queryFn: () => listNotificationsAsync({ unreadOnly: true }),
+    // The 100 newest unread, site notices among them: an account with more misses the oldest
+    // (待後端: an unread count by type).
+    ...unreadNotificationsQuery(adminNotificationKeys.unread),
     select: (page): AdminNotice[] => readAdminNotices(page.items),
     enabled: userUuid !== null,
-    refetchInterval: POLL_INTERVAL_MS,
-    refetchOnWindowFocus: 'always',
-    refetchOnReconnect: 'always',
-    meta: { quietErrors: true },
   });
 
   const [seen, setSeen] = useState<{ user: string; at: string | null } | null>(
@@ -60,7 +46,7 @@ export function useAdminNotifyBadge(): {
       return;
     }
     const load = () =>
-      setSeen({ user: userUuid, at: readSeenAt(browserStorage(), userUuid) });
+      setSeen({ user: userUuid, at: readSeenAt(localDeviceStorage(), userUuid) });
     load();
     // Another tab opened the list: its bell cleared, so this one does too.
     const onStorage = (event: StorageEvent) => {
@@ -78,8 +64,8 @@ export function useAdminNotifyBadge(): {
       if (!userUuid || !at) {
         return;
       }
-      writeSeenAt(browserStorage(), userUuid, at);
-      setSeen({ user: userUuid, at: readSeenAt(browserStorage(), userUuid) ?? at });
+      writeSeenAt(localDeviceStorage(), userUuid, at);
+      setSeen({ user: userUuid, at: readSeenAt(localDeviceStorage(), userUuid) ?? at });
     },
     [userUuid],
   );

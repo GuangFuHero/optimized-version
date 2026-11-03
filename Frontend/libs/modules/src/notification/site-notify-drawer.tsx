@@ -1,7 +1,6 @@
 'use client';
 
 import { Box, ButtonBase, Stack, Typography } from '@mui/material';
-import { useInfiniteQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useEffect, useState, type MouseEvent, type ReactNode } from 'react';
 import { useQuery } from 'urql';
@@ -25,15 +24,15 @@ import {
   myClaimTicketHref,
   openClaimedTicket,
 } from '../ticket/my-claims/my-claims';
-import { listNotificationsAsync, siteNotificationKeys } from './api';
+import { siteNotificationKeys } from './api';
 import {
   readSiteNotices,
-  readsNextPageUnasked,
   ticketOfNeed,
   type SiteNotice,
   type SiteNoticeKind,
 } from './site-notices';
 import { useMarkNotificationsRead } from './use-mark-notifications-read';
+import { useNotificationPages } from './use-notification-pages';
 
 const { color, radius, typography } = designTokens;
 
@@ -293,15 +292,9 @@ function SiteNotifyContent({
     requestPolicy: 'network-only',
     context: NEED_LISTS_QUERY_CONTEXT,
   });
-  const list = useInfiniteQuery({
-    queryKey: siteNotificationKeys.list,
-    queryFn: ({ pageParam }) => listNotificationsAsync({ page: pageParam }),
-    initialPageParam: 1,
-    getNextPageParam: (last, pages) =>
-      last.has_more ? pages.length + 1 : undefined,
-    refetchOnMount: 'always',
-    // The drawer says so itself, in place of the notices.
-    meta: { quietErrors: true },
+  const { list, notices, searching } = useNotificationPages({
+    listKey: siteNotificationKeys.list,
+    read: readSiteNotices,
   });
   const markRead = useMarkNotificationsRead({
     listKey: siteNotificationKeys.list,
@@ -312,9 +305,6 @@ function SiteNotifyContent({
   const listsSettled =
     Boolean(requests.data || requests.error) &&
     Boolean(claims.data || claims.error);
-  const notices = list.data
-    ? readSiteNotices(list.data.pages.flatMap((page) => page.items))
-    : null;
   // Told once the notices are in, and not taken back while they load again at the next opening:
   // the subtitle would come and go each time. A page that shows nothing is not empty while another
   // follows it, as the site shows only some kinds of notice; a read that fails puts the subtitle back
@@ -332,26 +322,6 @@ function SiteNotifyContent({
     }
   }, [empty, onEmpty]);
 
-  // Pages that show nothing, with more after them, would leave only 載入更多 under the subtitle: the
-  // next is read without a tap, a round at a time. Not while a read is on its way (each opening reads
-  // the pages it has again first), nor after one failed, which 載入更多 tries again.
-  const readingOn =
-    notices !== null &&
-    readsNextPageUnasked({
-      shown: notices.length,
-      pagesRead: list.data?.pages.length ?? 0,
-      hasNextPage: list.hasNextPage,
-      nextPageFailed: list.isFetchNextPageError,
-    });
-  const readNext = readingOn && !list.isFetching;
-  const { fetchNextPage } = list;
-
-  useEffect(() => {
-    if (readNext) {
-      void fetchNextPage();
-    }
-  }, [readNext, fetchNextPage]);
-
   if (!notices || !listsSettled) {
     return list.isError ? (
       <Notice>讀不到通知，請稍後再試一次。</Notice>
@@ -365,9 +335,6 @@ function SiteNotifyContent({
     claims: claims.data?.myTaskAssignments ?? [],
   };
   const unread = notices.filter((notice) => !notice.read);
-  // Nothing shown yet and the next page on its way, by itself or from a tap: one loading line, no button.
-  const searching =
-    notices.length === 0 && (readingOn || list.isFetchingNextPage);
 
   const openNotice = (
     event: MouseEvent<HTMLElement>,

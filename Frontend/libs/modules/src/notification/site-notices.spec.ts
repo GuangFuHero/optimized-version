@@ -288,6 +288,8 @@ describe('bellLabel', () => {
   it('says how many are unread, for a screen reader that cannot see the badge', () => {
     expect(bellLabel(0)).toBe('通知');
     expect(bellLabel(12)).toBe('通知，12 則未讀');
+    expect(bellLabel(3, '新通知')).toBe('通知，3 則新通知');
+    expect(bellLabel(0, '新通知')).toBe('通知');
   });
 });
 

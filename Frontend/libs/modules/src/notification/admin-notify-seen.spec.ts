@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 
 import type { AdminNotice } from './admin-notices';
 import {
-  bellNewLabel,
   countNewAdminNotices,
   newestCreatedAt,
   readSeenAt,
@@ -138,12 +137,5 @@ describe('seen-at storage', () => {
     storage.setItem(seenAtKey('u1'), 'abc');
 
     expect(readSeenAt(storage, 'u1')).toBeNull();
-  });
-});
-
-describe('bellNewLabel', () => {
-  it('says 新通知, never 未讀', () => {
-    expect(bellNewLabel(0)).toBe('通知');
-    expect(bellNewLabel(3)).toBe('通知，3 則新通知');
   });
 });

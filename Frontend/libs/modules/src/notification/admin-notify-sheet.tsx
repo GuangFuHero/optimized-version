@@ -1,7 +1,6 @@
 'use client';
 
 import { Box, ButtonBase, Stack, Typography } from '@mui/material';
-import { useInfiniteQuery } from '@tanstack/react-query';
 import {
   Building2,
   CheckCheck,
@@ -14,7 +13,6 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
 
 import {
   Button,
@@ -23,6 +21,7 @@ import {
   SheetFrame,
   SheetLayout,
   Tag,
+  VisuallyHidden,
 } from '@rescue-frontend/ui';
 
 import {
@@ -33,65 +32,35 @@ import {
   type AdminNoticeGroup,
   type AdminNoticeKind,
 } from './admin-notices';
-import {
-  adminNotificationKeys,
-  listNotificationsAsync,
-  siteNotificationKeys,
-} from './api';
-import { readsNextPageUnasked } from './site-notices';
+import { adminNotificationKeys } from './api';
 import { useMarkNotificationsRead } from './use-mark-notifications-read';
+import { useNotificationPages } from './use-notification-pages';
 
 const { color, iconSize, primitives, radius, typography } = designTokens;
-
-/** Screen-reader-only text. `@mui/utils` is not a direct dependency, so the same recipe lives here. */
-const VISUALLY_HIDDEN = {
-  position: 'absolute',
-  width: 1,
-  height: 1,
-  m: '-1px',
-  p: 0,
-  overflow: 'hidden',
-  clip: 'rect(0 0 0 0)',
-  whiteSpace: 'nowrap',
-  border: 0,
-} as const;
 
 /** The sheet's own body padding (`flushBody` hands it to the content): 16px on mobile, 24px above. */
 const BODY_PADDING = { mobile: 2, tablet: 3 } as const;
 
 type Tone = 'warning' | 'info' | 'neutral';
 
-/** Each kind's label, icon and colour (prototype `TYPES`). */
+/** A tone's icon colour, as its tag's (prototype `TYPES[].fg`). */
+const TONE_FG: Record<Tone, string> = {
+  warning: color.fg.warning,
+  info: color.fg.info,
+  neutral: color.fg.neutral.subtle,
+};
+
+/** Each kind's label, icon and tone (prototype `TYPES`). */
 const KIND_LOOKS: Record<
   AdminNoticeKind,
-  { label: string; Icon: LucideIcon; tone: Tone; fg: string }
+  { label: string; Icon: LucideIcon; tone: Tone }
 > = {
-  suggestion: {
-    label: '站點修改建議',
-    Icon: ClipboardCheck,
-    tone: 'warning',
-    fg: color.fg.warning,
-  },
-  dedup: {
-    label: '疑似重複',
-    Icon: Copy,
-    tone: 'warning',
-    fg: color.fg.warning,
-  },
-  role: {
-    label: '權限申請',
-    Icon: UserPlus,
-    tone: 'warning',
-    fg: color.fg.warning,
-  },
-  assign: { label: '指派', Icon: Flag, tone: 'info', fg: color.fg.info },
-  team: { label: '團隊', Icon: Users, tone: 'info', fg: color.fg.info },
-  station: {
-    label: '站點動態',
-    Icon: Building2,
-    tone: 'neutral',
-    fg: color.fg.neutral.subtle,
-  },
+  suggestion: { label: '站點修改建議', Icon: ClipboardCheck, tone: 'warning' },
+  dedup: { label: '疑似重複', Icon: Copy, tone: 'warning' },
+  role: { label: '權限申請', Icon: UserPlus, tone: 'warning' },
+  assign: { label: '指派', Icon: Flag, tone: 'info' },
+  team: { label: '團隊', Icon: Users, tone: 'info' },
+  station: { label: '站點動態', Icon: Building2, tone: 'neutral' },
 };
 
 const GROUP_COLORS: Record<AdminNoticeGroup, string> = {
@@ -159,7 +128,7 @@ function NoticeRow({
           flexShrink: 0,
           borderRadius: `${radius.full}px`,
           bgcolor: color.bg.neutral.subtle,
-          color: look.fg,
+          color: TONE_FG[look.tone],
         }}
       >
         <look.Icon size={iconSize.md} aria-hidden />
@@ -182,11 +151,7 @@ function NoticeRow({
             </Typography>
           ) : null}
         </Stack>
-        {unread ? (
-          <Box component="span" sx={VISUALLY_HIDDEN}>
-            未讀
-          </Box>
-        ) : null}
+        {unread ? <VisuallyHidden>未讀</VisuallyHidden> : null}
         <Typography
           sx={{
             ...typography.body[400],
@@ -258,7 +223,7 @@ function AdminNotifyEmpty() {
             }}
           >
             {EMPTY_REASONS.map(({ kind, text }) => {
-              const { Icon, fg } = KIND_LOOKS[kind];
+              const { Icon, tone } = KIND_LOOKS[kind];
 
               return (
                 <Stack
@@ -272,7 +237,7 @@ function AdminNotifyEmpty() {
                     color: color.fg.neutral.subtle,
                   }}
                 >
-                  <Icon size={16} aria-hidden color={fg} />
+                  <Icon size={16} aria-hidden color={TONE_FG[tone]} />
                   {text}
                 </Stack>
               );
@@ -310,51 +275,19 @@ export function AdminNotifySheet({ open, onClose }: AdminNotifySheetProps) {
 
 function AdminNotifyContent({ onClose }: { onClose: () => void }) {
   const router = useRouter();
-  const list = useInfiniteQuery({
-    queryKey: adminNotificationKeys.list,
-    queryFn: ({ pageParam }) => listNotificationsAsync({ page: pageParam }),
-    initialPageParam: 1,
-    getNextPageParam: (last, pages) =>
-      last.has_more ? pages.length + 1 : undefined,
-    refetchOnMount: 'always',
-    // The sheet says so itself, in place of the notices.
-    meta: { quietErrors: true },
+  // A staff member's newest page can be all site notices: the hook reads on without a tap.
+  const { list, notices, searching, empty } = useNotificationPages({
+    listKey: adminNotificationKeys.list,
+    read: readAdminNotices,
   });
+  // The admin app shows no site bell, so only its own notices are read again.
   const markRead = useMarkNotificationsRead({
     listKey: adminNotificationKeys.list,
-    invalidateKeys: [adminNotificationKeys.all, siteNotificationKeys.all],
+    invalidateKeys: [adminNotificationKeys.all],
   });
 
-  const notices = list.data
-    ? readAdminNotices(list.data.pages.flatMap((page) => page.items))
-    : null;
   const groups = notices ? groupAdminNotices(notices) : [];
   const unread = notices ? notices.filter((notice) => !notice.read) : [];
-
-  // A staff member's newest page can be all site notices: read on without a tap, as the site does,
-  // but not while a read is on its way, nor after one failed (載入更多 tries again).
-  const readingOn =
-    notices !== null &&
-    readsNextPageUnasked({
-      shown: notices.length,
-      pagesRead: list.data?.pages.length ?? 0,
-      hasNextPage: list.hasNextPage,
-      nextPageFailed: list.isFetchNextPageError,
-    });
-  const readNext = readingOn && !list.isFetching;
-  const { fetchNextPage } = list;
-
-  useEffect(() => {
-    if (readNext) {
-      void fetchNextPage();
-    }
-  }, [readNext, fetchNextPage]);
-
-  const searching =
-    notices !== null &&
-    notices.length === 0 &&
-    (readingOn || list.isFetchingNextPage);
-  const empty = notices !== null && notices.length === 0 && !list.hasNextPage;
 
   const openNotice = (notice: AdminNotice) => {
     if (!notice.read) {
@@ -380,7 +313,8 @@ function AdminNotifyContent({ onClose }: { onClose: () => void }) {
         </Box>
       }
       subtitle="等你處理的事，以及跟你團隊有關的動態"
-      headerContent={
+      toolbar={
+        // Left out with nothing listed: there is nothing to call read (prototype).
         notices && notices.length > 0 ? (
           <Stack direction="row" sx={{ alignItems: 'center', gap: '10px' }}>
             <Typography
@@ -388,8 +322,9 @@ function AdminNotifyContent({ onClose }: { onClose: () => void }) {
             >
               開啟這份清單只會清掉鈴鐺上的數字，不會把任何一則標成已讀。
             </Typography>
+            {/* The prototype's white, grey-ruled tool button: BTN-109 `neutral`. */}
             <Button
-              variant="outline"
+              variant="neutral"
               size="sm"
               startIcon={<CheckCheck size={iconSize.sm} />}
               disabled={unread.length === 0 || markRead.isPending}

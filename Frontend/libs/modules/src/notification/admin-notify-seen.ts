@@ -1,3 +1,4 @@
+import type { DeviceStorage } from '../storage';
 import type { AdminNotice } from './admin-notices';
 
 /*
@@ -54,7 +55,7 @@ export function seenAtKey(userUuid: string): string {
 
 /** The last opening for this account, or null when there is none, it is unreadable, or storage is blocked. */
 export function readSeenAt(
-  storage: Pick<Storage, 'getItem'> | null,
+  storage: Pick<DeviceStorage, 'getItem'> | null,
   userUuid: string,
 ): string | null {
   try {
@@ -67,7 +68,7 @@ export function readSeenAt(
 
 /** Records an opening. Never moves back (another tab may have seen later), never throws. */
 export function writeSeenAt(
-  storage: Pick<Storage, 'getItem' | 'setItem'> | null,
+  storage: DeviceStorage | null,
   userUuid: string,
   at: string,
 ): void {
@@ -84,9 +85,4 @@ export function writeSeenAt(
   } catch {
     // Private mode or blocked storage: the number simply comes back on the next load.
   }
-}
-
-/** The bell's spoken name. 「未讀」 is kept for the list's own rows (通知鈴鐺.md). */
-export function bellNewLabel(count: number): string {
-  return count > 0 ? `通知，${count} 則新通知` : '通知';
 }
