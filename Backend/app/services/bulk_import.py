@@ -50,6 +50,7 @@ from app.services.bulk_columns import (
     ticket_columns,
 )
 from app.services.bulk_dedup import Comparison, RowDraft, SuspectedRow
+from app.services.bulk_export import ALL_TASK_TYPES
 from app.services.bulk_match import (
     AMBIGUOUS,
     MATCHED,
@@ -85,6 +86,12 @@ logger = logging.getLogger(__name__)
 
 class BulkImportError(ValueError):
     """The upload cannot be processed at all (mapped to 400 by the endpoint)."""
+
+
+def _require_one_kind(task_type: str) -> None:
+    """An import file is one kind of need: `all`, every kind on the export, is not a type of its own."""
+    if task_type == ALL_TASK_TYPES:
+        raise BulkImportError("匯入要選一種需求種類，不能是全部種類（all）")
 
 
 @dataclass(frozen=True)
@@ -909,6 +916,7 @@ async def preview_tickets(
     mapping: dict[str, str] | None = None,
 ) -> PreviewResult:
     """Dry-run a ticket file. Same contract as `preview_stations`."""
+    _require_one_kind(task_type)
     async with stable_actor(db, actor):
         await require_scope(actor, Perm.TICKET_IMPORT, db)
         table, rows = await _read(raw, filename, mapping, columns=TICKET_COLUMNS)
@@ -1159,6 +1167,7 @@ async def commit_tickets(
     Every new task is put to the fast dedup layer before any row is written, as for stations
     (`commit_stations`, ADR-398). A declined first line holds the lines after it.
     """
+    _require_one_kind(task_type)
     async with stable_actor(db, actor):
         await require_scope(actor, Perm.TICKET_IMPORT, db)
         table, rows = await _read(raw, filename, mapping, columns=TICKET_COLUMNS)

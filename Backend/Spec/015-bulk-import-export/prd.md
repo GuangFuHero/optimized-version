@@ -83,7 +83,7 @@
 | `GET /bulk/stations/export?station_type=&format=` | 檔案下載（`Content-Disposition` 依 RFC 6266 編碼） | 400 型別未知 / 格式不支援 / 超過 10,000 列；403 無權限 |
 | `GET /bulk/tickets/export?task_type=&format=&responsible_team_uuid=&unassigned_only=` | 同上；`task_type=all` 是全部種類一份檔（只有固定欄位）（#285） | 同上；組織分配兩個一起給、範本配 `all` 也是 400 |
 | `GET /bulk/tickets/export/counts?responsible_team_uuid=&unassigned_only=` | `{counts, max_rows, own_team}`；`own_team` 是匯出只到自己隊責任區時的團隊（#285） | 400 組織分配兩個一起給；403 |
-| `POST /bulk/{stations,tickets}/import/preview`（multipart：`file`、選填 `mapping` JSON） | `BulkPreviewResponse` | 400 檔案無法解析 / 超過上限 / mapping 不合法；403 |
+| `POST /bulk/{stations,tickets}/import/preview`（multipart：`file`、選填 `mapping` JSON） | `BulkPreviewResponse` | 400 檔案無法解析 / 超過上限 / mapping 不合法 / 任務單的 `task_type=all`；403 |
 | `POST /bulk/{stations,tickets}/import/commit`（同上） | `BulkImportResponse` | 同上 |
 
 ⚠️ 這組端點的 400 目前**只有 `detail` 字串，沒有 `code`**（auth 端點已走 #41 的錯誤碼合約）。見 §8 待決 1。

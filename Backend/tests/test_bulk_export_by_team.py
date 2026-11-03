@@ -16,6 +16,7 @@ import pytest
 from geoalchemy2.shape import from_shape
 from openpyxl import load_workbook
 from shapely.geometry import Point, Polygon
+from sqlalchemy import func, select
 
 from app.core.permissions import Perm
 from app.core.tabular import read_table, write_csv, write_xlsx
@@ -32,7 +33,7 @@ from app.services.bulk_export import (
     own_export_team,
     ticket_import_template,
 )
-from app.services.bulk_import import preview_tickets
+from app.services.bulk_import import BulkImportError, commit_tickets, preview_tickets
 from tests.test_bulk_endpoints import BASE, _user_with
 from tests.test_bulk_export import IN_ZONE, OUT_OF_ZONE, _grant, _station, _ticket_with_task
 
@@ -210,6 +211,22 @@ _IMPORT_CODES = tuple(_ticket_row("x"))
 _IMPORT_LABELS = tuple(
     label_of(next(c for c in TICKET_COLUMNS if c.header == code)) for code in _IMPORT_CODES
 )
+
+
+@pytest.mark.parametrize("step", ["preview", "commit"])
+async def test_an_import_of_every_kind_is_refused(db, step):
+    """`all` means every kind on the export; an import file is one kind, so it is not a type."""
+    actor = await _actor(db, f"AllImporter-{step}", [(Perm.TICKET_IMPORT, "all"), (Perm.TICKET_ADD, "all")])
+    row = _ticket_row("全部種類匯入") | {"task_type": ""}
+    raw = write_csv(_IMPORT_CODES, [row], labels=_IMPORT_LABELS)
+    run = preview_tickets if step == "preview" else commit_tickets
+    stored_as_all = select(func.count()).select_from(TicketTask).where(TicketTask.task_type == "all")
+    before = await db.scalar(stored_as_all)
+
+    with pytest.raises(BulkImportError, match="all"):
+        await run(db, actor=actor, raw=raw, filename="t.csv", task_type="all")
+
+    assert await db.scalar(stored_as_all) == before
 
 
 @pytest.mark.parametrize("file_format", ["csv", "xlsx"])
