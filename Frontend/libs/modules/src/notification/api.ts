@@ -22,6 +22,13 @@ export const siteNotificationKeys = {
   list: ['site-notifications', 'list'],
 } as const;
 
+/** The back office's bell reads the same notifications under its own keys, so the two never share a cache. */
+export const adminNotificationKeys = {
+  all: ['admin-notifications'],
+  unread: ['admin-notifications', 'unread'],
+  list: ['admin-notifications', 'list'],
+} as const;
+
 /**
  * The most the backend sends in one page. The site shows only some of the kinds it sends, so it
  * reads as many as it can at once rather than a page of 20 that may hold none of its own.
