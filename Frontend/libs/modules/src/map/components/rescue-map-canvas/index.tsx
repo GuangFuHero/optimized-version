@@ -1060,7 +1060,8 @@ export function RescueMapCanvas({
         }
       : controllerRef.current.initialView;
     const map = L.map(host, {
-      zoomControl: true,
+      // Added below with Chinese names: Leaflet's own reads "Zoom in" / "Zoom out" to a screen reader.
+      zoomControl: false,
       minZoom: 7,
       maxZoom: 18,
       center: initialView.center,
@@ -1075,9 +1076,14 @@ export function RescueMapCanvas({
 
     const mapOptions = mapOptionsRef.current;
 
-    if (mapOptions.zoomControlPosition) {
-      map.zoomControl?.setPosition(mapOptions.zoomControlPosition);
-    }
+    // Always on the map; the `Map` decides whether it shows (`showZoomControl`).
+    L.control
+      .zoom({
+        position: mapOptions.zoomControlPosition ?? 'topleft',
+        zoomInTitle: '放大',
+        zoomOutTitle: '縮小',
+      })
+      .addTo(map);
 
     const overlayLayer = L.layerGroup();
     const cellLayer = L.layerGroup();
@@ -1440,8 +1446,10 @@ export function RescueMapCanvas({
       return;
     }
 
+    // Bottom right, above the attribution, at every width: the bottom left is kept for the map's
+    // summary cards, the top right holds 圖層 and the zoom buttons.
     const scaleControl = L.control.scale({
-      position: 'bottomleft',
+      position: 'bottomright',
       metric: true,
       imperial: false,
       maxWidth: 120,

@@ -125,6 +125,8 @@ export {
   getRescueColorScheme,
   Icons,
   layoutSizes,
+  siteMapControls,
+  siteMapLeftControlsMaxWidth,
   theme,
   themedIcon,
 } from './foundation';
