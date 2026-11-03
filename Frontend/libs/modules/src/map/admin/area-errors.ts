@@ -5,7 +5,7 @@ const AREA_ERROR_MESSAGES: readonly [needle: string, message: string][] = [
   ['needs a status', '危險區需要狀態'],
   ['Only gov teams may draw', '只有政府團隊可以劃設區域'],
   ['must be Polygon or MultiPolygon', '區域範圍必須是一個封閉的多邊形'],
-  ['is always public', '危險區和責任區一律公開，不能隱藏'],
+  ['is always public', '危險區和責任區不能改成只給後台看'],
   ['Team is not active', '這個團隊已停用，不能指派'],
   ['Team not found', '找不到這個團隊'],
   ['Area not found', '找不到這個區域，可能已經被刪除'],

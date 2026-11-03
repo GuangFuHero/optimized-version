@@ -202,6 +202,9 @@ export const OVERLAY_LAYER_CONFIG: Record<
   'public-zones': {
     label: '責任區與標示區',
     description: '團隊負責的範圍，和志工休息區、集合點等',
+    guestLabel: '標示區',
+    guestDescription: '志工休息區、集合點等',
+    guestNote: '責任區要登入才看得到',
     // The 責任區's indigo: 7.9:1 on the panel's white surface.
     color: PUBLIC_ZONE_COLORS.team_zone,
     icon: MapPinned,
