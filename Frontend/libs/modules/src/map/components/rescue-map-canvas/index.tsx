@@ -186,10 +186,10 @@ function getBuildingMarkers(
   return markers.filter((marker) => marker.building);
 }
 
-/** marker icon 的外觀只由色調（detailType）、圖示（variant）與標籤文字決定，大樓另加件數與缺額 —— 另加選用的 pin／tooltip。 */
+/** marker icon 的外觀只由色調（detailType）、圖示（variant）與標籤文字決定，大樓另加件數 —— 另加選用的 pin／tooltip。 */
 function getMarkerIconSignature(item: RescueMapMarkerItem): string {
   const base = item.building
-    ? `${item.detailType}|${item.variant}|${item.label}|${item.building.ticketCount}|${item.building.shortfall}`
+    ? `${item.detailType}|${item.variant}|${item.label}|${item.building.ticketCount}`
     : `${item.detailType}|${item.variant}|${item.label}`;
 
   if (!item.pin && !item.tooltip) {

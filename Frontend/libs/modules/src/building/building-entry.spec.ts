@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildingEntries, buildingEntryWords } from './building-entry';
+import { buildingEntries, buildingEntryCount } from './building-entry';
 import type { BuildingMapEntry } from './use-building-maps';
 
 function building(
@@ -40,7 +40,7 @@ describe('buildingEntries', () => {
     ).toEqual(['大進國小', '光復鄉公所']);
   });
 
-  it('puts those short of the most people first, then those with tickets, then those with none', () => {
+  it('puts those still short first, then those with tickets, then those with none', () => {
     expect(
       buildingEntries(
         [
@@ -52,7 +52,7 @@ describe('buildingEntries', () => {
         ],
         undefined,
       ).map((b) => b.name),
-    ).toEqual(['丙', '丁', '乙', '戊', '甲']);
+    ).toEqual(['丁', '丙', '乙', '戊', '甲']);
   });
 
   it('does not put more tickets first: they may all be done, as closed ones count too', () => {
@@ -64,10 +64,10 @@ describe('buildingEntries', () => {
     ).toEqual(['大進國小', '光復鄉公所']);
   });
 
-  it('goes back to name order between buildings as short and as full as each other', () => {
+  it('does not put the most short first: people and supplies do not add up', () => {
     expect(
       buildingEntries(
-        [counted('光復鄉公所', 3, 2), counted('大進國小', 3, 2)],
+        [counted('光復鄉公所', 3, 53), counted('大進國小', 3, 2)],
         undefined,
       ).map((b) => b.name),
     ).toEqual(['大進國小', '光復鄉公所']);
@@ -85,29 +85,19 @@ describe('buildingEntries', () => {
   });
 });
 
-describe('buildingEntryWords', () => {
-  it('gives a guest 看各樓層 and no 缺: a guest is given no counts', () => {
-    expect(buildingEntryWords({ ticketCount: null, shortfall: null })).toEqual({
-      count: '看各樓層',
-      short: null,
-    });
+describe('buildingEntryCount', () => {
+  it('gives a guest 看各樓層: a guest is given no counts', () => {
+    expect(buildingEntryCount({ ticketCount: null })).toBe('看各樓層');
   });
 
   it('says 還沒有求助, never 0 件, for a building with no tickets', () => {
-    expect(buildingEntryWords({ ticketCount: 0, shortfall: 0 })).toEqual({
-      count: '還沒有求助',
-      short: null,
-    });
+    expect(buildingEntryCount({ ticketCount: 0 })).toBe('還沒有求助');
   });
 
-  it('counts the tickets, and adds 缺 only while they are short of people', () => {
-    expect(buildingEntryWords({ ticketCount: 7, shortfall: 11 })).toEqual({
-      count: '7 件',
-      short: '缺 11',
-    });
-    expect(buildingEntryWords({ ticketCount: 2, shortfall: 0 })).toEqual({
-      count: '2 件',
-      short: null,
-    });
+  it('counts the tickets and never says what they are short', () => {
+    const words = buildingEntryCount({ ticketCount: 7 });
+
+    expect(words).toBe('7 件');
+    expect(words).not.toContain('缺');
   });
 });

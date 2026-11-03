@@ -122,17 +122,6 @@ export const rescueMapMarkerStyles = {
     lineHeight: 1,
     fontWeight: 700,
   },
-  // 缺 M on red, as the list and the floors' drawer say a shortfall.
-  '.map-building__short': {
-    padding: '2px 6px',
-    borderRadius: `${radius.full}px`,
-    background: color.bg.danger.default,
-    color: color.fg.onDanger,
-    fontFamily: typography.data[300].fontFamily,
-    ...displayTextSizeCss(11),
-    lineHeight: 1.3,
-    fontWeight: 700,
-  },
   '.map-marker-wrapper:hover .map-building': {
     transform: 'scale(1.04)',
   },

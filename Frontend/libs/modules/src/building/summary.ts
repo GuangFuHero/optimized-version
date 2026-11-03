@@ -97,8 +97,16 @@ export function summarizeTicket(ticket: BuildingTicket): TicketSummary {
 }
 
 export interface TicketsSummary {
-  /** People still missing, all of them together. */
+  /**
+   * People and supplies still missing, all of them together: what opens a floor by itself. Never
+   * shown, as 3 people and 50 lunch boxes would read 「缺 53」; `shortCount` is.
+   */
   lack: number;
+  /**
+   * Tickets not finished with a people or supply need still short: a ticket short on two needs is
+   * one. A floor's header says it, as 「N 件缺人」.
+   */
+  shortCount: number;
   /** Searches and rescues not finished: what a floor's header leads with. */
   rescueOpen: number;
   closedCount: number;
@@ -109,6 +117,7 @@ export function summarizeTickets(
   tickets: readonly BuildingTicket[],
 ): TicketsSummary {
   let lack = 0;
+  let shortCount = 0;
   let rescueOpen = 0;
   let closedCount = 0;
 
@@ -117,6 +126,10 @@ export function summarizeTickets(
 
     lack += summary.lack;
 
+    if (summary.lack > 0) {
+      shortCount += 1;
+    }
+
     if (summary.closed) {
       closedCount += 1;
     } else if (isRescueTicket(ticket)) {
@@ -124,7 +137,13 @@ export function summarizeTickets(
     }
   }
 
-  return { lack, rescueOpen, closedCount, ticketCount: tickets.length };
+  return {
+    lack,
+    shortCount,
+    rescueOpen,
+    closedCount,
+    ticketCount: tickets.length,
+  };
 }
 
 /** A floor opens by itself with someone still to find or people still missing on it. */
