@@ -1991,7 +1991,7 @@ function DoneDetail({
       {decisions.length ? (
         <Stack sx={{ gap: 0.75 }}>
           <Box component="span" sx={typography.label[400]}>
-            已寫入變更紀錄
+            處理紀錄
           </Box>
           {decisions.map((event) => (
             <Box

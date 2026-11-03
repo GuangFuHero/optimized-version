@@ -14,6 +14,7 @@ import {
   invalidateTicketWrite,
   type AdminQueryOptions,
 } from './graphql-fetchers';
+import { SILENT_ERROR_META } from './query-client';
 import { ticketKeys } from './ticket-query-keys';
 
 export const currentUserQuery = () =>
@@ -916,7 +917,12 @@ export const duplicateHintRatesQuery = () =>
   });
 
 export function useDuplicateHintRates(options: AdminQueryOptions = {}) {
-  return useQuery({ ...duplicateHintRatesQuery(), enabled: options.enabled });
+  return useQuery({
+    ...duplicateHintRatesQuery(),
+    enabled: options.enabled,
+    // The rates panel shows its own 無法載入統計 with a retry (STAT-109); no toast on top.
+    meta: { [SILENT_ERROR_META]: true },
+  });
 }
 
 export const duplicatePairQuery = (pairUuid: string) =>

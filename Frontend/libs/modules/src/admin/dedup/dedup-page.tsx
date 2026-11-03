@@ -14,10 +14,10 @@ import {
 } from '@rescue-frontend/data-access/admin';
 import {
   Badge,
+  Button,
   Callout,
   designTokens,
   ListPagination,
-  SegmentedTabs,
   Tabs,
 } from '@rescue-frontend/ui';
 
@@ -181,37 +181,42 @@ export function DedupReviewPage() {
           />
         </Tabs>
         <Box sx={{ flex: 1 }} />
-        <SegmentedTabs
-          value={view}
-          onChange={(_, value: PairView) => {
-            setView(value);
-            setPage(0);
-          }}
+        {/* BTN-114: a grey pill holding ghost sm buttons; the chosen one is light orange (BTN-107),
+            never black, which means nothing in this palette (design review, 2026-11-03). */}
+        <Stack
+          direction="row"
+          role="group"
           aria-label="待處理或已處理"
           sx={{
-            alignSelf: 'auto',
-            p: '2px',
-            bgcolor: 'transparent',
+            gap: 0.5,
+            p: 0.5,
             borderRadius: `${radius.full}px`,
-            '& .MuiTabs-list': { gap: 0 },
-            '& .MuiTab-root': {
-              minHeight: 28,
-              height: 28,
-              borderRadius: `${radius.full}px`,
-              ...typography.label[300],
-              color: color.fg.neutral.subtle,
-              '&.Mui-selected': {
-                bgcolor: color.fg.neutral.default,
-                boxShadow: 'none',
-                fontWeight: 400,
-                color: color.fg.inverse,
-              },
-            },
+            bgcolor: color.bg.neutral.sunken,
           }}
         >
-          <Tab value="pending" label="待處理" />
-          <Tab value="done" label="已處理" />
-        </SegmentedTabs>
+          {(
+            [
+              ['pending', '待處理'],
+              ['done', '已處理'],
+            ] as const
+          ).map(([value, label]) => (
+            <Button
+              key={value}
+              variant="ghost"
+              size="sm"
+              selected={view === value}
+              onClick={() => {
+                setView(value);
+                setPage(0);
+              }}
+              sx={
+                view === value ? undefined : { color: color.fg.neutral.subtle }
+              }
+            >
+              {label}
+            </Button>
+          ))}
+        </Stack>
         <Box
           component="select"
           aria-label="排序"
