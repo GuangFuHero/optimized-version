@@ -39,6 +39,7 @@ import { RoleRequestQueue, usePendingRoleRequests } from './queue';
 import {
   directory,
   matchesName,
+  membershipsOf,
   platformOf,
   platformStaff,
   superAdminCount,
@@ -46,6 +47,7 @@ import {
   type AdminUser,
   type DirectoryPerson,
   type PlatformKey,
+  type TeamMembership,
 } from './roster';
 
 const { color, typography } = designTokens;
@@ -54,12 +56,16 @@ type Perm = components['schemas']['Perm'];
 
 const LAST_SUPER_RULE = '平台角色不變量 —— 平台必須至少保留 1 位超級管理員';
 
+interface Person {
+  uuid: string;
+  name: string;
+  platform: PlatformKey;
+  /** Their team identities; a data auditor without one loses the back office on revoking. */
+  teams?: readonly TeamMembership[];
+}
+
 interface PersonActions {
-  actionsFor: (person: {
-    uuid: string;
-    name: string;
-    platform: PlatformKey;
-  }) => NeedAction[];
+  actionsFor: (person: Person) => NeedAction[];
   dialogs: ReactElement;
 }
 
@@ -82,12 +88,12 @@ function usePersonActions(
     uuid: string;
     name: string;
   } | null>(null);
-  // 指派為超級管理員 and 改回一般帳號 confirm first, as 撤銷超級管理員 does.
+  // 指派為超級管理員 and 撤銷資料檢核員 confirm first, as 撤銷超級管理員 does.
   const [granting, setGranting] = useState<{
     uuid: string;
     name: string;
-    role: 'super_admin' | 'user';
   } | null>(null);
+  const [revokingAuditor, setRevokingAuditor] = useState<Person | null>(null);
   const supers = superAdminCount(users);
 
   const assign = (
@@ -105,11 +111,12 @@ function usePersonActions(
             role === 'super_admin'
               ? `已指派 ${person.name} 為超級管理員`
               : role === 'user'
-                ? `已將 ${person.name} 改回一般帳號`
+                ? `已撤銷 ${person.name} 的${platformLabel('data_auditor')}`
                 : `已撤銷 ${person.name} 的超級管理員`,
           );
           setRevokingSuper(null);
           setGranting(null);
+          setRevokingAuditor(null);
         },
       },
     );
@@ -119,13 +126,13 @@ function usePersonActions(
       ? [
           {
             label: '指派為超級管理員',
-            onSelect: () => setGranting({ ...person, role: 'super_admin' }),
+            onSelect: () => setGranting(person),
           },
           // Assigning `user` takes the platform role away (019/ADR-294).
           {
-            label: '改回一般帳號',
+            label: `撤銷${platformLabel('data_auditor')}`,
             tone: 'danger' as const,
-            onSelect: () => setGranting({ ...person, role: 'user' }),
+            onSelect: () => setRevokingAuditor(person),
           },
         ]
       : []),
@@ -181,27 +188,27 @@ function usePersonActions(
       {granting ? (
         <Dialog
           open
-          title={
-            granting.role === 'super_admin'
-              ? `指派 ${granting.name} 為超級管理員`
-              : `將 ${granting.name} 改回一般帳號`
-          }
-          confirmLabel={
-            granting.role === 'super_admin' ? '確認指派' : '確認改回'
-          }
-          confirmTone={granting.role === 'super_admin' ? 'primary' : 'danger'}
+          title={`指派 ${granting.name} 為超級管理員`}
+          confirmLabel="確認指派"
           submitting={assignRole.isPending}
           onClose={() => setGranting(null)}
-          onConfirm={() => assign(granting, granting.role)}
+          onConfirm={() => assign(granting, 'super_admin')}
         >
           <Typography
             sx={{ ...typography.body[400], color: color.fg.neutral.default }}
           >
-            {granting.role === 'super_admin'
-              ? '新的超級管理員將擁有與您相同的最高權限，可互相撤銷（平台至少保留 1 位）。'
-              : `改回後不再是${platformLabel('data_auditor')}，失去全域檢核的權限；帳號與團隊身分都保留。`}
+            新的超級管理員將擁有與您相同的最高權限，可互相撤銷（平台至少保留 1
+            位）。
           </Typography>
         </Dialog>
+      ) : null}
+      {revokingAuditor ? (
+        <RevokeAuditorDialog
+          person={revokingAuditor}
+          submitting={assignRole.isPending}
+          onClose={() => setRevokingAuditor(null)}
+          onConfirm={() => assign(revokingAuditor, 'user')}
+        />
       ) : null}
       {signingOut ? (
         <Dialog
@@ -236,6 +243,51 @@ function usePersonActions(
   );
 
   return { actionsFor, dialogs };
+}
+
+/**
+ * 撤銷資料檢核員 (RBAC-REVOKE-101): says whether they keep the back office, which only a team
+ * identity still opens for them.
+ */
+function RevokeAuditorDialog({
+  person,
+  submitting,
+  onClose,
+  onConfirm,
+}: {
+  person: Person;
+  submitting: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const auditor = platformLabel('data_auditor');
+  const teams = person.teams ?? [];
+  return (
+    <Dialog
+      open
+      title={`撤銷 ${person.name} 的${auditor}？`}
+      confirmLabel="撤銷"
+      confirmTone="danger"
+      submitting={submitting}
+      onClose={onClose}
+      onConfirm={onConfirm}
+    >
+      <Stack sx={{ gap: 0.5 }}>
+        <Typography
+          sx={{ ...typography.body[400], color: color.fg.neutral.default }}
+        >
+          {teams.length === 0
+            ? `撤銷後 ${person.name} 就不能再進管理平台。`
+            : `撤銷後 ${person.name} 不能再做資料檢核。`}
+        </Typography>
+        <Typography sx={captionSx}>
+          {teams.length === 0
+            ? '他沒有其他團隊身份。帳號會保留，之後要再給權限得重新指派。'
+            : `他在${teams.map((team) => `「${team.teamName}」`).join('、')}的身份照舊，仍然可以用那個身份進管理平台。`}
+        </Typography>
+      </Stack>
+    </Dialog>
+  );
 }
 
 const staffColumn = createColumnHelper<DataTableFeatures, AdminUser>();
@@ -301,6 +353,7 @@ function PlatformStaff({
             uuid: row.original.uuid,
             name: row.original.name,
             platform: platformOf(row.original, teamTypes),
+            teams: membershipsOf(row.original),
           })}
         />
       ),
@@ -347,12 +400,11 @@ function PlatformStaff({
 
 const FILTERS: { id: PlatformKey | 'all'; label: string }[] = [
   { id: 'all', label: '全部' },
-  ...(['super_admin', 'gov', 'ngo', 'data_auditor', 'user'] as const).map(
-    (id) => ({
-      id,
-      label: platformLabel(id),
-    }),
-  ),
+  // No 一般使用者: nobody knows themselves by the backend's default (design review, 2026-11-03).
+  ...(['super_admin', 'gov', 'ngo', 'data_auditor'] as const).map((id) => ({
+    id,
+    label: platformLabel(id),
+  })),
 ];
 
 const directoryColumn = createColumnHelper<

@@ -27,12 +27,17 @@ import {
   stripApplyReturn,
 } from './apply-return';
 import { roleRequestErrorMessage } from './error';
-import { REASON_MAX_LENGTH, validateRoleRequestForm } from './form';
+import {
+  pendingRequestName,
+  REASON_MAX_LENGTH,
+  validateRoleRequestForm,
+} from './form';
 import {
   joinThroughInvite,
   openTeamInvite,
   type OpenedInvite,
 } from './invite-api';
+import { BACK_OFFICE_HREF } from './portal-entry';
 import { useApplyDraft } from './use-apply-draft';
 import { usePhoneVerification } from './use-phone-verification';
 import { useWithdrawRoleRequest } from './use-withdraw-role-request';
@@ -42,8 +47,6 @@ type CurrentUser = components['schemas']['UserResponse'];
 
 function inviteError(error: unknown): string {
   if (error instanceof ApiError) {
-    if (error.status === 404)
-      return '邀請連結已失效、已過期或團隊已停用。請向團隊管理員索取新的邀請。';
     if (error.status === 401) return '登入已過期，請重新登入後再試一次。';
     if (error.status === 403) return '目前暫停開放申請。';
     return roleRequestErrorMessage({
@@ -94,41 +97,56 @@ export function TeamInvitePage({ token }: { token: string }) {
         {status === 'loading' ? (
           <Typography role="status">確認登入狀態中…</Typography>
         ) : status !== 'authenticated' ? (
+          // ①: the backend names the team only to someone signed in.
           <>
-            <Typography>
-              請先登入或註冊，接著即可查看團隊並申請加入。
-            </Typography>
+            <Box>
+              <Typography component="h2" variant="h6">
+                你收到一個加入團隊的邀請
+              </Typography>
+              <Typography color="text.secondary">
+                登入後就會看到是哪一個團隊，再決定要不要申請。
+              </Typography>
+            </Box>
             <Button variant="contained" href={authLink}>
-              登入後繼續
+              登入
             </Button>
-            <Button href={authHref('/register', { callbackUrl })}>
+            <Button
+              variant="outlined"
+              href={authHref('/register', { callbackUrl })}
+            >
               註冊帳號
             </Button>
+            <Typography color="text.secondary">
+              還沒有帳號的話，用手機或電子郵件就能註冊。登入或註冊好會自動回到這一頁，不用再掃一次。
+            </Typography>
           </>
         ) : invite.isPending || applicant.isPending ? (
-          <Typography role="status">載入邀請中…</Typography>
+          <>
+            <Typography role="status">載入邀請中…</Typography>
+            <BackToSite />
+          </>
+        ) : invite.error instanceof ApiError && invite.error.status === 404 ? (
+          <InviteUnusable />
         ) : invite.isError || applicant.isError ? (
           <>
             <Alert severity="error">
               {inviteError(invite.error ?? applicant.error)}
             </Alert>
-            {invite.error instanceof ApiError &&
-            invite.error.status === 404 ? null : (
-              <Button
-                onClick={() => {
-                  void invite.refetch();
-                  void applicant.refetch();
-                }}
-              >
-                重新載入
-              </Button>
-            )}
+            <Button
+              onClick={() => {
+                void invite.refetch();
+                void applicant.refetch();
+              }}
+            >
+              重新載入
+            </Button>
             {(invite.error instanceof ApiError &&
               invite.error.status === 401) ||
             (applicant.error instanceof ApiError &&
               applicant.error.status === 401) ? (
               <Button href={authLink}>重新登入</Button>
             ) : null}
+            <BackToSite />
           </>
         ) : (
           <InviteDetails
@@ -140,11 +158,44 @@ export function TeamInvitePage({ token }: { token: string }) {
             refreshAccount={() => void applicant.refetch()}
           />
         )}
-        <Button href="/map" variant="text">
-          回到公開地圖
-        </Button>
       </Stack>
     </Container>
+  );
+}
+
+/** 前台: the public map, where 申請管理權限 also opens (`?apply=1`, `apply-return.ts`). */
+const SITE_HREF = '/map';
+const APPLY_HREF = '/map?apply=1';
+
+function BackToSite({ label = '回到前台' }: { label?: string }) {
+  return (
+    <Button href={SITE_HREF} variant="text">
+      {label}
+    </Button>
+  );
+}
+
+/**
+ * ⑥: expired, revoked or its team suspended — the backend tells them apart to no one (404). Not an
+ * error box: the person did nothing wrong, and applying on their own still gets them there.
+ */
+function InviteUnusable() {
+  return (
+    <>
+      <Box>
+        <Typography component="h2" variant="h6">
+          這個邀請連結不能用了
+        </Typography>
+        <Typography color="text.secondary">
+          可能已經超過 24
+          小時，或是被收回了。請跟給你邀請的人要一個新的，再掃一次。
+        </Typography>
+      </Box>
+      <Button variant="contained" href={APPLY_HREF}>
+        自己申請加入團隊
+      </Button>
+      <BackToSite />
+    </>
   );
 }
 
@@ -167,7 +218,7 @@ function InviteDetails({
     refreshInvite();
     refreshAccount();
   });
-  const pending = invite.my_request ?? invite.pending_elsewhere;
+  const myRequest = invite.my_request;
   const alreadyMember = user.identities?.some(
     (identity) => identity.team_uuid === invite.team.uuid,
   );
@@ -192,60 +243,129 @@ function InviteDetails({
         </Typography>
       </Box>
       {alreadyMember ? (
-        <Alert severity="success">
-          你已經是這個團隊的成員，可從管理平台切換至團隊身分。
-        </Alert>
+        // ④
+        <>
+          <Box>
+            <Typography sx={{ fontWeight: 700 }}>
+              你已經是{invite.team.name}的成員
+            </Typography>
+            <Typography color="text.secondary">
+              不用再申請。要做團隊的事，請到管理平台。
+            </Typography>
+          </Box>
+          <Button variant="contained" href={BACK_OFFICE_HREF}>
+            前往管理平台
+          </Button>
+          <BackToSite />
+        </>
       ) : submitted || invite.my_request ? (
-        <Alert severity="success">
-          你的加入申請已送出，正在等待管理員審核。邀請連結到期不會取消已送出的申請。
-        </Alert>
-      ) : invite.pending_elsewhere ? (
-        <Alert severity="warning">
-          你已有一筆「
-          {invite.pending_elsewhere.team_name ??
-            invite.pending_elsewhere.new_team_name ??
-            '資料檢核員'}
-          」申請在審核中。若要改申請加入本隊，請先撤回原申請。
-        </Alert>
-      ) : (
-        <InviteForm
-          token={token}
-          invite={invite}
-          user={user}
-          onSubmitted={() => {
-            setSubmitted(true);
-            refreshInvite();
-          }}
-          refreshInvite={refreshInvite}
-          refreshAccount={refreshAccount}
-        />
-      )}
-      {!alreadyMember && pending ? (
-        <Stack sx={{ gap: 1 }}>
-          {withdraw.confirming ? (
-            <>
-              <Typography>確定撤回這筆申請？撤回後需重新送出。</Typography>
-              <Button
-                color="error"
-                variant="outlined"
-                disabled={withdraw.submitting}
-                onClick={() => void withdraw.confirm(pending.uuid)}
-              >
-                確定撤回
-              </Button>
-              <Button disabled={withdraw.submitting} onClick={withdraw.cancel}>
-                保留申請
-              </Button>
-            </>
-          ) : (
-            <Button onClick={withdraw.request}>撤回申請</Button>
-          )}
-          {withdraw.error ? (
-            <Alert severity="error">{withdraw.error}</Alert>
+        <>
+          <Alert severity="success">
+            你的加入申請已送出，正在等待管理員審核。邀請連結到期不會取消已送出的申請。
+          </Alert>
+          {myRequest ? (
+            <Stack sx={{ gap: 1 }}>
+              {withdraw.confirming ? (
+                <>
+                  <Typography>確定撤回這筆申請？撤回後需重新送出。</Typography>
+                  <Button
+                    color="error"
+                    variant="outlined"
+                    disabled={withdraw.submitting}
+                    onClick={() => void withdraw.confirm(myRequest.uuid)}
+                  >
+                    確定撤回
+                  </Button>
+                  <Button
+                    disabled={withdraw.submitting}
+                    onClick={withdraw.cancel}
+                  >
+                    保留申請
+                  </Button>
+                </>
+              ) : (
+                <Button onClick={withdraw.request}>撤回申請</Button>
+              )}
+              {withdraw.error ? (
+                <Alert severity="error">{withdraw.error}</Alert>
+              ) : null}
+            </Stack>
           ) : null}
-        </Stack>
-      ) : null}
+          <BackToSite />
+        </>
+      ) : invite.pending_elsewhere ? (
+        // ⑤: withdrawing it reads the invite again, which then opens the form.
+        <PendingElsewhere
+          pending={invite.pending_elsewhere}
+          teamName={invite.team.name}
+          withdraw={withdraw}
+        />
+      ) : (
+        <>
+          <InviteForm
+            token={token}
+            invite={invite}
+            user={user}
+            onSubmitted={() => {
+              setSubmitted(true);
+              refreshInvite();
+            }}
+            refreshInvite={refreshInvite}
+            refreshAccount={refreshAccount}
+          />
+          <BackToSite />
+        </>
+      )}
     </Stack>
+  );
+}
+
+function PendingElsewhere({
+  pending,
+  teamName,
+  withdraw,
+}: {
+  pending: NonNullable<OpenedInvite['pending_elsewhere']>;
+  teamName: string;
+  withdraw: ReturnType<typeof useWithdrawRoleRequest>;
+}) {
+  const other = pendingRequestName(pending);
+  return (
+    <>
+      <Alert severity="warning">
+        <Typography sx={{ fontWeight: 700 }}>你有另一筆申請還在審核</Typography>
+        <Typography>
+          申請{other}，
+          {new Date(pending.created_at).toLocaleDateString('zh-TW', {
+            timeZone: 'Asia/Taipei',
+          })}
+          送出
+        </Typography>
+      </Alert>
+      {withdraw.confirming ? (
+        <>
+          <Typography>撤回「{other}」那一筆？</Typography>
+          <Button
+            variant="contained"
+            disabled={withdraw.submitting}
+            onClick={() => void withdraw.confirm(pending.uuid)}
+          >
+            撤回，改申請{teamName}
+          </Button>
+          <Button disabled={withdraw.submitting} onClick={withdraw.cancel}>
+            不撤回
+          </Button>
+        </>
+      ) : (
+        <>
+          <Button variant="contained" onClick={withdraw.request}>
+            撤回那一筆，改申請{teamName}
+          </Button>
+          <BackToSite label="先不要，回到前台" />
+        </>
+      )}
+      {withdraw.error ? <Alert severity="error">{withdraw.error}</Alert> : null}
+    </>
   );
 }
 
@@ -270,6 +390,9 @@ function InviteForm({
   const [touched, setTouched] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // ⑪: the invite stopped working while this was being filled in (404 on sending).
+  const [lapsed, setLapsed] = useState(false);
+  const lapsedRef = useRef<HTMLDivElement>(null);
   const { keep, take } = useApplyDraft(user.uuid);
   const verification = usePhoneVerification({
     account,
@@ -342,14 +465,38 @@ function InviteForm({
       });
       onSubmitted();
     } catch (cause) {
+      // Stays on the form rather than reading the invite again into ⑥, which would drop what was typed.
+      if (cause instanceof ApiError && cause.status === 404) {
+        setLapsed(true);
+        return;
+      }
       setError(inviteError(cause));
-      if (cause instanceof ApiError && [404, 409].includes(cause.status))
-        refreshInvite();
+      if (cause instanceof ApiError && cause.status === 409) refreshInvite();
       if (cause instanceof ApiError && [409, 422].includes(cause.status))
         refreshAccount();
     } finally {
       setBusy(false);
     }
+  };
+
+  // JOIN-112: the notice sits above the form and the button below it, so bring it into view.
+  useEffect(() => {
+    if (!lapsed) return;
+    lapsedRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    lapsedRef.current?.focus();
+  }, [lapsed]);
+
+  // The form as it is, for 申請管理權限 to open with (`?apply=1` takes the draft, `apply-return.ts`).
+  const applyOnOwn = () => {
+    keep({
+      role: invite.team.type === 'gov' ? 'government' : 'ngo',
+      team: invite.team.uuid,
+      newTeamName: '',
+      name,
+      reason,
+      phone: verification.phone,
+    });
+    window.location.assign(APPLY_HREF);
   };
 
   return (
@@ -362,6 +509,18 @@ function InviteForm({
       }}
       sx={{ gap: 3 }}
     >
+      {lapsed ? (
+        <Alert
+          ref={lapsedRef}
+          severity="error"
+          role="alert"
+          tabIndex={-1}
+          sx={{ scrollMarginTop: 16 }}
+        >
+          這個邀請連結剛剛不能用了（可能超過 24
+          小時，或被收回）。你填的內容還在，可以改成自己申請，不用重打。
+        </Alert>
+      ) : null}
       <ApplicantSection
         account={account}
         name={name}
@@ -391,13 +550,19 @@ function InviteForm({
           請確認名字、手機驗證與申請理由後再送出。
         </Alert>
       ) : null}
-      <Button
-        type="submit"
-        variant="contained"
-        disabled={busy || verification.busy}
-      >
-        {busy ? '送出中…' : '送出加入申請'}
-      </Button>
+      {lapsed ? (
+        <Button variant="contained" onClick={applyOnOwn}>
+          改成自己申請
+        </Button>
+      ) : (
+        <Button
+          type="submit"
+          variant="contained"
+          disabled={busy || verification.busy}
+        >
+          {busy ? '送出中…' : '送出加入申請'}
+        </Button>
+      )}
     </Stack>
   );
 }

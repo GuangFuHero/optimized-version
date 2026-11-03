@@ -38,6 +38,28 @@ export const MEMBER_AUDIT_TABLES: ReadonlySet<string> = new Set([
   'team_zone_assign',
 ]);
 
+/**
+ * Whether 全部 reads the next page by itself: nothing to show yet, more to read, under the cap, and
+ * the last page didn't fail. A failed page stops it, so the panel shows its error and
+ * 載入更早的紀錄 retries, instead of refetching the failing page over and over.
+ */
+export function shouldReadOnForAll(state: {
+  category: AuditCategory | 'all';
+  shown: number;
+  hasNextPage: boolean;
+  failed: boolean;
+  pagesRead: number;
+  pageCap: number;
+}): boolean {
+  return (
+    state.category === 'all' &&
+    state.shown === 0 &&
+    state.hasNextPage &&
+    !state.failed &&
+    state.pagesRead < state.pageCap
+  );
+}
+
 export interface AuditLookups {
   userName: (uuid: string) => string | undefined;
   teamName: (uuid: string) => string | undefined;
@@ -232,6 +254,23 @@ function actorOf(item: AuditLogItem, lookups: AuditLookups): string {
   const team = str(identity, 'team');
   if (role) return team ? `${team} · ${role}` : role;
   return item.user_uuid ? SOMEONE : '系統';
+}
+
+/**
+ * A grant of `user`, the platform role every account holds. Revoking a data auditor or super admin
+ * deletes their grant (logged as 撤銷), so this says nothing anyone acted on; and nobody knows
+ * themselves by 一般使用者 (design review, 2026-11-03).
+ */
+export function isDefaultRoleGrant(
+  item: AuditLogItem,
+  lookups: AuditLookups,
+): boolean {
+  if (item.table_name !== 'user_role_assign') return false;
+  const values = item.new_values ?? item.old_values;
+  return (
+    !str(values, 'team_uuid') &&
+    lookups.roleName(str(values, 'role_uuid') ?? '') === 'user'
+  );
 }
 
 export function describeAuditEntry(

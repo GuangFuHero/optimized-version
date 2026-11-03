@@ -25,7 +25,9 @@ import {
 import {
   AUDIT_CATEGORY_TABLE,
   describeAuditEntry,
+  isDefaultRoleGrant,
   MEMBER_AUDIT_TABLES,
+  shouldReadOnForAll,
   type AuditCategory,
   type AuditLookups,
 } from './audit';
@@ -99,18 +101,25 @@ export function AuditLog({
     () =>
       (logs.data?.pages.flat() ?? [])
         // 全部 is still about people and teams; tickets and stations have their own history.
-        .filter((item) => MEMBER_AUDIT_TABLES.has(item.table_name))
+        .filter(
+          (item) =>
+            MEMBER_AUDIT_TABLES.has(item.table_name) &&
+            !isDefaultRoleGrant(item, lookups),
+        )
         .map((item) => describeAuditEntry(item, lookups)),
     [logs.data, lookups],
   );
 
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = logs;
   const pagesRead = logs.data?.pages.length ?? 0;
-  const scanning =
-    category === 'all' &&
-    entries.length === 0 &&
-    hasNextPage &&
-    pagesRead < ALL_PAGES_TO_SCAN;
+  const scanning = shouldReadOnForAll({
+    category,
+    shown: entries.length,
+    hasNextPage,
+    failed: logs.isError,
+    pagesRead,
+    pageCap: ALL_PAGES_TO_SCAN,
+  });
   useEffect(() => {
     if (scanning && !isFetchingNextPage) void fetchNextPage();
   }, [scanning, isFetchingNextPage, fetchNextPage]);

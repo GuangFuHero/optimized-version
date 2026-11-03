@@ -1,11 +1,14 @@
 'use client';
 
+import { Typography } from '@mui/material';
+
 import { Badge, type BadgeTone } from '@rescue-frontend/ui';
 
 import {
   ROLE_DISPLAY_NAMES,
   TEAM_TYPE_DISPLAY_NAMES,
 } from '../../constants/roles';
+import { captionSx } from './parts';
 import type { PlatformKey, TeamRole } from './roster';
 
 /** Labels come from `constants/roles`; tones follow the prototype's `wg-terms.js`. */
@@ -23,7 +26,9 @@ const PLATFORM: Record<PlatformKey, { label: string; tone: BadgeTone }> = {
     tone: 'secondary',
   },
   ngo: { label: TEAM_TYPE_DISPLAY_NAMES.get('ngo') ?? 'ngo', tone: 'info' },
-  user: { label: ROLE_DISPLAY_NAMES.get('user') ?? 'user', tone: 'neutral' },
+  // `user` is the backend's default, which nobody knows themselves by: no back-office role reads
+  // as a dash (design review, 2026-11-03).
+  user: { label: '—', tone: 'neutral' },
 };
 
 export function platformLabel(platform: PlatformKey) {
@@ -32,6 +37,13 @@ export function platformLabel(platform: PlatformKey) {
 
 export function PlatformBadge({ platform }: { platform: PlatformKey }) {
   const { label, tone } = PLATFORM[platform];
+  if (platform === 'user') {
+    return (
+      <Typography component="span" sx={captionSx}>
+        {label}
+      </Typography>
+    );
+  }
   // A super admin is the one role the prototype fills in, so it stands out in a column of them.
   return (
     <Badge

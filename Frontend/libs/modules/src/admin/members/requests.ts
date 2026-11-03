@@ -52,7 +52,7 @@ const CONFLICTS: Record<string, DecisionConflict> = {
     decided: false,
   },
   'The applicant has another back-office identity now': {
-    message: '申請人已經有其他後台身份，不能再成為資料稽核員；請拒絕這筆申請。',
+    message: '申請人已經有其他後台身份，不能再成為資料檢核員；請拒絕這筆申請。',
     decided: false,
   },
   'The team cannot be joined now': {

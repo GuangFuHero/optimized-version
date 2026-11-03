@@ -80,7 +80,12 @@ type Blocked = { title: string; body: string } | null;
  * The ⋯ of a roster row: promote or demote, then remove. Refuses to leave a team without an
  * admin before asking; the backend refuses it as well (409, ADR-356).
  */
-function useRosterActions(team: Team, roster: readonly RosterMember[]) {
+function useRosterActions(
+  team: Team,
+  roster: readonly RosterMember[],
+  /** A super admin's view: they still manage the team after stepping down in it. */
+  managesEveryTeam: boolean,
+) {
   const addMember = useAddTeamMember();
   const removeMember = useRemoveTeamMember();
   const { data: self } = useCurrentUser();
@@ -159,8 +164,9 @@ function useRosterActions(team: Team, roster: readonly RosterMember[]) {
           <Typography
             sx={{ ...typography.body[400], color: color.fg.neutral.default }}
           >
-            這是你自己。降級後你在「{team.name}
-            」只剩成員身分，不能再管理這一隊；要恢復，需由這一隊的其他管理員把你升回管理員。
+            {managesEveryTeam
+              ? `這是你自己。降級後你在「${team.name}」只剩成員身分。`
+              : `這是你自己。降級後你在「${team.name}」只剩成員身分，不能再管理這一隊；要恢復，需由這一隊的其他管理員把你升回管理員。`}
           </Typography>
         </Dialog>
       ) : null}
@@ -355,7 +361,7 @@ function TeamStatusDialog({
         sx={{ ...typography.body[400], color: color.fg.neutral.default }}
       >
         {suspending
-          ? '暫停後，成員立即無法以本隊身份操作（下次請求即登出該身份），邀請連結失效，待審的加入申請會被拒絕並通知申請人。成員名單與資料都保留，可隨時恢復。'
+          ? '暫停後，成員立即無法以本隊身份操作（下次操作時會回到他的預設身分），邀請連結失效，待審的加入申請會被拒絕並通知申請人。成員名單與資料都保留，可隨時恢復。'
           : '恢復後，成員可再切換到本隊身份，原有的團隊角色照舊，不必重新加入。'}
       </Typography>
     </Dialog>
@@ -384,7 +390,7 @@ function TeamDetail({
   const [inviting, setInviting] = useState(false);
   const [editing, setEditing] = useState(false);
   const [changingStatus, setChangingStatus] = useState(false);
-  const { actionsFor, dialogs } = useRosterActions(team, roster);
+  const { actionsFor, dialogs } = useRosterActions(team, roster, true);
   const admins = adminCount(roster);
   const running = team.status === 'active';
 
@@ -796,7 +802,7 @@ function MyTeamView({
     () => members.map((m) => ({ uuid: m.role_uuid, name: m.role })),
     [members],
   );
-  const { actionsFor, dialogs } = useRosterActions(team, roster);
+  const { actionsFor, dialogs } = useRosterActions(team, roster, false);
   const queueCount = pendingRequests.data?.length ?? 0;
 
   const tabs = [

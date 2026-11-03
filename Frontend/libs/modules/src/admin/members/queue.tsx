@@ -229,7 +229,7 @@ const KIND_FILTERS: { id: KindFilter; label: string }[] = [
   { id: 'all', label: '全部' },
   { id: 'member', label: '加入團隊' },
   { id: 'new_team', label: '建立新團隊' },
-  { id: 'data_auditor', label: '資料稽核員' },
+  { id: 'data_auditor', label: '資料檢核員' },
 ];
 
 /**

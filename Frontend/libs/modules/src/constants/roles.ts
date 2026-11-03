@@ -5,7 +5,7 @@ export const ROLE_DISPLAY_NAMES = new Map<
   string
 >([
   ['user', '一般使用者'],
-  ['data_auditor', '資料稽核員'],
+  ['data_auditor', '資料檢核員'],
   ['super_admin', '超級管理員'],
   ['admin', '管理員'],
   ['member', '成員'],

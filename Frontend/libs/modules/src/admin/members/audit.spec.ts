@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import {
   describeAuditEntry,
+  isDefaultRoleGrant,
+  shouldReadOnForAll,
   type AuditLogItem,
   type AuditLookups,
 } from './audit';
@@ -13,6 +15,7 @@ const names: Record<string, string> = {
   'r-admin': 'admin',
   'r-member': 'member',
   'r-auditor': 'data_auditor',
+  'r-user': 'user',
 };
 const lookups: AuditLookups = {
   userName: (uuid) => (uuid.startsWith('u-') ? names[uuid] : undefined),
@@ -105,7 +108,7 @@ describe('describeAuditEntry — role grants', () => {
         table_name: 'user_role_assign',
         new_values: { user_uuid: 'u-wang', role_uuid: 'r-auditor' },
       }),
-    ).toMatchObject({ action: '指派 王小明 為資料稽核員', teamName: null });
+    ).toMatchObject({ action: '指派 王小明 為資料檢核員', teamName: null });
   });
 
   it('says 某位使用者 rather than show a uuid it cannot name', () => {
@@ -184,5 +187,64 @@ describe('describeAuditEntry — actor', () => {
       }).actor,
     ).toBe('慈濟基金會 · 管理員');
     expect(describe1({ user_uuid: null }).actor).toBe('系統');
+  });
+});
+
+describe('shouldReadOnForAll', () => {
+  const state = {
+    category: 'all' as const,
+    shown: 0,
+    hasNextPage: true,
+    failed: false,
+    pagesRead: 1,
+    pageCap: 10,
+  };
+
+  it('reads on under 全部 while nothing is shown and more pages exist', () => {
+    expect(shouldReadOnForAll(state)).toBe(true);
+  });
+
+  it('stops once a page fails, so a failing page is not refetched over and over', () => {
+    expect(shouldReadOnForAll({ ...state, failed: true })).toBe(false);
+  });
+
+  it('stops for another category, once something is shown, at the last page or at the cap', () => {
+    expect(shouldReadOnForAll({ ...state, category: 'team' })).toBe(false);
+    expect(shouldReadOnForAll({ ...state, shown: 1 })).toBe(false);
+    expect(shouldReadOnForAll({ ...state, hasNextPage: false })).toBe(false);
+    expect(shouldReadOnForAll({ ...state, pagesRead: 10 })).toBe(false);
+  });
+});
+
+describe('isDefaultRoleGrant', () => {
+  const grant = (values: Record<string, unknown>) =>
+    row({ table_name: 'user_role_assign', new_values: values });
+
+  it('picks out a grant of the default platform role, which 操作紀錄 leaves out', () => {
+    expect(
+      isDefaultRoleGrant(
+        grant({ user_uuid: 'u-wang', role_uuid: 'r-user' }),
+        lookups,
+      ),
+    ).toBe(true);
+  });
+
+  it('keeps every other grant, the revoke of a data auditor among them', () => {
+    expect(
+      isDefaultRoleGrant(
+        grant({ user_uuid: 'u-wang', role_uuid: 'r-auditor' }),
+        lookups,
+      ),
+    ).toBe(false);
+    expect(
+      isDefaultRoleGrant(
+        grant({
+          user_uuid: 'u-wang',
+          role_uuid: 'r-member',
+          team_uuid: 't-ngo',
+        }),
+        lookups,
+      ),
+    ).toBe(false);
   });
 });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  pendingRequestName,
   roleRequestFormProblems,
   toSubmitRoleRequestInput,
   validateRoleRequestForm,
@@ -194,5 +195,32 @@ describe('toSubmitRoleRequestInput', () => {
         role: 'data_auditor',
       }),
     ).not.toHaveProperty('teamUuid');
+  });
+});
+
+describe('pendingRequestName', () => {
+  const pending = {
+    team_name: null,
+    new_team_name: null,
+    requested_role: 'data_auditor' as const,
+  };
+
+  it('names the team the other request is for, or the one it would found', () => {
+    expect(
+      pendingRequestName({ ...pending, team_name: '光復在地互助協會' }),
+    ).toBe('光復在地互助協會');
+    expect(pendingRequestName({ ...pending, new_team_name: '新的協會' })).toBe(
+      '新的協會',
+    );
+  });
+
+  it('names the role of a request with no team, not always 資料檢核員', () => {
+    expect(
+      pendingRequestName({ ...pending, requested_role: 'government' }),
+    ).toBe('政府單位人員');
+    expect(pendingRequestName({ ...pending, requested_role: 'ngo' })).toBe(
+      '社福團體人員',
+    );
+    expect(pendingRequestName(pending)).toBe('資料檢核員');
   });
 });
