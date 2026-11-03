@@ -238,6 +238,25 @@ export function useTicketStats(options: AdminQueryOptions = {}) {
   return useQuery({ ...ticketStatsQuery(), enabled: options.enabled });
 }
 
+/** The filter panel's choices: the areas the tickets' addresses name, and the teams holding a 責任區. */
+export const ticketFacetsQuery = () =>
+  queryOptions({
+    queryKey: ticketKeys.facets(),
+    queryFn: ({ signal }) =>
+      adminGraphqlClient
+        .query(
+          documents.AdminTicketFacetsDocument,
+          {},
+          { fetchOptions: { credentials: 'include', signal } },
+        )
+        .toPromise()
+        .then(graphqlResponseData),
+  });
+
+export function useTicketFacets(options: AdminQueryOptions = {}) {
+  return useQuery({ ...ticketFacetsQuery(), enabled: options.enabled });
+}
+
 export const ticketQuery = (variables: documents.AdminTicketQueryVariables) =>
   queryOptions({
     queryKey: [...ticketKeys.details(), variables],

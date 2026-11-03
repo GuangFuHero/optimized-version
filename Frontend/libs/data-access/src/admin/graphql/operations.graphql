@@ -96,7 +96,12 @@ query AdminTickets(
   $priority: String
   $q: String
   $needType: String
-  $disasterType: String
+  $responsibleTeamUuid: UUID
+  $unassignedOnly: Boolean = false
+  $county: String
+  $town: String
+  $updatedAfter: DateTime
+  $updatedBefore: DateTime
   $zoom: Float
   $skip: Int = 0
   $limit: Int = 50
@@ -107,7 +112,12 @@ query AdminTickets(
     priority: $priority
     q: $q
     needType: $needType
-    disasterType: $disasterType
+    responsibleTeamUuid: $responsibleTeamUuid
+    unassignedOnly: $unassignedOnly
+    county: $county
+    town: $town
+    updatedAfter: $updatedAfter
+    updatedBefore: $updatedBefore
     zoom: $zoom
     skip: $skip
     limit: $limit
@@ -149,7 +159,12 @@ query AdminTicketMapPins(
   $priority: String
   $q: String
   $needType: String
-  $disasterType: String
+  $responsibleTeamUuid: UUID
+  $unassignedOnly: Boolean = false
+  $county: String
+  $town: String
+  $updatedAfter: DateTime
+  $updatedBefore: DateTime
   $zoom: Float
   $skip: Int = 0
   $limit: Int = 50
@@ -160,7 +175,12 @@ query AdminTicketMapPins(
     priority: $priority
     q: $q
     needType: $needType
-    disasterType: $disasterType
+    responsibleTeamUuid: $responsibleTeamUuid
+    unassignedOnly: $unassignedOnly
+    county: $county
+    town: $town
+    updatedAfter: $updatedAfter
+    updatedBefore: $updatedBefore
     zoom: $zoom
     skip: $skip
     limit: $limit
@@ -190,20 +210,43 @@ query AdminTicketsExtent(
   $priority: String
   $q: String
   $needType: String
-  $disasterType: String
+  $responsibleTeamUuid: UUID
+  $unassignedOnly: Boolean = false
+  $county: String
+  $town: String
+  $updatedAfter: DateTime
+  $updatedBefore: DateTime
 ) {
   ticketsExtent(
     status: $status
     priority: $priority
     q: $q
     needType: $needType
-    disasterType: $disasterType
+    responsibleTeamUuid: $responsibleTeamUuid
+    unassignedOnly: $unassignedOnly
+    county: $county
+    town: $town
+    updatedAfter: $updatedAfter
+    updatedBefore: $updatedBefore
   ) {
     count
     minLat
     maxLat
     minLng
     maxLng
+  }
+}
+# The 行政區域 and 組織分配 chips of the board's filter panel.
+query AdminTicketFacets {
+  ticketFacets {
+    areas {
+      county
+      town
+    }
+    teams {
+      uuid
+      name
+    }
   }
 }
 query AdminTicketStats {
@@ -963,8 +1006,14 @@ fragment AdminSpaceTicketFields on TicketType {
   disasterTypes
   updatedAt
   secondaryLocation {
+    county
+    town
     floor
     room
+  }
+  # The board's 組織分配 filter, which a space's tickets pass in the browser.
+  responsibleTeams {
+    uuid
   }
   tasks {
     uuid

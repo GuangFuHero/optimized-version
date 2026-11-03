@@ -46,6 +46,7 @@ function ticket(
     disasterTypes: [],
     updatedAt: '2026-10-29T01:00:00Z',
     secondaryLocation: { floor, room },
+    responsibleTeams: [],
     tasks: [],
     ...rest,
   };

@@ -16,6 +16,8 @@ export function useTicketCapabilities() {
     canAdd: has('ticket.add'),
     canImport: has('ticket.import'),
     canExport: has('ticket.export'),
+    /** The exact point and address: what the 行政區域 and 組織分配 filters match on. */
+    canViewDetail: has('ticket.view_detail'),
   };
 }
 

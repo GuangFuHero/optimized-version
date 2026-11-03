@@ -53,6 +53,7 @@ function ticket(floor: string | null): SpaceTicket {
     disasterTypes: [],
     updatedAt: null,
     secondaryLocation: { floor, room: null },
+    responsibleTeams: [],
     tasks: [],
   };
 }
