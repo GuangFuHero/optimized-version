@@ -19,6 +19,7 @@ import {
   nameInitials,
 } from '@rescue-frontend/ui';
 
+import { openMyStationReports } from '../../station/suggestion/open-my-station-reports';
 import { MyTasksDrawer } from '../../ticket/my-claims/my-tasks-drawer';
 
 const { color, radius, shadow, spacing, motion } = designTokens;
@@ -44,6 +45,11 @@ export function SiteUserMenu({ userName, onSignOut }: SiteUserMenuProps) {
   const handleOpenMyTasks = () => {
     setAnchorEl(null);
     setMyTasksOpen(true);
+  };
+
+  const handleOpenStationReports = () => {
+    setAnchorEl(null);
+    openMyStationReports();
   };
 
   const handleOpenSecurity = () => {
@@ -133,10 +139,18 @@ export function SiteUserMenu({ userName, onSignOut }: SiteUserMenuProps) {
             我的任務
           </Typography>
         </MenuItem>
+        {/* Beside 我的任務, its own entry (prototype `site-shell.jsx`): a report is public data that was
+            wrong, not someone coming or going to help. */}
+        <MenuItem onClick={handleOpenStationReports} sx={{ gap: 1 }}>
+          <Icons.clipboardCheck sx={{ fontSize: designTokens.iconSize.md }} />
+          <Typography sx={{ fontSize: displayTextSize[14] }}>
+            我回報的站點
+          </Typography>
+        </MenuItem>
         {/* Not in the prototype's menu, which has no such page: added after 我的任務, the site's own
             thing, and before 登出. */}
         <MenuItem onClick={handleOpenSecurity} sx={{ gap: 1 }}>
-          <Icons.shield sx={{ fontSize: 18 }} />
+          <Icons.shieldCheck sx={{ fontSize: designTokens.iconSize.md }} />
           <Typography sx={{ fontSize: displayTextSize[14] }}>
             帳號安全
           </Typography>

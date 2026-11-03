@@ -946,6 +946,29 @@ export type MyRoleRequestsType = {
 };
 
 /** One of the caller's claims, with the need and the ticket it is for */
+export type MyStationSuggestionType = {
+  __typename?: 'MyStationSuggestionType';
+  /** Approved, adopted_edited or revoked: the value the reviewer wrote, which may differ from newValue. Otherwise null, as for an approval from before merges were recorded */
+  appliedValue?: Maybe<Scalars['String']['output']>;
+  comment?: Maybe<Scalars['String']['output']>;
+  /** When it was approved or rejected, or for a revoked one when the approval was undone; for one decided before merges were recorded, when the row last changed. Null while pending */
+  decidedAt?: Maybe<Scalars['DateTime']['output']>;
+  fieldName: Scalars['String']['output'];
+  /** The value suggested, the latest if sent again */
+  newValue: Scalars['String']['output'];
+  /** The field's value when last sent, as text ('' for none); null for a suggestion sent before this was recorded */
+  previousValue?: Maybe<Scalars['String']['output']>;
+  /** The station it is about, or its property's; null once deleted or out of the caller's view, by the rules of `station` */
+  station?: Maybe<StationType>;
+  /** 'pending', 'approved', 'adopted_edited', 'not_adopted', 'rejected', or 'revoked' */
+  status: Scalars['String']['output'];
+  /** When it was first sent */
+  submittedAt: Scalars['DateTime']['output'];
+  /** 'station' or 'station_property' */
+  targetType: Scalars['String']['output'];
+  uuid: Scalars['UUID']['output'];
+};
+
 export type MyTaskAssignmentType = {
   __typename?: 'MyTaskAssignmentType';
   assignment: TaskAssignmentType;
@@ -1008,6 +1031,7 @@ export type Query = {
   hazardousZone?: Maybe<HazardousZoneType>;
   hazardousZones: HazardousZoneConnection;
   myRoleRequests: MyRoleRequestsType;
+  myStationSuggestions: Array<MyStationSuggestionType>;
   myTaskAssignments: Array<MyTaskAssignmentType>;
   myTickets: Array<TicketType>;
   /** Look a typed address up in TGOS before saving it (exact matches only). Pass the map pin as lat/lng to check the two agree. Signed-in callers only, 30 lookups a minute shared with reverseGeocode */
@@ -1094,6 +1118,11 @@ export type QueryHazardousZoneArgs = {
 
 export type QueryHazardousZonesArgs = {
   bounds?: InputMaybe<BoundsInput>;
+  limit?: Scalars['Int']['input'];
+  skip?: Scalars['Int']['input'];
+};
+
+export type QueryMyStationSuggestionsArgs = {
   limit?: Scalars['Int']['input'];
   skip?: Scalars['Int']['input'];
 };
@@ -2459,6 +2488,31 @@ export type CreateStationSuggestionMutation = {
     newValue: string;
     status: string;
   };
+};
+
+export type MyStationSuggestionsQueryVariables = Exact<{
+  [key: string]: never;
+}>;
+
+export type MyStationSuggestionsQuery = {
+  __typename?: 'Query';
+  myStationSuggestions: Array<{
+    __typename?: 'MyStationSuggestionType';
+    uuid: string;
+    targetType: string;
+    fieldName: string;
+    previousValue?: string | null;
+    newValue: string;
+    comment?: string | null;
+    status: string;
+    submittedAt: any;
+    decidedAt?: any | null;
+    station?: {
+      __typename?: 'StationType';
+      uuid: string;
+      name?: string | null;
+    } | null;
+  }>;
 };
 
 export type MyRoleRequestsQueryVariables = Exact<{ [key: string]: never }>;
@@ -4732,6 +4786,56 @@ export const CreateStationSuggestionDocument = {
 } as unknown as DocumentNode<
   CreateStationSuggestionMutation,
   CreateStationSuggestionMutationVariables
+>;
+export const MyStationSuggestionsDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'MyStationSuggestions' },
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'myStationSuggestions' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'targetType' } },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'station' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'name' } },
+                    ],
+                  },
+                },
+                { kind: 'Field', name: { kind: 'Name', value: 'fieldName' } },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'previousValue' },
+                },
+                { kind: 'Field', name: { kind: 'Name', value: 'newValue' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'comment' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'status' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'submittedAt' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'decidedAt' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  MyStationSuggestionsQuery,
+  MyStationSuggestionsQueryVariables
 >;
 export const MyRoleRequestsDocument = {
   kind: 'Document',
