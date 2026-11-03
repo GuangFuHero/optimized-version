@@ -237,7 +237,8 @@ Chinese as Spec 019 does.
 ### User site — 申請成為後台人員
 
 1. **Team list**: `roleRequestTeams(type: GOV | NGO)` → `[{ uuid, name, type, contactName, contactPhone }]`; the
-   form reads `uuid`, `name` and `type`. 政府單位人員 asks for `GOV`, 社福團體人員 for `NGO`. The form's last option, 「＋ 清單裡沒有，建立新的單位／團隊」, sends `newTeamName` instead.
+   form reads `uuid`, `name` and `type`. 政府單位人員 asks for `GOV`, 社福團體人員 for `NGO`. The form's last
+   option, 「＋ 清單裡沒有，建立新的單位／團隊」, sends `newTeamName` instead.
 2. **Phone first** (phone only, by the team's decision): if `/users/me` has no verified phone, add one with
    the contact flow before submitting:
    `POST /api/v1/auth/contacts` then `POST /api/v1/auth/contacts/verify`. **An account that already has a
