@@ -307,7 +307,7 @@ export type CreateAreaInput = {
   geometry: Scalars['GeoJSON']['input'];
   /** Hazardous zone only: agency name or URL the report came from */
   informationSource?: InputMaybe<Scalars['String']['input']>;
-  /** Shown on the public map; hazardous and team zones are always public, a mark zone defaults to false */
+  /** Shown on the public map, a team zone only to those signed in; hazardous and team zones are always public, a mark zone defaults to false */
   isPublic?: InputMaybe<Scalars['Boolean']['input']>;
   name?: InputMaybe<Scalars['String']['input']>;
   note?: InputMaybe<Scalars['String']['input']>;
