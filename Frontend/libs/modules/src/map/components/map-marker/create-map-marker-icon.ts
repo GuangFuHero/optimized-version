@@ -162,11 +162,14 @@ function createBuildingIcon(
  * only the caller's colour is inline.
  */
 function createPinIcon(
+  item: RescueMapMarkerItem,
   pin: NonNullable<RescueMapMarkerItem['pin']>,
   leaflet: typeof import('leaflet'),
 ): import('leaflet').DivIcon {
   const modifiers = [
     pin.shape === 'square' ? ' map-pin--square' : '',
+    pin.shape === 'dot' ? ' map-pin--dot' : '',
+    pin.shape === 'station' ? ' map-pin--station' : '',
     pin.selected ? ' map-pin--selected' : '',
     pin.dimmed ? ' map-pin--dimmed' : '',
   ].join('');
@@ -175,7 +178,10 @@ function createPinIcon(
   const glyph =
     pin.shape === 'square'
       ? '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M10 6h4M10 10h4M10 14h4M10 18h4"/></svg>'
-      : '';
+      : pin.shape === 'station'
+        ? // The station's type, as its pin on the site map draws it.
+          `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="${color.fg.inverse}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${stationTypeGlyphShapes(item.stationMeta?.type)}</svg>`
+        : '';
 
   return leaflet.divIcon({
     className: 'map-pin-wrapper',
@@ -208,7 +214,7 @@ export function createMapMarkerIcon(
   leaflet: typeof import('leaflet'),
 ): import('leaflet').DivIcon {
   if (item.pin) {
-    return createPinIcon(item.pin, leaflet);
+    return createPinIcon(item, item.pin, leaflet);
   }
 
   if (item.building) {

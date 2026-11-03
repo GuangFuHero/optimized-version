@@ -9,6 +9,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { fetchExchange, type CombinedError } from 'urql';
 
 import type { RescueMapMarkerItem } from '../types';
+import { designTokens } from '@rescue-frontend/ui';
+import { ADMIN_MAP_PRIORITIES } from './map-filter';
 import { sessionExpiryFetch } from '../../session/end-expired-session';
 import {
   dedupeMarkersById,
@@ -23,7 +25,42 @@ const LIVE_QUERY_CONTEXT = {
   suspense: false,
 };
 
+const { color } = designTokens;
+
 export const ADMIN_MAP_LIVE_QUERY_LIMIT = 200;
+
+/**
+ * How a marker is drawn on 互助地圖 (prototype `map-canvas.jsx`): a ticket is a dot in its
+ * priority's colour, a station a dark square with its type's icon, and hovering either names it.
+ * The pins are the legend's: a 生命危急 ticket is found by its red.
+ */
+export function toAdminMapPin(
+  marker: RescueMapMarkerItem,
+): RescueMapMarkerItem {
+  if (marker.detailType === 'station') {
+    return {
+      ...marker,
+      pin: { shape: 'station', color: color.fg.neutral.default },
+      tooltip: { title: marker.title, subtitle: marker.subtitle || undefined },
+    };
+  }
+
+  const priority = marker.ticketMeta?.priority?.trim().toLowerCase();
+  const teams = marker.ticketMeta?.responsibleTeams
+    ?.map((team) => team.name)
+    .join('、');
+
+  return {
+    ...marker,
+    pin: {
+      shape: 'dot',
+      color:
+        ADMIN_MAP_PRIORITIES.find((entry) => entry.value === priority)?.color ??
+        color.bg.info.default,
+    },
+    tooltip: { title: marker.title, subtitle: teams || undefined },
+  };
+}
 const LIVE_QUERY_LIMIT = ADMIN_MAP_LIVE_QUERY_LIMIT;
 
 export interface AdminMapLiveMarkers {
@@ -116,18 +153,20 @@ export function useAdminMapLiveMarkers(
             const marker = mapTicketToMarker(ticket);
 
             return marker
-              ? {
+              ? toAdminMapPin({
                   ...marker,
                   ticketMeta: {
                     ...marker.ticketMeta,
                     responsibleTeams: ticket.responsibleTeams,
                   },
-                }
+                })
               : null;
           }),
-          ...(stationResult.data?.stations.items ?? []).map((station) =>
-            mapStationToMarker(station),
-          ),
+          ...(stationResult.data?.stations.items ?? []).map((station) => {
+            const marker = mapStationToMarker(station);
+
+            return marker ? toAdminMapPin(marker) : null;
+          }),
         ].filter((marker): marker is RescueMapMarkerItem => Boolean(marker)),
       );
 

@@ -94,6 +94,8 @@ function Row({
   );
 }
 
+const FILTER_BAR_WIDTH = 424;
+
 /**
  * 互助地圖's top left: how many tickets and stations the map shows, and a panel of filters behind
  * 篩選 (prototype `MapFilterBar`). The filters are a way of looking, not of choosing (MAP-ZD-128):
@@ -121,8 +123,9 @@ export function AdminMapFilterBar({
   canFilterByAssignment: boolean;
   /**
    * How many tickets lie in no 責任區 that has a team, of all those loaded, whatever the filters:
-   * the number most asked for on this page, so it stays in the summary (prototype). Left out where
-   * the viewer is not told the teams.
+   * the number most asked for on this page, so it stays in the summary (prototype), 0 included: of
+   * the tickets the map has loaded, which are those in view. Left out where the viewer is not told
+   * the teams.
    */
   unassignedTickets: number | null;
   /** Whether the map shows fewer than it has. */
@@ -156,7 +159,9 @@ export function AdminMapFilterBar({
   return (
     <Box
       sx={{
-        width: open ? 344 : 'auto',
+        // One width, open or closed, so the bar does not jump when it opens. Wide enough for the
+        // summary (it carries 張未指派) with 清除 and 篩選 after it; the note under it wraps.
+        width: FILTER_BAR_WIDTH,
         maxWidth: 'calc(100vw - 56px)',
         borderRadius: `${radius.md}px`,
         border: `1px solid ${color.border.default}`,
@@ -167,7 +172,7 @@ export function AdminMapFilterBar({
     >
       <Stack
         direction="row"
-        spacing={1.125}
+        spacing={1}
         sx={{ alignItems: 'center', px: 1.5, py: 1 }}
       >
         <Box
@@ -188,17 +193,20 @@ export function AdminMapFilterBar({
         <Typography sx={{ ...typography.body[300], whiteSpace: 'nowrap' }}>
           {filters.layers.stations ? `${shownStations} 個站點` : '站點已隱藏'}
         </Typography>
-        {unassignedTickets ? (
+        {unassignedTickets !== null ? (
           <>
             <Typography sx={{ color: color.border.default }}>·</Typography>
             <Typography
               sx={{
                 ...typography.body[300],
                 whiteSpace: 'nowrap',
-                color: color.fg.warning,
+                // The prototype's orange (#E65100, amber-700), whatever the count; `fg.warning` is the
+                // darker amber-900, which reads brown here.
+                color: color.bg.warning.hover,
               }}
             >
-              {unassignedTickets} 張未指派
+              {unassignedTickets}
+              {ticketsMayBeMore ? '+' : ''} 張未指派
             </Typography>
           </>
         ) : null}
@@ -209,6 +217,8 @@ export function AdminMapFilterBar({
               onChange({ ...DEFAULT_ADMIN_MAP_FILTERS, layers: filters.layers })
             }
             sx={{
+              flexShrink: 0,
+              whiteSpace: 'nowrap',
               ...typography.label[300],
               textDecoration: 'underline',
               color: color.fg.neutral.subtle,
@@ -222,6 +232,8 @@ export function AdminMapFilterBar({
           disabled={disabled}
           aria-expanded={open}
           sx={{
+            flexShrink: 0,
+            whiteSpace: 'nowrap',
             gap: 0.5,
             ...typography.label[300],
             fontWeight: 700,

@@ -103,6 +103,16 @@ export function AdminMapPageClient() {
     () => filterMarkers(markers, filters),
     [filters, markers],
   );
+  // The pin picked is ringed: the pins carry their own selection (`pin.selected`).
+  const drawnMarkers = useMemo(
+    () =>
+      shownMarkers.map((marker) =>
+        marker.pin && marker.id === routeState.selectedMarkerId
+          ? { ...marker, pin: { ...marker.pin, selected: true } }
+          : marker,
+      ),
+    [routeState.selectedMarkerId, shownMarkers],
+  );
   const shownTickets = shownMarkers.filter(
     (marker) => marker.detailType === 'ticket',
   ).length;
@@ -768,7 +778,7 @@ export function AdminMapPageClient() {
           }}
         >
           <Map
-            markers={shownMarkers}
+            markers={drawnMarkers}
             closureAreas={filters.layers.areas ? closureAreas : NO_AREAS}
             publicZones={filters.layers.areas ? publicZones : NO_AREAS}
             routeState={routeState}

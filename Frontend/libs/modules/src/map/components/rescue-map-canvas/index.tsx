@@ -207,7 +207,9 @@ function getMarkerIconSignature(item: RescueMapMarkerItem): string {
 
   return [
     base,
-    pin ? `${pin.color}|${pin.dimmed ? 1 : 0}|${pin.selected ? 1 : 0}` : '',
+    pin
+      ? `${pin.shape ?? 'drop'}|${pin.color}|${pin.dimmed ? 1 : 0}|${pin.selected ? 1 : 0}${pin.shape === 'station' ? `|${item.stationMeta?.type ?? ''}` : ''}`
+      : '',
     tooltip ? `${tooltip.title}|${tooltip.subtitle ?? ''}` : '',
   ].join('|');
 }

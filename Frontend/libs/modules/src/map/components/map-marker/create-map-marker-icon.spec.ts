@@ -182,3 +182,42 @@ describe("a building's entry (`building`)", () => {
     expect(entry(7, 3).anchor).toEqual([70, 40]);
   });
 });
+
+describe('the admin 互助地圖 pins', () => {
+  function pin(item: Partial<RescueMapMarkerItem>): string {
+    return (
+      createMapMarkerIcon(
+        {
+          id: 'm',
+          title: 't',
+          subtitle: '',
+          position: [23.67, 121.43],
+          label: 'l',
+          variant: 'urgent-ticket',
+          detailType: 'ticket',
+          ...item,
+        },
+        leaflet,
+      ) as unknown as { html: string }
+    ).html;
+  }
+
+  it('draws a ticket as a dot in the colour it is given', () => {
+    const html = pin({ pin: { shape: 'dot', color: '#D32F2F' } });
+
+    expect(html).toContain('map-pin--dot');
+    expect(html).toContain('background:#D32F2F');
+  });
+
+  it('draws a station as a dark square with its type icon', () => {
+    const html = pin({
+      detailType: 'station',
+      variant: 'resource-station',
+      stationMeta: { type: 'water' },
+      pin: { shape: 'station', color: '#0F172A' },
+    });
+
+    expect(html).toContain('map-pin--station');
+    expect(html).toContain(firstShape(getStationTypeLucideIcon('water')));
+  });
+});

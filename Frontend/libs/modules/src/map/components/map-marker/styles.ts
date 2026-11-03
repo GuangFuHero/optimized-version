@@ -169,6 +169,26 @@ export const rescueMapMarkerStyles = {
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // A ticket on the admin 互助地圖: a dot with a white ring (prototype `pinHtml`).
+  '.map-pin--dot .map-pin__drop': {
+    width: 14,
+    height: 14,
+    borderRadius: '50%',
+    transform: 'none',
+    boxShadow: `0 0 0 2px ${color.bg.neutral.default}, 0 1px 4px rgba(15, 23, 42, 0.45)`,
+  },
+  // A station there: a dark rounded square carrying its type's icon (prototype `stationHtml`).
+  '.map-pin--station .map-pin__drop': {
+    width: 24,
+    height: 24,
+    borderRadius: 7,
+    transform: 'none',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    border: `2px solid ${color.bg.neutral.default}`,
+    boxShadow: '0 2px 7px rgba(15, 23, 42, 0.4)',
+  },
   '.map-pin--dimmed .map-pin__drop': {
     opacity: 0.45,
   },
@@ -180,6 +200,12 @@ export const rescueMapMarkerStyles = {
     outlineOffset: 2,
     border: `2px solid ${color.fg.neutral.default}`,
     boxShadow: '0 10px 24px rgba(15, 23, 42, 0.34)',
+  },
+  // A dot has no border to colour: the dark ring is its selection (prototype).
+  '.map-pin--dot.map-pin--selected .map-pin__drop': {
+    outline: 'none',
+    border: 0,
+    boxShadow: `0 0 0 2px ${color.bg.neutral.default}, 0 0 0 4px ${color.fg.neutral.default}`,
   },
   '.map-pin-wrapper:hover .map-pin:not(.map-pin--selected)': {
     transform: 'translateY(-2px) scale(1.06)',

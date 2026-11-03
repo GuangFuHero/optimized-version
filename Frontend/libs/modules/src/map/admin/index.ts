@@ -31,6 +31,7 @@ export { holdRequest, UNDO_MS } from './hold-request';
 export { useAdminMapAreas, type AdminMapAreas } from './use-admin-map-areas';
 export {
   ADMIN_MAP_LIVE_QUERY_LIMIT,
+  toAdminMapPin,
   useAdminMapLiveMarkers,
   type AdminMapLiveMarkers,
 } from './use-admin-map-live-markers';

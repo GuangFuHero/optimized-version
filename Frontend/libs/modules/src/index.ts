@@ -101,6 +101,7 @@ export {
   UNDO_MS,
   useAdminMapAreas,
   ADMIN_MAP_LIVE_QUERY_LIMIT,
+  toAdminMapPin,
   useAdminMapLiveMarkers,
   viewOfArea,
   type AdminMapAreas,

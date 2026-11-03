@@ -184,8 +184,13 @@ export interface RescueMapPinAppearance {
   dimmed?: boolean;
   /** Outlined, enlarged and lifted above the other pins. */
   selected?: boolean;
-  /** A teardrop unless set; square marks a 開啟空間 space on the admin ticket map. */
-  shape?: 'drop' | 'square';
+  /**
+   * A teardrop unless set. `square` marks a 開啟空間 space on the admin ticket map. On the admin
+   * 互助地圖 a ticket is a `dot` (the page's subject is the areas, and a hundred drops would cover
+   * them) and a station a `station`: a dark rounded square with its type's icon, a different shape
+   * and not just a different colour, so the two read apart at a glance (prototype `map-canvas.jsx`).
+   */
+  shape?: 'drop' | 'square' | 'dot' | 'station';
 }
 
 /** Opt-in hover tooltip for a marker. Plain text; it is escaped. */
