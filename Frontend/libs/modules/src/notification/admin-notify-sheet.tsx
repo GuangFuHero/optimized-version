@@ -255,9 +255,9 @@ interface AdminNotifySheetProps {
 }
 
 /**
- * 通知 (prototype `WGNotifyDrawer`): what waits for the back office, then its team's news, urgent
- * first and then newest (the backend's order). Opening it marks nothing read; only a row's click or
- * 全部標為已讀 does.
+ * 通知清單, what the 通知鈴鐺 opens (`wg-notify.jsx`; 🔒 Sucre: a 清單, never a 抽屜): what waits for
+ * the back office, then its team's news, urgent first and then newest (the backend's order).
+ * Opening it marks nothing read; only a row's click or 全部標為已讀 does.
  */
 export function AdminNotifySheet({ open, onClose }: AdminNotifySheetProps) {
   return (
