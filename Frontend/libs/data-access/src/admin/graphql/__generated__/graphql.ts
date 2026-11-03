@@ -4139,16 +4139,6 @@ export type AdminDeleteAreaMutation = {
   deleteArea: boolean;
 };
 
-export type AdminPromoteMarkZoneMutationVariables = Exact<{
-  uuid: Scalars['UUID']['input'];
-  input: PromoteMarkZoneInput;
-}>;
-
-export type AdminPromoteMarkZoneMutation = {
-  __typename?: 'Mutation';
-  promoteMarkZone: { __typename?: 'HazardousZoneType'; uuid: string };
-};
-
 export type AdminAssignZoneToTeamMutationVariables = Exact<{
   input: ZoneTeamAssignmentInput;
 }>;
@@ -11293,76 +11283,6 @@ export const AdminDeleteAreaDocument = {
 } as unknown as DocumentNode<
   AdminDeleteAreaMutation,
   AdminDeleteAreaMutationVariables
->;
-export const AdminPromoteMarkZoneDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminPromoteMarkZone' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
-          type: {
-            kind: 'NonNullType',
-            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
-          },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'input' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'NamedType',
-              name: { kind: 'Name', value: 'PromoteMarkZoneInput' },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'promoteMarkZone' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'uuid' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'uuid' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'input' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'input' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminPromoteMarkZoneMutation,
-  AdminPromoteMarkZoneMutationVariables
 >;
 export const AdminAssignZoneToTeamDocument = {
   kind: 'Document',

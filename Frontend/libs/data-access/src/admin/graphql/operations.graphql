@@ -919,11 +919,6 @@ mutation AdminUpdateArea($uuid: UUID!, $input: UpdateAreaInput!) {
 mutation AdminDeleteArea($uuid: UUID!) {
   deleteArea(uuid: $uuid)
 }
-mutation AdminPromoteMarkZone($uuid: UUID!, $input: PromoteMarkZoneInput!) {
-  promoteMarkZone(uuid: $uuid, input: $input) {
-    uuid
-  }
-}
 mutation AdminAssignZoneToTeam($input: ZoneTeamAssignmentInput!) {
   assignZoneToTeam(input: $input) {
     zoneUuid

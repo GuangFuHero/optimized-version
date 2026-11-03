@@ -46,7 +46,6 @@ export interface AreaActions {
   canEditBounds: boolean;
   onEditBounds: () => void;
   onSave: (changes: AreaChanges) => void;
-  onPromote: () => void;
   onDelete: () => void;
   onAddTeam: (teamUuid: string) => void;
   onRemoveTeam: (teamUuid: string) => void;
@@ -271,7 +270,7 @@ export function AreaDetailFooter({
   editing: boolean;
   onEdit: () => void;
 }) {
-  const [confirm, setConfirm] = useState<'delete' | 'promote' | null>(null);
+  const [confirming, setConfirming] = useState(false);
   const name = item.name ?? '這個區域';
 
   if (!actions.canEdit && !actions.canDelete) {
@@ -280,7 +279,7 @@ export function AreaDetailFooter({
 
   return (
     <>
-      {/* Up to four buttons in 360px: they wrap, rather than push the last off the panel. */}
+      {/* Up to three buttons in 360px: they wrap, rather than push the last off the panel. */}
       <Stack
         direction="row"
         sx={{
@@ -293,16 +292,11 @@ export function AreaDetailFooter({
         }}
       >
         {actions.canDelete ? (
-          <Button color="error" onClick={() => setConfirm('delete')}>
-            刪除區域
+          <Button color="error" onClick={() => setConfirming(true)}>
+            {item.kind === 'hazardous_zone' ? '解除危險區' : '刪除區域'}
           </Button>
         ) : null}
         <Box sx={{ flex: 1 }} />
-        {actions.canEdit && item.kind === 'mark_zone' ? (
-          <Button variant="outlined" onClick={() => setConfirm('promote')}>
-            升為危險區
-          </Button>
-        ) : null}
         {actions.canEdit ? (
           <Button variant="outlined" disabled={editing} onClick={onEdit}>
             編輯
@@ -328,26 +322,25 @@ export function AreaDetailFooter({
           </Tooltip>
         ) : null}
       </Stack>
+      {/* A 危險區 does not expire: someone lifts it, to say the danger is past, which 刪除 would
+          read as a drawing mistake (design review, 2026-11-02). */}
       <AreaConfirmDialog
-        open={confirm === 'delete'}
-        title={`刪除「${name}」？`}
-        body="區域會從地圖上移除，前台也看不到。刪除後沒有辦法還原，只有按下後的 5 秒內可以復原。"
-        confirmLabel="刪除"
-        onClose={() => setConfirm(null)}
+        open={confirming}
+        title={
+          item.kind === 'hazardous_zone'
+            ? `解除「${name}」？`
+            : `刪除「${name}」？`
+        }
+        body={
+          item.kind === 'hazardous_zone'
+            ? '危險區會從地圖上移除，前台也看不到。只有按下後的 5 秒內可以復原。'
+            : '區域會從地圖上移除，前台也看不到。刪除後沒有辦法還原，只有按下後的 5 秒內可以復原。'
+        }
+        confirmLabel={item.kind === 'hazardous_zone' ? '解除' : '刪除'}
+        onClose={() => setConfirming(false)}
         onConfirm={() => {
-          setConfirm(null);
+          setConfirming(false);
           actions.onDelete();
-        }}
-      />
-      <AreaConfirmDialog
-        open={confirm === 'promote'}
-        title={`把「${name}」升為危險區？`}
-        body="升級後這一區會變成危險區，一律公開到前台，沒有辦法改回標示區。"
-        confirmLabel="升為危險區"
-        onClose={() => setConfirm(null)}
-        onConfirm={() => {
-          setConfirm(null);
-          actions.onPromote();
         }}
       />
     </>

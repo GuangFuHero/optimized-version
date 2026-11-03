@@ -1402,16 +1402,6 @@ export function useDeleteArea() {
   });
 }
 
-export function usePromoteMarkZone() {
-  return useMutation({
-    mutationFn: (variables: documents.AdminPromoteMarkZoneMutationVariables) =>
-      adminGraphqlClient
-        .mutation(documents.AdminPromoteMarkZoneDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
-  });
-}
-
 export function useAssignZoneToTeam() {
   const queryClient = useQueryClient();
   return useMutation({

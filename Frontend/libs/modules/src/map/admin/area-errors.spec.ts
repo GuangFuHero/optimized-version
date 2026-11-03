@@ -22,11 +22,6 @@ describe('areaErrorMessage', () => {
     );
     expect(
       areaErrorMessage(
-        new Error('Only a mark zone can be promoted to a hazardous zone'),
-      ),
-    ).toBe('只有標示區可以升為危險區');
-    expect(
-      areaErrorMessage(
         new Error('This team is not assigned to this team zone'),
       ),
     ).toBe('這個團隊沒有被指派到這個責任區');

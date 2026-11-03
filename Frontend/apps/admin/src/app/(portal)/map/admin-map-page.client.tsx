@@ -9,7 +9,6 @@ import {
   useCapability,
   useCreateArea,
   useDeleteArea,
-  usePromoteMarkZone,
   useAssignableStationTeams,
   useRemoveZoneFromTeam,
   useUpdateArea,
@@ -62,7 +61,7 @@ const { color, shadow, typography } = designTokens;
 
 // 危險區 has no status in the UI (Carol: skip it; areas can be edited and deleted directly, so no
 // open/closed state is needed). The backend still refuses a blank one, and nothing reads it, so this
-// fixed value is sent on create and on promote.
+// fixed value is sent on create.
 const DEFAULT_HAZARD_STATUS = 'dangerous';
 
 const NO_AREAS: never[] = [];
@@ -517,7 +516,6 @@ export function AdminMapPageClient() {
   const canDeleteZone = useCapability('work_zone.delete').data ?? false;
   const updateArea = useUpdateArea();
   const deleteArea = useDeleteArea();
-  const promoteMarkZone = usePromoteMarkZone();
   const assignZoneToTeam = useAssignZoneToTeam();
   const removeZoneFromTeam = useRemoveZoneFromTeam();
   const areaActions = useMemo<AreaActions | undefined>(() => {
@@ -587,21 +585,11 @@ export function AdminMapPageClient() {
             areas.reload();
             toast.success(`已更新${label}`);
           }, fail),
-      onPromote: () =>
-        void promoteMarkZone
-          .mutateAsync({
-            uuid: area.id,
-            input: { status: DEFAULT_HAZARD_STATUS },
-          })
-          .then(() => {
-            areas.reload();
-            toast.success(`${label}已升為危險區`);
-          }, fail),
       onDelete: () => {
         setHiddenAreaIds((current) => new Set(current).add(area.id));
         setSelectedAreaId(null);
         holdRequest({
-          message: `已刪除${label}`,
+          message: `${area.kind === 'hazardous_zone' ? '已解除' : '已刪除'}${label}`,
           onUndo: () => settleHidden(area.id),
           send: () =>
             deleteArea
@@ -659,7 +647,6 @@ export function AdminMapPageClient() {
     canDeleteZone,
     canEditZone,
     deleteArea,
-    promoteMarkZone,
     removeZoneFromTeam,
     selectedAreaId,
     settleHidden,

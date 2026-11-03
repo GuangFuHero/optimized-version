@@ -9,7 +9,6 @@ const AREA_ERROR_MESSAGES: readonly [needle: string, message: string][] = [
   ['Team is not active', '這個團隊已停用，不能指派'],
   ['Team not found', '找不到這個團隊'],
   ['Area not found', '找不到這個區域，可能已經被刪除'],
-  ['Only a mark zone can be promoted', '只有標示區可以升為危險區'],
   ['is not assigned to this team zone', '這個團隊沒有被指派到這個責任區'],
   [
     'A team zone needs at least one team',
