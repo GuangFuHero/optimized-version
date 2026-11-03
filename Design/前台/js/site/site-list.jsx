@@ -104,7 +104,8 @@
     const removed = state.status === 'deleted';
     const left = Math.max(0, state.required - state.matched);
     const pct = state.required ? Math.min(100, Math.round((state.matched / state.required) * 100)) : 0;
-    const disabled = !isAuthenticated || full || removed || mine;
+    const disabled = full || removed || mine;   // 訪客可按，去登入（PR #213 For the designer 4，同詳情）
+    const noQty = Boolean(state.noQuantity);   // A6：沒填數量 → 不畫條、寫「未填數量 · 已 N 人」
     const label = removed ? '已刪除' : mine ? '已承接' : full ? '已滿' : !isAuthenticated ? '登入後接' : '接這筆';
 
     return (
@@ -137,19 +138,22 @@
               color: full ? 'var(--color-fg-success)' : mine ? 'var(--color-brand-secondary-subtle)' : 'var(--color-fg-neutral-muted)' }}>
               {/* 不再加「你已接」前綴 —— 按鈕已經寫著「已承接」，這裡重複一次
                   會在 390px 上把需求名稱擠到截斷。狀態用顏色帶，不用字。 */}
-              {state.matched}/{state.required}{full ? ' 已滿' : left ? ' · 缺 ' + left : ''}
+              {noQty ? '未填數量 · 已 ' + state.matched + ' 人'
+                : <>{state.matched}/{state.required}{full ? ' 已滿' : left ? ' · 缺 ' + left : ''}</>}
             </span>
           </div>
+          {noQty ? null : (
           <div style={{ marginTop: 4, height: 4, borderRadius: 'var(--radius-full)',
             background: 'var(--color-bg-neutral-sunken)', overflow: 'hidden' }}>
             <div style={{ width: pct + '%', height: '100%', borderRadius: 'var(--radius-full)',
               background: full ? 'var(--color-bg-success)' : 'var(--color-bg-primary)' }}></div>
           </div>
+          )}
         </div>
 
         {/* 觸控目標：視覺 32px（手機 36px，字放大後 32 會夾到），
             外圍 margin 把命中區補到 44px。 */}
-        <button type="button" onClick={onClaim} disabled={disabled}
+        <button type="button" onClick={isAuthenticated ? onClaim : () => { if (window.SiteAuth) window.SiteAuth.goSignIn(); }} disabled={disabled}
           style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 5,
             height: compact ? 36 : 32, padding: '0 ' + (compact ? '12px' : '14px'),
             margin: (compact ? '4px' : '5px') + ' 0',
@@ -233,7 +237,7 @@
     const single = needs.length === 1 ? needs[0] : null;
     const singleMine = Boolean(single) && Boolean(viewerId) && (single.state.claimedBy || []).indexOf(viewerId) !== -1;
     const claimDisabled = !taskMatch ? true
-      : single ? (!isAuthenticated || singleMine || single.state.status === 'matched' || single.state.status === 'deleted')
+      : single ? (singleMine || single.state.status === 'matched' || single.state.status === 'deleted')   // 訪客可按，去登入（PR #213 For the designer 4）
       : false;                                  // 「查看 N 筆需求」永遠可按
     const claimLabel = !taskMatch ? '接任務'
       : !single ? '查看 ' + needs.length + ' 筆需求'
@@ -242,7 +246,10 @@
       : single.state.status === 'deleted' ? '已刪除'
       : !isAuthenticated ? '登入後接任務' : '接任務';
     const claimIcon = !single ? 'ListChecks' : isAuthenticated ? 'HeartHandshake' : 'Lock';
-    const onClaimClick = () => { if (single) onClaimNeed(single.task); else onSelect(); };
+    const onClaimClick = () => {
+      if (single && !isAuthenticated) { if (window.SiteAuth) window.SiteAuth.goSignIn(); return; }
+      if (single) onClaimNeed(single.task); else onSelect();
+    };
 
     return (
       <div style={{ padding: 'var(--space-4)', borderRadius: 'var(--radius-lg)',

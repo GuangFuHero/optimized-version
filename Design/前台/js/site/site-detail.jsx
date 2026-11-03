@@ -6,6 +6,8 @@
   const { useState, useEffect } = React;
   const { Badge, Button, Tabs, Avatar } = window.WanGuardDesignSystem_9c8f68;
   const R = window.SiteRoute;
+  /* 訪客按「登入後接」→ 去登入頁，帶整個 href 回來（含開著的那張單），見 site-auth.js goSignIn */
+  const goSignIn = () => { if (window.SiteAuth && window.SiteAuth.goSignIn) window.SiteAuth.goSignIn(); };
 
   const GRID_M = (window.SiteGuestBoundary && window.SiteGuestBoundary.GUEST_GRID_DIAMETER_M) || 550;
   const TASK_MATCH_LABELS = { idle: '未媒合', claimed: '已報名', matched: '媒合完成', deleted: '已刪除' };
@@ -28,7 +30,11 @@
   /* 右內距要留 56px 給絕對定位的關閉鈕（44 ＋ 8 邊距 ＋ 一點餘裕），
      否則長標題會跑到 X 底下。 */
   const panelHead = { display: 'flex', alignItems: 'flex-start', gap: 'var(--space-3)', padding: 'var(--space-4) 56px var(--space-4) var(--space-6)' };
-  const sectionLabel = { font: '700 var(--fs-11)/1.4 var(--font-latin)', letterSpacing: '.08em', color: 'var(--color-fg-neutral-muted)', marginBottom: 6 };
+  /* 🔄 2026-11-01（PR #213 For the designer 2）：區塊小標從 `--color-fg-neutral-muted`（#94A3B8）改成 #64748B。
+     #94A3B8 在白底只有 2.56:1，連 3:1 都不到；前端 09-17 已改，原型跟上。
+     DS 沒有 #64748B 的語意 token，直接用 primitive。 */
+  const LABEL_FG = 'var(--prim-color-neutral-500, #64748B)';
+  const sectionLabel = { font: '700 var(--fs-11)/1.4 var(--font-latin)', letterSpacing: '.08em', color: LABEL_FG, marginBottom: 6 };
   const sectionValue = { font: '400 var(--fs-14)/1.6 var(--font-body)', color: 'var(--color-fg-neutral-default)', textWrap: 'pretty' };
   const rowGap = { display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' };
 
@@ -88,8 +94,29 @@
     );
   }
 
+  /* 志工媒合總進度怎麼算（B2；2026-11-01 照 PR #213 For the designer 5，對齊前端 `summarizeNeedsProgress`）
+   *  - 沒填數量的需求**不算**（分子分母都不算）—— 它自己那一列也不畫條，總數不能替它編一個數字
+   *  - 承接人數超過需求量 → 只算到滿，不能拿多出來的人去補另一筆還缺人的
+   *  - 已刪除的需求、或整張單已結束（已完成／已取消）→ 不再要人：分母＝已承接的人數
+   *    （3 人的需求停掉時沒人接 → 加 0/0，不是 3/3）
+   *  - 分母是 0 → 不畫條
+   *  🔴 不要回到舊算法「沒填數量先以 1 計」：那會讓總數出現一個沒人要求過的名額。 */
+  function summarizeNeedsProgress(needs, ticketEnded) {
+    let matched = 0, required = 0;
+    (needs || []).forEach(({ task, state }) => {
+      const qty = typeof task.quantity === 'number' && task.quantity > 0 ? task.quantity : null;
+      if (qty == null) return;
+      const got = Math.min(state.matched || 0, qty);
+      const stopped = ticketEnded || state.status === 'deleted';
+      matched += got;
+      required += stopped ? got : qty;
+    });
+    return { matched, required };
+  }
+
   function VolunteerProgress({ matched, required, needCount }) {
-    const pct = required ? Math.min(100, Math.round((matched / required) * 100)) : 0;
+    if (!required) return null;
+    const pct = Math.min(100, Math.round((matched / required) * 100));
     return (
       <div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 6 }}>
@@ -135,7 +162,10 @@
     const meta = NEED_KIND_META[task.kind] || NEED_KIND_META.hr;
     const pct = state.required ? Math.min(100, Math.round((state.matched / state.required) * 100)) : 0;
     const full = state.status === 'matched';
-    const disabled = !isAuthenticated || full || state.status === 'deleted' || mine;
+    /* 🔄 2026-11-01（PR #213 For the designer 4）：訪客的「登入後接」**橘色、可以按**，按了去登入、登入完回到這張單。
+       原本是灰色停用 —— 那違反 08-22 S-2「入口一律顯示，擋在送出前不擋在入口前」。 */
+    const disabled = full || state.status === 'deleted' || mine;
+    const hasQty = typeof task.quantity === 'number' && task.quantity > 0;
     return (
       <div style={{ padding: 'var(--space-3)', borderRadius: 'var(--radius-md)',
         border: '1px solid ' + (mine ? 'var(--color-brand-secondary-default)' : 'var(--color-border-default)'),
@@ -150,19 +180,21 @@
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginTop: 'var(--space-2)' }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ height: 6, borderRadius: 'var(--radius-full)', background: 'var(--color-bg-neutral-sunken)', overflow: 'hidden' }}>
-              <div style={{ width: pct + '%', height: '100%', borderRadius: 'var(--radius-full)',
-                background: full ? 'var(--color-bg-success)' : 'var(--color-bg-primary)', transition: 'width var(--transition-base)' }}></div>
-            </div>
-            <div style={{ marginTop: 4, font: '400 var(--fs-12)/1.5 var(--font-data)', color: 'var(--color-fg-neutral-subtle)' }}>
-              {state.matched}/{state.required}
-              {typeof task.quantity === 'number' && task.quantity > 0 ? '' : '（未填數量，先以 1 計）'}
+            {/* A6（2026-11-01）：沒填數量就**不畫條**，只寫已經幾個人 —— 跟 staging 一樣。 */}
+            {hasQty ? (
+              <div style={{ height: 6, borderRadius: 'var(--radius-full)', background: 'var(--color-bg-neutral-sunken)', overflow: 'hidden' }}>
+                <div style={{ width: pct + '%', height: '100%', borderRadius: 'var(--radius-full)',
+                  background: full ? 'var(--color-bg-success)' : 'var(--color-bg-primary)', transition: 'width var(--transition-base)' }}></div>
+              </div>
+            ) : null}
+            <div style={{ marginTop: hasQty ? 4 : 0, font: '400 var(--fs-12)/1.5 var(--font-data)', color: 'var(--color-fg-neutral-subtle)' }}>
+              {hasQty ? state.matched + '/' + state.required : '未填數量 · 已 ' + (state.matched || 0) + ' 人'}
               {mine ? ' · 你已承接' : ''}
             </div>
           </div>
           <Button variant={mine ? 'outline' : 'primary'} size="sm" disabled={disabled}
             startIcon={<WGIcon n={mine ? 'Check' : isAuthenticated ? 'HeartHandshake' : 'Lock'} s={15} />}
-            onClick={onClaim}>
+            onClick={isAuthenticated ? onClaim : goSignIn}>
             {mine ? '已承接' : needClaimLabel(state, isAuthenticated)}
           </Button>
         </div>
@@ -319,8 +351,8 @@
     const needs = taskMatch.needs || [];
     const single = needs.length === 1 ? needs[0] : null;
     const singleMine = Boolean(single) && Boolean(viewerId) && (single.state.claimedBy || []).indexOf(viewerId) !== -1;
-    const claimDisabled = !single || singleMine || !isAuthenticated
-      || single.state.status === 'matched' || single.state.status === 'deleted';
+    const claimDisabled = !single || singleMine
+      || single.state.status === 'matched' || single.state.status === 'deleted';   // 訪客可以按（去登入），見 NeedRow
     const claimLabel = !single ? '接任務'
       : singleMine ? '已承接'
       : single.state.status === 'matched' ? '已滿額'
@@ -346,8 +378,9 @@
           {tk.priority === 'critical' ? <Badge tone="danger" variant="solid">最高優先</Badge>
             : tk.priority === 'high' ? <Badge tone="warning" variant="subtle">高優先</Badge> : null}
           {/* 狀態標籤已經寫「媒合完成」時，不要再掛一顆一模一樣的。 */}
-          {R.resolveTicketDisplay(tk.status, taskMatch).fromMatch ? null
-            : <Badge tone={TASK_MATCH_TONES[taskMatch.status]} variant="subtle">{TASK_MATCH_LABELS[taskMatch.status]}</Badge>}
+          {/* 🔄 2026-11-01（PR #213 For the designer 3）：拿掉第三顆「未媒合／已報名／媒合完成」。
+              狀態本身已經由需求推出來（沒人接＝待處理、有人接＝處理中），再掛一顆是同一件事講兩次；
+              缺不缺人看下面「志工媒合」的進度條。 */}
         </div>
 
         <div style={{ padding: '0 var(--space-6)', marginTop: 'var(--space-4)' }}>
@@ -357,7 +390,8 @@
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 'var(--space-4) var(--space-6) var(--space-6)' }}>
           {tab === 'details' ? (
             <div style={rowGap}>
-              <VolunteerProgress matched={taskMatch.matched} required={taskMatch.required} needCount={needs.length} />
+              {(() => { const p = summarizeNeedsProgress(needs, ['completed', 'closed', 'cancelled', 'canceled'].indexOf(tk.status) !== -1);
+                return <VolunteerProgress matched={p.matched} required={p.required} needCount={needs.length} />; })()}
 
               <NeedList needs={needs} viewerId={viewerId} isAuthenticated={isAuthenticated} onClaimNeed={onClaimNeed} />
 
@@ -503,7 +537,7 @@
               那正是 2026-09-04 回報的問題。改在上面每一筆各給一顆。 */}
           {single ? (
             <Button variant="primary" disabled={claimDisabled} startIcon={<WGIcon n="HeartHandshake" s={16} />}
-              onClick={() => onClaimNeed(single.task)} style={{ flex: 1 }}>{claimLabel}</Button>
+              onClick={isAuthenticated ? () => onClaimNeed(single.task) : goSignIn} style={{ flex: 1 }}>{claimLabel}</Button>
           ) : (
             <span style={{ flex: 1, alignSelf: 'center', font: '400 var(--fs-12)/1.5 var(--font-body)', color: 'var(--color-fg-neutral-subtle)' }}>
               這張單有 {needs.length} 筆需求，請在上面選要接哪一筆。

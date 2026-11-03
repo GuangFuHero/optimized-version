@@ -178,6 +178,8 @@
     'tk-4031': [
       { id: 'K-4031-1', kind: 'hr', name: '分送志工（3 人一組）', quantity: 6, matched: 2 },
       { id: 'K-4031-2', kind: 'supply', name: '飲水與熱食', quantity: 3, matched: 0 },
+      /* 2026-11-01 示範用（Claude 編的）：沒填數量的需求 —— 自己那列不畫條、不算進「志工媒合」總數（A6、PR #213 第 5 點） */
+      { id: 'K-4031-3', kind: 'hr', name: '協助長者上下樓', quantity: null, matched: 1 },
     ],
     'tk-4008': [
       { id: 'K-4008-1', kind: 'hr', name: '破壞剪操作', quantity: 2, matched: 2 },

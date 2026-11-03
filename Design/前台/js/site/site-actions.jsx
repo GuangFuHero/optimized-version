@@ -702,12 +702,21 @@
 
     /** 一筆需求的承接狀態。`quantity` 為 null（民眾沒填）時分母當 1 —— 這是
      *  **顯示用的估值**，`ticket_tasks.quantity` 本身仍然誠實地存 null。 */
+    /* 🔄 2026-11-01（A6、PR #213 第 5 點）：沒填數量的需求**永遠不會「已滿」** ——
+       沒人說過要幾個，接了 1 個就寫已滿等於替民眾關門。`noQuantity` 讓畫面改寫「未填數量 · 已 N 人」、不畫條、
+       不算進「志工媒合」總數；required 仍給 1 只是讓舊的除法不出錯。 */
     const getNeedState = useCallback((marker, task) => {
-      const required = (typeof task.quantity === 'number' && task.quantity > 0) ? task.quantity : 1;
+      const noQuantity = !(typeof task.quantity === 'number' && task.quantity > 0);
+      const required = noQuantity ? 1 : task.quantity;
       const local = stored[Bridge.matchKey(marker.id, task.id)];
-      if (local) return { ...local, required: local.required || required };
+      if (local) {
+        const st = { ...local, required: local.required || required, noQuantity };
+        if (noQuantity && st.status === 'matched') st.status = st.matched > 0 ? 'claimed' : 'idle';
+        return st;
+      }
       const base = task.matched || 0;
-      return { status: base >= required ? 'matched' : 'idle', matched: base, required, log: [] };
+      const status = noQuantity ? (base > 0 ? 'claimed' : 'idle') : (base >= required ? 'matched' : 'idle');
+      return { status, matched: base, required, noQuantity, log: [] };
     }, [stored]);
 
     /** 整張單的彙總。給卡片與 Badge 用 —— 它回答「這張單還缺不缺人」，
@@ -742,18 +751,18 @@
          兩筆不同需求（2026-09-04 Sucre 確認），那是兩列合法的 assignment。 */
       const already = (prev.claimedBy || []).indexOf(viewerId) !== -1;
       if (viewerId && already) return;
-      const matched = Math.min(prev.required, prev.matched + 1);
+      const matched = prev.noQuantity ? prev.matched + 1 : Math.min(prev.required, prev.matched + 1);
       const claimedBy = (prev.claimedBy || []).slice();
       if (viewerId) claimedBy.push(viewerId);
       Bridge.writeTaskMatch(marker.id, task.id, {
         ...prev, matched, claimedBy,
-        status: matched >= prev.required ? 'matched' : 'claimed',
+        status: !prev.noQuantity && matched >= prev.required ? 'matched' : 'claimed',
         /* 後台任務管理讀這幾個欄位就能顯示「前台有人接了這一筆」。 */
         claimedAt: Bridge.stamp(),
         source: 'site',
         taskName: task.name,          // 讓「我承接的」不必再回查 marker 才知道接了什麼
         ticketTitle: marker.title,
-        log: [{ text: '志工報名成功，目前 ' + matched + '/' + prev.required + ' 人', at: nowLabel() }, ...(prev.log || [])],
+        log: [{ text: '志工報名成功，目前 ' + (prev.noQuantity ? matched : matched + '/' + prev.required) + ' 人', at: nowLabel() }, ...(prev.log || [])],
       });
 
       /* ① 通知建立者：有人接了，而且是誰。 */
