@@ -39,7 +39,11 @@ describe('stationReportOutcome', () => {
         'revoked',
         'rejected',
         'not_adopted',
-      ].map(stationReportOutcome),
+      ].map((status) =>
+        stationReportOutcome(
+          row({ status, appliedValue: 'temporarily_closed' }),
+        ),
+      ),
     ).toEqual([
       'pending',
       'adopted',
@@ -50,8 +54,24 @@ describe('stationReportOutcome', () => {
     ]);
   });
 
+  it('keeps 已參考修改 when a value the reviewer wrote is revoked', () => {
+    expect(
+      stationReportOutcome(
+        row({ status: 'revoked', appliedValue: 'permanently_closed' }),
+      ),
+    ).toBe('consulted');
+  });
+
+  it('reads a revoke with no value written as 已採用', () => {
+    expect(
+      stationReportOutcome(row({ status: 'revoked', appliedValue: null })),
+    ).toBe('adopted');
+  });
+
   it('reads a status it does not know as still waiting', () => {
-    expect(stationReportOutcome('something_new')).toBe('pending');
+    expect(stationReportOutcome(row({ status: 'something_new' }))).toBe(
+      'pending',
+    );
   });
 });
 
@@ -77,6 +97,19 @@ describe('readMyStationReports', () => {
       applied: '09:00-18:00',
     });
     expect(adopted.applied).toBeNull();
+  });
+
+  it('keeps the value the reviewer wrote on the card after a revoke', () => {
+    const [report] = readMyStationReports(
+      [row({ status: 'revoked', appliedValue: 'permanently_closed' })],
+      NOW,
+    );
+
+    expect(report).toMatchObject({
+      outcome: 'consulted',
+      suggested: '暫停服務',
+      applied: '已關閉',
+    });
   });
 
   it('names the field and its values as the suggestion form does', () => {
