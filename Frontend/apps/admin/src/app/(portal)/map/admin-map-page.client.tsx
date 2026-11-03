@@ -370,6 +370,38 @@ export function AdminMapPageClient() {
     },
     [visibleClosureAreas, visiblePublicZones, viewportStore],
   );
+  // `?zone=<uuid>` (the bell's 責任區 notices) opens on that area once the areas are in, as a click
+  // in the list does. Read once: an area the viewer may not see, or one since deleted, leaves the
+  // map as it is.
+  const zoneFromUrl = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    if (zoneFromUrl.current === undefined) {
+      zoneFromUrl.current = new URLSearchParams(window.location.search).get(
+        'zone',
+      );
+    }
+
+    const zoneId = zoneFromUrl.current;
+
+    if (!zoneId || !areas.hasFetchedOnce) {
+      return;
+    }
+
+    zoneFromUrl.current = null;
+
+    if (
+      [...visibleClosureAreas, ...visiblePublicZones].some(
+        (area) => area.id === zoneId,
+      )
+    ) {
+      handleSelectArea(zoneId);
+    }
+  }, [
+    areas.hasFetchedOnce,
+    handleSelectArea,
+    visibleClosureAreas,
+    visiblePublicZones,
+  ]);
   // Drawing a new area: first its corners, then what it is.
   const canDraw = useCapability('work_zone.add').data ?? false;
   const canAssignZone = useCapability('work_zone.assign').data ?? false;

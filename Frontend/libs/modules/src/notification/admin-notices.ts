@@ -29,28 +29,31 @@ export const ADMIN_NOTICE_GROUPS: Record<
   team: { title: '你的團隊', hint: '跟你的團隊有關的動態' },
 };
 
-/** Where a notice of a type opens: a page, or the station it names. */
+/** Where a notice of a type opens: a page, or the station or zone it names. */
 type AdminPage = '/stations' | '/audit' | '/users' | '/map' | '/teams';
+
+/** What a page can open from its URL: the ref it takes, and the query parameter it reads. */
+const OPENS = {
+  station: { refType: 'station', param: 'station' },
+  zone: { refType: 'work_zone', param: 'zone' },
+} as const;
+
+interface AdminNoticeEntry {
+  kind: AdminNoticeKind;
+  group: AdminNoticeGroup;
+  page: AdminPage;
+  /** The page opens on the station or zone the notice names, when it names one. */
+  opens?: keyof typeof OPENS;
+  /** Whether it adds to the bell's number. A station's data changing is news, not a task. */
+  countsOnBell?: false;
+}
 
 /**
  * The backend's event types the back office shows, how each reads, and what it opens. A list of
  * what to show rather than of what to hide, so an event added later stays out until someone
  * decides it is for the back office.
  */
-const ADMIN_NOTICE_TYPES: Partial<
-  Record<
-    string,
-    {
-      kind: AdminNoticeKind;
-      group: AdminNoticeGroup;
-      page: AdminPage;
-      /** The page opens on the station the notice names, when it names one. */
-      opensStation?: boolean;
-      /** Whether it adds to the bell's number. A station's data changing is news, not a task. */
-      countsOnBell?: false;
-    }
-  >
-> = {
+const ADMIN_NOTICE_TYPES: Partial<Record<string, AdminNoticeEntry>> = {
   // The ref is the suggestion, not the station, so it opens the list and cannot pick a station.
   station_suggestion_created: {
     kind: 'suggestion',
@@ -63,46 +66,53 @@ const ADMIN_NOTICE_TYPES: Partial<
     kind: 'assign',
     group: 'team',
     page: '/stations',
-    opensStation: true,
+    opens: 'station',
   },
   station_unassigned: {
     kind: 'assign',
     group: 'team',
     page: '/stations',
-    opensStation: true,
+    opens: 'station',
   },
-  // The map has no deep link to a zone yet, so a click opens the page.
-  zone_assigned: { kind: 'assign', group: 'team', page: '/map' },
-  zone_unassigned: { kind: 'assign', group: 'team', page: '/map' },
+  zone_assigned: { kind: 'assign', group: 'team', page: '/map', opens: 'zone' },
+  zone_unassigned: {
+    kind: 'assign',
+    group: 'team',
+    page: '/map',
+    opens: 'zone',
+  },
   team_member_added: { kind: 'team', group: 'team', page: '/teams' },
   team_suspended: { kind: 'team', group: 'team', page: '/teams' },
   resource_station_updated: {
     kind: 'station',
     group: 'team',
     page: '/stations',
-    opensStation: true,
+    opens: 'station',
     countsOnBell: false,
   },
 };
 
 /**
  * The page a notice opens, or null for a type that is not the back office's. A notice that names
- * a station opens it; one that names anything else, a suggestion included, opens the page.
+ * a station or zone opens it; one that names anything else, a suggestion included, opens the page.
  */
-export function adminNoticeHref({
-  type,
-  ref_type,
-  ref_uuid,
-}: Pick<NotificationRow, 'type' | 'ref_type' | 'ref_uuid'>): string | null {
-  const entry = ADMIN_NOTICE_TYPES[type];
+export function adminNoticeHref(
+  row: Pick<NotificationRow, 'type' | 'ref_type' | 'ref_uuid'>,
+): string | null {
+  const entry = ADMIN_NOTICE_TYPES[row.type];
 
-  if (!entry) {
-    return null;
-  }
+  return entry ? hrefOf(entry, row) : null;
+}
 
-  return entry.opensStation && ref_type === 'station' && ref_uuid
-    ? `${entry.page}?station=${ref_uuid}`
-    : entry.page;
+function hrefOf(
+  { page, opens }: AdminNoticeEntry,
+  { ref_type, ref_uuid }: Pick<NotificationRow, 'ref_type' | 'ref_uuid'>,
+): string {
+  const target = opens ? OPENS[opens] : null;
+
+  return target && ref_type === target.refType && ref_uuid
+    ? `${page}?${target.param}=${encodeURIComponent(ref_uuid)}`
+    : page;
 }
 
 /** A notice as the bell shows it. */
@@ -127,12 +137,12 @@ export function readAdminNotices(
 ): AdminNotice[] {
   return rows.flatMap((row) => {
     const entry = ADMIN_NOTICE_TYPES[row.type];
-    const href = adminNoticeHref(row);
-    const text = adminNoticeText(row);
 
-    if (!entry || href === null) {
+    if (!entry) {
       return [];
     }
+
+    const text = adminNoticeText(row);
 
     return [
       {
@@ -144,7 +154,7 @@ export function readAdminNotices(
         read: row.read,
         createdAt: row.created_at ?? null,
         ago: timeAgo(row.created_at, now),
-        href,
+        href: hrefOf(entry, row),
         countsOnBell: entry.countsOnBell !== false,
       },
     ];

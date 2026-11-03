@@ -113,6 +113,23 @@ describe('adminNoticeHref', () => {
     ).toBe('/stations?station=s1');
   });
 
+  it('opens the zone on the map', () => {
+    expect(
+      adminNoticeHref({
+        type: 'zone_assigned',
+        ref_type: 'work_zone',
+        ref_uuid: 'z1',
+      }),
+    ).toBe('/map?zone=z1');
+    expect(
+      adminNoticeHref({
+        type: 'zone_unassigned',
+        ref_type: 'station',
+        ref_uuid: 'z1',
+      }),
+    ).toBe('/map');
+  });
+
   it('opens the station list without a station uuid', () => {
     expect(
       adminNoticeHref({
