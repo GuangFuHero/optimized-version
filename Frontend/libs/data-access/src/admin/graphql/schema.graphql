@@ -136,7 +136,9 @@ type AreaType {
   geometry: GeoJSON
   note: String
 
-  """Shown on the public map; always true except for a mark zone"""
+  """
+  Shown on the public map, a team zone only to those signed in; always true except for a mark zone
+  """
   isPublic: Boolean!
   createdAt: DateTime
   updatedAt: DateTime
@@ -313,7 +315,7 @@ input CreateAreaInput {
   note: String = null
 
   """
-  Shown on the public map; hazardous and team zones are always public, a mark zone defaults to false
+  Shown on the public map; hazardous and team zones are always public, though a guest never sees a team zone; a mark zone defaults to false
   """
   isPublic: Boolean = null
 
@@ -1767,7 +1769,9 @@ type TeamZoneType {
   geometry: GeoJSON
   note: String
 
-  """Always true: a team zone and its teams are shown on the public map"""
+  """
+  Always true: a team zone and its teams are shown on the public map to those signed in
+  """
   isPublic: Boolean!
 
   """UUID of the gov user who drew this zone"""

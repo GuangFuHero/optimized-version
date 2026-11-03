@@ -1,7 +1,8 @@
 """GraphQL integration tests for map areas (危險區, 責任區, 標示區) and team zone assignment.
 
-Covers the gov gate on drawing, the always-public hazard and team zone, the team-zone-needs-a-team
-rule, the mark zone's visibility switch and viewport, mark -> hazard promotion, and assign/remove.
+Covers the gov gate on drawing, the always-public hazard and team zone, the team zone kept from guests,
+the team-zone-needs-a-team rule, the mark zone's visibility switch and viewport, mark -> hazard
+promotion, and assign/remove.
 """
 
 import uuid as uuid_mod
@@ -67,6 +68,12 @@ DELETE_AREA = "mutation($uuid: UUID!) { deleteArea(uuid: $uuid) }"
 ASSIGN_ZONE_FULL = """
 mutation($input: ZoneTeamAssignmentInput!) {
     assignZoneToTeam(input: $input) { zoneUuid teamUuid assignedAt assignedBy }
+}
+"""
+
+AREAS_COUNTED = """
+query($bounds: BoundsInput) {
+    areas(bounds: $bounds, limit: 1000) { items { uuid type } pageInfo { totalCount } }
 }
 """
 
@@ -245,10 +252,15 @@ async def test_create_area_rejects_a_point_geometry(client, redis, team_uuid):
 
 
 @pytest.mark.asyncio
-async def test_anonymous_cannot_view_team_zones(client):
-    """work_zone.view is not public (ADR-036) — an anonymous query is denied."""
-    resp = await client.post("/graphql", json={"query": TEAM_ZONES})
-    assert "Permission Denied." in _errors(resp.json())
+async def test_anonymous_cannot_view_team_zones(client, team_uuid):
+    """work_zone.view is not public (ADR-036): a guest is denied the list, one zone and a team's zones."""
+    for query, variables in (
+        (TEAM_ZONES, {}),
+        (ZONE_WITH_TEAMS, {"uuid": str(uuid_mod.uuid4())}),
+        (ZONES_BY_TEAM, {"teamUuid": team_uuid}),
+    ):
+        resp = await client.post("/graphql", json={"query": query, "variables": variables})
+        assert "Permission Denied." in _errors(resp.json()), query
 
 
 @pytest.mark.asyncio
@@ -681,7 +693,7 @@ async def test_a_hazardous_zone_is_always_public(client, redis):
 
 @pytest.mark.asyncio
 async def test_a_team_zone_is_always_public_with_its_teams(client, redis, team_uuid):
-    """A team zone is public on creation, cannot be switched off, and the guest map names its team."""
+    """A team zone is public on creation and cannot be switched off; signed in, the map names its team."""
     gov_token = await _make_gov_user(redis)
     zone = _zone_input("Public zone", team_uuid, _square(136.0, 36.0))
 
@@ -701,10 +713,62 @@ async def test_a_team_zone_is_always_public_with_its_teams(client, redis, team_u
 
     async with test_db() as db:
         team_name = await db.scalar(select(Team.name).where(Team.uuid == team_uuid))
-    guest = await client.post("/graphql", json={"query": AREAS, "variables": {"bounds": _box(136.0, 36.0)}})
-    items = {i["uuid"]: i for i in guest.json()["data"]["areas"]["items"]}
+    signed_in = await client.post(
+        "/graphql",
+        json={"query": AREAS, "variables": {"bounds": _box(136.0, 36.0)}},
+        headers=auth_header(await _make_plain_user(redis)),
+    )
+    items = {i["uuid"]: i for i in signed_in.json()["data"]["areas"]["items"]}
     assert items[zone_uuid]["isPublic"] is True
     assert items[zone_uuid]["assignedTeams"] == [{"name": team_name}]
+
+
+async def _map_kinds(client, bounds: dict, token: str | None = None) -> tuple[dict, int]:
+    """The public map inside `bounds` as `token` (a guest without one): each area's kind, and the count."""
+    resp = await client.post(
+        "/graphql",
+        json={"query": AREAS_COUNTED, "variables": {"bounds": bounds}},
+        headers=auth_header(token) if token else {},
+    )
+    body = resp.json()
+    assert "errors" not in body, body
+    areas = body["data"]["areas"]
+    return {i["uuid"]: i["type"] for i in areas["items"]}, areas["pageInfo"]["totalCount"]
+
+
+@pytest.mark.asyncio
+async def test_a_guest_sees_no_team_zone_and_anyone_signed_in_still_does(client, redis, team_uuid):
+    """A guest's map keeps the hazard and the public mark zone but has no team zone, not even in the count.
+
+    The schema outlives a run, so earlier runs' areas may share the box; the checks hold whatever is there.
+    """
+    gov_token = await _make_gov_user(redis)
+    drawn = {}
+    for kind, extra in (
+        ("hazardous_zone", {"status": "blocked"}),
+        ("mark_zone", {"isPublic": True}),
+        ("team_zone", {"teamUuid": team_uuid}),
+    ):
+        body = await _create(
+            client, gov_token, {"input": {"type": kind, "geometry": _square(137.0, 37.0), **extra}}
+        )
+        drawn[body["data"]["createArea"]["uuid"]] = kind
+    bounds = _box(137.0, 37.0)
+    without_team_zone = {uuid: kind for uuid, kind in drawn.items() if kind != "team_zone"}
+
+    guest, guest_total = await _map_kinds(client, bounds)
+    assert without_team_zone.items() <= guest.items()
+    assert "team_zone" not in guest.values()
+    assert guest_total == len(guest)
+    for token in (
+        await _make_plain_user(redis),
+        await _make_team_user(redis, "ngo"),
+        await _make_team_user(redis, "gov"),
+        gov_token,
+    ):
+        seen, total = await _map_kinds(client, bounds, token)
+        assert drawn.items() <= seen.items()
+        assert total == len(seen) == guest_total + list(seen.values()).count("team_zone")
 
 
 @pytest.mark.asyncio

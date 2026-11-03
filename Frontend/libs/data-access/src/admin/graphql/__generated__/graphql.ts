@@ -150,7 +150,7 @@ export type AreaType = {
   createdAt?: Maybe<Scalars['DateTime']['output']>;
   /** GeoJSON Polygon or MultiPolygon marking the area */
   geometry?: Maybe<Scalars['GeoJSON']['output']>;
-  /** Shown on the public map; always true except for a mark zone */
+  /** Shown on the public map, a team zone only to those signed in; always true except for a mark zone */
   isPublic: Scalars['Boolean']['output'];
   name?: Maybe<Scalars['String']['output']>;
   note?: Maybe<Scalars['String']['output']>;
@@ -307,7 +307,7 @@ export type CreateAreaInput = {
   geometry: Scalars['GeoJSON']['input'];
   /** Hazardous zone only: agency name or URL the report came from */
   informationSource?: InputMaybe<Scalars['String']['input']>;
-  /** Shown on the public map; hazardous and team zones are always public, a mark zone defaults to false */
+  /** Shown on the public map; hazardous and team zones are always public, though a guest never sees a team zone; a mark zone defaults to false */
   isPublic?: InputMaybe<Scalars['Boolean']['input']>;
   name?: InputMaybe<Scalars['String']['input']>;
   note?: InputMaybe<Scalars['String']['input']>;
@@ -1805,7 +1805,7 @@ export type TeamZoneType = {
   createdBy?: Maybe<Scalars['String']['output']>;
   /** GeoJSON Polygon or MultiPolygon marking the zone boundary */
   geometry?: Maybe<Scalars['GeoJSON']['output']>;
-  /** Always true: a team zone and its teams are shown on the public map */
+  /** Always true: a team zone and its teams are shown on the public map to those signed in */
   isPublic: Scalars['Boolean']['output'];
   name?: Maybe<Scalars['String']['output']>;
   note?: Maybe<Scalars['String']['output']>;

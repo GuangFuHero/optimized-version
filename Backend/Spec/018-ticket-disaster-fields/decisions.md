@@ -796,6 +796,8 @@ priority 另議：會改到每一個寫入路徑，已經存進去的資料也�
 它在哪個責任區：`TicketType` 沒有這個欄位，前台的詳情也沒寫。責任區和它的團隊本來就在公開地圖上（ADR-311），
 團隊名稱不是個資（ADR-285）。
 
+> 註：ADR-311 後來再修訂，責任區與它的團隊不再給未登入的訪客看，訪客在地圖上也點不到責任區的標籤；登入者照舊。
+
 **Decision**：
 
 - `TicketType.responsibleTeams: [AssignedTeamType!]!`，跟地圖的 `assignedTeams` 同一個型別。不在任何責任區時是
