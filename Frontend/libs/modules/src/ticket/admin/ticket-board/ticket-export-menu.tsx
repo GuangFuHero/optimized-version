@@ -94,6 +94,10 @@ export function TicketExportMenu({ team, taskType }: TicketExportMenuProps) {
   const scope = exportScopeParams(chosen);
   // Counted only while the popover is open; a ticket write marks it stale with the lists.
   const answer = useTicketExportCounts(scope, { enabled: open }).data;
+  // Until the first answer it is not known whether the caller is held to an own_team, so 哪個組織
+  // and the note wait for it instead of showing a select that may turn into a team's name.
+  const [answered, setAnswered] = useState(false);
+  if (answer && !answered) setAnswered(true);
   if (answer) {
     const seen = answer.own_team
       ? { uuid: answer.own_team.uuid, name: answer.own_team.name ?? '你的團隊' }
@@ -101,8 +105,13 @@ export function TicketExportMenu({ team, taskType }: TicketExportMenuProps) {
     if (seen?.uuid !== ownTeam?.uuid) setOwnTeam(seen);
   }
 
-  const namedOrg = ownTeam ? ownTeam.name : exportOrgLabel(chosen, teams);
-  // A team the facets have not named yet (they load as the popover opens): its export waits for it.
+  const namedOrg = !answered
+    ? null
+    : ownTeam
+      ? ownTeam.name
+      : exportOrgLabel(chosen, teams);
+  // A team the facets have not named yet (they load as the popover opens), or no answer yet: its
+  // export waits for it.
   const orgLabel = namedOrg ?? '…';
   const types = exportTypeOrder(taskType, (answer?.counts.medical ?? 0) > 0);
   const exportType =
@@ -178,6 +187,16 @@ export function TicketExportMenu({ team, taskType }: TicketExportMenuProps) {
                   }}
                 >
                   {ownTeam.name}（只能匯出自己隊的責任區）
+                </Typography>
+              ) : !answered ? (
+                <Typography
+                  sx={{
+                    ...typography.body[300],
+                    color: color.fg.neutral.muted,
+                    mt: '6px',
+                  }}
+                >
+                  …
                 </Typography>
               ) : (
                 <Box sx={{ mt: '6px' }}>
