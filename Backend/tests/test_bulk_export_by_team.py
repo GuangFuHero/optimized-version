@@ -329,6 +329,53 @@ async def test_without_view_detail_the_team_filters_match_nothing(db):
     assert _titles(_parse(await export_tickets(db, actor=actor, task_type="rescue")), *MINE) == set(MINE)
 
 
+async def _team_files(db, actor, alpha, bravo) -> dict[str, set[str]]:
+    """The titles among MINE in each 組織分配's file, checked against its count."""
+    files = {}
+    for name, kw in (
+        ("alpha", {"responsible_team_uuid": alpha.uuid}),
+        ("bravo", {"responsible_team_uuid": bravo.uuid}),
+        ("none", {"unassigned_only": True}),
+        ("all", {}),
+    ):
+        table = _parse(await export_tickets(db, actor=actor, task_type="rescue", **kw))
+        counts = await count_ticket_exports(db, actor=actor, **kw)
+        assert len(table.rows) == counts.get("rescue", 0)
+        files[name] = _titles(table, *MINE)
+    return files
+
+
+async def test_with_the_detail_at_zone_a_team_s_file_keeps_the_rows_seen_in_detail(db):
+    """Export `all`, view_detail `zone`: 組織分配 matches only the tickets in the caller's own zones.
+
+    Another team's ticket and an unassigned one are in the plain file, but no team's file holds them.
+    """
+    creator = await _actor(db, "ZoneCreator", [])
+    alpha, bravo = await _two_teams_and_tickets(db, creator)
+    actor = await _actor(
+        db, "ZoneDetail", [(Perm.TICKET_EXPORT, "all"), (Perm.TICKET_VIEW_DETAIL, "zone")], team=alpha
+    )
+
+    files = await _team_files(db, actor, alpha, bravo)
+
+    assert files == {"alpha": {"甲區"}, "bravo": set(), "none": set(), "all": set(MINE)}
+
+
+async def test_with_the_detail_at_own_a_team_s_file_keeps_the_caller_s_tickets(db):
+    """Export `all`, view_detail `own`: 組織分配 matches only the tickets the caller created."""
+    actor = await _actor(db, "OwnDetail", [(Perm.TICKET_EXPORT, "all"), (Perm.TICKET_VIEW_DETAIL, "own")])
+    other = await _actor(db, "OwnOther", [])
+    alpha = await _team(db, "甲隊", ZONE_POLYGON)
+    bravo = await _team(db, "乙隊", OTHER_POLYGON)
+    await _ticket_with_task(db, title="甲區", point=IN_ZONE, creator=actor)
+    await _ticket_with_task(db, title="乙區", point=OTHER_POINT, creator=other, phone="0922333444")
+    await _ticket_with_task(db, title="無區", point=OUT_OF_ZONE, creator=actor, phone="0933444555")
+
+    files = await _team_files(db, actor, alpha, bravo)
+
+    assert files == {"alpha": {"甲區"}, "bravo": set(), "none": {"無區"}, "all": set(MINE)}
+
+
 async def test_counts_follow_the_team_as_the_export_does(db):
     """The popover's counts are the rows the chosen 組織分配's file would hold."""
     actor = await _actor(db, "Counter", EXPORTER)
