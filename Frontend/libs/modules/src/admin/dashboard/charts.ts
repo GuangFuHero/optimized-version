@@ -72,27 +72,10 @@ export const TICKET_CHARTS: readonly DashboardChart[] = [
   },
 ];
 
-/**
- * The gap card's number split by need type, first in the detail charts. Only the gap: needed and
- * matched by type would add bars a call for volunteers does not read.
- */
-export const VOLUNTEER_GAP_BY_TYPE: DashboardChart = {
-  domain: 'tickets',
-  metric: 'volunteer_gap',
-  x: 'category',
-  chartType: 'bar',
-  span: 12,
-  fixed: {
-    title: '各需求類型還缺幾人',
-    description:
-      '跟缺口卡同一天，依需求類型分。哪一類最缺人，招募訊息就先寫那一類',
-    tone: 'warning',
-  },
-};
-
 /** Secondary analysis, folded away by default so the first screen stays readable. */
+// No gap by need type here: the gap counts 人力 only, so split by type it is one bar; the cards
+// above already say how many people 人力 lacks and how many 物資 needs nobody has taken.
 export const TICKET_DETAIL_CHARTS: readonly DashboardChart[] = [
-  VOLUNTEER_GAP_BY_TYPE,
   {
     domain: 'tickets',
     metric: 'completion_rate',
