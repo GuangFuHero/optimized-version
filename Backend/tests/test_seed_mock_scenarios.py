@@ -15,6 +15,7 @@ import asyncio
 import os
 import re
 import sys
+import uuid
 from pathlib import Path
 
 import asyncpg
@@ -22,6 +23,9 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
+from app.models.auth import User
+from app.repositories.active_identity_repository import active_identity_repository
+from app.services.role_request import approve
 from app.services.ticket_verification import disputes_by_ticket
 from tests.conftest import _ADMIN_DB_URL, TEST_DB_URL
 
@@ -265,6 +269,44 @@ async def test_a_rerun_drops_the_published_password_from_the_back_office_test_ac
         [SUPER_ADMIN, AUDITOR],
     )
     assert [tuple(row) for row in rows] == [(AUDITOR, _VM_HASH)]
+
+
+AVOL04 = "c0000000-0000-4000-8000-000000000004"
+AVOL04_REQUEST = "60000000-0000-4000-8000-000000000001"
+# 光復鄉公所-災防課 and its team admin, agov01.
+GUANGFU_OFFICE = "10000000-0000-4000-8000-000000000005"
+GUANGFU_ADMIN = "c0000000-0000-4000-8000-000000000025"
+_AVOL04_IN_OFFICE = (
+    "SELECT count(*) FROM user_role_assign a JOIN roles r ON r.uuid = a.role_uuid"
+    f" WHERE a.user_uuid = '{AVOL04}' AND a.team_uuid = '{GUANGFU_OFFICE}' AND r.name = 'member'"
+)
+
+
+@pytest.mark.asyncio(loop_scope="module")
+@pytest.mark.parametrize("reviewer", [SUPER_ADMIN, GUANGFU_ADMIN], ids=["asuper01", "agov01"])
+async def test_avol04s_pending_application_can_be_approved_and_comes_back_on_a_rerun(seeded, reviewer):
+    """The header sends testers to approve it: an application naming no team is refused with a 409.
+
+    It names the office its reason and contact point to, so approving adds avol04 to it as `member`,
+    which the office's own admin may do as well as asuper01. A rerun puts it back to pending.
+    """
+    engine = create_async_engine(f"{_SERVER}/{_CASE_DB}")
+    try:
+        async with AsyncSession(engine) as db:
+            actor = await db.get(User, reviewer)
+            # The API binds the caller's identity before the service runs; without one nothing is in scope.
+            actor.active_identity = await active_identity_repository.back_office_identity(db, reviewer, None)
+            request = await approve(db, actor=actor, request_uuid=uuid.UUID(AVOL04_REQUEST), note=None)
+            assert (request.status, str(request.granted_team_uuid)) == ("approved", GUANGFU_OFFICE)
+    finally:
+        await engine.dispose()
+    assert (await _fetch(_CASE_DSN, _AVOL04_IN_OFFICE))[0][0] == 1
+
+    await _execute(_CASE_DSN, SEED_SQL)
+
+    rows = await _fetch(_CASE_DSN, f"SELECT status FROM role_requests WHERE uuid = '{AVOL04_REQUEST}'")
+    assert [row["status"] for row in rows] == ["pending"]
+    assert (await _fetch(_CASE_DSN, _AVOL04_IN_OFFICE))[0][0] == 0
 
 
 @pytest.mark.asyncio(loop_scope="module")
