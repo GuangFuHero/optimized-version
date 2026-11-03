@@ -121,32 +121,24 @@ describe('exportCapLabel', () => {
 
 describe('exportTypeOrder', () => {
   it('leads with 全部種類 when the board has no 需求 filter', () => {
-    expect(exportTypeOrder(null, false)).toEqual([
-      'all',
-      'rescue',
-      'hr',
-      'supply',
-    ]);
-  });
-
-  it('leads with the board’s type, and puts 全部種類 last', () => {
-    expect(exportTypeOrder('supply', false)).toEqual([
-      'supply',
-      'rescue',
-      'hr',
-      'all',
-    ]);
-  });
-
-  it('lists 醫療 once it has rows, or when the board is filtered to it', () => {
-    expect(exportTypeOrder(null, true)).toEqual([
+    expect(exportTypeOrder(null)).toEqual([
       'all',
       'rescue',
       'hr',
       'supply',
       'medical',
     ]);
-    expect(exportTypeOrder('medical', false)).toEqual([
+  });
+
+  it('leads with the board’s type, and puts 全部種類 last', () => {
+    expect(exportTypeOrder('supply')).toEqual([
+      'supply',
+      'rescue',
+      'hr',
+      'medical',
+      'all',
+    ]);
+    expect(exportTypeOrder('medical')).toEqual([
       'medical',
       'rescue',
       'hr',
@@ -156,7 +148,7 @@ describe('exportTypeOrder', () => {
   });
 
   it('ignores a 需求 value it does not know', () => {
-    expect(exportTypeOrder('unknown', false)[0]).toBe('all');
+    expect(exportTypeOrder('unknown')[0]).toBe('all');
   });
 
   it('labels 全部種類', () => {

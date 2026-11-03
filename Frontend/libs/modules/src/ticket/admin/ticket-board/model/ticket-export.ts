@@ -1,7 +1,7 @@
 import type { components } from '@rescue-frontend/data-access/openapi';
 
 import { taiwanDateParts } from '../../../../time';
-import { UNASSIGNED_TEAM } from './ticket-filters';
+import { NEED_FILTER_TYPES, UNASSIGNED_TEAM } from './ticket-filters';
 import { needTypeLabel, type NeedType } from './ticket-row';
 
 /** 全部種類: every need type in one file, with the fixed columns only (no type's own fields). */
@@ -22,22 +22,13 @@ export interface ExportTeam {
   name: string;
 }
 
-/** The prototype's three kinds, in its order; 醫療 (not in the prototype) joins only once it has rows. */
-const LISTED_TYPES: NeedType[] = ['rescue', 'hr', 'supply'];
-
 /**
- * 匯出哪一種需求's choices, the default first (BK-8b). With the board's 需求 filter on a type, that
- * type leads and 全部種類 goes last; otherwise 全部種類 leads. 醫療 is listed once it has rows, or
- * when the board is filtered to it.
+ * 匯出哪一種需求's choices, the default first (BK-8b): the need types as the filter panel's 需求 row
+ * lists them, the backend's four. With the board's 需求 filter on a type, that type leads and
+ * 全部種類 goes last; otherwise 全部種類 leads.
  */
-export function exportTypeOrder(
-  boardType: string | null,
-  hasMedical: boolean,
-): ExportType[] {
-  const listed: NeedType[] =
-    hasMedical || boardType === 'medical'
-      ? [...LISTED_TYPES, 'medical']
-      : LISTED_TYPES;
+export function exportTypeOrder(boardType: string | null): ExportType[] {
+  const listed = NEED_FILTER_TYPES;
   const lead = listed.find((type) => type === boardType);
   return lead
     ? [lead, ...listed.filter((type) => type !== lead), ALL_NEED_TYPES]

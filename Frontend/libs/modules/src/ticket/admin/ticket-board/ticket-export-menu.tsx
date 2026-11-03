@@ -113,7 +113,7 @@ export function TicketExportMenu({ team, taskType }: TicketExportMenuProps) {
   // A team the facets have not named yet (they load as the popover opens), or no answer yet: its
   // export waits for it.
   const orgLabel = namedOrg ?? '…';
-  const types = exportTypeOrder(taskType, (answer?.counts.medical ?? 0) > 0);
+  const types = exportTypeOrder(taskType);
   const exportType =
     pickedType && types.includes(pickedType) ? pickedType : types[0];
   // A type past the cap is refused by the backend: said so up front, and its button stays off.
