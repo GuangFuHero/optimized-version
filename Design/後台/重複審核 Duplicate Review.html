@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>重複審核 Duplicate Review · 救災平台 ManagerEnd</title>
 <link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/styles.css">
+<link rel="stylesheet" href="js/shared/wg-button.css?v=20261103b">
+<link rel="stylesheet" href="js/shared/wg-ui.css?v=20261103a">
 <style>
   html, body { margin: 0; height: 100%; background: var(--color-bg-neutral-subtle); }
   #root { height: 100vh; overflow: hidden; }
@@ -78,6 +80,9 @@ window.WGIcon = function WGIcon({ n, s = 20, c = "currentColor", style }) {
 <script type="text/babel" src="js/admin/announce/an-banner.jsx" data-presets="react"></script>
 <!-- 2026-09-27：每一頁的「？」頁面說明 -->
 <script type="text/babel" src="js/shared/wg-help.jsx?v=20261102a" data-presets="react"></script>
+<!-- 共用元件：按鈕／分段切換（wg-button）、標籤／下拉（wg-ui）。要排在用到它們的 jsx 之前 -->
+<script type="text/babel" src="js/shared/wg-button.jsx?v=20261101i6" data-presets="react"></script>
+<script type="text/babel" src="js/shared/wg-ui.jsx?v=20261101i6" data-presets="react"></script>
 <script type="text/babel" src="js/admin/shell/wg-shell.jsx" data-presets="react"></script>
 
 <!-- 身份與事件假資料（與任務管理頁同一份） -->
@@ -89,8 +94,8 @@ window.WGIcon = function WGIcon({ n, s = 20, c = "currentColor", style }) {
 <script src="js/admin/settings/st-data.js?v=20261026m"></script>
 
 <!-- 本頁：重複審核（規則見 dd-data.js 檔頭與 docs/重複審核.md）。看示範資料：網址加 ?demo=1 -->
-<script src="js/admin/dedup/dd-data.js?v=20261101x"></script>
-<script type="text/babel" src="js/admin/dedup/dd-app.jsx?v=20261101x" data-presets="react"></script>
+<script src="js/admin/dedup/dd-data.js?v=20261103a"></script>
+<script type="text/babel" src="js/admin/dedup/dd-app.jsx?v=20261103a" data-presets="react"></script>
 
 <script type="text/babel" data-presets="react">
 fetch('assets/logo/mark.svg')

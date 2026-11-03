@@ -24,7 +24,6 @@
  * 🔒 text/babel 腳本不要用物件 rest 解構（09-27 的 _excluded 撞名事故）。
  */
 (function () {
-  // 🔒 DUP-BE-430：畫面上不出現「保留哪一張」。每列挑值、其他需求與照片勾選，使用者看的是「合併後的單」
   const { Button, Badge, Alert, Tabs } = window.WanGuardDesignSystem_9c8f68;
   const Icon = window.WGIcon;
   const muted = { color: "var(--color-fg-neutral-muted)" };
@@ -36,7 +35,7 @@
     const d = new Date(); const p = (n) => String(n).padStart(2, "0");
     return `${p(d.getMonth() + 1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
   };
-  // 🔒 2026-11-01 Sucre：後端沒有單號（任務單、站點都只有 uuid），畫面不顯示 T-xxxx／RS-xxxx／組號 D-xxx。
+  // 🔒 後端沒有單號（任務單、站點都只有 uuid），畫面不顯示 T-xxxx／RS-xxxx／組號 D-xxx。
   //    畫面上靠 A／B 圓點＋標題分辨；寫進紀錄、通知的文字用 itemRef（「標題」）。ticketId／g.id 只當內部參照。
   const itemLabel = () => "";
   const itemTitle = (g, it) => (g.kind === "station" ? it.name : it.ticketTitle);
@@ -151,7 +150,8 @@
         <div className="dd-row-score">
           {g.status === "pending"
             ? <React.Fragment>
-                <span style={{ font: "var(--font-label-400)", fontSize: 18, color: "var(--color-fg-neutral-default)" }}>{Math.round(g.score * 100)}%</span>
+                {/* DUP-TYPE-101：相似度是數字，用數字字型 data-500（16px 粗體），不寫死字級 */}
+                <span style={{ font: "var(--font-data-500)", color: "var(--color-fg-neutral-default)", fontVariantNumeric: "tabular-nums" }}>{Math.round(g.score * 100)}%</span>
                 <span style={{ font: "var(--font-data-300)", ...muted }}>相似度</span>
               </React.Fragment>
             : <Badge tone={out.tone}>{out.label}</Badge>}
@@ -189,13 +189,16 @@
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }} data-dd-list>
         {list.length === 0 && (
-          <div style={{ padding: "56px 12px", textAlign: "center", display: "flex", flexDirection: "column", gap: 6, alignItems: "center",
-            border: "1px dashed var(--color-border-default)", borderRadius: "var(--radius-lg, 12px)" }}>
-            <Icon n="CircleCheck" s={28} c="var(--color-fg-neutral-muted)" />
-            <span style={{ font: "var(--font-label-400)" }}>{view === "pending" ? "目前沒有待處理的可能重複" : "還沒有處理過的"}</span>
-            <span className="wg-caption" style={{ color: "var(--color-fg-neutral-muted)", lineHeight: 1.8, maxWidth: 520 }}>
+          // DUP-EMPTY-101：照共用元件 EmptyState —— 沒有外框、圖示放在 56px 淡灰圓圈裡、說明最寬 380px 自動換行
+          //   圓圈用 sunken：後台頁面底色就是 subtle，圓圈也用 subtle 會整個看不見
+          <div style={{ padding: "56px 12px", textAlign: "center", display: "flex", flexDirection: "column", gap: 8, alignItems: "center" }} data-dd-empty>
+            <span style={{ width: 56, height: 56, borderRadius: "var(--radius-full)", background: "var(--color-bg-neutral-sunken)", display: "grid", placeItems: "center", marginBottom: 4 }}>
+              <Icon n="CircleCheck" s={28} c="var(--color-fg-neutral-muted)" />
+            </span>
+            <span style={{ font: "var(--font-label-400)", color: "var(--color-fg-neutral-subtle)" }}>{view === "pending" ? "目前沒有待處理的可能重複" : "還沒有處理過的"}</span>
+            <span className="wg-caption" style={{ color: "var(--color-fg-neutral-muted)", maxWidth: 380 }}>
               {view === "pending"
-                ? <>系統發現兩張{tab === "station" ? "站點" : "任務單"}可能在講同一件事，就會出現在這裡。<br />來源有三種：有人建單或改單時與既有的很像、CSV 匯入時撞到既有資料，<br />或建單者被提醒後仍選擇送出。進來之後在這裡兩張並排比對，決定{tab === "station" ? "是不是重複" : "合併或「不是重複」"}。</>
+                ? `系統發現兩張${tab === "station" ? "站點" : "任務單"}可能在講同一件事，就會出現在這裡。來源有三種：有人建單或改單時與既有的很像、CSV 匯入時撞到既有資料，或建單者被提醒後仍選擇送出。進來之後在這裡兩張並排比對，決定${tab === "station" ? "是不是重複" : "合併或「不是重複」"}。`
                 : `在「待處理」按下${tab === "station" ? "確認重複" : "合併"}或「不是重複」之後，會留在這裡，方便事後查是誰決定的。`}
             </span>
           </div>
@@ -469,7 +472,8 @@
         {r.note && <div style={{ font: "var(--font-body-300)", ...subtle }}>備註：{r.note}</div>}
         {(r.history || []).length > 0 && (
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <span style={{ font: "var(--font-label-400)" }}>已寫入變更紀錄</span>
+            {/* 🔒 DUP-BE-441：判定與備註只留在這一頁，不寫進任務單的變更紀錄 → 叫「處理紀錄」 */}
+            <span style={{ font: "var(--font-label-400)" }}>處理紀錄</span>
             {r.history.map((h, i) => <span key={i} style={{ font: "var(--font-body-300)", ...subtle }}>· {h}</span>)}
           </div>
         )}
@@ -509,12 +513,17 @@
     const ticket = g.kind === "ticket";
     const [showFx, setShowFx] = React.useState(false);
     const fx = !isDone && ticket ? effectLines(g, props.plan, props.picks) : null;
+    // 多裝置（WG-RWD-111）：平板／手機時比對表與「合併後的任務單」上下排，整頁自己往下捲；
+    //    比對表固定一個高度（裡面照舊可橫捲、欄位名稱黏在左邊），結果面板全寬
+    const bp = window.useWGBreakpoint ? window.useWGBreakpoint() : "desktop";
+    const narrow = bp !== "desktop";
 
     return (
-      <div style={{ height: "100%", display: "flex", flexDirection: "column", gap: 12, minHeight: 0 }} data-dd-detail>
+      <div style={{ height: narrow ? "auto" : "100%", display: "flex", flexDirection: "column", gap: 12, minHeight: 0 }} data-dd-detail>
         <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <Button variant="outline" onClick={props.onBack} startIcon={<Icon n="ArrowLeft" s={16} />} data-dd-back>回清單</Button>
-          <span className="wg-h600" style={{ fontSize: 18, whiteSpace: "nowrap" }}>{ticket ? "兩張任務單可能重複" : "兩個站點可能重複"}</span>
+          {/* DUP-TYPE-102：比對畫面標題直接用 heading-600（20px），不覆寫字級 */}
+          <span className="wg-h600" style={{ whiteSpace: "nowrap" }}>{ticket ? "兩張任務單可能重複" : "兩個站點可能重複"}</span>
           {g.status === "pending" ? <Badge tone="warning">相似度 {Math.round(g.score * 100)}%</Badge> : null}
           <span style={{ font: "var(--font-data-300)", ...muted }}>發現於 {g.detectedAt}</span>
           <span style={{ flex: 1 }}></span>
@@ -550,16 +559,16 @@
               </Alert>
             )}
 
-            <div style={{ flex: 1, minHeight: 0, display: "flex", gap: 12 }}>
-              <div style={{ flex: 1, minWidth: 0, display: "flex", border: "1px solid var(--color-border-default)", borderRadius: "var(--radius-lg, 12px)", background: "var(--color-bg-neutral-default)", overflow: "hidden" }}>
+            <div style={{ flex: narrow ? "none" : 1, minHeight: 0, display: "flex", flexDirection: narrow ? "column" : "row", gap: 12 }}>
+              <div style={{ flex: narrow ? "none" : 1, height: narrow ? (bp === "phone" ? 420 : 520) : undefined, minWidth: 0, display: "flex", border: "1px solid var(--color-border-default)", borderRadius: "var(--radius-lg, 12px)", background: "var(--color-bg-neutral-default)", overflow: "hidden" }}>
                 <CompareTable g={g} kept={props.plan.kept} picks={props.picks} edits={props.edits} needOff={props.plan.needOff} photoOff={props.plan.photoOff}
                   canEdit={!!editable} diffOnly={props.diffOnly}
                   onKeep={props.onKeep} onPick={props.onPick} onNeed={props.onNeed} onPhoto={props.onPhoto} />
               </div>
-              {ticket && <ResultPanel g={g} plan={props.plan} picks={props.picks} edits={props.edits} canEdit={!!editable} onEdit={props.onEdit} />}
+              {ticket && <ResultPanel g={g} plan={props.plan} picks={props.picks} edits={props.edits} canEdit={!!editable} onEdit={props.onEdit} full={narrow} />}
             </div>
 
-            <div style={{ flexShrink: 0, position: "relative", border: "1px solid var(--color-border-default)", borderRadius: "var(--radius-lg, 12px)", padding: "10px 14px", display: "flex", alignItems: "center", gap: 14, background: "var(--color-bg-neutral-default)", boxShadow: "var(--shadow-sm)" }} data-dd-actions>
+            <div style={{ flexShrink: 0, position: narrow ? "sticky" : "relative", bottom: narrow ? 0 : undefined, zIndex: narrow ? 5 : undefined, flexWrap: bp === "phone" ? "wrap" : undefined, border: "1px solid var(--color-border-default)", borderRadius: "var(--radius-lg, 12px)", padding: "10px 14px", display: "flex", alignItems: "center", gap: bp === "phone" ? 10 : 14, background: "var(--color-bg-neutral-default)", boxShadow: "var(--shadow-sm)" }} data-dd-actions>
               {editable ? (
                 <React.Fragment>
                   <Button variant="outline" onClick={props.onSeparate} data-dd-separate>不是重複</Button>
@@ -567,7 +576,8 @@
                   {ticket ? (
                     <React.Fragment>
                       <button type="button" onClick={() => setShowFx(!showFx)} data-dd-effect aria-expanded={showFx} title={fx.short}
-                        style={{ display: "inline-flex", alignItems: "center", gap: 6, minWidth: 0, border: "none", background: "transparent", cursor: "pointer", font: "var(--font-body-300)", ...subtle, textAlign: "right" }}>
+                        style={{ display: "inline-flex", alignItems: "center", gap: 6, minWidth: 0, border: "none", background: "transparent", cursor: "pointer", font: "var(--font-body-300)", ...subtle, textAlign: "right",
+                          ...(bp === "phone" ? { order: 3, flexBasis: "100%", justifyContent: "space-between", minHeight: 32 } : {}) }}>
                         <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{fx.short}</span>
                         <span style={{ display: "inline-flex", alignItems: "center", gap: 2, color: "var(--color-fg-primary, var(--color-bg-primary))", font: "var(--font-label-300)", whiteSpace: "nowrap" }}>
                           合併後會發生什麼<Icon n={showFx ? "ChevronDown" : "ChevronUp"} s={14} c="currentColor" />
@@ -579,7 +589,7 @@
                           background: "var(--color-bg-neutral-default)", border: "1px solid var(--color-border-default)", borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-lg)", padding: "12px 16px", display: "flex", flexDirection: "column", gap: 6 }}>
                           <span style={{ font: "var(--font-label-400)" }}>按下合併後</span>
                           {fx.lines.map((l, i) => <span key={i} style={{ font: "var(--font-body-300)", ...subtle }}>· {l}</span>)}
-                          <span style={{ font: "var(--font-data-300)", ...muted, marginTop: 4 }}>按下合併後會先預覽合併後的單子；確認送出後不能復原。</span>
+                          <span style={{ font: "var(--font-data-300)", ...muted, marginTop: 4 }}>按下合併後會先確認一次；確認送出後不能復原。</span>
                         </div>
                       )}
                     </React.Fragment>
@@ -609,6 +619,23 @@
   //   地址、需求種類不能改（只顯示）。改過的標「已修改」＋「還原」
   //   不給使用者看是哪一張被保留（DUP-BE-430）
   // ════════════════════════════════════════════════════════════════════════
+  // DUP-INPUT-101：欄位外觀照共用元件 TextInput —— 高 48、16px 字（小於 16px iPhone 會整頁放大）、
+  //   淡底、圓角 12。改過的那一格框線變橘（「已修改」），共用元件要補這個狀態。
+  const DD_FIELD = { width: "100%", boxSizing: "border-box", minHeight: 48, padding: "0 16px", borderRadius: "var(--radius-md)",
+    font: "var(--font-body-400)", fontSize: 16, color: "var(--color-fg-neutral-default)",
+    border: "1px solid var(--color-border-default)", background: "var(--color-bg-neutral-subtle)" };
+  // DUP-INPUT-102：多行欄位跟著內容自動長高，2〜5 行，超過才捲動；不給手拉
+  function AutoTextarea(props) {
+    const ref = React.useRef(null);
+    React.useLayoutEffect(() => {
+      const el = ref.current; if (!el) return;
+      const lh = parseFloat(getComputedStyle(el).lineHeight) || 24;
+      el.style.height = "auto";
+      el.style.height = Math.min(Math.max(el.scrollHeight, lh * 2 + 24), lh * 5 + 24) + "px";
+    }, [props.value]);
+    return <textarea ref={ref} rows={2} {...props} style={Object.assign({}, props.style, { padding: "12px 16px", resize: "none", overflowY: "auto" })} />;
+  }
+
   function ResultField({ g, plan, picks, edits, f, canEdit, onEdit }) {
     const id = fid(f);
     const kept = plan.kept;
@@ -618,10 +645,9 @@
     const text = edits && edits[id] != null ? String(edits[id]) : toText(f, picked);
     const edited = isEdited(g, kept, picks, edits, f);
     const opts = f.options ? f.options() : (f.cfg && f.cfg.dataType === "single_select" && (f.cfg.options || []).length ? f.cfg.options.map((o) => [o, o]) : null);
-    const box = { width: "100%", boxSizing: "border-box", padding: "6px 8px", borderRadius: "var(--radius-sm, 6px)", font: "var(--font-body-300)", color: "var(--color-fg-neutral-default)",
-      border: "1px solid " + (edited ? "var(--color-fg-warning)" : "var(--color-border-default)"), background: "var(--color-bg-neutral-default)" };
+    const box = Object.assign({}, DD_FIELD, edited ? { borderColor: "var(--color-fg-warning)" } : null);
     let input;
-    if (fixed) input = <span style={{ font: "var(--font-body-300)", color: "var(--color-fg-neutral-default)", padding: "6px 0", whiteSpace: "pre-wrap" }}>{show(f, picked)}</span>;
+    if (fixed) input = <span style={{ font: "var(--font-body-400)", color: "var(--color-fg-neutral-default)", padding: "4px 0", whiteSpace: "pre-wrap" }}>{show(f, picked)}</span>;
     else if (opts) input = (
       <select value={text} onChange={(e) => onEdit(id, e.target.value)} style={box} data-dd-result-input={id}>
         {text !== "" && !opts.some((o) => o[0] === text) && <option value={text}>{text}</option>}
@@ -629,13 +655,13 @@
         {opts.map((o) => <option key={o[0]} value={o[0]}>{o[1]}</option>)}
       </select>
     );
-    else if (f.long) input = <textarea value={text} rows={Math.min(5, Math.max(2, Math.ceil(text.length / 22)))} onChange={(e) => onEdit(id, e.target.value)} style={Object.assign({ resize: "vertical" }, box)} data-dd-result-input={id} />;
+    else if (f.long) input = <AutoTextarea value={text} onChange={(e) => onEdit(id, e.target.value)} style={box} data-dd-result-input={id} />;
     else input = <input type={isNum(f) ? "number" : "text"} min={isNum(f) ? 0 : undefined} value={text} onChange={(e) => onEdit(id, e.target.value)} style={box} data-dd-result-input={id}
       placeholder={isArr(f, picked) ? "用「、」分開" : ""} />;
     return (
       <div data-dd-result-field={id} style={{ display: "flex", flexDirection: "column", gap: 4, padding: "8px 0", borderTop: "1px solid var(--color-border-subtle, var(--color-bg-neutral-sunken))" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6, minHeight: 20 }}>
-          <span style={{ font: "var(--font-label-300)", ...subtle }}>{f.label}</span>
+          <span style={{ font: "var(--font-label-400)", color: "var(--color-fg-neutral-default)" }}>{f.label}</span>
           {f.primary && canEdit && <span style={{ font: "var(--font-data-300)", ...muted }}>· 在左邊選</span>}
           {edited && <Chip tone="warning">已修改</Chip>}
           <span style={{ flex: 1 }}></span>
@@ -647,7 +673,7 @@
     );
   }
 
-  function ResultPanel({ g, plan, picks, edits, canEdit, onEdit }) {
+  function ResultPanel({ g, plan, picks, edits, canEdit, onEdit, full }) {
     const F = fieldsOf(g);
     const e = window.ddMergeEffects(g, plan);
     const sum = g.items.reduce((s, it) => s + (Number(it.task.quantity) || 0), 0);
@@ -660,7 +686,7 @@
     const p2 = Object.assign({}, plan, { qtyHint });
     const field = (f) => <ResultField key={fid(f)} g={g} plan={p2} picks={picks} edits={edits} f={f} canEdit={canEdit} onEdit={onEdit} />;
     return (
-      <aside data-dd-result style={{ width: 380, flexShrink: 0, display: "flex", flexDirection: "column", minHeight: 0,
+      <aside data-dd-result style={{ width: full ? "100%" : 380, flexShrink: 0, display: "flex", flexDirection: "column", minHeight: 0,
         border: "1px solid var(--color-bg-primary)", borderRadius: "var(--radius-lg, 12px)", background: "var(--color-bg-neutral-default)", overflow: "hidden" }}>
         <div style={{ padding: "10px 16px", background: "var(--color-bg-primary-subtle)", borderBottom: "1px solid var(--color-border-default)", display: "flex", alignItems: "center", gap: 8 }}>
           <Icon n="Merge" s={16} c="var(--color-bg-primary)" />
@@ -694,8 +720,73 @@
     );
   }
 
+  /* 🔒 DUP-BE-413：合併的確認視窗是**模擬一張合併好的單**，不是條列教學。
+   *   看的人要在送出前看到「民眾和志工之後會看到的那一張」長什麼樣：標題、欄位、合併的那一筆需求、其他需求、照片。
+   *   兩邊值不一樣的欄位標出用了哪一張（「用 B 的」），審核時改過的標「已修改」；兩邊一樣的不標，免得每列都有標籤。
+   *   ❌ 不要拿「合併後的任務單就是你在右邊看到的那一張」取代 —— 右邊是編輯區，送出前要再看一次結果。
+   *   卡片看不出來的後果（志工會收到通知、沒勾的需求取消）才另外列在卡片下面。 */
+  function MergePreview({ g, plan, picks, edits }) {
+    const F = fieldsOf(g);
+    const e = window.ddMergeEffects(g, plan);
+    const val = (f) => plan.values[fid(f)];
+    const srcKey = (f) => (f.primary ? plan.kept : (picks[fid(f)] || plan.kept));
+    const tagOf = (f) => {
+      if (isEdited(g, plan.kept, picks, edits, f)) return <Chip tone="warning">已修改</Chip>;
+      const texts = g.items.map((it) => toText(f, window.ddRead(it, f)));
+      if (texts.every((t) => t === texts[0])) return null;
+      return <span style={{ font: "var(--font-data-300)", ...muted }}>用 {letterOf(g, srcKey(f))} 的</span>;
+    };
+    const Row = ({ f }) => (
+      <div data-dd-preview-field={fid(f)} style={{ display: "grid", gridTemplateColumns: "92px 1fr auto", gap: 10, alignItems: "baseline", padding: "7px 0", borderTop: "1px solid var(--color-border-subtle, var(--color-bg-neutral-sunken))" }}>
+        <span style={{ font: "var(--font-label-300)", ...subtle }}>{f.label}</span>
+        <span style={{ font: "var(--font-body-300)", color: "var(--color-fg-neutral-default)", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{show(f, val(f))}</span>
+        <span>{tagOf(f)}</span>
+      </div>
+    );
+    const titleF = F.ticket.find((f) => f.key === "ticketTitle");
+    return (
+      <div style={{ border: "1px solid var(--color-border-default)", borderRadius: "var(--radius-lg, 12px)", background: "var(--color-bg-neutral-default)", overflow: "hidden", flexShrink: 0 }} data-dd-preview>
+        <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--color-border-default)", display: "flex", alignItems: "baseline", gap: 8 }}>
+          <span style={{ flex: 1, font: "var(--font-label-400)", color: "var(--color-fg-neutral-default)" }}>{titleF ? show(titleF, val(titleF)) : ""}</span>
+          {titleF && tagOf(titleF)}
+        </div>
+        <div style={{ padding: "4px 16px 4px" }}>{F.ticket.filter((f) => f.key !== "ticketTitle").map((f) => <Row key={fid(f)} f={f} />)}</div>
+        <div style={{ padding: "8px 16px 14px", display: "flex", flexDirection: "column", gap: 8 }}>
+          <span style={{ font: "var(--font-label-300)", ...subtle }}>需求 {1 + e.included.length} 項</span>
+          <div data-dd-preview-task style={{ border: "1px solid var(--color-bg-primary)", background: "var(--color-bg-primary-subtle)", borderRadius: "var(--radius-md)", padding: "6px 12px 4px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "2px 0 4px", flexWrap: "wrap" }}>
+              <Icon n="Merge" s={14} c="var(--color-bg-primary)" />
+              <span style={{ font: "var(--font-label-300)", color: "var(--color-fg-neutral-default)" }}>合併的這一筆</span>
+              {e.claimedTotal > 0 && <span style={{ font: "var(--font-data-300)", ...muted }}>· {e.claimedTotal} 位志工承接</span>}
+            </div>
+            {F.task.map((f) => <Row key={fid(f)} f={f} />)}
+          </div>
+          {e.included.map((t) => (
+            <div key={t.id} style={{ padding: "8px 12px", borderRadius: "var(--radius-md)", border: "1px solid var(--color-border-default)", font: "var(--font-body-300)", color: "var(--color-fg-neutral-default)" }}>
+              {t.name} ×{t.quantity}<span style={{ font: "var(--font-data-300)", ...muted }}> · {kindLabel(t.kind)}{t.claimed ? ` · ${t.claimed} 位志工承接` : ""}</span>
+            </div>
+          ))}
+        </div>
+        {e.photosIn.length > 0 && (
+          <div style={{ padding: "0 16px 14px", font: "var(--font-label-300)", ...subtle }}>照片 {e.photosIn.length} 張</div>
+        )}
+      </div>
+    );
+  }
+
+  // 卡片看不出來的後果（DUP-BE-413）：誰會收到通知、什麼會被取消
+  function mergeAfterLines(e) {
+    const lines = [];
+    if (e.dropped.length) lines.push(`沒勾的需求取消：${e.dropped.map((t) => `「${t.name}」`).join("、")}`);
+    if (e.volunteersStay) lines.push(`${e.volunteersStay} 位已承接的志工繼續承接，會收到通知`);
+    if (e.volunteersCanceled) lines.push(`${e.volunteersCanceled} 位志工承接的需求取消了，會收到通知`);
+    if (e.photosDropped) lines.push(`${e.photosDropped} 張照片不要`);
+    lines.push("通知兩邊開單的人");
+    return lines;
+  }
+
   // 送出前的確認（DUP-BE-402）。mode：merge／separate（不是重複）／confirm（站點確認重複，DUP-BE-424）
-  function ConfirmDialog({ mode, g, plan, picks, onBack, onConfirm }) {
+  function ConfirmDialog({ mode, g, plan, picks, edits, onBack, onConfirm }) {
     const [note, setNote] = React.useState("");
     React.useEffect(() => {
       const onKey = (e) => { if (e.key === "Escape") onBack(); };
@@ -707,7 +798,7 @@
     const blocked = isMerge && (fx.e.qtyTooSmall || fx.e.qtyMissing)
       ? (fx.e.qtyMissing ? "合併後的數量沒有填。" : `合併後的數量 ${plan.qty} 少於承接人數 ${fx.e.claimedTotal}，請回去改。`) : null;
     const title = isMerge ? "確認合併這兩張單？" : mode === "confirm" ? "確認這兩個站點是重複的？" : `確認這兩${g.kind === "station" ? "個站點" : "張單"}不是重複？`;
-    const sub = isMerge ? "合併後的任務單就是你在右邊看到的那一張。送出後不能復原，也不能拆回。"
+    const sub = isMerge ? "合併後會是下面這一張。送出後不能復原，也不能拆回。"
       : mode === "confirm" ? "只記下判定，兩個站點都不會變。站點合併後端還沒做，之後做好再處理。送出後不能復原。"
       : "送出後不能復原。這一對不會再提示，除非之後有人把它們改到相似。";
     return (
@@ -715,18 +806,21 @@
         style={{ position: "fixed", left: 0, right: 0, bottom: 0, top: "var(--wg-banner-bottom, 0px)", zIndex: 900,
           display: "grid", placeItems: "center", padding: 24, background: "rgba(15,23,42,0.45)" }}
         onMouseDown={(e) => { if (e.target === e.currentTarget) onBack(); }}>
-        <div style={{ width: "min(600px, 100%)", maxHeight: "88vh", display: "flex", flexDirection: "column",
-          background: "var(--color-bg-neutral-default)", borderRadius: "var(--radius-xl, 16px)", boxShadow: "var(--shadow-lg)", overflow: "hidden" }}>
-          <div style={{ padding: "18px 24px 12px", borderBottom: "1px solid var(--color-border-default)" }}>
-            <div className="wg-h600" style={{ fontSize: 19 }}>{title}</div>
+        <div style={{ width: "min(640px, 100%)", maxHeight: "88vh", display: "flex", flexDirection: "column",
+          background: "var(--color-bg-neutral-default)", borderRadius: "var(--radius-lg)", boxShadow: "var(--shadow-lg)", overflow: "hidden" }}>
+          {/* DUP-DLG-101：照共用元件 Dialog —— 圓角 20、標題 22px、白色實心。
+              共用元件要補：寬版 640（合併預覽 444 放不下）、副標、上下分隔線、只有中間捲動、寬版按鈕靠右照內容寬 */}
+          <div style={{ padding: "20px 24px 12px", borderBottom: "1px solid var(--color-border-default)" }}>
+            <div className="wg-h600" style={{ fontSize: 22 }}>{title}</div>
             <div style={{ marginTop: 4, font: "var(--font-body-300)", ...subtle }}>{sub}</div>
           </div>
           <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "16px 24px", display: "flex", flexDirection: "column", gap: 16, }}>
             {isMerge ? (
               <React.Fragment>
+                <MergePreview g={g} plan={plan} picks={picks} edits={edits} />
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }} data-dd-confirm-effects>
                   <span style={{ font: "var(--font-label-400)" }}>送出後會發生</span>
-                  {fx.lines.map((l, i) => <span key={i} style={{ font: "var(--font-body-300)", ...subtle }}>· {l}</span>)}
+                  {mergeAfterLines(fx.e).map((l, i) => <span key={i} style={{ font: "var(--font-body-300)", ...subtle }}>· {l}</span>)}
                 </div>
               </React.Fragment>
             ) : (
@@ -739,14 +833,14 @@
             )}
             {/* DUP-BE-427：備註選填，上限 1000 字（後端 note） */}
             <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <span style={{ font: "var(--font-label-300)" }}>備註 <span style={{ font: "var(--font-data-300)", ...muted }}>選填，例如「已電話確認是同一戶」</span></span>
-              <textarea value={note} maxLength={1000} rows={2} onChange={(e) => setNote(e.target.value)} data-dd-note
-                style={{ width: "100%", boxSizing: "border-box", resize: "vertical", padding: "8px 10px", borderRadius: "var(--radius-sm, 6px)", border: "1px solid var(--color-border-default)", font: "var(--font-body-300)", background: "var(--color-bg-neutral-default)" }} />
+              <span style={{ font: "var(--font-label-400)" }}>備註 <span style={{ font: "var(--font-data-300)", ...muted }}>選填，例如「已電話確認是同一戶」</span></span>
+              <AutoTextarea value={note} maxLength={1000} onChange={(e) => setNote(e.target.value)} data-dd-note style={DD_FIELD} />
             </label>
             {blocked && <Alert tone="danger" title="還不能送出">{blocked}</Alert>}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 24px", borderTop: "1px solid var(--color-border-default)" }}>
-            <span style={{ flex: 1, font: "var(--font-data-300)", ...muted }}>送出後不能復原</span>
+            {/* 「送出後不能復原」已經寫在副標，按鈕列不重複 */}
+            <span style={{ flex: 1 }}></span>
             <Button variant="outline" onClick={onBack} data-dd-confirm-back>回去修改</Button>
             <Button variant="primary" onClick={() => onConfirm(note.trim())} disabled={!!blocked} data-dd-confirm-ok
               startIcon={<Icon n={isMerge ? "Merge" : "Check"} s={16} />}>{isMerge ? "確認合併，送出" : mode === "confirm" ? "確認重複，送出" : "確認不是重複，送出"}</Button>
@@ -929,12 +1023,10 @@
       afterHandled(g.id);
     };
 
-    const selectStyle = { height: 32, padding: "0 10px", borderRadius: "var(--radius-sm, 6px)", border: "1px solid var(--color-border-default)",
-      background: "var(--color-bg-neutral-default)", font: "var(--font-body-300)", color: "var(--color-fg-neutral-default)" };
 
     if (current) {
       return (
-        <div style={{ height: "100%", minHeight: 560 }} data-dd-root>
+        <div style={{ height: (window.useWGBreakpoint && document.documentElement.getAttribute("data-wg-bp") !== "desktop") ? "auto" : "100%", minHeight: 560 }} data-dd-root>
           <CompareView key={current.id} g={current} plan={plan} picks={curPicks} edits={curEdits} onEdit={setEdit}
             can={can} editable={editable} stale={stale === current.id}
             diffOnly={diffOnly} setDiffOnly={setDiffOnly}
@@ -943,7 +1035,7 @@
             onNeed={(id, on) => upd(setNeedOff, id, !on)} onPhoto={(id, on) => upd(setPhotoOff, id, !on)}
             onReload={reload} onMerge={askMerge} onSeparate={() => setConfirm("separate")} onConfirmDup={() => setConfirm("confirm")} />
           {confirm && editable && (
-            <ConfirmDialog mode={confirm} g={current} plan={plan} picks={curPicks}
+            <ConfirmDialog mode={confirm} g={current} plan={plan} picks={curPicks} edits={curEdits}
               onBack={() => setConfirm(null)}
               onConfirm={(note) => (confirm === "merge" ? merge(note) : decide(confirm === "confirm" ? "confirmed" : "separate", note))} />
           )}
@@ -959,17 +1051,13 @@
             { value: "station", label: <span style={{ whiteSpace: "nowrap" }} data-dd-tab="station">站點（{count("station")}）</span> },
           ]} />
           <span style={{ flex: 1 }}></span>
-          <div role="group" aria-label="待處理或已處理" style={{ display: "inline-flex", border: "1px solid var(--color-border-default)", borderRadius: "var(--radius-full)", padding: 2 }}>
+          {/* 共用分段切換（js/shared/wg-button.css BTN-114）：選中＝淡橘，不再用黑底白字 */}
+          <div role="group" aria-label="待處理或已處理" className="wg-seg">
             {[["pending", "待處理"], ["done", "已處理"]].map(([k, l]) => (
-              <button key={k} type="button" data-dd-view={k} onClick={() => setView(k)}
-                style={{ border: "none", cursor: "pointer", height: 28, padding: "0 14px", borderRadius: "var(--radius-full)", font: "var(--font-label-300)",
-                  background: view === k ? "var(--color-fg-neutral-default)" : "transparent", color: view === k ? "#fff" : "var(--color-fg-neutral-subtle)" }}>{l}</button>
+              <WGButton key={k} variant="ghost" size="sm" data-dd-view={k} selected={view === k} onClick={() => setView(k)}>{l}</WGButton>
             ))}
           </div>
-          <select value={sort} onChange={(e) => setSort(e.target.value)} style={selectStyle} aria-label="排序">
-            <option value="score">相似度高的在前</option>
-            <option value="time">最新建立的在前</option>
-          </select>
+          <WGSelect value={sort} onChange={(e) => setSort(e.target.value)} ariaLabel="排序" options={[["score", "相似度高的在前"], ["time", "最新建立的在前"]]} />
         </div>
         {tab === "station" && (
           <span style={{ font: "var(--font-body-300)", ...muted }} data-dd-station-note>站點這一版還不能合併（後端還沒做），只能記下「確認重複」或「不是重複」，兩個站點都不會變。</span>

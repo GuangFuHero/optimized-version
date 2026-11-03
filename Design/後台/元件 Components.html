@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>共用元件 Components</title>
 <link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/styles.css">
-<link rel="stylesheet" href="js/shared/wg-button.css?v=20261101i6">
-<link rel="stylesheet" href="js/shared/wg-ui.css?v=20261101i6">
+<link rel="stylesheet" href="js/shared/wg-button.css?v=20261103b">
+<link rel="stylesheet" href="js/shared/wg-ui.css?v=20261103a">
 <style>
   /* 各頁都有這條重設；漏了的話設計系統的 Chip 會吃到瀏覽器預設的 2px outset 外框，看起來像 3D 按鍵 */
   button { border: 0; font-family: inherit; }
@@ -185,6 +185,137 @@ function StationIconList() {
         </tbody>
       </table>
       <p className="cap">圖示一律 lucide 線條款（stroke 2），16px 放在文字旁、22px 單獨出現。顏色跟著文字，不另外上色；類型不靠顏色分辨。前台、後台、staging 都照這張表，前端元件是 <code>StationTypeIcon</code>。</p>
+    </div>
+  );
+}
+
+// 第 11 節：確認視窗、輸入框、空白畫面（11-03，回 PR #205）。規則 DLG-／EMPTY- 在 js/shared/wg-ui.css 檔頭，INP-106〜108 在 wg-button.css 檔頭
+const FIELD = { width: "100%", boxSizing: "border-box", minHeight: 48, padding: "0 16px", borderRadius: "var(--radius-md)",
+  font: "var(--font-body-400)", fontSize: 16, color: "var(--color-fg-neutral-default)",
+  border: "1px solid var(--color-border-default)", background: "var(--color-bg-neutral-subtle)" };
+const DLG_TITLE = { font: "var(--font-heading-600)", fontSize: 22, color: "var(--color-fg-neutral-default)" };
+const DLG_SUB = { marginTop: 4, font: "var(--font-body-300)", color: "var(--color-fg-neutral-subtle)" };
+const dlgBox = (w) => ({ width: w, maxWidth: "100%", boxSizing: "border-box", background: "var(--color-bg-neutral-default)",
+  borderRadius: "var(--radius-lg)", boxShadow: "var(--shadow-lg)", overflow: "hidden", display: "flex", flexDirection: "column" });
+
+function DialogDemo() {
+  return (
+    <div className="card scroll" style={{ background: "rgba(15,23,42,0.45)" }}>
+      <div style={{ display: "flex", gap: 24, alignItems: "flex-start", flexWrap: "wrap" }}>
+        <div>
+          <div className="cap" style={{ color: "#fff", margin: "0 0 8px" }}>一般 444（照舊）</div>
+          <div style={dlgBox(444)} data-dlg="normal">
+            <div style={{ padding: "24px 24px 12px" }}><div style={DLG_TITLE}>撤回這筆申請？</div></div>
+            <div style={{ padding: "0 24px 8px", font: "var(--font-body-400)", color: "var(--color-fg-neutral-subtle)" }}>撤回後可以馬上再送一次。</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, padding: "16px 24px 24px" }}>
+              <WGButton variant="outline">取消</WGButton><WGButton variant="danger">撤回</WGButton>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div className="cap" style={{ color: "#fff", margin: "0 0 8px" }}>寬版 640（要補）：副標、上下分隔線、只有中間捲動、按鈕靠右</div>
+          <div style={{ ...dlgBox(640), maxHeight: 440 }} data-dlg="wide">
+            <div style={{ padding: "20px 24px 12px", borderBottom: "1px solid var(--color-border-default)" }}>
+              <div style={DLG_TITLE}>確認合併這兩張單？</div>
+              <div style={DLG_SUB}>合併後會是下面這一張。送出後不能復原，也不能拆回。</div>
+            </div>
+            <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "16px 24px", display: "flex", flexDirection: "column", gap: 10 }}>
+              {["標題", "聯絡人", "優先級", "災害類型", "需求名稱", "數量", "地址", "描述"].map((k) => (
+                <div key={k} style={{ display: "grid", gridTemplateColumns: "92px 1fr", gap: 10, padding: "8px 0", borderTop: "1px solid var(--color-bg-neutral-sunken)" }}>
+                  <span style={{ font: "var(--font-label-300)", color: "var(--color-fg-neutral-subtle)" }}>{k}</span>
+                  <span style={{ font: "var(--font-body-300)" }}>（預覽卡的一列，內容很長時只有這一段捲動）</span>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", padding: "14px 24px", borderTop: "1px solid var(--color-border-default)" }}>
+              <WGButton variant="outline">回去修改</WGButton><WGButton variant="primary" startIcon={I("Merge")}>確認合併，送出</WGButton>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p className="cap" style={{ color: "#fff" }}>兩種寬度都是白色實心、圓角 20、標題 22px（DLG-101）。寬版只在 444 放不下時用（DLG-102）；按鈕列不再寫「送出後不能復原」，那句放副標（DLG-103、105）。</p>
+    </div>
+  );
+}
+
+function FieldLabel({ children, edited, onRevert }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, minHeight: 24, marginBottom: 6 }}>
+      <span style={{ font: "var(--font-label-400)", color: "var(--color-fg-neutral-default)" }}>{children}</span>
+      {edited && <WGTag tone="warning">已修改</WGTag>}
+      <span style={{ flex: 1 }} />
+      {edited && <WGButton variant="neutral" size="sm" onClick={onRevert}>還原</WGButton>}
+    </div>
+  );
+}
+
+function AutoGrow(props) {
+  const ref = React.useRef(null);
+  React.useLayoutEffect(() => {
+    const el = ref.current; if (!el) return;
+    const lh = parseFloat(getComputedStyle(el).lineHeight) || 24;
+    el.style.height = "auto";
+    el.style.height = Math.min(Math.max(el.scrollHeight, lh * 2 + 24), lh * 5 + 24) + "px";
+  }, [props.value]);
+  return <textarea ref={ref} rows={2} {...props} style={{ ...FIELD, padding: "12px 16px", resize: "none", overflowY: "auto" }} />;
+}
+
+function InputDemo() {
+  const ORIG = "光復鄉大全街105號附近災情回報";
+  const [title, setTitle] = React.useState("光復路118號清理污泥（合併）");
+  const [pri, setPri] = React.useState("一般");
+  const [note, setNote] = React.useState("一樓客廳積泥約 30 公分，需要 4 人清理。");
+  const edited = title !== ORIG;
+  return (
+    <div className="card">
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 20 }}>
+        <div>
+          <span className="cap" style={{ display: "block", margin: "0 0 8px" }}>預設（現在的元件）</span>
+          <FieldLabel>聯絡人</FieldLabel>
+          <input style={FIELD} defaultValue="志工-劉家豪 0917-334-169" />
+        </div>
+        <div>
+          <span className="cap" style={{ display: "block", margin: "0 0 8px" }}>已修改（要補，INP-106）</span>
+          <FieldLabel edited={edited} onRevert={() => setTitle(ORIG)}>標題</FieldLabel>
+          <input style={{ ...FIELD, ...(edited ? { borderColor: "var(--color-fg-warning)" } : null) }} value={title} onChange={(e) => setTitle(e.target.value)} data-inp-edited={edited || undefined} />
+        </div>
+        <div>
+          <span className="cap" style={{ display: "block", margin: "0 0 8px" }}>下拉選單（要補，INP-107）</span>
+          <FieldLabel>優先級</FieldLabel>
+          <div style={{ position: "relative" }}>
+            <select value={pri} onChange={(e) => setPri(e.target.value)} style={{ ...FIELD, appearance: "none", WebkitAppearance: "none", paddingRight: 40 }}>
+              {["生命危急", "緊急", "一般", "低"].map((o) => <option key={o}>{o}</option>)}
+            </select>
+            <span style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "var(--color-fg-neutral-subtle)" }}>{I("ChevronDown")}</span>
+          </div>
+        </div>
+        <div>
+          <span className="cap" style={{ display: "block", margin: "0 0 8px" }}>多行（INP-108）：2〜5 行自動長高</span>
+          <FieldLabel>描述</FieldLabel>
+          <AutoGrow value={note} onChange={(e) => setNote(e.target.value)} />
+        </div>
+      </div>
+      <p className="cap">四種都是 48 高、16px 字、淡底、圓角 12。標籤那一列右邊要能放東西（「已修改」＋「還原」）。不加 35px 小尺寸：欄位多就讓右欄變長，不要把字縮到 14px。試著改「標題」或按「還原」。</p>
+    </div>
+  );
+}
+
+function EmptyDemo() {
+  const one = (bg, circle, label) => (
+    <div style={{ flex: "1 1 300px", background: bg, borderRadius: "var(--radius-md)", boxShadow: "inset 0 0 0 1px var(--color-border-default)", padding: "40px 12px", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, textAlign: "center" }}>
+      <span style={{ width: 56, height: 56, borderRadius: "var(--radius-full)", background: circle, display: "grid", placeItems: "center", marginBottom: 4 }}>
+        <WGIcon n="CircleCheck" s={28} c="var(--color-fg-neutral-muted)" />
+      </span>
+      <span style={{ font: "var(--font-label-400)", color: "var(--color-fg-neutral-subtle)" }}>目前沒有待處理的可能重複</span>
+      <span style={{ font: "var(--font-label-300)", color: "var(--color-fg-neutral-muted)", maxWidth: 380 }}>系統發現兩張任務單可能在講同一件事，就會出現在這裡。說明最寬 380px，自動換行，不手動斷行。</span>
+      <span className="cap" style={{ marginTop: 8 }}>{label}</span>
+    </div>
+  );
+  return (
+    <div className="row" style={{ alignItems: "stretch" }}>
+      {one("var(--color-bg-neutral-subtle)", "var(--color-bg-neutral-subtle)", "❌ 現在：後台頁面底是 subtle，圓圈也是 subtle，看不見")}
+      {one("var(--color-bg-neutral-subtle)", "var(--color-bg-neutral-sunken)", "✅ 後台頁面上：圓圈用 sunken（EMPTY-102）")}
+      {one("var(--color-bg-neutral-default)", "var(--color-bg-neutral-subtle)", "✅ 白卡片上：圓圈用 subtle（照舊）")}
     </div>
   );
 }
@@ -594,6 +725,15 @@ function App() {
             <p className="cap">沒選的那顆是灰框黑字，滑過只變淡灰；選中的是淡橘底、橘框、橘字＋打勾，不只靠顏色。</p>
           </div>
         </div>
+      </Section>
+
+      <Section id="dialog-input-empty" title="11. 確認視窗、輸入框、空白畫面（11-03，回 PR #205）" sub="libs/ui 已經有 Dialog、TextInput、EmptyState。這一節只畫元件還缺的：寬版確認視窗、輸入框「已修改」與下拉選單、空白畫面的圓圈底色。規則 DLG-／EMPTY- 在 js/shared/wg-ui.css 檔頭，INP-106〜108 在 wg-button.css 檔頭。">
+        <h3>A. 確認視窗 Dialog</h3>
+        <DialogDemo />
+        <h3>B. 輸入框 TextInput</h3>
+        <InputDemo />
+        <h3>C. 空白畫面 EmptyState</h3>
+        <EmptyDemo />
       </Section>
     </div>
   );
