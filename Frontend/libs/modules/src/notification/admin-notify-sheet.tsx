@@ -41,7 +41,27 @@ import {
 import { readsNextPageUnasked } from './site-notices';
 import { useMarkNotificationsRead } from './use-mark-notifications-read';
 
-const { color, radius, typography } = designTokens;
+const { color, iconSize, primitives, radius, typography } = designTokens;
+
+/** Screen-reader-only text. `@mui/utils` is not a direct dependency, so the same recipe lives here. */
+const VISUALLY_HIDDEN = {
+  position: 'absolute',
+  width: 1,
+  height: 1,
+  m: '-1px',
+  p: 0,
+  overflow: 'hidden',
+  clip: 'rect(0 0 0 0)',
+  whiteSpace: 'nowrap',
+  border: 0,
+} as const;
+
+/** The sheet's own body padding (`flushBody` hands it to the content): 16px on mobile, 24px above. */
+const BODY_PADDING = { mobile: 2, tablet: 3 } as const;
+
+// The caption under the title returns when the bell's number ships; until then staff never see the
+// number it explains. Kept as-is so it can be restored:
+// 開啟這份清單只會清掉鈴鐺上的數字，不會把任何一則標成已讀。
 
 type Tone = 'warning' | 'info' | 'neutral';
 
@@ -146,7 +166,7 @@ function NoticeRow({
           color: look.fg,
         }}
       >
-        <look.Icon size={18} aria-hidden />
+        <look.Icon size={iconSize.md} aria-hidden />
       </Box>
       <Stack sx={{ flex: 1, minWidth: 0, gap: '4px' }}>
         <Stack direction="row" sx={{ alignItems: 'center', gap: '7px' }}>
@@ -166,10 +186,17 @@ function NoticeRow({
             </Typography>
           ) : null}
         </Stack>
+        {unread ? (
+          <Box component="span" sx={VISUALLY_HIDDEN}>
+            未讀
+          </Box>
+        ) : null}
         <Typography
           sx={{
             ...typography.body[400],
-            fontWeight: unread ? 700 : 400,
+            fontWeight: unread
+              ? primitives.fontWeight.bold
+              : primitives.fontWeight.regular,
             color: color.fg.neutral.default,
             overflowWrap: 'anywhere',
           }}
@@ -190,7 +217,7 @@ function NoticeRow({
       </Stack>
       {unread ? (
         <Box
-          aria-label="未讀"
+          aria-hidden
           sx={{
             width: 9,
             height: 9,
@@ -267,8 +294,9 @@ interface AdminNotifySheetProps {
 }
 
 /**
- * 通知 (prototype `WGNotifyDrawer`): what waits for the back office, then its team's news, newest
- * first. Opening it marks nothing read; only a row's click or 全部標為已讀 does.
+ * 通知 (prototype `WGNotifyDrawer`): what waits for the back office, then its team's news, urgent
+ * first and then newest (the backend's order). Opening it marks nothing read; only a row's click or
+ * 全部標為已讀 does.
  */
 export function AdminNotifySheet({ open, onClose }: AdminNotifySheetProps) {
   return (
@@ -343,6 +371,7 @@ function AdminNotifyContent({ onClose }: { onClose: () => void }) {
 
   return (
     <SheetLayout
+      flushBody
       title={
         <Box
           component="span"
@@ -358,16 +387,11 @@ function AdminNotifyContent({ onClose }: { onClose: () => void }) {
       headerContent={
         notices && notices.length > 0 ? (
           <Stack direction="row" sx={{ alignItems: 'center', gap: '10px' }}>
-            <Typography
-              sx={{ ...typography.body[300], color: color.fg.neutral.muted }}
-            >
-              開啟這份清單只會清掉鈴鐺上的數字，不會把任何一則標成已讀。
-            </Typography>
             <Button
               variant="outline"
               size="sm"
-              startIcon={<CheckCheck size={14} />}
-              disabled={unread.length === 0}
+              startIcon={<CheckCheck size={iconSize.sm} />}
+              disabled={unread.length === 0 || markRead.isPending}
               onClick={() =>
                 markRead.mutate(unread.map((notice) => notice.uuid))
               }
@@ -390,22 +414,28 @@ function AdminNotifyContent({ onClose }: { onClose: () => void }) {
         </Typography>
       }
     >
-      {/* The body pads itself; the rows and the sticky headers run edge to edge. */}
-      <Box sx={{ m: { mobile: '-16px', tablet: '-24px' } }}>
+      {/* `flushBody`: the rows and the sticky headers run edge to edge; the other states pad themselves. */}
+      <Box>
         {!notices ? (
-          <Line>
-            {list.isError ? '讀不到通知，請稍後再試一次。' : '載入中…'}
-          </Line>
+          <Box sx={{ p: BODY_PADDING }}>
+            <Line>
+              {list.isError ? '讀不到通知，請稍後再試一次。' : '載入中…'}
+            </Line>
+          </Box>
         ) : empty ? (
-          <AdminNotifyEmpty />
+          <Box sx={{ p: BODY_PADDING }}>
+            <AdminNotifyEmpty />
+          </Box>
         ) : notices.length === 0 ? (
-          <Line>
-            {searching
-              ? '載入中…'
-              : list.isFetchNextPageError
-                ? '讀不到通知，請稍後再試一次。'
-                : '最近的通知都是給前台的，這裡不顯示。'}
-          </Line>
+          <Box sx={{ p: BODY_PADDING }}>
+            <Line>
+              {searching
+                ? '載入中…'
+                : list.isFetchNextPageError
+                  ? '讀不到通知，請稍後再試一次。'
+                  : '最近的通知都是給前台的，這裡不顯示。'}
+            </Line>
+          </Box>
         ) : (
           groups.map(({ group, notices: inGroup, unread: groupUnread }) => {
             const { title, hint } = ADMIN_NOTICE_GROUPS[group];
@@ -466,7 +496,7 @@ function AdminNotifyContent({ onClose }: { onClose: () => void }) {
         )}
 
         {list.hasNextPage && !searching ? (
-          <Stack sx={{ alignItems: 'center' }}>
+          <Stack sx={{ alignItems: 'center', p: BODY_PADDING }}>
             <Button
               variant="ghost"
               size="sm"

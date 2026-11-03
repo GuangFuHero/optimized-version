@@ -118,6 +118,13 @@ export interface SheetLayoutProps {
   /** The close button; the frame's `onClose` unless the content needs to guard it. */
   onClose?: () => void;
   closeLabel?: string;
+  /**
+   * Render the scrolling body with no padding, default false. Content that wants to run edge to
+   * edge (a list with sticky group headers) sets this rather than undoing the padding with a
+   * negative margin, which makes `position: sticky` stick one padding-height below the top. The
+   * content then pads whatever needs it.
+   */
+  flushBody?: boolean;
   children: ReactNode;
 }
 
@@ -132,6 +139,7 @@ export function SheetLayout({
   footer,
   onClose,
   closeLabel = '關閉',
+  flushBody = false,
   children,
 }: SheetLayoutProps) {
   const sheet = useSheetContext();
@@ -218,7 +226,9 @@ export function SheetLayout({
         {headerContent ? <Box sx={{ mt: '12px' }}>{headerContent}</Box> : null}
       </Box>
 
-      <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', p: px }}>
+      <Box
+        sx={{ flex: 1, minHeight: 0, overflowY: 'auto', p: flushBody ? 0 : px }}
+      >
         {children}
       </Box>
 
