@@ -168,14 +168,6 @@ export function TicketTable({
             >
               {row.summary}
             </CutText>
-            {row.volunteerGap > 0 ? (
-              <Typography
-                noWrap
-                sx={{ ...typography.label[300], color: color.fg.warning }}
-              >
-                缺 {row.volunteerGap} 人
-              </Typography>
-            ) : null}
           </Box>
         );
       case 'updated':
