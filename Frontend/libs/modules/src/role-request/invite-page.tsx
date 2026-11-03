@@ -561,7 +561,7 @@ function InviteForm({
       ) : null}
       {lapsed ? (
         <Button variant="primary" onClick={applyOnOwn}>
-          改成自己申請
+          改成自己申請（帶著剛剛填的）
         </Button>
       ) : (
         <Button
