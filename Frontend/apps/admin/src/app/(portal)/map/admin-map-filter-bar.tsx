@@ -107,6 +107,7 @@ export function AdminMapFilterBar({
   shownStations,
   ticketsMayBeMore,
   canFilterByAssignment,
+  unassignedTickets,
   isFiltered,
   disabled,
 }: {
@@ -118,6 +119,12 @@ export function AdminMapFilterBar({
   ticketsMayBeMore: boolean;
   /** Whether the viewer is told which teams a ticket is answered by (ticket.view_detail). */
   canFilterByAssignment: boolean;
+  /**
+   * How many tickets lie in no 責任區 that has a team, of all those loaded, whatever the filters:
+   * the number most asked for on this page, so it stays in the summary (prototype). Left out where
+   * the viewer is not told the teams.
+   */
+  unassignedTickets: number | null;
   /** Whether the map shows fewer than it has. */
   isFiltered: boolean;
   disabled: boolean;
@@ -181,6 +188,20 @@ export function AdminMapFilterBar({
         <Typography sx={{ ...typography.body[300], whiteSpace: 'nowrap' }}>
           {filters.layers.stations ? `${shownStations} 個站點` : '站點已隱藏'}
         </Typography>
+        {unassignedTickets ? (
+          <>
+            <Typography sx={{ color: color.border.default }}>·</Typography>
+            <Typography
+              sx={{
+                ...typography.body[300],
+                whiteSpace: 'nowrap',
+                color: color.fg.warning,
+              }}
+            >
+              {unassignedTickets} 張未指派
+            </Typography>
+          </>
+        ) : null}
         <Box sx={{ flex: 1 }} />
         {active > 0 ? (
           <ButtonBase
@@ -234,6 +255,9 @@ export function AdminMapFilterBar({
             }}
           >
             篩選只影響<b>看到什麼</b>。區域清單與區域裡的數量不受篩選影響。
+            {filters.assignments.length > 0
+              ? '指派只篩選任務單，站點照常顯示。'
+              : null}
             {ticketsMayBeMore
               ? '地圖只載入範圍內最新的 200 張任務單，篩選只在這些裡面找。'
               : null}

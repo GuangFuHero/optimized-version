@@ -113,6 +113,17 @@ export function AdminMapPageClient() {
     markers.filter((marker) => marker.detailType === 'ticket').length >=
     ADMIN_MAP_LIVE_QUERY_LIMIT;
   // Those who may not see work zones still get the 危險區 the public map shows.
+  const unassignedTickets = useMemo(
+    () =>
+      canViewTicketDetail
+        ? markers.filter(
+            (marker) =>
+              marker.detailType === 'ticket' &&
+              (marker.ticketMeta?.responsibleTeams?.length ?? 0) === 0,
+          ).length
+        : null,
+    [canViewTicketDetail, markers],
+  );
   const areas = useAdminMapAreas({
     enabled: true,
     includePrivate: canViewZones,
@@ -699,7 +710,16 @@ export function AdminMapPageClient() {
       // A pin tapped while drawing is a corner missed, not a ticket to open.
       const rest = isBusy ? { ...picked, selectedMarkerId: undefined } : picked;
 
-      viewportStore.setState({ position, bbox });
+      // A change that is not of the view (a pin picked) carries none: the map stays where it is,
+      // not sent back to the default view.
+      if (position || bbox) {
+        const view = viewportStore.getSnapshot();
+
+        viewportStore.setState({
+          position: position ?? view.position,
+          bbox: bbox ?? view.bbox,
+        });
+      }
       setRouteState((current) =>
         haveSameNonViewportState(current, rest) ? current : rest,
       );
@@ -800,6 +820,7 @@ export function AdminMapPageClient() {
                     shownStations={shownStations}
                     ticketsMayBeMore={ticketsMayBeMore}
                     canFilterByAssignment={canViewTicketDetail}
+                    unassignedTickets={unassignedTickets}
                     isFiltered={isFiltering(filters)}
                     disabled={isBusy}
                   />
