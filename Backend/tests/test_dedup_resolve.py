@@ -17,7 +17,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.core.permissions import Perm
-from app.db.triggers import AUDIT_TRIGGER_FUNC_SQL, AUDITED_TABLES, get_audit_trigger_sql
 from app.models.auth import User
 from app.models.dedup import DedupAuditEvent, DuplicatePair
 from app.models.geo import BaseGeometry
@@ -554,9 +553,6 @@ async def test_a_failure_part_way_leaves_everything_as_it_was(db, monkeypatch):
 
 async def test_audit_logs_record_every_row_that_changed(db):
     """The audit trigger sees the resolve like any write: the tickets and needs it touched."""
-    await db.execute(text(AUDIT_TRIGGER_FUNC_SQL))
-    for table in AUDITED_TABLES:
-        await db.execute(text(get_audit_trigger_sql(table)))
     reviewer, ids = await _world(db)
     await db.commit()
 

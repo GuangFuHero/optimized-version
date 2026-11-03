@@ -58,9 +58,7 @@ async def _make_admin(db, *perms: Perm):
         permission = Permission(key=perm.value)
         db.add(permission)
         await db.flush()
-        db.add(RolePermissionAssign(
-            role_uuid=role.uuid, permission_uuid=permission.uuid, scope="all"
-        ))
+        db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope="all"))
     user = User(name="Super Admin")
     db.add(user)
     await db.flush()
@@ -76,21 +74,22 @@ async def _make_login_user(db, email: str = "findings@example.com") -> str:
     db.add(user)
     await db.flush()
     user_uuid = str(user.uuid)
-    db.add_all([
-        UserContact(user_uuid=user.uuid, type="email", value=email, verified=True),
-        UserIdentity(
-            user_uuid=user.uuid, provider="password",
-            password_hash=get_password_hash(_PASSWORD, generate_salt()),
-        ),
-    ])
+    db.add_all(
+        [
+            UserContact(user_uuid=user.uuid, type="email", value=email, verified=True),
+            UserIdentity(
+                user_uuid=user.uuid,
+                provider="password",
+                password_hash=get_password_hash(_PASSWORD, generate_salt()),
+            ),
+        ]
+    )
     await db.commit()
     return user_uuid
 
 
 async def _login(client, email: str = "findings@example.com") -> dict:
-    resp = await client.post(
-        "/api/v1/auth/login", data={"username": email, "password": _PASSWORD}
-    )
+    resp = await client.post("/api/v1/auth/login", data={"username": email, "password": _PASSWORD})
     assert resp.status_code == 200, resp.text
     return resp.json()
 
@@ -98,6 +97,7 @@ async def _login(client, email: str = "findings@example.com") -> dict:
 # ──────────────────────────────────────────────
 # H1 — a DB failure during refresh must not destroy the session
 # ──────────────────────────────────────────────
+
 
 async def test_h1_refresh_survives_a_failing_activity_write(client, db_session, monkeypatch):
     """last_activity_at is observability; it must not be able to fail the token exchange."""
@@ -109,9 +109,7 @@ async def test_h1_refresh_survives_a_failing_activity_write(client, db_session, 
 
     monkeypatch.setattr(user_repository, "update", _boom)
 
-    resp = await client.post(
-        "/api/v1/auth/refresh", json={"refresh_token": tokens["refresh_token"]}
-    )
+    resp = await client.post("/api/v1/auth/refresh", json={"refresh_token": tokens["refresh_token"]})
 
     assert resp.status_code == 200, f"refresh 500s when the activity write fails: {resp.text}"
 
@@ -136,9 +134,7 @@ async def test_h1_the_session_survives_a_transient_db_outage(client, db_session,
         raise RuntimeError("db is down")
 
     monkeypatch.setattr(user_repository, "update", _boom)
-    during_outage = await client.post(
-        "/api/v1/auth/refresh", json={"refresh_token": tokens["refresh_token"]}
-    )
+    during_outage = await client.post("/api/v1/auth/refresh", json={"refresh_token": tokens["refresh_token"]})
     assert during_outage.status_code == 200, during_outage.text
     monkeypatch.undo()  # the database recovers
 
@@ -153,30 +149,31 @@ async def test_h1_the_session_survives_a_transient_db_outage(client, db_session,
         f"(got {after_recovery.status_code}: {after_recovery.text})"
     )
     # and the activity write, which failed during the outage, resumes working
-    assert await db_session.scalar(
-        select(User.last_activity_at).where(User.name == "測試使用者")
-    ) is not None
+    assert await db_session.scalar(select(User.last_activity_at).where(User.name == "測試使用者")) is not None
 
 
 # ──────────────────────────────────────────────
 # M1 — the first PATCH must not create a nameless disaster
 # ──────────────────────────────────────────────
 
+
 async def test_m1_first_patch_without_a_name_is_rejected(client, db_session, redis):
     """`name` is NOT NULL and min_length=1, so creation without one should 422, not invent ""."""
     admin_uuid, role_uuid = await _make_admin(db_session, Perm.PROJECT_VIEW, Perm.PROJECT_EDIT)
 
-    resp = await client.patch(SETTINGS_URL, headers=await _auth_header(redis, admin_uuid, role_uuid),
-                              json={"disaster_types": ["fire"]})
-
-    assert resp.status_code == 422, (
-        f"created a nameless disaster instead: {resp.status_code} {resp.text}"
+    resp = await client.patch(
+        SETTINGS_URL,
+        headers=await _auth_header(redis, admin_uuid, role_uuid),
+        json={"disaster_types": ["fire"]},
     )
+
+    assert resp.status_code == 422, f"created a nameless disaster instead: {resp.status_code} {resp.text}"
 
 
 # ──────────────────────────────────────────────
 # M2 — concurrent upsert must not 500
 # ──────────────────────────────────────────────
+
 
 async def _two_sessions():
     """Two independent sessions on the test DB, for real concurrent transactions."""
@@ -206,9 +203,7 @@ async def test_m2_concurrent_project_settings_upsert(db):
 async def test_m2_concurrent_config_upsert(db):
     """Same race on the config tables, which this PR just gave a UNIQUE key."""
     engine, s1, s2 = await _two_sessions()
-    kwargs = dict(
-        station_type="shelter", property_name="發電機", data_type="integer", enum_options=None
-    )
+    kwargs = dict(station_type="shelter", property_name="發電機", data_type="number", enum_options=None)
     try:
         results = await asyncio.gather(
             station_property_config_repository.upsert(s1, **kwargs),
@@ -227,6 +222,7 @@ async def test_m2_concurrent_config_upsert(db):
 # ──────────────────────────────────────────────
 # M4 — active_session_count must not count expired sessions
 # ──────────────────────────────────────────────
+
 
 async def test_m4_expired_session_is_not_counted(client, db_session, redis):
     """A session whose `session:<sid>` key expired by TTL is never SREM'd from the user's set.
@@ -255,6 +251,7 @@ async def test_m4_expired_session_is_not_counted(client, db_session, redis):
 # ──────────────────────────────────────────────
 # L3 — the RBAC matrix doc must list the new capabilities
 # ──────────────────────────────────────────────
+
 
 def test_l3_rbac_matrix_documents_the_new_capabilities():
     """seed_rbac.py grants project.view/edit to super_admin; the matrix must agree."""

@@ -21,7 +21,7 @@ from app.models.auth import User
 from app.models.rbac import UserRoleAssign
 from app.services import audit_log as audit_log_service
 from scripts.seed_rbac import ROLES_DATA
-from tests.conftest import auth_headers_for
+from tests.conftest import auth_headers_for, clear_audit_trail
 from tests.cookies import cookie_header
 from tests.test_audit_log_api import _role, _row
 
@@ -66,10 +66,12 @@ def _table(response) -> list[list[str]]:
 @pytest.mark.asyncio
 async def test_a_super_admin_downloads_the_log_newest_first(client, db_session, redis):
     """A CSV attachment: one header row, then one row per change, newest first."""
+    headers = await _reader(db_session, redis, "boss", Perm.AUDIT_VIEW, Perm.AUDIT_EXPORT)
+    await clear_audit_trail(db_session)
     db_session.add_all(
         [_row("teams", new={"name": "甲隊"}, ago=2), _row("users", new={"name": "小明"}, ago=1)]
     )
-    headers = await _reader(db_session, redis, "boss", Perm.AUDIT_VIEW, Perm.AUDIT_EXPORT)
+    await db_session.commit()
 
     response = await _export(client, headers)
 
@@ -110,9 +112,10 @@ def _dated(name: str, minutes: int, *, table="teams", row_id=None, actor=None):
 )
 async def test_the_filters_of_the_read_api_apply(client, db_session, redis, filters, expected):
     """`table`, `from`, `to`, `actor_uuid` and `row_id` narrow the file as they narrow the page."""
+    headers = await _reader(db_session, redis, "boss", Perm.AUDIT_VIEW, Perm.AUDIT_EXPORT)
     actor = User(uuid=_ACTOR, name="actor")
     db_session.add(actor)
-    await db_session.flush()
+    await clear_audit_trail(db_session)
     db_session.add_all(
         [
             _dated("a", 0),
@@ -121,7 +124,7 @@ async def test_the_filters_of_the_read_api_apply(client, db_session, redis, filt
             _dated("u", -10, table="users"),
         ]
     )
-    headers = await _reader(db_session, redis, "boss", Perm.AUDIT_VIEW, Perm.AUDIT_EXPORT)
+    await db_session.commit()
 
     response = await _export(client, headers, **filters)
 
@@ -134,8 +137,10 @@ async def test_the_filters_of_the_read_api_apply(client, db_session, redis, filt
 @pytest.mark.parametrize("body", [{"table_name": "teams"}, {"user_uuid": str(uuid.uuid4())}])
 async def test_an_unknown_field_is_refused_not_ignored(client, db_session, redis, body):
     """ADR-428: a misspelled filter would otherwise export the whole log as if unfiltered."""
-    db_session.add(_row("users", new={"name": "小明"}))
     headers = await _reader(db_session, redis, "boss", Perm.AUDIT_VIEW, Perm.AUDIT_EXPORT)
+    await clear_audit_trail(db_session)
+    db_session.add(_row("users", new={"name": "小明"}))
+    await db_session.commit()
 
     response = await _export(client, headers, **body)
 
@@ -146,14 +151,15 @@ async def test_an_unknown_field_is_refused_not_ignored(client, db_session, redis
 @pytest.mark.asyncio
 async def test_each_row_names_who_made_the_change(client, db_session, redis):
     """`actor_name` is the nickname, written so a spreadsheet cannot run it as a formula."""
+    headers = await _reader(db_session, redis, "boss", Perm.AUDIT_VIEW, Perm.AUDIT_EXPORT)
     actor = User(name="=HYPERLINK(1)")
     db_session.add(actor)
-    await db_session.flush()
+    await clear_audit_trail(db_session)
     actor_uuid = actor.uuid
     row = _row("teams", new={"name": "甲隊"})
     row.user_uuid = actor_uuid
     db_session.add(row)
-    headers = await _reader(db_session, redis, "boss", Perm.AUDIT_VIEW, Perm.AUDIT_EXPORT)
+    await db_session.commit()
 
     response = await _export(client, headers)
 
@@ -193,8 +199,10 @@ async def test_audit_export_below_all_does_not_download(client, db_session, redi
 async def test_more_rows_than_the_cap_asks_for_a_narrower_range(client, db_session, redis, monkeypatch):
     """Over the cap the file is refused rather than cut short, so nobody mistakes a part for the whole."""
     monkeypatch.setattr(audit_log_service, "MAX_EXPORT_ROWS", 2)
-    db_session.add_all([_row("teams", new={"n": i}, ago=i) for i in range(3)])
     headers = await _reader(db_session, redis, "boss", Perm.AUDIT_VIEW, Perm.AUDIT_EXPORT)
+    await clear_audit_trail(db_session)
+    db_session.add_all([_row("teams", new={"n": i}, ago=i) for i in range(3)])
+    await db_session.commit()
 
     response = await _export(client, headers)
 
@@ -207,8 +215,10 @@ async def test_more_rows_than_the_cap_asks_for_a_narrower_range(client, db_sessi
 async def test_exactly_the_cap_is_still_a_file(client, db_session, redis, monkeypatch):
     """The cap is inclusive."""
     monkeypatch.setattr(audit_log_service, "MAX_EXPORT_ROWS", 2)
-    db_session.add_all([_row("teams", new={"n": i}, ago=i) for i in range(2)])
     headers = await _reader(db_session, redis, "boss", Perm.AUDIT_VIEW, Perm.AUDIT_EXPORT)
+    await clear_audit_trail(db_session)
+    db_session.add_all([_row("teams", new={"n": i}, ago=i) for i in range(2)])
+    await db_session.commit()
 
     response = await _export(client, headers)
 
@@ -230,8 +240,10 @@ async def _exports(db) -> list[AuditLog]:
 @pytest.mark.asyncio
 async def test_each_download_is_recorded(client, db_session, redis):
     """Who exported, with which filters and how many rows: the file leaves no other trace (ADR-417)."""
-    db_session.add_all([_row("teams", new={"n": 1}), _row("users", new={"n": 2})])
     headers = await _reader(db_session, redis, "boss", Perm.AUDIT_VIEW, Perm.AUDIT_EXPORT)
+    await clear_audit_trail(db_session)
+    db_session.add_all([_row("teams", new={"n": 1}), _row("users", new={"n": 2})])
+    await db_session.commit()
 
     response = await _export(client, headers, table="teams")
 
@@ -251,8 +263,10 @@ async def test_each_download_is_recorded(client, db_session, redis):
 async def test_an_attempt_over_the_cap_is_recorded(client, db_session, redis, monkeypatch):
     """ADR-429: no file left, but an attempt to pull more of the log than one file allows is kept."""
     monkeypatch.setattr(audit_log_service, "MAX_EXPORT_ROWS", 1)
-    db_session.add_all([_row("teams", new={"n": 1}), _row("teams", new={"n": 2})])
     boss = await _reader(db_session, redis, "boss", Perm.AUDIT_VIEW, Perm.AUDIT_EXPORT)
+    await clear_audit_trail(db_session)
+    db_session.add_all([_row("teams", new={"n": 1}), _row("teams", new={"n": 2})])
+    await db_session.commit()
 
     response = await _export(client, boss, table="teams", tz="Asia/Taipei")
 
@@ -271,8 +285,10 @@ async def test_an_attempt_over_the_cap_is_recorded(client, db_session, redis, mo
 @pytest.mark.asyncio
 async def test_a_forbidden_download_records_nothing(client, db_session, redis):
     """A 403 is someone who may not export at all: no attempt at the log is recorded for them."""
-    db_session.add(_row("teams", new={"n": 1}))
     auditor = await _reader(db_session, redis, "auditor", Perm.AUDIT_VIEW)
+    await clear_audit_trail(db_session)
+    db_session.add(_row("teams", new={"n": 1}))
+    await db_session.commit()
 
     assert (await _export(client, auditor)).status_code == 403
     assert await _exports(db_session) == []
@@ -343,8 +359,10 @@ _APPLICATION = {"team_uuid": None, "applicant_phone": "+886912345678", "reason":
 @pytest.mark.asyncio
 async def test_without_role_request_review_applicant_details_are_masked(client, db_session, redis):
     """As on screen (ADR-359 point 5): an export grant alone does not reveal what applicants sent."""
-    db_session.add(_row("role_requests", new=_APPLICATION))
     headers = await _reader(db_session, redis, "exporter", Perm.AUDIT_VIEW, Perm.AUDIT_EXPORT)
+    await clear_audit_trail(db_session)
+    db_session.add(_row("role_requests", new=_APPLICATION))
+    await db_session.commit()
 
     response = await _export(client, headers)
 
@@ -355,10 +373,12 @@ async def test_without_role_request_review_applicant_details_are_masked(client, 
 @pytest.mark.asyncio
 async def test_with_role_request_review_applicant_details_are_shown(client, db_session, redis):
     """The super admin, who reviews applications, reads them as sent."""
-    db_session.add(_row("role_requests", new=_APPLICATION))
     headers = await _reader(
         db_session, redis, "boss", Perm.AUDIT_VIEW, Perm.AUDIT_EXPORT, Perm.ROLE_REQUEST_REVIEW
     )
+    await clear_audit_trail(db_session)
+    db_session.add(_row("role_requests", new=_APPLICATION))
+    await db_session.commit()
 
     response = await _export(client, headers)
 
@@ -369,10 +389,12 @@ async def test_with_role_request_review_applicant_details_are_shown(client, db_s
 @pytest.mark.asyncio
 async def test_an_invite_link_token_is_never_in_the_file(client, db_session, redis):
     """ADR-431: a token stays usable for 24 hours, and this file is made to be carried away."""
-    db_session.add(_row("team_invites", new={"token": "live-token", "team_uuid": None}))
     headers = await _reader(
         db_session, redis, "boss", Perm.AUDIT_VIEW, Perm.AUDIT_EXPORT, Perm.ROLE_REQUEST_REVIEW
     )
+    await clear_audit_trail(db_session)
+    db_session.add(_row("team_invites", new={"token": "live-token", "team_uuid": None}))
+    await db_session.commit()
 
     response = await _export(client, headers)
 

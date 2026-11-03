@@ -8,8 +8,8 @@ import pytest
 import pytest_asyncio
 import redis.asyncio as aioredis
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 # 強制設定為測試環境
 os.environ["ENV"] = "testing"
@@ -18,44 +18,32 @@ from app.core import security
 from app.core.permissions import Perm
 from app.core.redis import get_redis
 from app.main import app
-from app.models.auth import Base
-from app.models.rbac import Permission, Role, RolePermissionAssign
-from tests.conftest import TEST_DB_URL as TEST_SQLALCHEMY_DATABASE_URL
-from tests.conftest import TEST_REDIS_URL
+from app.models.rbac import Permission, RolePermissionAssign
+from tests.conftest import TEST_REDIS_URL, ensure_role
 
 
 @pytest_asyncio.fixture(scope="function")
-async def db_session():
-    """建立測試專用的 Engine 與 Session，並覆寫 get_db."""
-    engine = create_async_engine(TEST_SQLALCHEMY_DATABASE_URL, echo=False)
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-        await conn.run_sync(Base.metadata.create_all)
+async def db_session(db_session):
+    """The shared session, with the default `user` role granted map.view everywhere.
 
-    TestingSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=True)
-
-    # 預填基礎角色與權限 (name="user" matches app.services.auth_account.DEFAULT_PLATFORM_ROLE,
-    # so every account create_account() makes is auto-assigned this role.)
-    async with TestingSessionLocal() as db:
-        user_role = Role(name="user", kind="platform")
-        db.add(user_role)
-        await db.flush()
-
+    `user` matches app.services.auth_account.DEFAULT_PLATFORM_ROLE, so every account
+    create_account() makes is auto-assigned it.
+    """
+    user_role = await ensure_role(db_session, "user")
+    map_view = await db_session.scalar(select(Permission).where(Permission.key == Perm.MAP_VIEW.value))
+    if map_view is None:
         map_view = Permission(key=Perm.MAP_VIEW.value)
-        db.add(map_view)
-        await db.flush()
+        db_session.add(map_view)
+        await db_session.flush()
+    db_session.add(RolePermissionAssign(role_uuid=user_role.uuid, permission_uuid=map_view.uuid, scope="all"))
+    await db_session.commit()
+    return db_session
 
-        db.add(RolePermissionAssign(role_uuid=user_role.uuid, permission_uuid=map_view.uuid, scope="all"))
-        await db.commit()
-
-    async with TestingSessionLocal() as session:
-        yield session
-
-    await engine.dispose()
 
 @pytest_asyncio.fixture(scope="function")
 async def client(db_session):
     """配置測試客戶端並覆寫資料庫依賴."""
+
     async def override_get_db():
         yield db_session
 
@@ -69,6 +57,7 @@ async def client(db_session):
     app.dependency_overrides.clear()
     await fake_redis.flushdb()
     await fake_redis.aclose()
+
 
 @pytest.mark.asyncio
 async def test_full_rbac_flow(client: AsyncClient, db_session: AsyncSession):
@@ -98,8 +87,7 @@ async def test_full_rbac_flow(client: AsyncClient, db_session: AsyncSession):
 
     # 3. 執行登入 (以 email 為帳號)
     login_response = await client.post(
-        "/api/v1/auth/login",
-        data={"username": test_email, "password": test_hash_password_v1}
+        "/api/v1/auth/login", data={"username": test_email, "password": test_hash_password_v1}
     )
     assert login_response.status_code == 200
     token_data = login_response.json()

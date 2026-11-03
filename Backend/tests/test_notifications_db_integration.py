@@ -175,7 +175,10 @@ async def test_an_unassigned_station_notifies_gov_only(db: AsyncSession):
 @pytest.mark.asyncio
 async def test_resolve_permission_scope_filtering(db: AsyncSession):
     """Verify resolve_permission only returns users with non-none scopes."""
-    perm = Permission(key=Perm.AI_DUP_REVIEW.value, description="AI 重複審核")
+    # The migrations seed this permission; the test adds it when they have not.
+    perm = await db.scalar(select(Permission).where(Permission.key == Perm.AI_DUP_REVIEW.value))
+    if perm is None:
+        perm = Permission(key=Perm.AI_DUP_REVIEW.value, description="AI 重複審核")
     # Platform-kind: this test is about scope filtering, not teams, and the grants below name
     # no team — which ck_ura_role_team_kind rejects for a team-kind role (ADR-073).
     role_valid = Role(name="admin", kind="platform")

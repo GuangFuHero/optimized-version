@@ -6,10 +6,8 @@ behalf" may be renamed or deleted before anyone reads the trail.
 """
 
 import pytest
-import pytest_asyncio
-from sqlalchemy import delete, select, text
+from sqlalchemy import delete, select
 
-from app.db.triggers import AUDIT_TRIGGER_FUNC_SQL, get_audit_trigger_sql
 from app.models.audit import AuditLog
 from app.models.auth import User
 from app.models.rbac import Role, UserRoleAssign
@@ -17,17 +15,6 @@ from app.models.team import Team
 from tests.conftest import auth_headers_for
 
 pytestmark = pytest.mark.asyncio
-
-
-@pytest_asyncio.fixture(autouse=True)
-async def _install_audit_trigger_on_users(db_session):
-    """Install the real trigger onto `users` for this test's schema instance.
-
-    The schema is dropped and recreated per test, taking any trigger with it.
-    """
-    await db_session.execute(text(AUDIT_TRIGGER_FUNC_SQL))
-    await db_session.execute(text(get_audit_trigger_sql("users")))
-    await db_session.commit()
 
 
 async def _actor_with_identity(db, redis, *, team_name: str | None):
@@ -63,23 +50,25 @@ async def _actor_with_identity(db, redis, *, team_name: str | None):
 
 async def _rename_self(client, headers) -> None:
     """Make one audited write as the caller."""
-    resp = await client.patch(
-        "/api/v1/users/me", json={"name": "Renamed"}, headers=headers
-    )
+    resp = await client.patch("/api/v1/users/me", json={"name": "Renamed"}, headers=headers)
     assert resp.status_code == 200, resp.text
 
 
 async def _audit_row(db, actor_uuid: str) -> AuditLog:
     """The single UPDATE row logged for this actor."""
     logs = (
-        await db.execute(
-            select(AuditLog).where(
-                AuditLog.table_name == "users",
-                AuditLog.row_id == actor_uuid,
-                AuditLog.action == "UPDATE",
+        (
+            await db.execute(
+                select(AuditLog).where(
+                    AuditLog.table_name == "users",
+                    AuditLog.row_id == actor_uuid,
+                    AuditLog.action == "UPDATE",
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     assert len(logs) == 1
     return logs[0]
 

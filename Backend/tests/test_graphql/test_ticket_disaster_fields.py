@@ -18,7 +18,6 @@ from sqlalchemy import delete, select, text
 from app.core.identity import encode_act
 from app.core.permissions import Perm
 from app.core.security import create_access_token
-from app.db.triggers import AUDIT_TRIGGER_FUNC_SQL, get_audit_trigger_sql
 from app.models.auth import User
 from app.models.disaster_type import DisasterType
 from app.models.property_config import (
@@ -59,8 +58,8 @@ mutation ($uuid: UUID!, $details: [TicketDisasterDetailInput!]!) {
 
 POINT = {"type": "Point", "coordinates": [121.4219, 23.6696]}
 
-# The six keys migration e7b249d0af31 seeds. Re-created here because the GraphQL test DB is
-# built from Base.metadata, which carries no migration data.
+# The six keys migration e7b249d0af31 seeds. Re-created here because the module wipes the
+# vocabulary between tests.
 _KEYS = [
     ("flood", "水災"),
     ("landslide", "土石流"),
@@ -69,26 +68,6 @@ _KEYS = [
     ("fire", "火災"),
     ("earthquake", "地震"),
 ]
-
-
-@pytest_asyncio.fixture(autouse=True)
-async def audit_triggers():
-    """Install the audit trigger function and the triggers this module asserts on.
-
-    The GraphQL test DB is created from `Base.metadata`, which carries no triggers — only
-    migrations attach them. Without this the audit assertions below would pass vacuously by
-    finding nothing and never noticing.
-    """
-    async with test_db() as db:
-        await db.execute(text(AUDIT_TRIGGER_FUNC_SQL))
-        for table in ("tickets", "ticket_disaster_details"):
-            await db.execute(text(f"DROP TRIGGER IF EXISTS audit_trigger_{table} ON {table};"))
-            await db.execute(text(get_audit_trigger_sql(table)))
-    yield
-    async with test_db() as db:
-        for table in ("tickets", "ticket_disaster_details"):
-            await db.execute(text(f"DROP TRIGGER IF EXISTS audit_trigger_{table} ON {table};"))
-        await db.execute(text("DELETE FROM audit_logs"))
 
 
 @pytest_asyncio.fixture
@@ -637,8 +616,7 @@ async def test_disaster_detail_writes_are_audited(client, coordinator_auth):
     """The sibling EAV tables have no trail at all (ADR-124) — that is the mistake not to repeat.
 
     Guards the silent failure mode specifically: adding a table to `AUDITED_TABLES` does
-    nothing on its own, and the test fixture attaches triggers at runtime from that same list,
-    so a missing migration passes every other test in the suite.
+    nothing on its own; only a migration attaches the trigger this test reads.
     """
     _, token = coordinator_auth
     ticket = await _create_ticket(client, token, disasterTypes=["flood"])

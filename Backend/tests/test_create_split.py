@@ -60,7 +60,7 @@ async def _actor(db, *perms: Perm) -> User:
         db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope="all"))
     db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid))
     acting_as(user, role)  # before the commit expires `role`
-    seed_disaster_types(db)
+    await seed_disaster_types(db)
     await db.commit()
     await db.refresh(user)
     return user

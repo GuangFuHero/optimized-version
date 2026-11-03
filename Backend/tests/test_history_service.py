@@ -1,11 +1,9 @@
 """Timeline aggregation, merging and derivation (feature 016, ADR-131~137).
 
-Note on the fixture: `db` builds the schema from `Base.metadata`, which carries no audit
-triggers — those are installed by migrations. So these tests insert audit rows by hand,
-shaped exactly the way the trigger writes them. The real trigger path is exercised in the
-docker verification (plan Task 10); what is under test here is the interpretation, and
-hand-written rows make the awkward cases (a hard-deleted assignment, a soft delete) actually
-reachable.
+These tests clear what the audit triggers logged of their setup, then insert audit rows by
+hand, shaped exactly the way the trigger writes them. What is under test here is the
+interpretation, and hand-written rows make the awkward cases (a hard-deleted assignment, a
+soft delete) actually reachable.
 """
 
 import os
@@ -41,6 +39,7 @@ from app.services.history import (
     render_events,
     resolve_scope_ids,
 )
+from tests.conftest import clear_audit_trail
 
 
 async def _user(db, name="Actor") -> User:
@@ -282,6 +281,7 @@ async def test_a_cancelled_assignment_is_still_in_the_timeline(db):
     ticket, tasks, actor = await _ticket_with_two_tasks(db)
     dead_assignment = uuidlib.uuid4()  # never present in task_assignments
     payload = {"task_uuid": str(tasks[0].uuid), "actor_uuid": str(actor.uuid)}
+    await clear_audit_trail(db)
     db.add(_audit("task_assignments", "INSERT", dead_assignment, new=payload))
     db.add(_audit("task_assignments", "DELETE", dead_assignment, old=payload))
     await db.flush()
@@ -299,6 +299,7 @@ async def test_a_cancelled_assignment_is_still_in_the_timeline(db):
 async def test_a_geometry_write_that_only_moved_updated_at_is_left_out(db):
     """Adding a need stamps its ticket too; the need's own row says what happened, so the stamp is dropped."""
     ticket = uuidlib.uuid4()
+    await clear_audit_trail(db)
     db.add_all(
         [
             _audit(
@@ -337,6 +338,7 @@ async def test_a_live_assignment_is_not_returned_twice(db):
         .scalars()
         .first()
     )
+    await clear_audit_trail(db)
     db.add(
         _audit(
             "task_assignments",
@@ -357,6 +359,7 @@ async def test_a_live_assignment_is_not_returned_twice(db):
 async def test_truncation_is_reported_rather_than_silent(db):
     """Past the cap the caller is told, instead of quietly receiving a partial history."""
     ticket, _, _ = await _ticket_with_two_tasks(db)
+    await clear_audit_trail(db)
     for _ in range(6):
         db.add(_audit("tickets", "UPDATE", ticket.uuid, old={"status": "a"}, new={"status": "b"}))
     await db.flush()

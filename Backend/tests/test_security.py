@@ -6,28 +6,12 @@ import uuid
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
 
 # 強制設定為測試環境，避開全域 Rate Limit
 os.environ["ENV"] = "testing"
 
 from app.core import security  # noqa: E402
-from app.models.auth import Base  # noqa: E402
-from tests.conftest import TEST_DB_URL as TEST_SQLALCHEMY_DATABASE_URL  # noqa: E402 — dedicated test DB
 
-
-@pytest_asyncio.fixture(scope="function")
-async def db_session():
-    """Create an isolated test database session with fresh schema."""
-    engine = create_async_engine(TEST_SQLALCHEMY_DATABASE_URL, echo=False)
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-        await conn.run_sync(Base.metadata.create_all)
-    TestingSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=True)
-    async with TestingSessionLocal() as session:
-        yield session
-    await engine.dispose()
 
 @pytest_asyncio.fixture(scope="function")
 async def client(db_session, redis):
@@ -37,6 +21,7 @@ async def client(db_session, redis):
 
     async def override_get_db():
         yield db_session
+
     app.dependency_overrides[security.get_db] = override_get_db
     # Authentication reads the token's session out of Redis (ADR-099), so this local client
     # needs the same wiring the shared fixture has, or every authenticated route 500s here.
@@ -60,12 +45,13 @@ async def client(db_session, redis):
 async def test_rate_limiting(client: AsyncClient):
     """測試頻率限制防禦."""
     username = f"limit_{uuid.uuid4().hex[:4]}"
-    
+
     # 1. 測試 Salt 限制 (10/min)
     for _ in range(10):
         await client.get(f"/api/v1/auth/salt/{username}")
     res = await client.get(f"/api/v1/auth/salt/{username}")
     assert res.status_code == 429
+
 
 @pytest.mark.asyncio
 async def test_jwt_integrity(client: AsyncClient):
