@@ -54,6 +54,16 @@ export function byLatestCreated<T extends Pick<DuplicatePair, 'low' | 'high'>>(
   return [...pairs].sort((a, b) => latest(b) - latest(a));
 }
 
+/** 相似度高的在前, as the API's `-similarity`: a card with no score goes last, the uuid breaks ties. */
+export function byHighestSimilarity<
+  T extends Pick<DuplicatePair, 'uuid' | 'similarity'>,
+>(pairs: readonly T[]): T[] {
+  const score = (pair: T) => pair.similarity ?? -1;
+  return [...pairs].sort(
+    (a, b) => score(b) - score(a) || a.uuid.localeCompare(b.uuid),
+  );
+}
+
 /** How far apart two times are, in the words the design uses: 同時, 25 分, 1 小時 25 分, 2 天 3 小時. */
 export function gapText(from?: string | null, to?: string | null): string {
   const mins = Math.round(Math.abs(time(to) - time(from)) / 60_000);

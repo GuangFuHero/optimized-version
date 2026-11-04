@@ -3,7 +3,7 @@
 import { Box, Stack, Tab } from '@mui/material';
 import { ChevronRight, CircleCheck, Trash2 } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useState, type ChangeEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 
 import {
   useAllDuplicatePairs,
@@ -23,6 +23,7 @@ import {
 
 import { CompareView } from './compare-view';
 import {
+  byHighestSimilarity,
   byLatestCreated,
   DONE_STATUSES,
   gapText,
@@ -42,17 +43,16 @@ const PAGE_SIZE = 50;
 type Sort = 'similarity' | 'latest';
 
 /**
- * The query a list shows, a page at a time. 已處理 sorted by latest goes by when the card was
+ * 已處理, a page at a time, as 任務管理 pages its list. Sorted by latest it goes by when the card was
  * found (`-created_at`), which the API can page: that list only grows, so it is never read whole.
  */
-export function listQuery(
+export function decidedListQuery(
   tab: PairTab,
-  view: PairView,
   page: number,
   sort: Sort = 'similarity',
 ): DuplicatePairsQuery {
   return {
-    status: [...(view === 'pending' ? PENDING_STATUSES : DONE_STATUSES)],
+    status: [...DONE_STATUSES],
     entity_kind: TAB_KINDS[tab],
     sort: sort === 'latest' ? '-created_at' : '-similarity',
     skip: page * PAGE_SIZE,
@@ -76,25 +76,26 @@ export function DedupReviewPage() {
   const canView = user?.capabilities.includes('ai_duplicate.view') ?? false;
   const canReview = user?.capabilities.includes('ai_duplicate.review') ?? false;
 
-  // 待處理 by latest is the later-created side, which the API cannot sort by, so that list is read
-  // whole; it is the work still to do, so it stays short. Every other list is paged by the API.
-  const readWhole = sort === 'latest' && view === 'pending';
-  const byPage = useDuplicatePairs(listQuery(tab, view, page, sort), {
-    enabled: canView && !readWhole,
+  // 待處理 is work to get through, so it is one long list, read whole: what its tab counts is what
+  // is listed, 上一對／下一對 reach every pair, and a pair handled by someone else cannot move another
+  // past the edge of a page unseen. It is the work still to do, so it stays short.
+  const pending = view === 'pending';
+  const byPage = useDuplicatePairs(decidedListQuery(tab, page, sort), {
+    enabled: canView && !pending,
   });
   const whole = useAllDuplicatePairs(
     {
       status: [...PENDING_STATUSES],
       entity_kind: TAB_KINDS[tab],
     },
-    { enabled: canView && readWhole },
+    { enabled: canView && pending },
   );
-  const list = readWhole ? whole : byPage;
-  const allItems = whole.data ? byLatestCreated(whole.data) : [];
-  const items = readWhole
-    ? allItems.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
-    : (byPage.data?.items ?? []);
-  const total = readWhole ? allItems.length : (byPage.data?.total ?? 0);
+  const list = pending ? whole : byPage;
+  const wholeSorted =
+    sort === 'latest'
+      ? byLatestCreated(whole.data ?? [])
+      : byHighestSimilarity(whole.data ?? []);
+  const items = pending ? wholeSorted : (byPage.data?.items ?? []);
   // The tab counts are the pending totals; one card each is the smallest page that carries them.
   const counts = {
     ticket: useDuplicatePairs(
@@ -114,6 +115,21 @@ export function DedupReviewPage() {
       { enabled: canView },
     ),
   };
+
+  // Back from a pair, the list opens at that pair: a long list would start over at the top. A pair
+  // just handled has left the list, and it opens at the top.
+  const lastOpened = useRef<string | null>(null);
+  useEffect(() => {
+    if (openUuid) {
+      lastOpened.current = openUuid;
+      return;
+    }
+    if (!lastOpened.current || items.length === 0) return;
+    document
+      .querySelector(`[data-dedup-pair="${lastOpened.current}"]`)
+      ?.scrollIntoView({ block: 'center' });
+    lastOpened.current = null;
+  }, [openUuid, items.length]);
 
   // The compare screen is a page of its own: the browser's back button returns to the list.
   const open = (uuid: string | null) => {
@@ -146,7 +162,10 @@ export function DedupReviewPage() {
     );
   }
 
-  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const pageCount = Math.max(
+    1,
+    Math.ceil((byPage.data?.total ?? 0) / PAGE_SIZE),
+  );
 
   return (
     <Stack
@@ -303,16 +322,15 @@ export function DedupReviewPage() {
         </Stack>
       )}
 
-      {pageCount > 1 ? (
-        <ListPagination
-          page={page + 1}
-          pageCount={pageCount}
-          onPageChange={(next) => setPage(next - 1)}
-          onPrevious={() => setPage((p) => Math.max(0, p - 1))}
-          onNext={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
-          previousAriaLabel="上一頁"
-          nextAriaLabel="下一頁"
-        />
+      {!pending && pageCount > 1 ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+          <ListPagination
+            showPageNumbers
+            page={page + 1}
+            pageCount={pageCount}
+            onPageChange={(next) => setPage(next - 1)}
+          />
+        </Box>
       ) : null}
     </Stack>
   );
