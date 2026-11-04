@@ -114,7 +114,10 @@ export {
   TimelineChange,
   timelineTimeFormatter,
 } from './components/Timeline';
-export { backendEventsToTimelineItems } from './components/Timeline/backend-events';
+export {
+  backendEventsToTimelineItems,
+  type HistoryLabels,
+} from './components/Timeline/backend-events';
 export type {
   TimelineChangeProps,
   TimelineChangeData,

@@ -11,6 +11,8 @@ import {
 import { History } from 'lucide-react';
 import { useState } from 'react';
 
+import { historyLabels } from '../../../admin/shared/model/history-labels';
+
 const { color, typography } = designTokens;
 
 const PAGE = 50;
@@ -28,6 +30,8 @@ export function useLoadedStationVersion(uuid: string): number | null {
   if (!history.data) return null;
   return (history.data.meta?.total ?? history.data.data?.length ?? 0) + 1;
 }
+
+const STATION_HISTORY_LABELS = historyLabels();
 
 export function StationHistoryPanel({ uuid }: { uuid: string }) {
   const [limit, setLimit] = useState(PAGE);
@@ -54,7 +58,7 @@ export function StationHistoryPanel({ uuid }: { uuid: string }) {
         </Typography>
       </Box>
       <Timeline
-        items={backendEventsToTimelineItems(events)}
+        items={backendEventsToTimelineItems(events, STATION_HISTORY_LABELS)}
         emptyText={history.isPending ? '載入中…' : '尚無變更紀錄'}
       />
       {canLoadMore ? (

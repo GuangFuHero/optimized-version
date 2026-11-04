@@ -1,7 +1,10 @@
 'use client';
 
 import { Box, Typography } from '@mui/material';
-import { ticketHistoryQuery } from '@rescue-frontend/data-access/admin';
+import {
+  ticketHistoryQuery,
+  useDisasterTypes,
+} from '@rescue-frontend/data-access/admin';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import {
   backendEventsToTimelineItems,
@@ -10,7 +13,9 @@ import {
   designTokens,
   Timeline,
 } from '@rescue-frontend/ui';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+
+import { historyLabels } from '../../../admin/shared/model/history-labels';
 
 const { color, typography } = designTokens;
 
@@ -27,6 +32,20 @@ export function TicketHistoryPanel({ uuid }: { uuid: string }) {
     ...ticketHistoryQuery({ path: { uuid }, query: { limit } }),
     placeholderData: keepPreviousData,
   });
+  // Active types only, as the drawer's own read; a retired key shows as itself.
+  const disasterTypes = useDisasterTypes({ includeInactive: false });
+  const labels = useMemo(
+    () =>
+      historyLabels(
+        Object.fromEntries(
+          (disasterTypes.data?.disasterTypes ?? []).map((d) => [
+            d.key,
+            d.label,
+          ]),
+        ),
+      ),
+    [disasterTypes.data],
+  );
   const events = history.data?.data ?? [];
   const total = history.data?.meta?.total ?? 0;
   // `total` is itself a floor when the backend's fetch cap cut the merge short.
@@ -48,7 +67,7 @@ export function TicketHistoryPanel({ uuid }: { uuid: string }) {
         Super Admin。
       </Callout>
       <Timeline
-        items={backendEventsToTimelineItems(events)}
+        items={backendEventsToTimelineItems(events, labels)}
         emptyText={emptyText}
       />
       {canLoadMore ? (

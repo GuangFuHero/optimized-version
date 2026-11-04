@@ -188,6 +188,7 @@ export function Timeline({
 
 export type TimelineChangeData = { field: string } & (
   | { kind: 'withheld' }
+  | { kind: 'value'; value: string }
   | { kind: 'values'; before: string; after: string }
 );
 
@@ -231,6 +232,13 @@ export function TimelineChange({
         >
           已變更，內容未公開
         </Typography>
+      ) : change.kind === 'value' ? (
+        <Box
+          component="span"
+          sx={{ ...changeChipSx, color: color.fg.neutral.default }}
+        >
+          {change.value}
+        </Box>
       ) : (
         <>
           <Box
