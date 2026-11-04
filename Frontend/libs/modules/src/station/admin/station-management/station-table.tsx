@@ -11,7 +11,6 @@ import {
 } from '@rescue-frontend/ui';
 import {
   ChevronRight,
-  MapPin,
   MapPinPlus,
   SearchX,
   ShieldCheck,
@@ -95,12 +94,6 @@ export function StationTable({
       header: '類型',
       meta: { width: '120px' },
       cell: ({ row }) => <TypeChip type={row.original.type} />,
-    },
-    {
-      id: 'area',
-      header: '行政區',
-      meta: { width: '110px' },
-      cell: ({ row }) => <AreaCell area={row.original.area} />,
     },
     {
       id: 'status',
@@ -335,30 +328,5 @@ export function TeamText({ name }: { name: string | null }) {
     >
       {name ?? '未指派'}
     </Typography>
-  );
-}
-
-function AreaCell({ area }: { area: string }) {
-  return (
-    <Box
-      sx={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '4px',
-        minWidth: 0,
-      }}
-    >
-      <MapPin
-        size={14}
-        color={color.fg.neutral.muted}
-        style={{ flexShrink: 0 }}
-      />
-      <Typography
-        noWrap
-        sx={{ ...typography.body[300], color: color.fg.neutral.muted }}
-      >
-        {area || '—'}
-      </Typography>
-    </Box>
   );
 }
