@@ -11,7 +11,6 @@ import {
   useCreateArea,
   useDeleteArea,
   useAssignableStationTeams,
-  useCurrentUser,
   useRemoveZoneFromTeam,
   useUpdateArea,
 } from '@rescue-frontend/data-access/admin';
@@ -34,6 +33,8 @@ import {
   toGeoJsonPolygon,
   useAdminMapAreas,
   useAdminMapLiveMarkers,
+  AdminMapPinPanel,
+  isLocationCellId,
   viewOfArea,
   type AdminMapFilters,
   type RescueMapDraftArea,
@@ -56,7 +57,6 @@ import {
   AdminAreaDetailPanel,
   AdminAreaListPanel,
   toAdminAreaListItems,
-  type AdminMapLogEntry,
 } from './admin-area-list-panel';
 import { designTokens } from '@rescue-frontend/ui';
 
@@ -68,12 +68,6 @@ const { color, shadow, typography } = designTokens;
 const DEFAULT_HAZARD_STATUS = 'dangerous';
 
 const NO_AREAS: never[] = [];
-
-const MAX_LOG_ENTRIES = 40;
-
-function formatLogTime(date: Date): string {
-  return date.toTimeString().slice(0, 5);
-}
 
 // Two clicks on one corner this close are a double-click.
 const DOUBLE_CLICK_MS = 500;
@@ -100,35 +94,6 @@ export function AdminMapPageClient() {
   // Without this the backend gives no 責任區 teams, and every ticket would read as 未指派.
   const canViewTicketDetail = useCapability('ticket.view_detail').data ?? false;
   const mapBoxRef = useRef<HTMLDivElement>(null);
-  // What was done on this page, newest first, kept in memory alone (prototype `record`): the
-  // 操作紀錄 tab. The backend's audit log is the record that lasts.
-  const actor = useCurrentUser().data?.name ?? '';
-  const [log, setLog] = useState<AdminMapLogEntry[]>([]);
-  const record = useCallback(
-    (action: string) =>
-      setLog((current) =>
-        [{ at: formatLogTime(new Date()), actor, action }, ...current].slice(
-          0,
-          MAX_LOG_ENTRIES,
-        ),
-      ),
-    [actor],
-  );
-  // A change held for its 5 seconds goes in the log when it is made, and 復原 goes in as its own
-  // line (AC-03: every undo is recorded).
-  const hold = useCallback(
-    (request: Parameters<typeof holdRequest>[0]) => {
-      record(request.message);
-      holdRequest({
-        ...request,
-        onUndo: () => {
-          record(`復原：${request.message}`);
-          request.onUndo();
-        },
-      });
-    },
-    [record],
-  );
   const [viewportStore] = useState(() => createSiteMapViewportStore({}));
   const [routeState, setRouteState] = useState<RescueMapRouteState>({});
   const liveMarkers = useAdminMapLiveMarkers(viewportStore);
@@ -309,6 +274,29 @@ export function AdminMapPageClient() {
         )
       : [];
   }, [visibleClosureAreas, visiblePublicZones, markers, selectedAreaId]);
+  // Kept while the map moves on: a pin that leaves the view must not take its panel with it.
+  const [pin, setPin] = useState<RescueMapMarkerItem | null>(null);
+  const selectedMarkerId = routeState.selectedMarkerId;
+  useEffect(() => {
+    if (!selectedMarkerId) {
+      setPin(null);
+      return;
+    }
+    const found = markers.find((marker) => marker.id === selectedMarkerId);
+    if (found) {
+      setPin(found);
+    }
+  }, [markers, selectedMarkerId]);
+  const pickedPin =
+    pin?.id === selectedMarkerId &&
+    (pin?.detailType === 'ticket' || pin?.detailType === 'station')
+      ? pin
+      : null;
+  const closePin = useCallback(
+    () =>
+      setRouteState((current) => ({ ...current, selectedMarkerId: undefined })),
+    [],
+  );
   const handleBackToAreaList = useCallback(() => {
     setSelectedAreaId(null);
     setRouteState((current) => ({ ...current, selectedMarkerId: undefined }));
@@ -361,6 +349,8 @@ export function AdminMapPageClient() {
         : null;
 
       setSelectedAreaId(areaId);
+      // Opened from the bell with a pin's panel open: the panel gives way to the area.
+      setRouteState((current) => ({ ...current, selectedMarkerId: undefined }));
 
       if (view) {
         viewportStore.setState({
@@ -511,7 +501,7 @@ export function AdminMapPageClient() {
       setDrawPoints([]);
       setFormValues(EMPTY_AREA_FORM);
 
-      hold({
+      holdRequest({
         message: `已建立${label}`,
         onUndo: backToForm,
         send: async () => {
@@ -534,7 +524,7 @@ export function AdminMapPageClient() {
         },
       });
     },
-    [areas, createArea, drawPoints, hold],
+    [areas, createArea, drawPoints],
   );
   // Changing the boundary of the area on show (FE-021 item 5, MAP-ZD-191 to 199).
   const editedArea = useMemo(
@@ -637,7 +627,7 @@ export function AdminMapPageClient() {
         ...current,
         [area.id]: [...(current[area.id] ?? []), next],
       }));
-      hold({
+      holdRequest({
         message,
         onUndo: settle,
         send: () =>
@@ -669,21 +659,19 @@ export function AdminMapPageClient() {
         void updateArea
           .mutateAsync({ uuid: area.id, input: { isPublic } })
           .then(() => {
-            record(`${isPublic ? '已公開' : '已改為只有後台看得到'}${label}`);
             areas.reload();
           }, fail),
       onSave: (changes) =>
         void updateArea
           .mutateAsync({ uuid: area.id, input: changes })
           .then(() => {
-            record(`已更新${label}`);
             areas.reload();
             toast.success(`已更新${label}`);
           }, fail),
       onDelete: () => {
         setHiddenAreaIds((current) => new Set(current).add(area.id));
         setSelectedAreaId(null);
-        hold({
+        holdRequest({
           message: `${area.kind === 'hazardous_zone' ? '已解除' : '已刪除'}${label}`,
           onUndo: () => settleHidden(area.id),
           send: () =>
@@ -742,8 +730,6 @@ export function AdminMapPageClient() {
     canDeleteZone,
     canEditZone,
     deleteArea,
-    hold,
-    record,
     removeZoneFromTeam,
     selectedAreaId,
     settleHidden,
@@ -768,7 +754,7 @@ export function AdminMapPageClient() {
       [areaId]: [...(current[areaId] ?? []), shown],
     }));
     setEditing(null);
-    hold({
+    holdRequest({
       message: `已調整${name}的範圍`,
       onUndo: () => settleGeometry(areaId, shown),
       send: () =>
@@ -787,7 +773,7 @@ export function AdminMapPageClient() {
           )
           .then(() => settleGeometry(areaId, shown)),
     });
-  }, [areas, editedArea, editing, hold, settleGeometry, updateArea]);
+  }, [areas, editedArea, editing, settleGeometry, updateArea]);
   const handleRouteStateChange = useCallback(
     (next: RescueMapRouteState) => {
       const { position, bbox, ...picked } = next;
@@ -873,6 +859,11 @@ export function AdminMapPageClient() {
             viewportStore={viewportStore}
             showScale
             viewMemoryKey="mutual-aid"
+            // Beside the map instead (MAP-SCOPE-101), for whoever has the panel it goes in. A grid
+            // cell has no such panel: it lists the coarse tickets inside it, in the drawer.
+            hideDetailDrawer={
+              canViewZones && !isLocationCellId(routeState.selectedMarkerId)
+            }
             onMapClick={handleMapClick}
             draftArea={draftArea}
             editArea={editArea}
@@ -1013,18 +1004,41 @@ export function AdminMapPageClient() {
                 onSave={saveBoundary}
               />
             ) : selectedAreaItem ? (
-              <AdminAreaDetailPanel
-                item={selectedAreaItem}
-                tickets={selectedAreaTickets}
-                selectedTicketId={routeState.selectedMarkerId}
-                actions={areaActions}
-                onBack={handleBackToAreaList}
-                onSelectTicket={handleSelectAreaTicket}
+              <>
+                {pickedPin ? (
+                  <AdminMapPinPanel
+                    marker={pickedPin}
+                    backLabel={`回到「${selectedAreaItem.name ?? '區域'}」`}
+                    onBack={closePin}
+                  />
+                ) : null}
+                {/* Stays mounted under the pin: an area's edit form must not lose what was typed. */}
+                <Stack
+                  sx={{
+                    display: pickedPin ? 'none' : 'flex',
+                    flex: 1,
+                    minHeight: 0,
+                  }}
+                >
+                  <AdminAreaDetailPanel
+                    item={selectedAreaItem}
+                    tickets={selectedAreaTickets}
+                    selectedTicketId={routeState.selectedMarkerId}
+                    actions={areaActions}
+                    onBack={handleBackToAreaList}
+                    onSelectTicket={handleSelectAreaTicket}
+                  />
+                </Stack>
+              </>
+            ) : pickedPin ? (
+              <AdminMapPinPanel
+                marker={pickedPin}
+                backLabel="回到區域清單"
+                onBack={closePin}
               />
             ) : (
               <AdminAreaListPanel
                 items={areaListItems}
-                log={log}
                 selectedId={selectedAreaId}
                 isLoading={areas.isFetching && !areas.hasFetchedOnce}
                 hasError={areas.error !== null}

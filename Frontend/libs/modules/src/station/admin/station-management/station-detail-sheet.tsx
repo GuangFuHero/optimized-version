@@ -359,7 +359,7 @@ function PhotoStrip({ photos }: { photos: DetailStation['photos'] }) {
   );
 }
 
-function PrivateLabel({ children }: { children: ReactNode }) {
+export function PrivateLabel({ children }: { children: ReactNode }) {
   return (
     <Box
       component="span"

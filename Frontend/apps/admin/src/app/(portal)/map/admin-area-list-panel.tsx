@@ -1,13 +1,6 @@
 'use client';
 
-import {
-  ArrowLeft,
-  ChevronRight,
-  Eye,
-  EyeOff,
-  History,
-  MapPinned,
-} from 'lucide-react';
+import { ArrowLeft, ChevronRight, Eye, EyeOff, MapPinned } from 'lucide-react';
 
 import {
   Box,
@@ -15,7 +8,6 @@ import {
   ButtonBase,
   Stack,
   Switch,
-  Tab,
   Typography,
 } from '@mui/material';
 import { useEffect, useRef, useState } from 'react';
@@ -38,7 +30,7 @@ import {
 } from './admin-area-detail-actions';
 import { AreaSwatch } from './area-swatch';
 import { useHazardousZoneSource } from '@rescue-frontend/data-access/admin';
-import { Tabs, designTokens } from '@rescue-frontend/ui';
+import { designTokens } from '@rescue-frontend/ui';
 
 const { color, radius, typography } = designTokens;
 
@@ -58,13 +50,6 @@ export interface AdminAreaListItem {
    * Null where there is nothing to say: another kind of area, or a viewer not told the teams.
    */
   attributedTickets: number | null;
-}
-
-/** One line of what was done on this page (prototype `record`): when, by whom, and what. */
-export interface AdminMapLogEntry {
-  at: string;
-  actor: string;
-  action: string;
 }
 
 // 危險區 first: the first thing to see on opening the page is where not to go (prototype `map-panel.jsx`).
@@ -316,7 +301,6 @@ function EmptyState({ canDraw }: { canDraw: boolean }) {
  */
 export function AdminAreaListPanel({
   items,
-  log,
   selectedId,
   isLoading,
   hasError,
@@ -325,8 +309,6 @@ export function AdminAreaListPanel({
   onStartDraw,
 }: {
   items: readonly AdminAreaListItem[];
-  /** What was done on this page, newest first: the 操作紀錄 tab. */
-  log: readonly AdminMapLogEntry[];
   selectedId: string | null;
   isLoading: boolean;
   hasError: boolean;
@@ -335,159 +317,85 @@ export function AdminAreaListPanel({
   onSelect: (id: string) => void;
   onStartDraw?: () => void;
 }) {
-  const [tab, setTab] = useState<'zones' | 'log'>('zones');
-
   return (
     <Stack aria-label="區域清單" sx={{ flex: 1, minHeight: 0 }}>
-      <Tabs
-        value={tab}
-        onChange={(_, next: 'zones' | 'log') => setTab(next)}
-        aria-label="區域與操作紀錄"
-        sx={{ flexShrink: 0, px: 1 }}
-      >
-        <Tab value="zones" label={`區域 ${items.length}`} />
-        <Tab
-          value="log"
-          label={`操作紀錄${log.length > 0 ? ` ${log.length}` : ''}`}
-        />
-      </Tabs>
-      {tab === 'log' ? (
-        <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', p: 2 }}>
-          <LogList log={log} />
-        </Box>
-      ) : (
-        <>
-          <Stack
-            spacing={2.25}
-            sx={{ flex: 1, minHeight: 0, overflowY: 'auto', p: 2 }}
-          >
-            <Typography
-              sx={{
-                ...typography.label[300],
-                color: color.fg.neutral.subtle,
-              }}
-            >
-              數量只算目前地圖畫面內已載入的任務單與站點。
-            </Typography>
-            {hasError ? (
-              <Typography
-                sx={{ ...typography.body[300], color: color.fg.danger }}
-              >
-                區域載入失敗，請重新整理。
-              </Typography>
-            ) : null}
-            {KIND_ORDER.map((kind) => {
-              const group = items.filter((item) => item.kind === kind);
-
-              if (group.length === 0) {
-                return null;
-              }
-
-              return (
-                <Stack key={kind} spacing={1}>
-                  <Typography
-                    sx={{
-                      ...typography.label[400],
-                      color: color.fg.neutral.muted,
-                    }}
-                  >
-                    {AREA_KIND_LABELS[kind]}（{group.length}）
-                  </Typography>
-                  {group.map((item) => (
-                    <AreaRow
-                      key={item.id}
-                      item={item}
-                      selected={item.id === selectedId}
-                      onSelect={onSelect}
-                    />
-                  ))}
-                </Stack>
-              );
-            })}
-            {items.length === 0 && !isLoading && !hasError ? (
-              <EmptyState canDraw={canDraw} />
-            ) : null}
-          </Stack>
-          {canDraw && onStartDraw ? (
-            <Stack
-              direction="row"
-              sx={{
-                justifyContent: 'flex-end',
-                px: 2.25,
-                py: 1.5,
-                borderTop: `1px solid ${color.border.default}`,
-              }}
-            >
-              <Button variant="contained" onClick={onStartDraw}>
-                圈選新區域
-              </Button>
-            </Stack>
-          ) : null}
-        </>
-      )}
-    </Stack>
-  );
-}
-
-/** 操作紀錄 (prototype `LogList`): newest first, kept in this page's memory alone. */
-function LogList({ log }: { log: readonly AdminMapLogEntry[] }) {
-  if (log.length === 0) {
-    return (
-      <Stack
-        spacing={0.5}
+      <Typography
         sx={{
-          alignItems: 'center',
-          textAlign: 'center',
-          py: 4,
-          color: color.fg.neutral.muted,
+          flexShrink: 0,
+          px: 2,
+          py: 1.5,
+          ...typography.label[500],
+          fontWeight: 700,
+          color: color.fg.neutral.default,
+          borderBottom: `1px solid ${color.border.default}`,
         }}
       >
-        <Box component={History} sx={{ width: 28, height: 28 }} />
-        <Typography sx={{ ...typography.body[300], mt: 1 }}>
-          這次還沒有任何操作。
-        </Typography>
-        <Typography sx={{ ...typography.label[300], lineHeight: 1.6 }}>
-          這裡只列出你在這一頁做過的事，重新整理就會清空。
-        </Typography>
-      </Stack>
-    );
-  }
-
-  return (
-    <Stack component="ol" sx={{ listStyle: 'none', m: 0, p: 0 }}>
-      {log.map((entry, index) => (
-        <Stack
-          component="li"
-          // The same minute and words can repeat: the position is what tells them apart.
-          key={index}
-          direction="row"
-          spacing={1.5}
+        區域 {items.length}
+      </Typography>
+      <Stack
+        spacing={2.25}
+        sx={{ flex: 1, minHeight: 0, overflowY: 'auto', p: 2 }}
+      >
+        <Typography
           sx={{
-            py: 1.25,
-            borderBottom: `1px solid ${color.border.default}`,
+            ...typography.label[300],
+            color: color.fg.neutral.subtle,
           }}
         >
-          <Typography
-            sx={{
-              ...typography.data[300],
-              flexShrink: 0,
-              color: color.fg.neutral.muted,
-            }}
-          >
-            {entry.at}
+          數量只算目前地圖畫面內已載入的任務單與站點。
+        </Typography>
+        {hasError ? (
+          <Typography sx={{ ...typography.body[300], color: color.fg.danger }}>
+            區域載入失敗，請重新整理。
           </Typography>
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography sx={{ ...typography.body[300], lineHeight: 1.6 }}>
-              {entry.action}
-            </Typography>
-            <Typography
-              sx={{ ...typography.label[300], color: color.fg.neutral.muted }}
-            >
-              {entry.actor}
-            </Typography>
-          </Box>
+        ) : null}
+        {KIND_ORDER.map((kind) => {
+          const group = items.filter((item) => item.kind === kind);
+
+          if (group.length === 0) {
+            return null;
+          }
+
+          return (
+            <Stack key={kind} spacing={1}>
+              <Typography
+                sx={{
+                  ...typography.label[400],
+                  color: color.fg.neutral.muted,
+                }}
+              >
+                {AREA_KIND_LABELS[kind]}（{group.length}）
+              </Typography>
+              {group.map((item) => (
+                <AreaRow
+                  key={item.id}
+                  item={item}
+                  selected={item.id === selectedId}
+                  onSelect={onSelect}
+                />
+              ))}
+            </Stack>
+          );
+        })}
+        {items.length === 0 && !isLoading && !hasError ? (
+          <EmptyState canDraw={canDraw} />
+        ) : null}
+      </Stack>
+      {canDraw && onStartDraw ? (
+        <Stack
+          direction="row"
+          sx={{
+            justifyContent: 'flex-end',
+            px: 2.25,
+            py: 1.5,
+            borderTop: `1px solid ${color.border.default}`,
+          }}
+        >
+          <Button variant="contained" onClick={onStartDraw}>
+            圈選新區域
+          </Button>
         </Stack>
-      ))}
+      ) : null}
     </Stack>
   );
 }
