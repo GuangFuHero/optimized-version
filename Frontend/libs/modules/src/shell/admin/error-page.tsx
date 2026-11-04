@@ -21,14 +21,15 @@ export function AdminErrorPage({ code }: { code: '404' | '403' }) {
     .slice(0, 3);
   const identity = user?.active_identity;
   const forbidden = code === '403';
-  const contact =
-    identity?.team_uuid && identity.role !== 'admin'
-      ? '你的團隊管理員'
-      : '平台的超級管理員';
+  // A team member is not pointed anywhere: members cannot look up who their team's admins are
+  // (ADR-357 point 5), and a super admin has no one above to ask.
+  const askSuperAdmin =
+    identity?.role !== 'super_admin' &&
+    !(identity?.team_uuid && identity.role !== 'admin');
   const lead = forbidden
-    ? (identity?.role === 'super_admin'
-        ? '你目前的身份沒有開放這個頁面'
-        : `你目前的身份沒有開放這個頁面。如果工作上需要，請聯絡${contact}開通`) +
+    ? (askSuperAdmin
+        ? '你目前的身份沒有開放這個頁面。如果工作上需要，請聯絡平台的超級管理員開通'
+        : '你目前的身份沒有開放這個頁面') +
       (backOfficeIdentities(user?.identities ?? []).length > 1
         ? '；或從右上角的人名切換到其他身份再試一次。'
         : '。') +
