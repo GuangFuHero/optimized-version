@@ -33,7 +33,7 @@ import type { NeedAction } from '../../ticket/needs/need-actions';
 import { AuditLog } from './audit-log';
 import { PlatformBadge, platformLabel, TeamRoleBadge } from './badges';
 import { AssignRoleDialog, BlockDialog } from './dialogs';
-import { PersonCell, RealName } from './member-table';
+import { PersonCell, RealName, ResponsivePeople } from './member-table';
 import { captionSx, formatDateTime, PageFrame, SearchField } from './parts';
 import { RoleRequestQueue, usePendingRoleRequests } from './queue';
 import {
@@ -380,11 +380,32 @@ function PlatformStaff({
           指派平台級角色
         </Button>
       </Stack>
-      <DataTable
-        columns={columns}
-        data={rows}
-        getRowId={(row) => row.uuid}
-        minWidth={560}
+      <ResponsivePeople
+        table={
+          <DataTable
+            columns={columns}
+            data={rows}
+            getRowId={(row) => row.uuid}
+            minWidth={560}
+          />
+        }
+        cards={rows.map((user) => {
+          const platform = platformOf(user, teamTypes);
+          return {
+            id: user.uuid,
+            name: user.name,
+            realName: user.real_name ?? null,
+            self: user.uuid === selfUuid,
+            lastActivityAt: user.last_activity_at,
+            badges: <PlatformBadge platform={platform} />,
+            actions: actionsFor({
+              uuid: user.uuid,
+              name: user.name,
+              platform,
+              teams: membershipsOf(user),
+            }),
+          };
+        })}
       />
       {dialogs}
       {assigning ? (
@@ -411,6 +432,36 @@ const directoryColumn = createColumnHelper<
   DataTableFeatures,
   DirectoryPerson
 >();
+
+function TeamChips({ teams }: { teams: DirectoryPerson['teams'] }) {
+  return (
+    <Stack direction="row" sx={{ gap: 0.75, flexWrap: 'wrap' }}>
+      {teams.map((membership) => (
+        <Stack
+          key={membership.teamUuid}
+          direction="row"
+          sx={{
+            alignItems: 'center',
+            gap: 0.75,
+            height: 26,
+            pl: '10px',
+            pr: '8px',
+            borderRadius: `${radius.full}px`,
+            bgcolor: color.bg.neutral.subtle,
+            border: `1px solid ${color.border.default}`,
+          }}
+        >
+          <Typography
+            sx={{ ...typography.body[300], color: color.fg.neutral.subtle }}
+          >
+            {membership.teamName}
+          </Typography>
+          <TeamRoleBadge role={membership.role} />
+        </Stack>
+      ))}
+    </Stack>
+  );
+}
 
 /** 全平台人員: who someone is, their platform role, and which teams they are in. */
 function PeopleDirectory({
@@ -462,34 +513,7 @@ function PeopleDirectory({
         getValue().length === 0 ? (
           <Typography sx={captionSx}>—</Typography>
         ) : (
-          <Stack direction="row" sx={{ gap: 0.75, flexWrap: 'wrap' }}>
-            {getValue().map((membership) => (
-              <Stack
-                key={membership.teamUuid}
-                direction="row"
-                sx={{
-                  alignItems: 'center',
-                  gap: 0.75,
-                  height: 26,
-                  pl: '10px',
-                  pr: '8px',
-                  borderRadius: `${radius.full}px`,
-                  bgcolor: color.bg.neutral.subtle,
-                  border: `1px solid ${color.border.default}`,
-                }}
-              >
-                <Typography
-                  sx={{
-                    ...typography.body[300],
-                    color: color.fg.neutral.subtle,
-                  }}
-                >
-                  {membership.teamName}
-                </Typography>
-                <TeamRoleBadge role={membership.role} />
-              </Stack>
-            ))}
-          </Stack>
+          <TeamChips teams={getValue()} />
         ),
     }),
     directoryColumn.accessor('lastActivityAt', {
@@ -550,18 +574,33 @@ function PeopleDirectory({
         <Box sx={{ flex: 1 }} />
         <Typography sx={captionSx}>{rows.length} 人</Typography>
       </Stack>
-      <DataTable
-        columns={columns}
-        data={rows}
-        getRowId={(row) => row.uuid}
-        minWidth={720}
-        empty={
-          <EmptyState
-            icon={<SearchX />}
-            title="查無符合的人員"
-            description="試試其他姓名或調整篩選條件。"
+      <ResponsivePeople
+        table={
+          <DataTable
+            columns={columns}
+            data={rows}
+            getRowId={(row) => row.uuid}
+            minWidth={rows.length === 0 ? undefined : 720}
+            empty={
+              <EmptyState
+                icon={<SearchX />}
+                title="查無符合的人員"
+                description="試試其他姓名或調整篩選條件。"
+              />
+            }
           />
         }
+        cards={rows.map((person) => ({
+          id: person.uuid,
+          name: person.name,
+          realName: person.realName,
+          self: person.uuid === selfUuid,
+          lastActivityAt: person.lastActivityAt,
+          badges: <PlatformBadge platform={person.platform} />,
+          actions: actionsFor(person),
+          detail:
+            person.teams.length > 0 ? <TeamChips teams={person.teams} /> : null,
+        }))}
       />
       {dialogs}
     </Stack>

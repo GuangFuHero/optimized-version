@@ -50,7 +50,7 @@ export function TypeChip({
           active ? color.brand.primary.default : color.border.default
         }`,
         bgcolor: active ? color.bg.primary.subtle : color.bg.neutral.default,
-        color: color.fg.neutral.default,
+        color: active ? color.brand.primary.subtle : color.fg.neutral.default,
         transition: `background-color ${motion.transition.fast}`,
         '&:hover': {
           bgcolor: active ? color.bg.primary.subtle : color.bg.neutral.subtle,

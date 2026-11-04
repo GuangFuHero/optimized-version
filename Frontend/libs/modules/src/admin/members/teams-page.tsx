@@ -2,6 +2,7 @@
 
 import {
   Building2,
+  ChevronLeft,
   KeySquare,
   Lock,
   Pencil,
@@ -11,10 +12,26 @@ import {
   Users,
 } from 'lucide-react';
 
-import { Box, ButtonBase, Stack, Tab, Tabs, Typography } from '@mui/material';
+import {
+  Box,
+  ButtonBase,
+  Stack,
+  Tab,
+  Tabs,
+  type Theme,
+  Typography,
+  useMediaQuery,
+} from '@mui/material';
 import { createColumnHelper } from '@tanstack/react-table';
 import { useSearchParams } from 'next/navigation';
-import { Fragment, Suspense, useMemo, useState } from 'react';
+import {
+  Fragment,
+  Suspense,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { toast } from 'sonner';
 
 import {
@@ -54,6 +71,7 @@ import { InviteSheet } from './invite-sheet';
 import { MemberTable } from './member-table';
 import { AuditLog } from './audit-log';
 import { RoleRequestQueue, usePendingRoleRequests } from './queue';
+import { formatPhoneForDisplay } from '../../auth/login/utils/identity-validation';
 import { captionSx, PageFrame, Panel, SearchField, StatPill } from './parts';
 import {
   adminCount,
@@ -465,14 +483,7 @@ function TeamDetail({
         </Stack>
         <Stack direction="row" sx={{ gap: 1.25, flexWrap: 'wrap' }}>
           <StatPill Icon={Users} label="成員" value={roster.length} />
-          {/* Red only at zero: a running team with no admin is broken (EA1) and needs a super
-              admin to appoint one; a single admin is fine and the demote/remove guard covers it. */}
-          <StatPill
-            Icon={KeySquare}
-            label="管理員"
-            value={admins}
-            danger={running && roster.length > 0 && admins === 0}
-          />
+          <StatPill Icon={KeySquare} label="管理員" value={admins} />
         </Stack>
       </Panel>
 
@@ -559,6 +570,22 @@ function SuperTeamsView({ siteUrl }: { siteUrl?: string }) {
   const [selected, setSelected] = useState<string | null>(() =>
     searchParams.get('team'),
   );
+  // Below desktop the list and the detail take turns: stacked, the detail sits a long scroll
+  // below whichever team was tapped, and the list would need a scroll area of its own.
+  const isWide = useMediaQuery((theme: Theme) =>
+    theme.breakpoints.up('desktop'),
+  );
+  const [detailOpen, setDetailOpen] = useState(() =>
+    Boolean(searchParams.get('team')),
+  );
+  const pageTop = useRef<HTMLDivElement>(null);
+  const openTeam = (uuid: string) => {
+    setSelected(uuid);
+    setDetailOpen(true);
+  };
+  useEffect(() => {
+    if (!isWide) pageTop.current?.scrollIntoView({ block: 'start' });
+  }, [isWide, detailOpen]);
   const focusMemberUuid = searchParams.get('member');
   const [query, setQuery] = useState('');
   const [creating, setCreating] = useState(false);
@@ -590,7 +617,7 @@ function SuperTeamsView({ siteUrl }: { siteUrl?: string }) {
       teams={teams}
       onClose={() => setCreating(false)}
       onCreated={(created) => {
-        setSelected(created.uuid);
+        openTeam(created.uuid);
         setCreating(false);
       }}
     />
@@ -610,16 +637,22 @@ function SuperTeamsView({ siteUrl }: { siteUrl?: string }) {
 
   return (
     <Box
+      ref={pageTop}
       sx={{
         display: 'grid',
         gridTemplateColumns: { mobile: '1fr', desktop: '300px minmax(0, 1fr)' },
         gap: 2.5,
         alignItems: 'start',
+        scrollMarginTop: 80,
       }}
     >
       <Panel
         padding="16px"
-        sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}
+        sx={{
+          display: isWide || !detailOpen ? 'flex' : 'none',
+          flexDirection: 'column',
+          gap: 1.5,
+        }}
       >
         <Button
           startIcon={<Plus size={17} />}
@@ -634,16 +667,7 @@ function SuperTeamsView({ siteUrl }: { siteUrl?: string }) {
           placeholder="搜尋團隊…"
           label="搜尋團隊"
         />
-        <Stack
-          component="nav"
-          aria-label="團隊"
-          // Stacked above the detail on narrow screens: a long list would push the team out of view.
-          sx={{
-            gap: '2px',
-            maxHeight: { mobile: 320, desktop: 'none' },
-            overflowY: { mobile: 'auto', desktop: 'visible' },
-          }}
-        >
+        <Stack component="nav" aria-label="團隊" sx={{ gap: '2px' }}>
           {visible.length === 0 ? (
             <Typography sx={{ ...captionSx, p: 1.5 }}>
               沒有符合的團隊
@@ -654,25 +678,44 @@ function SuperTeamsView({ siteUrl }: { siteUrl?: string }) {
                 key={t.uuid}
                 team={t}
                 count={counts.get(t.uuid) ?? 0}
-                active={t.uuid === team.uuid}
-                onClick={() => setSelected(t.uuid)}
+                active={isWide && t.uuid === team.uuid}
+                onClick={() => openTeam(t.uuid)}
               />
             ))
           )}
         </Stack>
       </Panel>
 
-      <TeamDetail
-        siteUrl={siteUrl}
-        team={team}
-        teams={teams}
-        roster={roster}
-        candidates={users}
-        teamTypes={teamTypes}
-        focusMemberUuid={
-          team.uuid === searchParams.get('team') ? focusMemberUuid : null
-        }
-      />
+      {isWide || detailOpen ? (
+        <Stack sx={{ gap: 1, minWidth: 0 }}>
+          {isWide ? null : (
+            <ButtonBase
+              onClick={() => setDetailOpen(false)}
+              sx={{
+                ...typography.label[400],
+                alignSelf: 'flex-start',
+                gap: 0.5,
+                minHeight: 44,
+                color: color.fg.neutral.subtle,
+              }}
+            >
+              <ChevronLeft size={18} />
+              所有團隊
+            </ButtonBase>
+          )}
+          <TeamDetail
+            siteUrl={siteUrl}
+            team={team}
+            teams={teams}
+            roster={roster}
+            candidates={users}
+            teamTypes={teamTypes}
+            focusMemberUuid={
+              team.uuid === searchParams.get('team') ? focusMemberUuid : null
+            }
+          />
+        </Stack>
+      ) : null}
       {createDialog}
     </Box>
   );
@@ -735,7 +778,7 @@ function AdminContactsCell({ admins }: { admins: readonly DirectoryAdmin[] }) {
           <Typography
             sx={{ ...typography.data[300], color: color.fg.neutral.subtle }}
           >
-            {admin.phone || '—'}
+            {admin.phone ? formatPhoneForDisplay(admin.phone) : '—'}
           </Typography>
           <Typography
             sx={{
@@ -752,7 +795,7 @@ function AdminContactsCell({ admins }: { admins: readonly DirectoryAdmin[] }) {
   );
 }
 
-/** 所有團隊 on a phone: one card per team, each admin as name, phone and email lines. */
+/** 所有團隊 below desktop: one card per team, each admin as name, phone and email lines. */
 function AllTeamsCards({
   teams,
   selfTeamUuid,
@@ -811,12 +854,15 @@ function AllTeamsCards({
                 <Typography sx={captionSx}>{NO_ADMIN}</Typography>
               ) : null}
             </Stack>
+            {showAdmins && admins.length > 0 ? (
+              <Typography sx={captionSx}>管理員</Typography>
+            ) : null}
             {showAdmins
               ? admins.map((admin, index) => (
                   <Stack key={index} sx={{ gap: 0.25 }}>
                     <Typography
                       sx={{
-                        ...typography.label[400],
+                        ...typography.body[300],
                         color: color.fg.neutral.default,
                       }}
                     >
@@ -828,7 +874,7 @@ function AllTeamsCards({
                         color: color.fg.neutral.subtle,
                       }}
                     >
-                      {admin.phone || '—'}
+                      {admin.phone ? formatPhoneForDisplay(admin.phone) : '—'}
                     </Typography>
                     {admin.email ? (
                       <Typography
@@ -925,7 +971,7 @@ function AllTeamsTable({ selfTeamUuid }: { selfTeamUuid: string }) {
         供劃區、轉介與跨隊聯繫時找人。這是管理員本人的電話與
         Email，請只用在救災協調。
       </Callout>
-      <Box sx={{ display: { mobile: 'none', tablet: 'block' } }}>
+      <Box sx={{ display: { mobile: 'none', desktop: 'block' } }}>
         <DataTable
           columns={columns}
           data={teams}
@@ -937,7 +983,7 @@ function AllTeamsTable({ selfTeamUuid }: { selfTeamUuid: string }) {
           })}
         />
       </Box>
-      <Box sx={{ display: { mobile: 'block', tablet: 'none' } }}>
+      <Box sx={{ display: { mobile: 'block', desktop: 'none' } }}>
         <AllTeamsCards
           teams={teams}
           selfTeamUuid={selfTeamUuid}

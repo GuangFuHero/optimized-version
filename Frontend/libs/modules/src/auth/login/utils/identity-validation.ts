@@ -69,3 +69,15 @@ export function validateIdentityValue(
     ? true
     : '手機號碼格式不正確（09 開頭十碼，或 +886 格式）';
 }
+
+/** A stored E.164 number the way people here write it: +886912345678 → 0912 345 678. */
+export function formatPhoneForDisplay(value: string) {
+  try {
+    return phoneNumberUtil.format(
+      phoneNumberUtil.parse(value.trim(), DEFAULT_PHONE_REGION),
+      PhoneNumberFormat.NATIONAL,
+    );
+  } catch {
+    return value;
+  }
+}

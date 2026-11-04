@@ -165,12 +165,22 @@ export function AuditLog({
             entries.map((entry) => {
               const Icon = CATEGORY_ICON[entry.category];
               return (
-                <Stack
+                <Box
                   key={entry.uuid}
-                  direction="row"
                   sx={{
+                    display: 'grid',
+                    // A phone has no room for four columns: the text would shrink to one
+                    // character a line, so the time and team go on a row of their own.
+                    gridTemplateColumns: {
+                      mobile: '32px minmax(0, 1fr) auto',
+                      tablet: '88px 32px minmax(0, 1fr) auto',
+                    },
+                    gridTemplateAreas: {
+                      mobile: '"time time team" "icon text text"',
+                      tablet: '"time icon text team"',
+                    },
                     alignItems: 'flex-start',
-                    gap: 1.75,
+                    gap: { mobile: 1, tablet: 1.75 },
                     p: '14px 16px',
                     borderBottom: `1px solid ${color.border.default}`,
                     '&:last-of-type': { borderBottom: 'none' },
@@ -179,9 +189,8 @@ export function AuditLog({
                   <Typography
                     sx={{
                       ...typography.data[300],
-                      width: 88,
-                      flexShrink: 0,
-                      pt: '6px',
+                      gridArea: 'time',
+                      pt: { mobile: '4px', tablet: '6px' },
                       color: color.fg.neutral.muted,
                     }}
                   >
@@ -189,9 +198,9 @@ export function AuditLog({
                   </Typography>
                   <Box
                     sx={{
+                      gridArea: 'icon',
                       width: 32,
                       height: 32,
-                      flexShrink: 0,
                       display: 'grid',
                       placeItems: 'center',
                       borderRadius: '50%',
@@ -208,8 +217,7 @@ export function AuditLog({
                   <Typography
                     sx={{
                       ...typography.body[300],
-                      flex: 1,
-                      minWidth: 0,
+                      gridArea: 'text',
                       pt: '5px',
                       color: color.fg.neutral.default,
                       overflowWrap: 'anywhere',
@@ -222,11 +230,11 @@ export function AuditLog({
                   </Typography>
                   <Badge
                     tone={entry.teamName ? 'info' : 'neutral'}
-                    sx={{ flexShrink: 0, mt: '4px' }}
+                    sx={{ gridArea: 'team', mt: '4px' }}
                   >
                     {entry.teamName ?? '平台'}
                   </Badge>
-                </Stack>
+                </Box>
               );
             })
           )}

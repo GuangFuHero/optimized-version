@@ -2,7 +2,7 @@
 
 import { Users } from 'lucide-react';
 
-import { Stack, Typography } from '@mui/material';
+import { Box, Stack, Typography } from '@mui/material';
 import { createColumnHelper } from '@tanstack/react-table';
 import type { ReactNode } from 'react';
 
@@ -21,7 +21,7 @@ import { PlatformBadge, TeamRoleBadge } from './badges';
 import { captionSx, formatDateTime } from './parts';
 import type { RosterMember } from './roster';
 
-const { color, typography } = designTokens;
+const { color, radius, typography } = designTokens;
 
 const column = createColumnHelper<DataTableFeatures, RosterMember>();
 
@@ -67,6 +67,88 @@ export function RealName({
     <Typography noWrap sx={{ ...captionSx, flexShrink: 1, minWidth: 0 }}>
       （實名 {realName}）
     </Typography>
+  );
+}
+
+export interface PersonCard {
+  id: string;
+  name: string;
+  realName: string | null;
+  self?: boolean;
+  highlighted?: boolean;
+  actions?: NeedAction[];
+  lastActivityAt?: string | null;
+  badges: ReactNode;
+  /** Anything longer than a badge row, such as the teams someone belongs to. */
+  detail?: ReactNode;
+}
+
+/**
+ * A people table on desktop, one card per person below it: a table scrolled sideways would
+ * leave the ⋯ menu off screen, and that menu is how a phone promotes or removes someone.
+ */
+export function ResponsivePeople({
+  table,
+  cards,
+}: {
+  table: ReactNode;
+  cards: readonly PersonCard[];
+}) {
+  if (cards.length === 0) return table;
+  return (
+    <>
+      <Box sx={{ display: { mobile: 'none', desktop: 'block' } }}>{table}</Box>
+      <Stack
+        sx={{
+          display: { mobile: 'flex', desktop: 'none' },
+          bgcolor: color.bg.neutral.default,
+          border: `1px solid ${color.border.default}`,
+          borderRadius: `${radius.lg}px`,
+          overflow: 'hidden',
+        }}
+      >
+        {cards.map((card, index) => (
+          <Stack
+            key={card.id}
+            sx={{
+              gap: 1,
+              p: 2,
+              borderTop:
+                index === 0 ? 'none' : `1px solid ${color.border.default}`,
+              bgcolor: card.highlighted ? color.bg.primary.subtle : undefined,
+            }}
+          >
+            <Stack
+              direction="row"
+              sx={{ alignItems: 'center', gap: 1, minWidth: 0 }}
+            >
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <PersonCell
+                  name={card.name}
+                  self={card.self}
+                  extra={<RealName name={card.name} realName={card.realName} />}
+                />
+              </Box>
+              {card.actions ? (
+                <NeedActionsMenu needName={card.name} items={card.actions} />
+              ) : null}
+            </Stack>
+            <Stack
+              direction="row"
+              sx={{ alignItems: 'center', gap: 1, flexWrap: 'wrap' }}
+            >
+              {card.badges}
+              {card.lastActivityAt ? (
+                <Typography sx={captionSx}>
+                  最後活動 {formatDateTime(card.lastActivityAt)}
+                </Typography>
+              ) : null}
+            </Stack>
+            {card.detail}
+          </Stack>
+        ))}
+      </Stack>
+    </>
   );
 }
 
@@ -153,7 +235,7 @@ export function MemberTable({
       : []),
   ]);
 
-  return (
+  const table = (
     <DataTable
       columns={columns}
       data={rows}
@@ -172,6 +254,30 @@ export function MemberTable({
           />
         )
       }
+    />
+  );
+  if (rows.length === 0) return table;
+
+  return (
+    <ResponsivePeople
+      table={table}
+      cards={rows.map((member) => ({
+        id: member.uuid,
+        name: member.name,
+        realName: member.realName,
+        self: member.uuid === selfUuid,
+        highlighted: member.uuid === highlightUuid,
+        actions: actionsFor?.(member),
+        lastActivityAt: basic ? null : member.lastActivityAt,
+        badges: (
+          <>
+            <TeamRoleBadge role={member.role} />
+            {!basic && member.platform ? (
+              <PlatformBadge platform={member.platform} />
+            ) : null}
+          </>
+        ),
+      }))}
     />
   );
 }

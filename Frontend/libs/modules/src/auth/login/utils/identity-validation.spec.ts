@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { validateIdentityValue } from './identity-validation';
+import {
+  formatPhoneForDisplay,
+  validateIdentityValue,
+} from './identity-validation';
 
 describe('validateIdentityValue', () => {
   it('asks for the account when nothing is typed', () => {
@@ -22,5 +25,15 @@ describe('validateIdentityValue', () => {
     expect(validateIdentityValue('email', 'hua@example.com')).toBe(true);
     expect(validateIdentityValue('phone', '0912345678')).toBe(true);
     expect(validateIdentityValue('phone', '+886912345678')).toBe(true);
+  });
+});
+
+describe('formatPhoneForDisplay', () => {
+  it('writes a stored number the way people here write it', () => {
+    expect(formatPhoneForDisplay('+886912345678')).toBe('0912 345 678');
+  });
+
+  it('leaves what it cannot read as it is', () => {
+    expect(formatPhoneForDisplay('LINE: abc')).toBe('LINE: abc');
   });
 });
