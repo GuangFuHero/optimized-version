@@ -161,10 +161,26 @@ function describeGrant(item: AuditLogItem, lookups: AuditLookups): Described {
   };
 }
 
+/**
+ * The real name a request was filed under. Someone not yet in the team (pending, rejected or
+ * withdrawn) is not on the roster the names come from, but the request still names them.
+ */
+function applicantNameOf(item: AuditLogItem): string | undefined {
+  if (item.table_name !== 'role_requests') return undefined;
+  return (
+    str(item.new_values, 'applicant_name') ??
+    str(item.old_values, 'applicant_name') ??
+    undefined
+  );
+}
+
 function describeRequest(item: AuditLogItem, lookups: AuditLookups): Described {
   const before = item.old_values;
   const after = item.new_values ?? before;
-  const applicant = lookups.userName(str(after, 'created_by') ?? '') ?? SOMEONE;
+  const applicant =
+    lookups.userName(str(after, 'created_by') ?? '') ??
+    applicantNameOf(item) ??
+    SOMEONE;
   const teamUuid =
     str(after, 'team_uuid') ?? str(after, 'granted_team_uuid') ?? null;
   const team = teamUuid ? (lookups.teamName(teamUuid) ?? '某團隊') : null;
@@ -245,12 +261,26 @@ function describeRow(item: AuditLogItem, lookups: AuditLookups): Described {
   }
 }
 
-/** The actor's name; with none, the identity they acted as, else the system itself. */
+/**
+ * The actor's name; with none, the applicant's own name on a request they filed, then the identity
+ * they acted as, else the system itself. The `user` identity is skipped: every request from the
+ * site acts as it, and nobody knows themselves by 一般使用者.
+ */
 function actorOf(item: AuditLogItem, lookups: AuditLookups): string {
   const name = item.user_uuid ? lookups.userName(item.user_uuid) : undefined;
   if (name) return name;
+  const values = item.new_values ?? item.old_values;
+  const applicant = applicantNameOf(item);
+  if (
+    applicant &&
+    item.user_uuid &&
+    item.user_uuid === str(values, 'created_by')
+  ) {
+    return applicant;
+  }
   const identity = item.context?.['identity'] as Values | undefined;
-  const role = roleLabel(str(identity, 'role') ?? undefined);
+  const roleName = str(identity, 'role') ?? undefined;
+  const role = roleName === 'user' ? undefined : roleLabel(roleName);
   const team = str(identity, 'team');
   if (role) return team ? `${team} · ${role}` : role;
   return item.user_uuid ? SOMEONE : '系統';

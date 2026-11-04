@@ -188,6 +188,31 @@ describe('describeAuditEntry — actor', () => {
     ).toBe('慈濟基金會 · 管理員');
     expect(describe1({ user_uuid: null }).actor).toBe('系統');
   });
+
+  it('names an applicant not on the roster by the name on the request', () => {
+    const entry = describe1({
+      table_name: 'role_requests',
+      user_uuid: 'u-new',
+      context: { identity: { role: 'user' } },
+      new_values: {
+        created_by: 'u-new',
+        applicant_name: '陳美玲',
+        team_uuid: 't-ngo',
+        status: 'pending',
+      },
+    });
+    expect(entry.actor).toBe('陳美玲');
+    expect(entry.action).toBe('陳美玲 申請加入「慈濟基金會」');
+  });
+
+  it('never names an actor 一般使用者', () => {
+    expect(
+      describe1({
+        user_uuid: 'u-gone',
+        context: { identity: { role: 'user' } },
+      }).actor,
+    ).toBe('某位使用者');
+  });
 });
 
 describe('shouldReadOnForAll', () => {
