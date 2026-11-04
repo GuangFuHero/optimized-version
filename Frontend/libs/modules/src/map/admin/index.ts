@@ -27,6 +27,7 @@ export {
   polygonSelfIntersects,
   toGeoJsonPolygon,
 } from './polygon';
+export { AdminMapPinPanel } from './admin-map-pin-panel';
 export { holdRequest, UNDO_MS } from './hold-request';
 export { useAdminMapAreas, type AdminMapAreas } from './use-admin-map-areas';
 export {

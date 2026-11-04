@@ -55,7 +55,7 @@ export { BuildingDrawer } from './building';
 
 export { Map, preloadRescueMapCanvas, readRescueMapMarkers } from './map';
 export { DEFAULT_TILE_ORIGIN } from './map/constants';
-export { hasRescueMapDetailItem } from './map/location-cells';
+export { hasRescueMapDetailItem, isLocationCellId } from './map/location-cells';
 export {
   AREA_KIND_LABELS,
   AREA_LABEL_NAME_MAX,
@@ -101,6 +101,7 @@ export {
   UNDO_MS,
   useAdminMapAreas,
   ADMIN_MAP_LIVE_QUERY_LIMIT,
+  AdminMapPinPanel,
   toAdminMapPin,
   useAdminMapLiveMarkers,
   viewOfArea,
