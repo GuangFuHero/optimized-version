@@ -22,12 +22,12 @@ export interface TicketColumn {
  * on hover.
  */
 export const TICKET_COLUMNS: readonly TicketColumn[] = [
-  { id: 'priority', label: '優先級', width: '104px', visible: true },
-  { id: 'ticket', label: '任務', width: 'minmax(0, 2.4fr)', visible: true },
+  { id: 'priority', label: '優先級', width: '84px', visible: true },
+  { id: 'ticket', label: '任務', width: 'minmax(0, 2fr)', visible: true },
   {
     id: 'needs',
     label: '需求 · 承接進度',
-    width: 'minmax(0, 2fr)',
+    width: 'minmax(0, 2.4fr)',
     visible: true,
   },
   { id: 'updated', label: '更新時間', width: '92px', visible: true },
@@ -38,7 +38,7 @@ export const TICKET_COLUMNS: readonly TicketColumn[] = [
 
 /**
  * Below this the table scrolls sideways instead of cutting 任務 and 需求 to nothing: the fixed
- * columns and gaps alone take about 440px. A desktop's content area is wider, so TM-FS-102 holds
+ * columns and gaps alone take about 420px. A desktop's content area is wider, so TM-FS-102 holds
  * there; a phone or a narrow window scrolls, as the station table does.
  */
 export const TICKET_TABLE_MIN_WIDTH = 720;
