@@ -959,17 +959,19 @@
    *  沒有回饋的話，使用者按下送出只看到抽屜關掉 —— 分不出「成功了」還是「壞掉了」，
    *  接著就會再送一次。這是重複單最常見的來源。
    *  auto-dismiss 給 6 秒：夠讀完，也夠按「查看」。 */
-  function SiteToast({ open, tone, title, description, actionLabel, onAction, onClose }) {
+  function SiteToast({ open, tone, title, description, actionLabel, onAction, discardLabel, onDiscard, persistent, onClose }) {
     React.useEffect(() => {
-      if (!open) return undefined;
+      if (!open || persistent) return undefined;
       const timer = setTimeout(onClose, 6000);
       return () => clearTimeout(timer);
-    }, [open, onClose]);
+    }, [open, onClose, persistent]);
     if (!open) return null;
+    /* 🔒 DUP-FE-115：不會自己消失的卡片，手機上要讓出底部列（放「接這筆」的那一列，約 82px）。 */
+    const phone = persistent && window.matchMedia('(max-width: 767px)').matches;
     return (
       <WGPortal>
         <div role="status" aria-live="polite"
-          style={{ position: 'fixed', zIndex: tone === 'info' ? 2600 : 200, left: '50%', bottom: 'var(--space-6)',   /* info 那則在詳情抽屜開著時跳，要壓在抽屜上面 */
+          style={{ position: 'fixed', zIndex: tone === 'info' ? 2600 : 200, left: '50%', bottom: phone ? 96 : 'var(--space-6)',   /* info 那則在詳情抽屜開著時跳，要壓在抽屜上面 */
             transform: 'translateX(-50%)', width: 'min(420px, calc(100vw - 32px))',
             display: 'flex', alignItems: 'flex-start', gap: 'var(--space-3)',
             padding: 'var(--space-4)', borderRadius: 'var(--radius-lg)',
@@ -1004,10 +1006,18 @@
              *   ② **移到自己的一行**，離開關閉鈕旁邊。誤觸的成本歸零，
              *      而想按的人反而更容易按到（44px 高、有明確邊界）。 */}
             {actionLabel ? (
-              <div style={{ marginTop: 'var(--space-3)' }}>
+              <div style={{ marginTop: 'var(--space-3)', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 'var(--space-2)' }}>
                 <Button variant="outline" size="sm" onClick={onAction}>
                   {actionLabel}<WGIcon n="ChevronRight" s={14} />
                 </Button>
+                {/* BTN-103：丟掉草稿是次要的破壞性動作，紅字 ghost */}
+                {discardLabel ? (
+                  <button type="button" onClick={onDiscard}
+                    style={{ minHeight: 44, padding: '0 var(--space-3)', background: 'none', border: 0, cursor: 'pointer',
+                      font: '700 var(--fs-14)/1 var(--font-body)', color: 'var(--color-fg-danger)' }}>
+                    {discardLabel}
+                  </button>
+                ) : null}
               </div>
             ) : null}
           </div>
@@ -1787,6 +1797,8 @@
   }
 
   /* DUP-FE-114：按「看這張」時把草稿收起來，回到表單時接著填。
+   * 🔒 DUP-FE-115：這張卡片不會自己消失 —— 他正在讀另一張單，6 秒不夠。留到按「回去繼續填」、
+   *    「不開了」（清掉草稿）或 ✕（只關卡片，草稿留著）為止。
    * ⚠️ 原型存在記憶體；正式版用 sessionStorage 即可（重整也還在），不用後端。 */
   let siteDraftStash = null;
   function takeSiteDraft() { const d = siteDraftStash; siteDraftStash = null; return d; }
@@ -1795,9 +1807,10 @@
     document.body.appendChild(host);
     const root = ReactDOM.createRoot(host);
     const close = () => { root.unmount(); host.remove(); };
-    root.render(<SiteToast open tone="info" title="剛才的單還沒送出"
+    root.render(<SiteToast open persistent tone="info" title="剛才的單還沒送出"
       description="填的內容都留著。" actionLabel="回去繼續填"
-      onAction={() => { close(); window.openNewTicketDrawer && window.openNewTicketDrawer(); }} onClose={close} />);
+      onAction={() => { close(); window.openNewTicketDrawer && window.openNewTicketDrawer(); }}
+      discardLabel="不開了" onDiscard={() => { siteDraftStash = null; close(); }} onClose={close} />);
   }
 
   /* ⚠️ 本元件由呼叫端**條件掛載**（`{open ? <SiteTicketCreateDrawer/> : null}`），不是自己 render null。
