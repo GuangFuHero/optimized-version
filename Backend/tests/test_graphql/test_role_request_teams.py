@@ -210,16 +210,34 @@ async def _admins(client, token: str) -> dict[str, list[dict] | None]:
     }
 
 
+async def _add_member(team_uuid: str) -> None:
+    """A `member` of the team with a real name and verified contacts, whom the directory must not list."""
+    async with graphql_db() as db:
+        role = await ensure_role(db, "member", kind="team")
+        user = User(name=f"member_{uuid.uuid4().hex[:8]}", real_name="隊員")
+        db.add(user)
+        await db.flush()
+        db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid, team_uuid=team_uuid))
+        db.add_all(
+            [
+                UserContact(user_uuid=user.uuid, type="phone", value=_phone(), verified=True),
+                UserContact(user_uuid=user.uuid, type="email", value=_email(), verified=True),
+            ]
+        )
+
+
 async def _directory() -> dict[str, list[dict]]:
     """A team with two admins (one fully filled in, one with only an account name) and a team with none.
 
-    The second admin's email was never verified, so it is not listed.
+    The second admin's email was never verified, so it is not listed; each team also has a member, who is not.
     """
     two, two_listed = await _team_with_admins(
         {"name": "帳號甲", "real_name": "王小明", "phone": _phone(), "email": _email()},
         {"name": "帳號乙", "phone": _phone(), "unverified_email": _email()},
     )
     none, none_listed = await _team_with_admins(type="gov")
+    for team_uuid in (two, none):
+        await _add_member(team_uuid)
     return {two: two_listed, none: none_listed}
 
 
