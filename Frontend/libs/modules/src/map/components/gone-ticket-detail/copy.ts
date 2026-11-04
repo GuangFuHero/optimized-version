@@ -10,7 +10,7 @@ export function goneTicketCopy(
   return availability === 'deleted'
     ? {
         title: '這張任務單已刪除',
-        body: '建立者已經關閉這張任務單，不再接受報名，內容也不再公開。如果你原本已承接，請看通知確認是否還需要前往。',
+        body: '這張任務單已經關閉，不再接受報名，內容也不再公開。如果你原本已承接，不用前往了。',
       }
     : {
         title: '找不到這張任務單',
