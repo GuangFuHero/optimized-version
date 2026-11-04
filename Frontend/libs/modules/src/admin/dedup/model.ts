@@ -513,7 +513,15 @@ export function defaultPrimary(pair: DuplicatePairDetail): Side {
   return first;
 }
 
-/** Each row starts on the kept ticket's value, or the other's when the kept one left it empty. */
+/** The contact rows after 現場聯絡人: they start on whichever ticket the name starts on. */
+const CONTACT_FOLLOWERS = ['ticket:contact_phone', 'ticket:contact_email'];
+
+/**
+ * Each row starts on the kept ticket's value, or the other's when the kept one left it empty. The
+ * contact rows are one person, so 聯絡電話 and Email start on the ticket 現場聯絡人 starts on, even
+ * where that ticket left them empty: filling the gap from the other ticket would put one person's
+ * email beside another's name. The reviewer can still pick them one by one.
+ */
 export function defaultPlan(
   pair: DuplicatePairDetail,
   fields: PairFields,
@@ -527,6 +535,12 @@ export function defaultPlan(
       !isEmptyValue(field.read(other(primary)))
         ? other(primary)
         : primary;
+  }
+  const contactSide = picks['ticket:contact_name'];
+  if (contactSide) {
+    for (const id of CONTACT_FOLLOWERS) {
+      if (id in picks) picks[id] = contactSide;
+    }
   }
   return { primary, picks, edits: {}, needOff: {}, photoOff: {} };
 }
