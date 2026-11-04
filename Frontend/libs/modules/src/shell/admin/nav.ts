@@ -140,10 +140,26 @@ export function useAdminNavSections() {
   })).filter((section) => section.items.length > 0);
 }
 
-export function useActiveAdminNavItem() {
-  const pathname = usePathname();
-
+/** The sidebar item a path is under, if any. */
+export function adminNavItemFor(pathname: string): AdminNavItem | undefined {
   return ADMIN_NAV_SECTIONS.flatMap((section) => section.items).find(
     (item) => pathname === item.href || pathname.startsWith(`${item.href}/`),
   );
+}
+
+/**
+ * Whether an identity with these capabilities may open a link: the shell answers 沒有權限 on a
+ * page whose sidebar item needs a capability the identity lacks, and the query never matters.
+ */
+export function canOpenAdminHref(
+  href: string,
+  capabilities: readonly string[],
+): boolean {
+  const capability = adminNavItemFor(href.split('?', 1)[0])?.capability;
+
+  return !capability || capabilities.includes(capability);
+}
+
+export function useActiveAdminNavItem() {
+  return adminNavItemFor(usePathname());
 }

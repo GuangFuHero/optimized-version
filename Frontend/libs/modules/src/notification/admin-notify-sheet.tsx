@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
+import { useCurrentUser } from '@rescue-frontend/data-access/admin';
 import {
   Button,
   designTokens,
@@ -34,6 +35,7 @@ import {
   type AdminNoticeKind,
 } from './admin-notices';
 import { StatTilesRetry } from '../admin/shared/stat-tiles';
+import { canOpenAdminHref } from '../shell/admin/nav';
 import { adminNotificationKeys } from './api';
 import { useMarkNotificationsRead } from './use-mark-notifications-read';
 import { useNotificationPages } from './use-notification-pages';
@@ -296,6 +298,7 @@ export function AdminNotifySheet({ open, onClose }: AdminNotifySheetProps) {
 
 function AdminNotifyContent({ onClose }: { onClose: () => void }) {
   const router = useRouter();
+  const { data: user } = useCurrentUser();
   // A staff member's newest page can be all site notices: the hook reads on without a tap.
   const { list, notices, searching } = useNotificationPages({
     listKey: adminNotificationKeys.list,
@@ -316,12 +319,13 @@ function AdminNotifyContent({ onClose }: { onClose: () => void }) {
     }
 
     onClose();
+    // 你已加入團隊 and 團隊已暫停 go to members too, who may not open 團隊; and whoever opens a
+    // notice may be acting as another identity by then. Rather than 沒有權限, they land on 總覽.
+    const href = canOpenAdminHref(notice.href, user?.capabilities ?? [])
+      ? notice.href
+      : '/';
     router.push(
-      noticeHrefFrom(
-        notice.href,
-        window.location.pathname,
-        window.location.search,
-      ),
+      noticeHrefFrom(href, window.location.pathname, window.location.search),
     );
   };
 

@@ -46,7 +46,7 @@ interface AdminNoticeEntry {
   opens?: keyof typeof OPENS;
   /**
    * Where it opens instead when `params.team_name` names a team to join: that team's own admins
-   * review it there, and they may not open `page` (成員與權限 needs `user.view`).
+   * review it there, and they may not open `page` (成員與權限 is for super admins alone).
    */
   joinTeamPage?: AdminPage;
   /** Whether it adds to the bell's number. A station's data changing is news, not a task. */
