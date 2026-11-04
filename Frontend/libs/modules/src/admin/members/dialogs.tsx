@@ -1,6 +1,6 @@
 'use client';
 
-import { Lock } from 'lucide-react';
+import { Check, Lock } from 'lucide-react';
 
 import { Box, Radio, Stack, Typography } from '@mui/material';
 import { useMemo, useState, type ReactNode } from 'react';
@@ -14,7 +14,6 @@ import {
 } from '@rescue-frontend/data-access/admin';
 import {
   Avatar,
-  Button,
   Callout,
   designTokens,
   Dialog,
@@ -22,6 +21,7 @@ import {
 } from '@rescue-frontend/ui';
 
 import { ROLE_DESCRIPTIONS, ROLE_DISPLAY_NAMES } from '../../constants/roles';
+import { TypeChip } from '../shared/import-dialog-parts';
 import { platformLabel } from './badges';
 import { captionSx, SearchField } from './parts';
 import {
@@ -219,16 +219,14 @@ export function CreateTeamDialog({
           sx={{ gap: 1 }}
         >
           {(['ngo', 'gov'] as const).map((value) => (
-            <Button
+            <TypeChip
               key={value}
-              role="radio"
-              aria-checked={type === value}
-              variant={type === value ? 'secondary' : 'outline'}
-              onClick={() => setType(value)}
-              sx={{ flex: 1 }}
-            >
-              {platformLabel(value)}
-            </Button>
+              icon={type === value ? <Check size={16} /> : undefined}
+              label={platformLabel(value)}
+              active={type === value}
+              disabled={createTeam.isPending}
+              onSelect={() => setType(value)}
+            />
           ))}
         </Stack>
         <Typography sx={captionSx}>
@@ -488,24 +486,32 @@ export function AddMemberDialog({
         selected={selected}
         onSelect={setSelected}
       />
-      <Stack
-        direction="row"
-        role="radiogroup"
-        aria-label="團隊角色"
-        sx={{ gap: 1 }}
-      >
-        {(['member', 'admin'] as const).map((value) => (
-          <Button
-            key={value}
-            role="radio"
-            aria-checked={role === value}
-            variant={role === value ? 'secondary' : 'outline'}
-            onClick={() => setRole(value)}
-            sx={{ flex: 1 }}
-          >
-            {ROLE_DISPLAY_NAMES.get(value) ?? value}
-          </Button>
-        ))}
+      <Stack sx={{ gap: '6px', mb: 1 }}>
+        <Typography
+          sx={{ ...typography.label[400], color: color.fg.neutral.default }}
+        >
+          他在這一隊的角色
+        </Typography>
+        <Stack
+          direction="row"
+          role="radiogroup"
+          aria-label="團隊角色"
+          sx={{ gap: 1 }}
+        >
+          {(['member', 'admin'] as const).map((value) => (
+            <TypeChip
+              key={value}
+              icon={role === value ? <Check size={16} /> : undefined}
+              label={ROLE_DISPLAY_NAMES.get(value) ?? value}
+              active={role === value}
+              disabled={addMember.isPending}
+              onSelect={() => setRole(value)}
+            />
+          ))}
+        </Stack>
+        <Typography sx={captionSx}>
+          管理員可以邀請成員、審核加入申請、編輯團隊資料。
+        </Typography>
       </Stack>
     </Dialog>
   );
