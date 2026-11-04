@@ -27,8 +27,8 @@ class Team(Base, UUIDPKMixin, TimestampMixin):
     type: Mapped[str] = mapped_column(String(10))
     tax_id: Mapped[str | None] = mapped_column(String(8), nullable=True)  # 統一編號 (UBN), 8 碼
     status: Mapped[str] = mapped_column(String(20), default="active")
-    # In `GET /admin/teams` for its own members and super admins; in `roleRequestTeams` for every team
-    # identity and super admin (ADR-357 point 5).
+    # In `GET /admin/teams` for its own members and super admins only; the team directory lists the team's
+    # admins instead (ADR-357 point 5).
     contact_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     contact_phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
 

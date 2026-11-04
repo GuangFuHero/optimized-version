@@ -1,11 +1,25 @@
 """Repositories for Team, TeamZone, and TeamZoneAssign (RBAC v1 §2B, Phase 4/T119)."""
 
+from dataclasses import dataclass
+
 from sqlalchemy import and_, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from app.infrastructure.repository.base import GenericRepository
+from app.models.auth import User, UserContact
+from app.models.rbac import Role, UserRoleAssign
 from app.models.team import Team, TeamZone, TeamZoneAssign
 from app.repositories.geo_repository import AreaRepository
+
+
+@dataclass(frozen=True)
+class TeamAdminContact:
+    """One admin of a team: real name (else the account name) and the account's verified phone and email."""
+
+    name: str
+    phone: str | None
+    email: str | None
 
 
 def joinable():
@@ -49,13 +63,47 @@ class TeamRepository(GenericRepository[Team]):
         """Teams someone can ask to join: active and not deleted, by name (Spec/026, ADR-352).
 
         No RBAC filter: it backs the 申請成為後台人員 picker, read by people in no team yet.
-        Callers expose uuid, name and type, and the contact only to team holders and super admins
+        Callers expose uuid, name and type, and each team's admins only to team admins and super admins
         (ADR-357 point 5).
         """
         query = select(Team).where(joinable())
         if type_ is not None:
             query = query.where(Team.type == type_)
         return (await db.execute(query.order_by(Team.name, Team.uuid))).scalars().all()
+
+    async def admins_by_team(self, db: AsyncSession, team_uuids: list, *, role_name: str) -> dict:
+        """Every holder of the team role `role_name` in each of `team_uuids`, with verified phone and email.
+
+        One query for all teams. Keyed by team uuid, people by name; a team with none is missing, and deleted
+        accounts are left out.
+        """
+        if not team_uuids:
+            return {}
+        phone, email = aliased(UserContact), aliased(UserContact)
+        rows = await db.execute(
+            select(UserRoleAssign.team_uuid, User.real_name, User.name, phone.value, email.value)
+            .join(Role, Role.uuid == UserRoleAssign.role_uuid)
+            .join(User, User.uuid == UserRoleAssign.user_uuid)
+            .outerjoin(
+                phone, and_(phone.user_uuid == User.uuid, phone.type == "phone", phone.verified.is_(True))
+            )
+            .outerjoin(
+                email, and_(email.user_uuid == User.uuid, email.type == "email", email.verified.is_(True))
+            )
+            .where(
+                UserRoleAssign.team_uuid.in_(team_uuids),
+                Role.kind == "team",
+                Role.name == role_name,
+                User.delete_at.is_(None),
+            )
+            .order_by(UserRoleAssign.team_uuid, func.coalesce(User.real_name, User.name), User.uuid)
+        )
+        admins: dict = {}
+        for team_uuid, real_name, name, phone_value, email_value in rows:
+            admins.setdefault(team_uuid, []).append(
+                TeamAdminContact(name=real_name or name, phone=phone_value, email=email_value)
+            )
+        return admins
 
 
 class TeamZoneRepository(AreaRepository):
