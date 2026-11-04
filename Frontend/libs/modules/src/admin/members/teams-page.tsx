@@ -14,7 +14,7 @@ import {
 import { Box, ButtonBase, Stack, Tab, Tabs, Typography } from '@mui/material';
 import { createColumnHelper } from '@tanstack/react-table';
 import { useSearchParams } from 'next/navigation';
-import { Suspense, useMemo, useState } from 'react';
+import { Fragment, Suspense, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 import {
@@ -29,7 +29,6 @@ import {
 } from '@rescue-frontend/data-access/admin';
 import type { components } from '@rescue-frontend/data-access/openapi';
 import {
-  Avatar,
   Badge,
   Button,
   Callout,
@@ -477,6 +476,16 @@ function TeamDetail({
         </Stack>
       </Panel>
 
+      {/* Without an admin, join requests wait on super admins alone and nobody speaks for the
+          team (EA1), so the super admin looking at it is asked to appoint one. */}
+      {running && admins === 0 ? (
+        <Callout tone="warning">
+          <b>這一隊還沒有管理員</b>
+          <br />
+          加入申請只有超級管理員能審，也沒有人能代表這一隊。請把一位成員升為管理員，或用「加入成員」直接指定。
+        </Callout>
+      ) : null}
+
       <Stack sx={{ gap: 1 }}>
         <Stack
           direction="row"
@@ -669,22 +678,184 @@ function SuperTeamsView({ siteUrl }: { siteUrl?: string }) {
   );
 }
 
+interface DirectoryAdmin {
+  name: string;
+  phone?: string | null;
+  email?: string | null;
+}
+
 interface DirectoryTeam {
   uuid: string;
   name: string;
   type: string;
-  contactName?: string | null;
-  contactPhone?: string | null;
+  /** Null when the caller may not see admins; `[]` for a team with none (ADR-357 point 5). */
+  admins?: readonly DirectoryAdmin[] | null;
 }
 
 const allTeamsColumn = createColumnHelper<DataTableFeatures, DirectoryTeam>();
 
 /**
- * 所有團隊 (read-only), as the design opens it to every team identity (D-4, 08-17). `/admin/teams`
- * lists only one's own team for a team role, so this reads the directory the user site's
- * application form uses (`roleRequestTeams`, Spec/026): every active team, with its name, type and
- * the contact it gives out, which every team identity may read (D-4, D-5; ADR-357 point 5 as #284
- * amends it). Other teams' rosters and members' phones stay closed.
+ * 管理員, 電話 and Email share one grid, header included, so each admin's three values stay on
+ * one line even when a long email wraps.
+ */
+const ADMIN_GRID_SX = {
+  display: 'grid',
+  gridTemplateColumns: 'minmax(96px, 1fr) 130px minmax(0, 1.6fr)',
+  columnGap: '12px',
+  rowGap: 1,
+  alignItems: 'baseline',
+} as const;
+
+const NO_ADMIN = '還沒有管理員';
+
+function AdminContactsHeader() {
+  return (
+    <Box sx={ADMIN_GRID_SX}>
+      <span>管理員</span>
+      <span>電話</span>
+      <span>Email</span>
+    </Box>
+  );
+}
+
+function AdminContactsCell({ admins }: { admins: readonly DirectoryAdmin[] }) {
+  if (admins.length === 0) {
+    return <Typography sx={captionSx}>{NO_ADMIN}</Typography>;
+  }
+  return (
+    <Box sx={ADMIN_GRID_SX}>
+      {admins.map((admin, index) => (
+        <Fragment key={index}>
+          <Typography
+            sx={{ ...typography.body[300], color: color.fg.neutral.default }}
+          >
+            {admin.name}
+          </Typography>
+          <Typography
+            sx={{ ...typography.data[300], color: color.fg.neutral.subtle }}
+          >
+            {admin.phone || '—'}
+          </Typography>
+          <Typography
+            sx={{
+              ...typography.body[300],
+              color: color.fg.neutral.default,
+              overflowWrap: 'anywhere',
+            }}
+          >
+            {admin.email ?? ''}
+          </Typography>
+        </Fragment>
+      ))}
+    </Box>
+  );
+}
+
+/** 所有團隊 on a phone: one card per team, each admin as name, phone and email lines. */
+function AllTeamsCards({
+  teams,
+  selfTeamUuid,
+  showAdmins,
+}: {
+  teams: readonly DirectoryTeam[];
+  selfTeamUuid: string;
+  showAdmins: boolean;
+}) {
+  return (
+    <Box
+      sx={{
+        bgcolor: color.bg.neutral.default,
+        border: `1px solid ${color.border.default}`,
+        borderRadius: `${radius.lg}px`,
+        overflow: 'hidden',
+      }}
+    >
+      {teams.map((team) => {
+        const admins = team.admins ?? [];
+        return (
+          <Stack
+            key={team.uuid}
+            sx={{
+              gap: 1.25,
+              p: 2,
+              borderBottom: `1px solid ${color.border.default}`,
+              bgcolor:
+                team.uuid === selfTeamUuid
+                  ? color.bg.primary.subtle
+                  : undefined,
+            }}
+          >
+            <Stack
+              direction="row"
+              sx={{ alignItems: 'center', gap: 1, flexWrap: 'wrap' }}
+            >
+              <Typography
+                sx={{
+                  ...typography.label[400],
+                  color: color.fg.neutral.default,
+                }}
+              >
+                {team.name}
+              </Typography>
+              {team.uuid === selfTeamUuid ? (
+                <Badge tone="primary">目前身份</Badge>
+              ) : null}
+            </Stack>
+            <Stack
+              direction="row"
+              sx={{ alignItems: 'center', gap: 1, flexWrap: 'wrap' }}
+            >
+              <TeamTypeBadge type={team.type} />
+              {showAdmins && admins.length === 0 ? (
+                <Typography sx={captionSx}>{NO_ADMIN}</Typography>
+              ) : null}
+            </Stack>
+            {showAdmins
+              ? admins.map((admin, index) => (
+                  <Stack key={index} sx={{ gap: 0.25 }}>
+                    <Typography
+                      sx={{
+                        ...typography.label[400],
+                        color: color.fg.neutral.default,
+                      }}
+                    >
+                      {admin.name}
+                    </Typography>
+                    <Typography
+                      sx={{
+                        ...typography.data[300],
+                        color: color.fg.neutral.subtle,
+                      }}
+                    >
+                      {admin.phone || '—'}
+                    </Typography>
+                    {admin.email ? (
+                      <Typography
+                        sx={{
+                          ...typography.body[300],
+                          color: color.fg.neutral.subtle,
+                          overflowWrap: 'anywhere',
+                        }}
+                      >
+                        {admin.email}
+                      </Typography>
+                    ) : null}
+                  </Stack>
+                ))
+              : null}
+          </Stack>
+        );
+      })}
+    </Box>
+  );
+}
+
+/**
+ * 所有團隊 (read-only): every active team with its admins' real names, verified phones and verified
+ * emails, so admins of different teams can reach each other when assigning zones, referring cases
+ * or coordinating. `/admin/teams` lists only one's own team for a team role, so this reads
+ * `roleRequestTeams` (Spec/026). Only team admins and super admins get `admins` (ADR-357 point 5);
+ * for anyone else it is null and the contact columns are left out. Other teams' rosters stay closed.
  */
 function AllTeamsTable({ selfTeamUuid }: { selfTeamUuid: string }) {
   const directory = useTeamDirectory();
@@ -696,10 +867,11 @@ function AllTeamsTable({ selfTeamUuid }: { selfTeamUuid: string }) {
       })),
     [directory.data],
   );
+  const showAdmins = teams.some((team) => team.admins != null);
   const columns = allTeamsColumn.columns([
     allTeamsColumn.accessor('name', {
       header: '團隊名稱',
-      meta: { width: 'minmax(180px, 2fr)' },
+      meta: { width: 'minmax(160px, 1.4fr)' },
       cell: ({ row }) => (
         <Stack
           direction="row"
@@ -719,43 +891,21 @@ function AllTeamsTable({ selfTeamUuid }: { selfTeamUuid: string }) {
     }),
     allTeamsColumn.accessor('type', {
       header: '類型',
-      meta: { width: '120px' },
+      meta: { width: '100px' },
       cell: ({ getValue }) => <TeamTypeBadge type={getValue()} />,
     }),
-    // The team's own outward contact (D-5), never an admin's number. Not filled in reads 未提供, as
-    // the prototype has it.
-    allTeamsColumn.accessor('contactName', {
-      header: '聯絡窗口',
-      meta: { width: 'minmax(140px, 1.2fr)' },
-      cell: ({ getValue }) => {
-        const name = getValue() || '未提供';
-        return (
-          <Stack
-            direction="row"
-            sx={{ alignItems: 'center', gap: 1, minWidth: 0 }}
-          >
-            <Avatar name={name} size={28} tone="neutral" />
-            <Typography
-              noWrap
-              sx={{ ...typography.body[300], color: color.fg.neutral.default }}
-            >
-              {name}
-            </Typography>
-          </Stack>
-        );
-      },
-    }),
-    allTeamsColumn.accessor('contactPhone', {
-      header: '電話',
-      meta: { width: '150px' },
-      cell: ({ getValue }) => (
-        <Typography
-          sx={{ ...typography.data[300], color: color.fg.neutral.subtle }}
-        >
-          {getValue() || '未提供'}
-        </Typography>
-      ),
-    }),
+    ...(showAdmins
+      ? [
+          allTeamsColumn.display({
+            id: 'admins',
+            header: () => <AdminContactsHeader />,
+            meta: { width: 'minmax(0, 3.6fr)' },
+            cell: ({ row }) => (
+              <AdminContactsCell admins={row.original.admins ?? []} />
+            ),
+          }),
+        ]
+      : []),
   ]);
 
   if (directory.isPending) {
@@ -770,19 +920,29 @@ function AllTeamsTable({ selfTeamUuid }: { selfTeamUuid: string }) {
   return (
     <Stack sx={{ gap: 2 }}>
       <Callout tone="info">
-        <b>唯讀 —— 只有團隊名稱與對外聯絡窗口</b>
+        <b>唯讀 —— 各隊管理員的聯絡方式</b>
         <br />
-        供劃區、轉介與跨隊聯繫時挑選對象。依個資原則，別隊的成員名單與成員電話一律不顯示；這裡的電話是各隊自己填的對外窗口，不是成員個人號碼。
+        供劃區、轉介與跨隊聯繫時找人。這是管理員本人的電話與
+        Email，請只用在救災協調。
       </Callout>
-      <DataTable
-        columns={columns}
-        data={teams}
-        getRowId={(row) => row.uuid}
-        getRowSx={(row) => ({
-          bgcolor:
-            row.uuid === selfTeamUuid ? color.bg.primary.subtle : undefined,
-        })}
-      />
+      <Box sx={{ display: { mobile: 'none', tablet: 'block' } }}>
+        <DataTable
+          columns={columns}
+          data={teams}
+          getRowId={(row) => row.uuid}
+          getRowSx={(row) => ({
+            bgcolor:
+              row.uuid === selfTeamUuid ? color.bg.primary.subtle : undefined,
+          })}
+        />
+      </Box>
+      <Box sx={{ display: { mobile: 'block', tablet: 'none' } }}>
+        <AllTeamsCards
+          teams={teams}
+          selfTeamUuid={selfTeamUuid}
+          showAdmins={showAdmins}
+        />
+      </Box>
       <Stack direction="row" sx={{ alignItems: 'center', gap: 0.75 }}>
         <Box
           component={Lock}

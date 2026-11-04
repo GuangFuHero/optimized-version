@@ -338,7 +338,7 @@ export function EditTeamDialog({
       />
       <TextInput
         label="聯絡窗口電話"
-        hint="選填 · 所有團隊身份都看得到"
+        hint="選填 · 只有本隊成員與超級管理員看得到"
         value={contactPhone}
         placeholder="0912 345 678"
         inputProps={{ inputMode: 'tel', maxLength: 20 }}
