@@ -33,7 +33,15 @@ describe('formatPhoneForDisplay', () => {
     expect(formatPhoneForDisplay('+886912345678')).toBe('0912 345 678');
   });
 
+  it('keeps the country code of a number from elsewhere', () => {
+    expect(formatPhoneForDisplay('+85291234567')).toBe('+852 9123 4567');
+  });
+
   it('leaves what it cannot read as it is', () => {
     expect(formatPhoneForDisplay('LINE: abc')).toBe('LINE: abc');
+  });
+
+  it('leaves a number that is not valid as it is', () => {
+    expect(formatPhoneForDisplay('+886123')).toBe('+886123');
   });
 });

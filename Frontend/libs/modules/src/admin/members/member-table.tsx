@@ -2,7 +2,13 @@
 
 import { Users } from 'lucide-react';
 
-import { Box, Stack, Typography } from '@mui/material';
+import {
+  Box,
+  Stack,
+  type Theme,
+  Typography,
+  useMediaQuery,
+} from '@mui/material';
 import { createColumnHelper } from '@tanstack/react-table';
 import type { ReactNode } from 'react';
 
@@ -94,61 +100,61 @@ export function ResponsivePeople({
   table: ReactNode;
   cards: readonly PersonCard[];
 }) {
-  if (cards.length === 0) return table;
+  const isWide = useMediaQuery((theme: Theme) =>
+    theme.breakpoints.up('desktop'),
+  );
+
+  if (isWide || cards.length === 0) return table;
   return (
-    <>
-      <Box sx={{ display: { mobile: 'none', desktop: 'block' } }}>{table}</Box>
-      <Stack
-        sx={{
-          display: { mobile: 'flex', desktop: 'none' },
-          bgcolor: color.bg.neutral.default,
-          border: `1px solid ${color.border.default}`,
-          borderRadius: `${radius.lg}px`,
-          overflow: 'hidden',
-        }}
-      >
-        {cards.map((card, index) => (
+    <Stack
+      sx={{
+        bgcolor: color.bg.neutral.default,
+        border: `1px solid ${color.border.default}`,
+        borderRadius: `${radius.lg}px`,
+        overflow: 'hidden',
+      }}
+    >
+      {cards.map((card, index) => (
+        <Stack
+          key={card.id}
+          sx={{
+            gap: 1,
+            p: 2,
+            borderTop:
+              index === 0 ? 'none' : `1px solid ${color.border.default}`,
+            bgcolor: card.highlighted ? color.bg.primary.subtle : undefined,
+          }}
+        >
           <Stack
-            key={card.id}
-            sx={{
-              gap: 1,
-              p: 2,
-              borderTop:
-                index === 0 ? 'none' : `1px solid ${color.border.default}`,
-              bgcolor: card.highlighted ? color.bg.primary.subtle : undefined,
-            }}
+            direction="row"
+            sx={{ alignItems: 'center', gap: 1, minWidth: 0 }}
           >
-            <Stack
-              direction="row"
-              sx={{ alignItems: 'center', gap: 1, minWidth: 0 }}
-            >
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <PersonCell
-                  name={card.name}
-                  self={card.self}
-                  extra={<RealName name={card.name} realName={card.realName} />}
-                />
-              </Box>
-              {card.actions ? (
-                <NeedActionsMenu needName={card.name} items={card.actions} />
-              ) : null}
-            </Stack>
-            <Stack
-              direction="row"
-              sx={{ alignItems: 'center', gap: 1, flexWrap: 'wrap' }}
-            >
-              {card.badges}
-              {card.lastActivityAt ? (
-                <Typography sx={captionSx}>
-                  最後活動 {formatDateTime(card.lastActivityAt)}
-                </Typography>
-              ) : null}
-            </Stack>
-            {card.detail}
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <PersonCell
+                name={card.name}
+                self={card.self}
+                extra={<RealName name={card.name} realName={card.realName} />}
+              />
+            </Box>
+            {card.actions ? (
+              <NeedActionsMenu needName={card.name} items={card.actions} />
+            ) : null}
           </Stack>
-        ))}
-      </Stack>
-    </>
+          <Stack
+            direction="row"
+            sx={{ alignItems: 'center', gap: 1, flexWrap: 'wrap' }}
+          >
+            {card.badges}
+            {card.lastActivityAt ? (
+              <Typography sx={captionSx}>
+                最後活動 {formatDateTime(card.lastActivityAt)}
+              </Typography>
+            ) : null}
+          </Stack>
+          {card.detail}
+        </Stack>
+      ))}
+    </Stack>
   );
 }
 
