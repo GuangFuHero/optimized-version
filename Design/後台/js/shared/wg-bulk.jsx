@@ -146,7 +146,9 @@
   // ── 依種類匯出的選單（後端：一次一種 task_type／station_type，不吃列表篩選）──
   // types：[{ key, label, icon, count }]；noun：「需求」「站點」；note(type)：說明文字
   // onExport(typeKey, format) → Promise<訊息>
-  function WGBulkExportMenu({ types, noun, note, max, onExport }) {
+  // scope（選填）：{ title, options: [{ key, label }], value, onChange, fixed } —— 匯出前先選範圍（任務單：組織，BK-8b）。
+  //   fixed 有值時只顯示那句、不給選（例：非政府組織管理員只能匯出自己隊）。沒傳就跟以前一樣（資源站點沒有傳）。
+  function WGBulkExportMenu({ types, noun, note, max, onExport, scope }) {
     const [open, setOpen] = React.useState(false);
     const [type, setType] = React.useState(types[0] && types[0].key);
     const [format, setFormat] = React.useState("csv");
@@ -168,6 +170,17 @@
           <span>
             <span onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 400 }}></span>
             <div className="tk-rise" style={{ position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 401, width: 340, maxHeight: "70vh", overflowY: "auto", background: "var(--color-bg-neutral-default)", border: "1px solid var(--color-border-default)", borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-lg)", padding: 14, display: "flex", flexDirection: "column", gap: 12 }}>
+              {scope && (
+                <div data-wg-export-scope>
+                  <div className="wg-label-sm" style={{ fontWeight: 700, marginBottom: 6 }}>{scope.title}</div>
+                  {scope.fixed
+                    ? <div style={{ font: "var(--font-label-300)", color: "var(--color-fg-neutral-default)" }}>{scope.fixed}</div>
+                    : <select value={scope.value} onChange={(e) => scope.onChange(e.target.value)} aria-label={scope.title}
+                        style={{ width: "100%", height: 40, padding: "0 10px", borderRadius: 12, border: "1px solid var(--color-border-default)", background: "var(--color-bg-neutral-default)", font: "var(--font-label-300)", color: "var(--color-fg-neutral-default)" }}>
+                        {scope.options.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+                      </select>}
+                </div>
+              )}
               <div>
                 <div className="wg-label-sm" style={{ fontWeight: 700, marginBottom: 6 }}>匯出哪一種{noun}</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -191,8 +204,9 @@
               </div>
               <div className="wg-caption" data-wg-export-note style={{ color: "var(--color-fg-neutral-muted)", lineHeight: 1.6 }}>{note(cur)}</div>
               {n > max && <div className="wg-caption" style={{ color: "var(--color-fg-danger)" }}>超過 {max.toLocaleString()} 筆，後端會拒絕匯出。</div>}
-              <Button variant="primary" disabled={n > max || busy} startIcon={<Icon n="Download" s={16} />} onClick={go}>
-                {n === 0 ? "下載空白範本" : `下載 ${n} 筆`}
+              {/* 🔒 BK-8e（對齊 PR #286）0 筆時下載鈕停用，不給空白範本（任務單、站點同一個選單） */}
+              <Button variant="primary" disabled={n === 0 || n > max || busy} startIcon={<Icon n="Download" s={16} />} onClick={go}>
+                {`下載 ${n} 筆`}
               </Button>
             </div>
           </span>

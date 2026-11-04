@@ -17,8 +17,13 @@
 //   BK-6 先試算（preview，不寫入）→ 確認才寫入（commit）。好的列照寫，壞的列回報列號、欄位、原因，
 //        並可下載「失敗的列」檔案修正後重傳（ADR-112）。一次最多 500 列（ADR-116）。
 //   BK-7 每一列走跟手動建單同一支 service（ADR-110），所以權限、驗證、History、**重複審核**都照跑。
-//   BK-8 匯出：選一種需求種類，匯出「你權限範圍內」該種類的全部需求；**不吃列表的篩選**。
-//        CSV 或 Excel；最多 10,000 列；聯絡資料依每一列的權限可能遮罩（ticket.view_pii）。
+//   BK-8 匯出：選一種需求種類匯出；CSV 或 Excel；最多 10,000 列；聯絡資料依每一列的權限可能遮罩（ticket.view_pii）。
+//   🔒 BK-8b（Carol 11-03；推翻 10-15「不吃列表的篩選」）匯出前選兩件事：**組織**與**需求種類**。
+//        組織＝全部／某一隊／未指派（跟列表「組織分配」同一套：單落在哪一隊的責任區），預設跟著列表上選的組織分配。
+//        理由：互助地圖劃完責任區後，要依組織匯出任務單；標案規劃書寫「非政府組織工作人員可將負責區域內的任務
+//        匯出為報表，提交給政府作為工作紀錄與資源申請依據」。
+//        非政府組織隊管理員只能匯出自己隊（BK-SCOPE），組織那格只寫隊名、不給選。
+//        ❌ 列表其他篩選（狀態、優先級、行政區域、時間、搜尋）不帶進匯出 —— Sucre 11-03：全帶進去太雜，只要種類和組織。
 //
 // 🔒 Sucre 裁示
 //   TM-IMP-102（10-13）匯入的單一樣要進 重複審核 —— 後端 BK-7 本來就是這樣。
@@ -93,11 +98,16 @@
     const c = window.TK_COORDS && window.TK_COORDS[t.id];
     return c ? c.c : (t.lat != null ? [t.lat, t.lng] : null);
   }
+  // 🔒 BK-8c（Sucre 11-03）表頭兩列：第一列中文（給人看、印紙本），第二列欄位代號（匯回時對欄位）。
+  //    ❌ 不可以只有英文欄名 —— 現場紙本、離線備用、結束歸檔、交給政府的報表都是人在讀。
+  //    匯入時看到第二列是欄位代號，就用它當表頭、跳過第一列（take() 裡）。
+  // 🔒 BK-8d（Sucre 11-03）type 可以是 "all"＝全部需求種類一份；這時不放各種類自己的細項欄位（prop.*），
+  //    每列的「需求種類」欄寫是哪一種。只選一種時照舊，細項都在。
   function exportRows(tickets, type) {
-    const cols = columnsFor(type);
-    const out = [cols.map((c) => c.key)];
+    const cols = type === "all" ? FIXED : columnsFor(type);
+    const out = [cols.map((c) => c.label), cols.map((c) => c.key)];
     tickets.forEach((t) => {
-      (t.tasks || []).filter((k) => k.kind === type && k.status !== "canceled").forEach((k) => {
+      (t.tasks || []).filter((k) => (type === "all" || k.kind === type) && k.status !== "canceled").forEach((k) => {
         const c = coordOf(t);
         const v = {
           uuid: t.id, title: t.title, description: t.desc || "", status: window.tkStatus ? window.tkStatus(t) : t.status,
@@ -118,18 +128,43 @@
     return n;
   }
 
-  function TicketExportMenu() {
+  // 🔒 BK-SCOPE（BE-RBAC-3，Carol 11-03 review #257）：非政府組織隊管理員匯出只有本隊責任區的單，匯入新增不限、
+  //    更新既有任務單只限本隊責任區；政府隊（管理員與成員）、超級管理員全部。
+  //    原型沒有真的責任區幾何判斷，用單上的「指派團隊」（t.team）代表落在哪一隊的責任區。
+  //    ❌ 不要用「是團隊身份」判斷 —— 政府隊也是團隊身份，但它的範圍是全部。
+  function ngoTeamName(persona) {
+    const id = window.wgActingIdentity ? window.wgActingIdentity(persona) : null;
+    return id && id.kind === "team" && id.teamType !== "gov" ? id.teamName : null;
+  }
+
+  // team：列表「組織分配」選的值（"all"／隊名／"__none__"），當匯出組織的預設；kind：「需求」那排選的種類（BK-8b）。
+  function TicketExportMenu({ team, kind }) {
     const tk = window.useTK();
-    // BK-8：範圍是「權限範圍內」，不是列表篩選，也不是「我的單位」切換。
-    // ⚠️ 原型的讀取是全域開放（AC-VS-101），所以用 allTickets；正式版後端依 scope_filter（團隊管理員＝責任區）。
-    const pool = tk.allTickets || tk.tickets;
+    const own = ngoTeamName(tk.persona);
+    const all = tk.allTickets || tk.tickets;
+    const teamNames = [...new Set(all.map((t) => t.team).filter(Boolean))];
+    const [org, setOrg] = React.useState(team || "all");
+    React.useEffect(() => { setOrg(team || "all"); }, [team]);
+    const pick = own || org;
+    const pool = pick === "all" ? all : all.filter((t) => pick === "__none__" ? !t.team : t.team === pick);
     const counts = countByType(pool);
-    const types = Object.keys(window.TK_TASK_KIND).map((k) => ({ key: k, label: kindLabel(k), icon: window.TK_TASK_KIND[k].icon, count: counts[k] || 0 }));
+    const kinds = Object.keys(window.TK_TASK_KIND);
+    const order = kind && kinds.includes(kind) ? [kind, ...kinds.filter((k) => k !== kind)] : kinds;
+    const total = Object.values(counts).reduce((a, b) => a + b, 0);
+    const types = [{ key: "all", label: "全部種類", icon: "LayoutList", count: total }]
+      .concat(order.map((k) => ({ key: k, label: kindLabel(k), icon: window.TK_TASK_KIND[k].icon, count: counts[k] || 0 })));
+    if (kind) types.push(types.shift()); // 列表選了某種需求時，那一種排第一（預設選它），全部種類放最後
+    const orgLabel = pick === "all" ? "全部組織" : pick === "__none__" ? "未指派" : pick;
+    const scope = {
+      title: "哪個組織", value: org, onChange: setOrg, fixed: own ? `${own}（只能匯出自己隊的責任區）` : null,
+      options: [["all", "全部組織"], ...teamNames.map((n) => [n, n]), ["__none__", "未指派"]].map(([key, label]) => ({ key, label })),
+    };
+    const fileOrg = pick === "all" ? "" : `_${orgLabel}`;
     return (
-      <window.WGBulkExportMenu types={types} noun="需求" max={MAX_EXPORT}
-        note={(t) => <span>匯出你權限範圍內<b>全部</b>的「{t.label}」需求，<b>不套用列表上的篩選</b>。一列＝一筆需求。聯絡資料依權限可能遮罩。這個檔案改完可以直接匯入：標題＋電話相同的會更新原本的單。</span>}
-        onExport={(type, format) => download(exportRows(pool, type), `任務單_${kindLabel(type)}_${stampName()}_${counts[type] || 0}筆`, format)
-          .then(() => tk.toast(counts[type] ? `已匯出「${kindLabel(type)}」需求 ${counts[type]} 筆` : `已下載「${kindLabel(type)}」空白範本`))
+      <window.WGBulkExportMenu key={kind || "all"} types={types} noun="需求" max={MAX_EXPORT} scope={scope}
+        note={(t) => <span>匯出「{orgLabel}」的「{t.label}」需求。一列＝一筆需求，表頭第一列中文、第二列欄位代號。聯絡資料依權限可能遮罩。{t.key === "all" ? "全部種類的檔案不含各種需求的細項欄位。" : "這個檔案改完可以直接匯入：標題＋電話相同的會更新原本的單。"}</span>}
+        onExport={(type, format) => download(exportRows(pool, type), `任務單_${type === "all" ? "全部種類" : kindLabel(type)}${fileOrg}_${stampName()}_${(type === "all" ? total : counts[type]) || 0}筆`, format)
+          .then(() => tk.toast(`已匯出「${orgLabel}」的「${type === "all" ? "全部種類" : kindLabel(type)}」需求 ${type === "all" ? total : counts[type]} 筆`))
           .catch((e) => tk.toast(e.message, "danger"))} />
     );
   }
@@ -165,7 +200,7 @@
 
   // 回傳的形狀刻意對齊後端 BulkPreviewResponse：row_count / to_create / to_update / errors[{line,column,message}]
   // plans 是原型自己用來寫入的，後端 preview 不回傳逐列結果。
-  function preview(rows, mapping, type, existing) {
+  function preview(rows, mapping, type, existing, ownTeam) {
     const header = rows[0], body = rows.slice(1);
     const cols = columnsFor(type);
     const errors = [];
@@ -187,7 +222,9 @@
       let kind = "create", target = null;
       if (hits.length > 1) err("-", `對到 ${hits.length} 張任務單（${hits.map((t) => t.id).join("、")}），無法判斷要更新哪一張`);
       else if (hits.length === 1) { kind = "update"; target = hits[0]; }
-      else if (v.title && leaders[key] != null) { kind = "attach"; }        // BK-5：同檔案裡同一張單的後續列
+      else if (v.title && leaders[key] != null) { kind = "attach"; }
+      // BK-SCOPE：非政府組織隊管理員只能更新本隊責任區的單；新增不限
+      if (kind === "update" && ownTeam && target.team !== ownTeam) err("-", `「${target.title}」不在「${ownTeam}」責任區，只能更新本隊責任區的單`);        // BK-5：同檔案裡同一張單的後續列
       // 種類：這份檔案就是選定的那一種
       if (v.task_type && norm(v.task_type) !== norm(type) && norm(v.task_type) !== norm(kindLabel(type))) err("task_type", `這份檔案是「${kindLabel(type)}」，這列寫的是「${v.task_type}」`);
       // 必填（只在建立時）
@@ -311,12 +348,15 @@
     const fileRef = React.useRef(null);
 
     const cols = type ? columnsFor(type) : [];
-    const result = React.useMemo(() => (type && rows && rows.length > 1 && mapping ? preview(rows, mapping, type, tk.allTickets) : null), [type, rows, mapping, tk.allTickets]);
+    const result = React.useMemo(() => (type && rows && rows.length > 1 && mapping ? preview(rows, mapping, type, tk.allTickets, ngoTeamName(tk.persona)) : null), [type, rows, mapping, tk.allTickets, tk.persona]);
     const failedLines = result ? Array.from(new Set(result.errors.map((e) => e.line))).length : 0;
 
     function take(r, name) {
       setLoadErr(""); setDone(null);
       if (!r || r.length < 2) { setRows(null); setMapping(null); setLoadErr(r && r.length === 1 ? "檔案只有標題列，沒有資料" : ""); return; }
+      // BK-8c：匯出檔第一列是中文、第二列是欄位代號 —— 用第二列當表頭
+      const keys = new Set(FIXED.map((c) => c.key));
+      if (r.length > 2 && r[1].filter((h) => keys.has(String(h).trim()) || String(h).startsWith("prop.")).length >= 3) r = r.slice(1);
       setRows(r); setFileName(name || ""); setMapping(guessMapping(r[0], columnsFor(type)));
     }
     function pickFile(e) {

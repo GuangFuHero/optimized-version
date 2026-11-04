@@ -165,7 +165,8 @@
     }, [shown]);
 
     return (
-      <div style={{ position: "relative", height, borderRadius: "var(--radius-lg)", overflow: "hidden", border: "1px solid var(--color-border-default)" }}>
+      // isolation：Leaflet 圖層（z-index 400〜700）與圖例關在地圖裡，不然會蓋住工具列的匯出、新增選單
+      <div style={{ position: "relative", isolation: "isolate", height, borderRadius: "var(--radius-lg)", overflow: "hidden", border: "1px solid var(--color-border-default)" }}>
         <div ref={elRef} style={{ position: "absolute", inset: 0, background: "var(--color-bg-neutral-sunken)" }}></div>
 
         {empty && (

@@ -76,8 +76,9 @@
   const skey = (name, county, city) => norm(name) + "|" + norm(county) + "|" + norm(city);
 
   // ── 匯出（SBK-7）────────────────────────────────────────────────────────
+  // 🔒 BK-8c（Sucre 11-03，跟任務單同一條）表頭兩列：第一列中文給人看，第二列欄位代號給匯回對欄位。
   function exportRows(stations, type) {
-    const out = [COLS.map((c) => c.key)];
+    const out = [COLS.map((c) => c.label), COLS.map((c) => c.key)];
     stations.filter((s) => !s.deleted && s.type === type).forEach((s) => {
       const a = addrParts(s);
       const v = {
@@ -92,24 +93,30 @@
     });
     return out;
   }
-  // 團隊管理員只匯出指派給自己團隊的站點（station.export＝team）
-  function exportPool(stations, persona) {
+  // 🔒 SBK-SCOPE（BE-RBAC-3，Carol 11-03 review #257）：非政府組織隊管理員匯出只有本隊站點，匯入新增不限、
+  //    更新既有站點只限本隊站點；政府隊（管理員與成員）、超級管理員全部。
+  //    ❌ 不要用「是團隊身份」判斷 —— 政府隊也是團隊身份，但它的範圍是全部（station.* 對政府隊放寬成 all）。
+  function ngoTeamName(persona) {
     const id = window.wgActingIdentity ? window.wgActingIdentity(persona) : null;
+    return id && id.kind === "team" && id.teamType !== "gov" ? id.teamName : null;
+  }
+  function exportPool(stations, persona) {
+    const own = ngoTeamName(persona);
     const live = stations.filter((s) => !s.deleted);
-    return id && id.kind === "team" ? live.filter((s) => s.assignedTeam === id.teamName) : live;
+    return own ? live.filter((s) => s.assignedTeam === own) : live;
   }
   function StationExportMenu({ stations, persona, onToast }) {
     const pool = exportPool(stations, persona);
     const counts = {};
     pool.forEach((s) => { counts[s.type] = (counts[s.type] || 0) + 1; });
-    const id = window.wgActingIdentity ? window.wgActingIdentity(persona) : null;
-    const scope = id && id.kind === "team" ? `指派給「${id.teamName}」的` : "";
+    const own = ngoTeamName(persona);
+    const scope = own ? `指派給「${own}」的` : "";
     const types = SD.TYPE_ORDER.map((k) => ({ key: k, label: typeLabel(k), icon: SD.TYPE[k].icon, count: counts[k] || 0 }));
     return (
       <window.WGBulkExportMenu types={types} noun="站點" max={MAX_EXPORT}
         note={(t) => <span>匯出你權限範圍內{scope}<b>全部</b>「{t.label}」站點，<b>不套用列表上的篩選</b>。一列＝一個站點。檔案裡沒有聯絡人、電話、營運狀態（後端匯出沒有這些欄位）。改完可以直接匯入：站名＋縣市＋鄉鎮相同的會更新原本的站點。</span>}
         onExport={(type, format) => B.download(exportRows(pool, type), `資源站點_${typeLabel(type)}_${B.stampName()}_${counts[type] || 0}筆`, format)
-          .then(() => onToast(counts[type] ? `已匯出「${typeLabel(type)}」站點 ${counts[type]} 筆` : `已下載「${typeLabel(type)}」空白範本`))
+          .then(() => onToast(`已匯出「${typeLabel(type)}」站點 ${counts[type]} 筆`))
           .catch((e) => onToast(e.message, "warning"))} />
     );
   }
@@ -124,7 +131,7 @@
     });
     return map;
   }
-  function preview(rows, mapping, type, existing) {
+  function preview(rows, mapping, type, existing, ownTeam) {
     const body = rows.slice(1);
     if (body.length > MAX_IMPORT) return { row_count: body.length, to_create: 0, to_update: 0, fatal: true, plans: [], errors: [{ line: 1, column: "-", message: `一次最多 ${MAX_IMPORT} 列，這個檔案有 ${body.length} 列。請拆成幾個檔案` }] };
     const index = {};
@@ -139,6 +146,8 @@
       let kind = "create", target = null;
       if (hits.length > 1) err("-", `對到 ${hits.length} 個站點（${hits.map((s) => s.id).join("、")}），無法判斷要更新哪一個`);
       else if (hits.length === 1) { kind = "update"; target = hits[0]; }
+      // SBK-SCOPE：非政府組織隊管理員只能更新本隊站點；新增不限
+      if (kind === "update" && ownTeam && target.assignedTeam !== ownTeam) err("-", `「${target.name}」不是指派給「${ownTeam}」的站點，只能更新本隊站點`);
       if (v.type && norm(v.type) !== norm(type) && norm(v.type) !== norm(typeLabel(type))) err("type", `這份檔案是「${typeLabel(type)}」，這列寫的是「${v.type}」`);
       if (kind === "create") COLS.filter((c) => c.required).forEach((c) => { if (!v[c.key]) err(c.key, `新的站點必填「${c.label}」`); });
       ["latitude", "longitude"].forEach((f) => {
@@ -239,7 +248,8 @@
   }
 
   // ── 匯入對話框（介面同任務單）──────────────────────────────────────────
-  function StationImportDialog({ existing, onClose, onApply }) {
+  function StationImportDialog({ existing, persona, onClose, onApply }) {
+    const ownTeam = ngoTeamName(persona);
     const [type, setType] = React.useState(null);
     const [rows, setRows] = React.useState(null);
     const [fileName, setFileName] = React.useState("");
@@ -247,7 +257,7 @@
     const [loadErr, setLoadErr] = React.useState("");
     const [done, setDone] = React.useState(null);
     const fileRef = React.useRef(null);
-    const result = React.useMemo(() => (type && rows && rows.length > 1 && mapping ? preview(rows, mapping, type, existing) : null), [type, rows, mapping, existing]);
+    const result = React.useMemo(() => (type && rows && rows.length > 1 && mapping ? preview(rows, mapping, type, existing, ownTeam) : null), [type, rows, mapping, existing, ownTeam]);
     const failedLines = result ? Array.from(new Set(result.errors.map((e) => e.line))).length : 0;
     const suspects = React.useMemo(() => importSuspects(result, existing, type), [result, existing, type]);
     const [choice, setChoice] = React.useState({});            // line → "file"｜"skip"；沒有＝預設不建立
@@ -257,6 +267,9 @@
     function take(r, name) {
       setLoadErr(""); setDone(null);
       if (!r || r.length < 2) { setRows(null); setMapping(null); setLoadErr(r && r.length === 1 ? "檔案只有標題列，沒有資料" : ""); return; }
+      // BK-8c：匯出檔第一列是中文、第二列是欄位代號 —— 用第二列當表頭
+      const keys = new Set(COLS.map((c) => c.key));
+      if (r.length > 2 && r[1].filter((h) => keys.has(String(h).trim())).length >= 3) r = r.slice(1);
       setRows(r); setFileName(name || ""); setMapping(guessMapping(r[0]));
     }
     function pickFile(e) {

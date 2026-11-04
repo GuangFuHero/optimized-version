@@ -236,7 +236,7 @@
         onClose: () => setDrawer(null), onSave: saveStation, onRetire: retire, onReactivate: reactivate, onRollback: rollback,
       }),
       importOpen && caps.canImport && React.createElement(window.StationImportDialog, {
-        existing: stations, onClose: () => setImportOpen(false), onApply: applyImport,
+        existing: stations, persona: caps.persona, onClose: () => setImportOpen(false), onApply: applyImport,
       }),
 
       // —— toast ——
