@@ -69,3 +69,26 @@ export function validateIdentityValue(
     ? true
     : '手機號碼格式不正確（09 開頭十碼，或 +886 格式）';
 }
+
+/**
+ * A stored E.164 number the way people here write it: +886912345678 → 0912 345 678. A number from
+ * elsewhere keeps its country code, without which it could not be dialled from Taiwan.
+ */
+export function formatPhoneForDisplay(value: string) {
+  try {
+    const parsed = phoneNumberUtil.parse(value.trim(), DEFAULT_PHONE_REGION);
+
+    if (!phoneNumberUtil.isValidNumber(parsed)) {
+      return value;
+    }
+
+    return phoneNumberUtil.format(
+      parsed,
+      phoneNumberUtil.getRegionCodeForNumber(parsed) === DEFAULT_PHONE_REGION
+        ? PhoneNumberFormat.NATIONAL
+        : PhoneNumberFormat.INTERNATIONAL,
+    );
+  } catch {
+    return value;
+  }
+}
