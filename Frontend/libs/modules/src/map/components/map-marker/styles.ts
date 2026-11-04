@@ -9,7 +9,9 @@ const { color, radius, shadow, typography, motion } = designTokens;
  * load-bearing rather than cosmetic:
  *
  * - The pin is a filled circle with a 2px surface-coloured ring. Over satellite or terrain tiles a
- *   flat fill loses its edge; the ring is what keeps the marker legible on any basemap.
+ *   flat fill loses its edge; the ring is what keeps the marker legible on any basemap. The SVG
+ *   draws both (`buildMarkerAssetSvg`), so `.map-marker` must not fill or outline itself as well: a
+ *   second circle sits offset from the first, and one ticket reads as two stacked.
  * - The label is a pill on an opaque surface, not a tinted rectangle. Tile imagery shows through
  *   anything translucent, and a station name is one of the most-read strings on this screen.
  */
@@ -34,17 +36,8 @@ export const rescueMapMarkerStyles = {
     lineHeight: 0,
     whiteSpace: 'nowrap',
     overflow: 'visible',
-    border: `2px solid ${color.bg.neutral.default}`,
     boxShadow: shadow.md,
     transition: `transform ${motion.transition.spring}`,
-  },
-  '.map-marker--ticket': {
-    background: color.bg.primary.default,
-    color: color.fg.onPrimary,
-  },
-  '.map-marker--station': {
-    background: color.brand.secondary.default,
-    color: color.fg.onSecondary,
   },
   '.map-marker--active': {
     transform: 'scale(1.18)',

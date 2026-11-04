@@ -83,7 +83,7 @@ function buildMarkerAssetSvg(item: RescueMapMarkerItem): string {
 
   return [
     '<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 36 36" fill="none" aria-hidden="true">',
-    `<circle cx="18" cy="18" r="16.5" fill="${tone.markerFill}" stroke="${tone.markerStroke}" stroke-width="2"/>`,
+    `<circle cx="18" cy="18" r="17" fill="${tone.markerFill}" stroke="${tone.markerStroke}" stroke-width="2"/>`,
     glyphSvg,
     '</svg>',
   ].join('');
@@ -96,7 +96,7 @@ function createMapMarkerIconHtml(item: RescueMapMarkerItem): string {
 
   return [
     '<div class="map-marker-stack">',
-    `<div class="map-marker map-marker--${item.variant} map-marker--${tone}">`,
+    `<div class="map-marker map-marker--${item.variant}">`,
     `<div class="map-marker__asset map-marker__asset--${item.variant}">${assetSvg}</div>`,
     '</div>',
     `<div class="map-marker__label map-marker__label--${tone}">`,

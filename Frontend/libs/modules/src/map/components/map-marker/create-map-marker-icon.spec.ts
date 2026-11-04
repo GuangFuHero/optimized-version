@@ -12,6 +12,7 @@ import {
 import { STATION_TYPE_OPTIONS } from '../../../station/type-options';
 import type { RescueMapMarkerItem } from '../../types';
 import { createMapMarkerIcon } from './create-map-marker-icon';
+import { rescueMapMarkerStyles } from './styles';
 
 const { color } = designTokens;
 
@@ -109,6 +110,16 @@ describe('a ticket pin', () => {
     expect(html).toContain(`fill="${color.bg.primary.default}"`);
     expect(html).toContain(`fill="${color.fg.onPrimary}"`);
     expect(html).not.toContain(`fill="${color.fg.inverse}"`);
+  });
+});
+
+describe('a pin', () => {
+  it('is one circle: the SVG draws it, and its box draws no second one', () => {
+    expect(pinHtml({ detailType: 'ticket' }).match(/<circle/g)).toHaveLength(1);
+    expect(rescueMapMarkerStyles['.map-marker']).not.toHaveProperty('border');
+    expect(rescueMapMarkerStyles['.map-marker']).not.toHaveProperty(
+      'background',
+    );
   });
 });
 
