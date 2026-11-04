@@ -3173,6 +3173,8 @@ export type AdminTeamDirectoryQuery = {
     uuid: string;
     name: string;
     type: RoleRequestTeamType;
+    contactName?: string | null;
+    contactPhone?: string | null;
   }>;
 };
 
@@ -7561,6 +7563,11 @@ export const AdminTeamDirectoryDocument = {
                 { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'name' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'type' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'contactPhone' },
+                },
               ],
             },
           },

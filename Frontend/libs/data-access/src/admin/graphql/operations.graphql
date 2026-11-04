@@ -553,6 +553,8 @@ query AdminTeamDirectory {
     uuid
     name
     type
+    contactName
+    contactPhone
   }
 }
 

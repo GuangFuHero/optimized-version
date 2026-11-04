@@ -29,6 +29,7 @@ import {
 } from '@rescue-frontend/data-access/admin';
 import type { components } from '@rescue-frontend/data-access/openapi';
 import {
+  Avatar,
   Badge,
   Button,
   Callout,
@@ -672,6 +673,8 @@ interface DirectoryTeam {
   uuid: string;
   name: string;
   type: string;
+  contactName?: string | null;
+  contactPhone?: string | null;
 }
 
 const allTeamsColumn = createColumnHelper<DataTableFeatures, DirectoryTeam>();
@@ -679,8 +682,9 @@ const allTeamsColumn = createColumnHelper<DataTableFeatures, DirectoryTeam>();
 /**
  * 所有團隊 (read-only), as the design opens it to every team identity (D-4, 08-17). `/admin/teams`
  * lists only one's own team for a team role, so this reads the directory the user site's
- * application form uses (`roleRequestTeams`, Spec/026): every active team, name and type only.
- * Other teams' rosters and contacts stay closed (ADR-357 point 5).
+ * application form uses (`roleRequestTeams`, Spec/026): every active team, with its name, type and
+ * the contact it gives out, which every team identity may read (D-4, D-5; ADR-357 point 5 as #284
+ * amends it). Other teams' rosters and members' phones stay closed.
  */
 function AllTeamsTable({ selfTeamUuid }: { selfTeamUuid: string }) {
   const directory = useTeamDirectory();
@@ -718,6 +722,40 @@ function AllTeamsTable({ selfTeamUuid }: { selfTeamUuid: string }) {
       meta: { width: '120px' },
       cell: ({ getValue }) => <TeamTypeBadge type={getValue()} />,
     }),
+    // The team's own outward contact (D-5), never an admin's number. Not filled in reads 未提供, as
+    // the prototype has it.
+    allTeamsColumn.accessor('contactName', {
+      header: '聯絡窗口',
+      meta: { width: 'minmax(140px, 1.2fr)' },
+      cell: ({ getValue }) => {
+        const name = getValue() || '未提供';
+        return (
+          <Stack
+            direction="row"
+            sx={{ alignItems: 'center', gap: 1, minWidth: 0 }}
+          >
+            <Avatar name={name} size={28} tone="neutral" />
+            <Typography
+              noWrap
+              sx={{ ...typography.body[300], color: color.fg.neutral.default }}
+            >
+              {name}
+            </Typography>
+          </Stack>
+        );
+      },
+    }),
+    allTeamsColumn.accessor('contactPhone', {
+      header: '電話',
+      meta: { width: '150px' },
+      cell: ({ getValue }) => (
+        <Typography
+          sx={{ ...typography.data[300], color: color.fg.neutral.subtle }}
+        >
+          {getValue() || '未提供'}
+        </Typography>
+      ),
+    }),
   ]);
 
   if (directory.isPending) {
@@ -732,9 +770,9 @@ function AllTeamsTable({ selfTeamUuid }: { selfTeamUuid: string }) {
   return (
     <Stack sx={{ gap: 2 }}>
       <Callout tone="info">
-        <b>唯讀 —— 只有團隊名稱與類型</b>
+        <b>唯讀 —— 只有團隊名稱與對外聯絡窗口</b>
         <br />
-        供劃區、轉介與跨隊聯繫時挑選對象。依個資原則，別隊的成員名單與成員電話一律不顯示。
+        供劃區、轉介與跨隊聯繫時挑選對象。依個資原則，別隊的成員名單與成員電話一律不顯示；這裡的電話是各隊自己填的對外窗口，不是成員個人號碼。
       </Callout>
       <DataTable
         columns={columns}
