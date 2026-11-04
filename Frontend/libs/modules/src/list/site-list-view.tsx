@@ -437,6 +437,8 @@ export function SiteListView() {
           minWidth: 0,
           minHeight: 0,
           display: 'grid',
+          // Without a track width, a long row of pins sets it and pushes the page off the screen.
+          gridTemplateColumns: 'minmax(0, 1fr)',
           gridTemplateRows: 'auto minmax(0, 1fr)',
         }}
       >
