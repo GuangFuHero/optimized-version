@@ -1779,10 +1779,6 @@ export function RescueMapCanvas({
       zIndexOffset: 1100,
     });
 
-    // Leaflet counts a tap as the marker's only if the marker listens for it; one that does not
-    // passes the tap on to the map, which would pick a new point under the bubble's own button.
-    bubble.on('click', () => undefined);
-
     crosshair.on('dragstart', () => {
       draftDraggingRef.current = true;
     });
@@ -1798,7 +1794,17 @@ export function RescueMapCanvas({
     bubble.addTo(map);
     draftMarkerRef.current = crosshair;
     draftBubbleRef.current = bubble;
-    setDraftBubbleHost(bubble.getElement() ?? null);
+
+    const bubbleHost = bubble.getElement() ?? null;
+
+    // A tap on the bubble is never the map's, or it picks a new point under the button. Stopped here
+    // rather than left to Leaflet: a button that lets the point go takes the bubble off the map, and
+    // Leaflet, walking up from the button to see whose tap it was, no longer finds the bubble.
+    if (bubbleHost) {
+      L.DomEvent.on(bubbleHost, 'click', L.DomEvent.stopPropagation);
+    }
+
+    setDraftBubbleHost(bubbleHost);
   }, [draftLat, draftLng]);
 
   return (
