@@ -181,18 +181,20 @@ function getPinnedMarkers(
   markers: readonly RescueMapMarkerItem[],
 ): RescueMapMarkerItem[] {
   return markers.filter(
-    (marker) => !isCoarseTicket(marker) && !marker.building,
+    (marker) =>
+      !isCoarseTicket(marker) && !marker.building && !marker.pin?.selected,
   );
 }
 
 /**
  * Open buildings' entries, kept out of the clusters: a building is never counted among the tickets
- * around it, and its entry stays in sight at any zoom.
+ * around it, and its entry stays in sight at any zoom. So does the pin picked on 互助地圖: its panel
+ * is open beside the map, and a number must not stand in for what is being read about.
  */
 function getBuildingMarkers(
   markers: readonly RescueMapMarkerItem[],
 ): RescueMapMarkerItem[] {
-  return markers.filter((marker) => marker.building);
+  return markers.filter((marker) => marker.building || marker.pin?.selected);
 }
 
 /** marker icon 的外觀只由色調（detailType）、圖示（variant）與標籤文字決定，大樓另加件數 —— 另加選用的 pin／tooltip。 */

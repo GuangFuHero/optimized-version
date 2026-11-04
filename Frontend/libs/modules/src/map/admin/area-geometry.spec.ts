@@ -4,6 +4,7 @@ import {
   boundaryChange,
   countInsideArea,
   isInArea,
+  isInView,
   viewOfArea,
 } from './area-geometry';
 import type { RescueMapMarkerItem } from '../types';
@@ -153,5 +154,22 @@ describe('boundaryChange', () => {
     expect(
       boundaryChange({ polygons: [[left]] }, { polygons: [[left]] }, markers),
     ).toEqual({ inside: 2, added: 0, removed: 0 });
+  });
+});
+
+describe('isInView', () => {
+  const BBOX = [121, 23, 122, 24] as const;
+
+  it('takes the point as [lat, lng] and the view as [minLng, minLat, maxLng, maxLat]', () => {
+    expect(isInView([23.5, 121.5], BBOX)).toBe(true);
+    expect(isInView([121.5, 23.5], BBOX)).toBe(false);
+  });
+
+  it('counts the edge of the view as inside', () => {
+    expect(isInView([23, 121], BBOX)).toBe(true);
+  });
+
+  it('says no while there is no view yet', () => {
+    expect(isInView([23.5, 121.5], undefined)).toBe(false);
   });
 });

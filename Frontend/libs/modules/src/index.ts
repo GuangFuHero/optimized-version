@@ -94,6 +94,7 @@ export {
   toggleValue,
   type AdminMapFilters,
   isInArea,
+  isInView,
   polygonAreaKm2,
   polygonSelfIntersects,
   toGeoJsonPolygon,

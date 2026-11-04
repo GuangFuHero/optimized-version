@@ -32,6 +32,20 @@ function isInPolygon(point: LatLng, rings: readonly (readonly LatLng[])[]) {
   );
 }
 
+/** Whether a point is inside the map's view, `[minLng, minLat, maxLng, maxLat]`. No view yet: no. */
+export function isInView(
+  [lat, lng]: LatLng,
+  bbox: readonly [number, number, number, number] | null | undefined,
+): boolean {
+  if (!bbox) {
+    return false;
+  }
+
+  const [minLng, minLat, maxLng, maxLat] = bbox;
+
+  return lng >= minLng && lng <= maxLng && lat >= minLat && lat <= maxLat;
+}
+
 export function isInArea(
   point: LatLng,
   area: Pick<RescueMapArea, 'polygons'>,
