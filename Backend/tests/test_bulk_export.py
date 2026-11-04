@@ -28,7 +28,7 @@ from app.models.secondary_location import SecondaryLocation
 from app.models.station_property import StationProperty
 from app.models.team import Team, TeamZone, TeamZoneAssign
 from app.models.ticket_task import TaskProperty, TicketTask
-from app.services.bulk_columns import DYNAMIC_PREFIX
+from app.services.bulk_columns import DYNAMIC_PREFIX, STATION_COLUMNS, TICKET_COLUMNS, is_code_of
 from app.services.bulk_export import (
     BulkExportError,
     count_ticket_exports,
@@ -193,7 +193,9 @@ async def _configs(db) -> None:
 
 
 def _parse(exported) -> object:
-    return read_table(exported.content, exported.filename)
+    """Read a file as the importer does, past the label row above the codes (#285)."""
+    columns = STATION_COLUMNS if exported.filename.startswith("stations") else TICKET_COLUMNS
+    return read_table(exported.content, exported.filename, is_code=is_code_of(columns))
 
 
 # --- stations ---
@@ -451,9 +453,9 @@ async def test_xlsx_export_marks_the_phone_column_as_text(db):
 
     exported = await export_tickets(db, actor=actor, task_type="rescue", file_format="xlsx")
     sheet = load_workbook(io.BytesIO(exported.content)).active
-    headers = [c.value for c in sheet[1]]
+    headers = [c.value for c in sheet[2]]  # under the label row (#285)
 
-    assert sheet.cell(row=2, column=headers.index("contact_phone") + 1).number_format == "@"
+    assert sheet.cell(row=3, column=headers.index("contact_phone") + 1).number_format == "@"
 
 
 # --- tickets ---

@@ -20,6 +20,7 @@ from app.core.tabular import read_table, write_csv
 from app.models.auth import User
 from app.models.property_config import StationPropertyConfig, TaskPropertyConfig
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
+from app.services.bulk_columns import TICKET_COLUMNS, is_code_of
 from app.services.bulk_import import MAX_ROWS
 from tests.conftest import auth_headers_for
 
@@ -182,7 +183,7 @@ async def test_ticket_export_counts_come_with_the_most_one_export_may_hold(clien
     resp = await client.get(f"{BASE}/tickets/export/counts", headers=headers)
 
     assert resp.status_code == 200, resp.text
-    assert resp.json() == {"counts": {}, "max_rows": 10_000}
+    assert resp.json() == {"counts": {}, "max_rows": 10_000, "own_team": None}
 
 
 @pytest.mark.asyncio
@@ -194,7 +195,7 @@ async def test_a_ticket_template_is_the_header_row_alone_for_an_importer(client,
 
     assert resp.status_code == 200, resp.text
     assert 'filename="tickets-medical-template.csv"' in resp.headers["content-disposition"]
-    table = read_table(resp.content, "template.csv")
+    table = read_table(resp.content, "template.csv", is_code=is_code_of(TICKET_COLUMNS))
     assert table.headers[:3] == ("uuid", "title", "description")
     assert "task_name" in table.headers
     assert table.rows == ()

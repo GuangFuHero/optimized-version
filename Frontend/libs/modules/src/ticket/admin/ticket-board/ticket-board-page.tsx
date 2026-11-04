@@ -264,7 +264,12 @@ export function TicketBoardPage() {
               spaceControl={<OpenSpaceButton />}
               onCreate={caps.canAdd ? () => setCreating(true) : undefined}
               onImport={() => setImportOpen(true)}
-              exportControl={<TicketExportMenu />}
+              exportControl={
+                <TicketExportMenu
+                  team={filters.team}
+                  taskType={filters.taskType}
+                />
+              }
             />
           </Stack>
         }

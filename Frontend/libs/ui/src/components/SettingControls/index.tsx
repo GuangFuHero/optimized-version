@@ -178,17 +178,25 @@ export interface NativeSelectProps {
   name?: string;
   'aria-label'?: string;
   minWidth?: number;
+  /** Fills its container's width (a select in a popover or a column) instead of sizing to minWidth. */
+  fullWidth?: boolean;
 }
 
 export function NativeSelect({
   options,
   minWidth = 180,
+  fullWidth = false,
   ...selectProps
 }: NativeSelectProps) {
   return (
     <Box
       component="span"
-      sx={{ position: 'relative', display: 'inline-flex', minWidth }}
+      sx={{
+        position: 'relative',
+        display: fullWidth ? 'flex' : 'inline-flex',
+        minWidth,
+        width: fullWidth ? '100%' : undefined,
+      }}
     >
       <Box
         component="select"

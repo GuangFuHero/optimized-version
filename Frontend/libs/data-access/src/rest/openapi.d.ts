@@ -1542,7 +1542,7 @@ export interface paths {
     };
     /**
      * 匯出資源站點（CSV / XLSX）
-     * @description Export one station type's rows, limited to what the caller's scope reaches.
+     * @description 表頭兩列：第一列中文欄名，第二列欄位代號；匯入時看到第二列是代號就用它當表頭。
      */
     get: operations['export_stations_api_v1_bulk_stations_export_get'];
     put?: never;
@@ -1564,8 +1564,10 @@ export interface paths {
      * 各任務型別匯出會有幾列
      * @description Count each task type's export rows in the caller's scope, with the most one export may hold.
      *
-     *     A type with no rows is left out. A count over `max_rows` is still the real one, so a page can
-     *     say that type's export will be refused before anyone asks for it.
+     *     Narrowed by 組織分配 exactly as `/tickets/export` is. A type with no rows is left out; 全部種類
+     *     is their sum. A count over `max_rows` is still the real one, so a page can say that type's
+     *     export will be refused before anyone asks for it. `own_team` is set when the caller's
+     *     ticket.export reaches only their team's 責任區.
      */
     get: operations['count_ticket_exports_api_v1_bulk_tickets_export_counts_get'];
     put?: never;
@@ -1585,9 +1587,7 @@ export interface paths {
     };
     /**
      * 匯出求助單（CSV / XLSX）
-     * @description Export one task type's rows; contact fields are masked per row (ADR-109).
-     *
-     *     With `template`, the header row alone, for an importer to fill in.
+     * @description 一列是一張單加一個需求。表頭兩列：第一列中文欄名，第二列欄位代號；匯入時看到第二列是代號就用它當表頭。task_type=all 是全部種類一份檔，只有固定欄位、沒有各種需求自己的 prop.* 欄位。列表的其他篩選（狀態、優先級、行政區域、時間、搜尋）不帶進匯出。
      */
     get: operations['export_tickets_api_v1_bulk_tickets_export_get'];
     put?: never;
@@ -3686,6 +3686,19 @@ export interface components {
       pending_elsewhere?: components['schemas']['PendingElsewhere'] | null;
     };
     /**
+     * OwnTeamResponse
+     * @description The team a caller's ticket export is limited to.
+     */
+    OwnTeamResponse: {
+      /** Uuid */
+      uuid: string;
+      /**
+       * Name
+       * @description 團隊名稱，取自目前身分
+       */
+      name: string | null;
+    };
+    /**
      * PendingElsewhere
      * @description The visitor's pending request for something else, to withdraw before asking here.
      */
@@ -4330,7 +4343,7 @@ export interface components {
     RowErrorResponse: {
       /**
        * Line
-       * @description 試算表的列號，表頭是第 1 列
+       * @description 試算表上的列號，從第 1 列算起
        */
       line: number;
       /**
@@ -4462,7 +4475,7 @@ export interface components {
     SuspectedRowResponse: {
       /**
        * Line
-       * @description 試算表的列號，表頭是第 1 列
+       * @description 試算表上的列號，從第 1 列算起
        */
       line: number;
       /**
@@ -4659,7 +4672,7 @@ export interface components {
     TicketExportCountsResponse: {
       /**
        * Counts
-       * @description 任務型別 → 匯出會有幾列；沒有列的型別不列
+       * @description 任務型別 → 匯出會有幾列；沒有列的型別不列。「全部種類」是各型別相加
        */
       counts: {
         [key: string]: number;
@@ -4669,6 +4682,8 @@ export interface components {
        * @description 單次匯出的上限；筆數超過的型別，匯出會被拒絕
        */
       max_rows: number;
+      /** @description 呼叫者的 ticket.export 範圍只到自己團隊的責任區（zone）時，是目前身分的團隊；all 或其他範圍是 null。有值時組織分配固定是這個團隊 */
+      own_team?: components['schemas']['OwnTeamResponse'] | null;
     };
     /**
      * TicketForReviewResponse
@@ -7824,7 +7839,12 @@ export interface operations {
   };
   count_ticket_exports_api_v1_bulk_tickets_export_counts_get: {
     parameters: {
-      query?: never;
+      query?: {
+        /** @description 組織分配：只要落在這個團隊責任區的單，跟 GraphQL `tickets` 的 responsibleTeamUuid 同一套（匯出那一刻算）。只比對呼叫者看得到細節（ticket.view_detail）的單，其他單一律不符合 */
+        responsible_team_uuid?: string | null;
+        /** @description 組織分配：只要不在任何責任區的單（未指派），跟 `tickets` 的 unassignedOnly 同一套；同樣只比對看得到細節的單。不能跟 responsible_team_uuid 一起用（400） */
+        unassigned_only?: boolean;
+      };
       header?: {
         'X-WG-Realm'?: string | null;
       };
@@ -7841,6 +7861,13 @@ export interface operations {
         content: {
           'application/json': components['schemas']['TicketExportCountsResponse'];
         };
+      };
+      /** @description responsible_team_uuid 和 unassigned_only 同時給 */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
       /** @description Permission Denied */
       403: {
@@ -7863,12 +7890,16 @@ export interface operations {
   export_tickets_api_v1_bulk_tickets_export_get: {
     parameters: {
       query: {
-        /** @description 要匯出的任務型別，例如 rescue */
+        /** @description 要匯出的任務型別，例如 rescue；all 是全部種類（只有固定欄位，不能配 template） */
         task_type: string;
         /** @description 檔案格式：csv / xlsx */
         format?: string;
-        /** @description 只回標題列，給匯入當範本：欄位跟匯出一樣、沒有資料；要 ticket.import，不要 ticket.export */
+        /** @description 只回標題列，給匯入當範本：欄位跟匯出一樣、沒有資料；要 ticket.import，不要 ticket.export。不看組織分配 */
         template?: boolean;
+        /** @description 組織分配：只要落在這個團隊責任區的單，跟 GraphQL `tickets` 的 responsibleTeamUuid 同一套（匯出那一刻算）。只比對呼叫者看得到細節（ticket.view_detail）的單，其他單一律不符合 */
+        responsible_team_uuid?: string | null;
+        /** @description 組織分配：只要不在任何責任區的單（未指派），跟 `tickets` 的 unassignedOnly 同一套；同樣只比對看得到細節的單。不能跟 responsible_team_uuid 一起用（400） */
+        unassigned_only?: boolean;
       };
       header?: {
         'X-WG-Realm'?: string | null;
@@ -7886,6 +7917,13 @@ export interface operations {
         content: {
           'application/json': unknown;
         };
+      };
+      /** @description 型別或格式不對、超過上限、組織分配兩個一起給、範本選了 all */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
       /** @description Permission Denied */
       403: {

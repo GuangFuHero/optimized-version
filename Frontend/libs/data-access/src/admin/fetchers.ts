@@ -711,21 +711,36 @@ export function useExportStations() {
   });
 }
 
+/** 組織分配 for the ticket export and its counts: a team's 責任區, or 未指派; none is every team. */
+export type TicketExportScope = NonNullable<
+  paths['/api/v1/bulk/tickets/export/counts']['get']['parameters']['query']
+>;
+
 /**
- * Rows each need type's export would hold (`counts`, keyed by type; a type with none is absent), and
- * `max_rows`, past which that type's export is refused.
+ * Rows each need type's export would hold in `scope` (`counts`, keyed by type; a type with none is
+ * absent), `max_rows`, past which that type's export is refused, and `own_team` when the caller's
+ * export reaches only their own team's 責任區.
  */
-export const ticketExportCountsQuery = () =>
+export const ticketExportCountsQuery = (scope: TicketExportScope = {}) =>
   queryOptions({
-    queryKey: ticketKeys.exportCounts(),
+    queryKey: [...ticketKeys.exportCounts(), scope],
     queryFn: ({ signal }) =>
       adminRestClient
-        .GET('/api/v1/bulk/tickets/export/counts', { signal })
+        .GET('/api/v1/bulk/tickets/export/counts', {
+          params: { query: scope },
+          signal,
+        })
         .then(responseData),
   });
 
-export function useTicketExportCounts(options: { enabled?: boolean } = {}) {
-  return useQuery({ ...ticketExportCountsQuery(), enabled: options.enabled });
+export function useTicketExportCounts(
+  scope: TicketExportScope = {},
+  options: { enabled?: boolean } = {},
+) {
+  return useQuery({
+    ...ticketExportCountsQuery(scope),
+    enabled: options.enabled,
+  });
 }
 
 export interface ExportTicketsInput {

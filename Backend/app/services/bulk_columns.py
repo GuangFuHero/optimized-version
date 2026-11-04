@@ -9,6 +9,7 @@ belonging to another disaster type are filtered out here for free (ADR-091/095) 
 deliberately no second filter in this module.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -75,6 +76,9 @@ class ColumnSpec:
     header: str
     field: str
     data_type: str = STRING
+    # What a person reads: the first of an export's two header rows (#285). The importer never
+    # reads it — it maps by `header`, the code row under it.
+    label: str = ""
     enum_options: tuple[str, ...] | None = None
     is_dynamic: bool = False
     writable_on_create: bool = True
@@ -100,8 +104,13 @@ def _create_only(column: ColumnSpec) -> ColumnSpec:
     return replace(column, writable_on_update=False)
 
 
-def _c(header: str, data_type: str = STRING, *, field: str | None = None, **kwargs) -> ColumnSpec:
-    return ColumnSpec(header=header, field=field or header, data_type=data_type, **kwargs)
+def _c(header: str, label: str, data_type: str = STRING, *, field: str | None = None, **kwargs) -> ColumnSpec:
+    return ColumnSpec(header=header, field=field or header, data_type=data_type, label=label, **kwargs)
+
+
+def label_of(column: ColumnSpec) -> str:
+    """The column's Chinese label, or its code when it has none."""
+    return column.label or column.header
 
 
 _VISIBILITY_OPTIONS = tuple(v.value for v in Visibility)
@@ -113,61 +122,70 @@ _VISIBILITY_OPTIONS = tuple(v.value for v in Visibility)
 _MATCH_KEY_NOTE = "match key — see ADR-108"
 
 STATION_COLUMNS: tuple[ColumnSpec, ...] = (
-    _readonly(_c("uuid")),
-    _create_only(_c("name", required_on_create=True)),  # _MATCH_KEY_NOTE
-    _c("type", max_length=50),
-    _c("description", TEXT),
-    _c("op_hour", max_length=100),
-    _c("level", INTEGER),
-    _c("comment", TEXT),
+    _readonly(_c("uuid", "編號")),
+    _create_only(_c("name", "站點名稱", required_on_create=True)),  # _MATCH_KEY_NOTE
+    _c("type", "類型", max_length=50),
+    _c("description", "說明", TEXT),
+    _c("op_hour", "開放時間", max_length=100),
+    _c("level", "等級", INTEGER),
+    _c("comment", "內部備註", TEXT),
     # An imported station is always official (ADMIN-026), so the file's value is never used.
-    _readonly(_c("source", max_length=50)),
-    _c("visibility", ENUM, enum_options=_VISIBILITY_OPTIONS, max_length=50),
-    _c("latitude", FLOAT, required_on_create=True),
-    _c("longitude", FLOAT, required_on_create=True),
+    _readonly(_c("source", "來源", max_length=50)),
+    _c("visibility", "公開範圍", ENUM, enum_options=_VISIBILITY_OPTIONS, max_length=50),
+    _c("latitude", "緯度", FLOAT, required_on_create=True),
+    _c("longitude", "經度", FLOAT, required_on_create=True),
     # The address line, split into its parts on import; it can only be set at creation. Its 縣市
     # and 鄉鎮市區 are part of the match key.
-    _create_only(_c("address", max_length=255)),
-    _create_only(_c("floor", max_length=20)),
-    _create_only(_c("room", max_length=20)),
-    _readonly(_c("verification_status")),
-    _readonly(_c("is_official", BOOLEAN)),
-    _readonly(_c("confidence_score", FLOAT)),
-    _readonly(_c("created_at", TIMESTAMP)),
-    _readonly(_c("updated_at", TIMESTAMP)),
+    _create_only(_c("address", "地址", max_length=255)),
+    _create_only(_c("floor", "樓", max_length=20)),
+    _create_only(_c("room", "室", max_length=20)),
+    _readonly(_c("verification_status", "查核狀態")),
+    _readonly(_c("is_official", "官方認定", BOOLEAN)),
+    _readonly(_c("confidence_score", "信心分數", FLOAT)),
+    _readonly(_c("created_at", "建立時間", TIMESTAMP)),
+    _readonly(_c("updated_at", "更新時間", TIMESTAMP)),
 )
 
 TICKET_COLUMNS: tuple[ColumnSpec, ...] = (
-    _readonly(_c("uuid")),
-    _create_only(_c("title", required_on_create=True, max_length=200)),  # _MATCH_KEY_NOTE
-    _c("description", TEXT),
+    _readonly(_c("uuid", "編號")),
+    _create_only(_c("title", "標題", required_on_create=True, max_length=200)),  # _MATCH_KEY_NOTE
+    _c("description", "說明", TEXT),
     # A ticket's status is worked out from its needs, so the file shows it and never sets it.
     # Plain text, not an enum: a cell that is never read must not fail its row (ADR-122).
-    _readonly(_c("status")),
-    _c("priority", max_length=20),
-    _c("disaster_types", LIST, max_length=200),
+    _readonly(_c("status", "狀態")),
+    _c("priority", "優先級", max_length=20),
+    _c("disaster_types", "災害類型", LIST, max_length=200),
     # PII, and `UpdateTicketInput` carries no contact fields at all; contact_phone is also
     # part of the match key.
-    _create_only(_c("contact_name", required_on_create=True, max_length=100)),
-    _create_only(_c("contact_email", max_length=100)),
-    _create_only(_c("contact_phone", max_length=50)),
+    _create_only(_c("contact_name", "聯絡人", required_on_create=True, max_length=100)),
+    _create_only(_c("contact_email", "聯絡 Email", max_length=100)),
+    _create_only(_c("contact_phone", "聯絡電話", max_length=50)),
     # `UpdateTicketInput` has no geometry, so a ticket's location is fixed once created.
-    _create_only(_c("latitude", FLOAT, required_on_create=True)),
-    _create_only(_c("longitude", FLOAT, required_on_create=True)),
+    _create_only(_c("latitude", "緯度", FLOAT, required_on_create=True)),
+    _create_only(_c("longitude", "經度", FLOAT, required_on_create=True)),
     # One row is one ticket plus one task (ADR-120). task_type + task_name are the task's
     # match key; task_description and task_quantity are absent from UpdateTicketTaskInput.
-    _create_only(_c("task_type", max_length=50)),
-    _create_only(_c("task_name", required_on_create=True, max_length=200)),
-    _create_only(_c("task_description", TEXT)),
+    _create_only(_c("task_type", "需求種類", max_length=50)),
+    _create_only(_c("task_name", "需求名稱", required_on_create=True, max_length=200)),
+    _create_only(_c("task_description", "需求說明", TEXT)),
     # At least 1, as for any need (`_validate_need_size`): with 0 every claim reads as full.
-    _create_only(_c("task_quantity", INTEGER, min_value=1)),
+    _create_only(_c("task_quantity", "需求數量", INTEGER, min_value=1)),
     # The latest verdict, for every exporter. Only `auditTicket` gives one, so a file never sets it.
-    _readonly(_c("audit_status")),
-    _readonly(_c("audit_note", TEXT)),
-    _readonly(_c("audited_at", TIMESTAMP)),
-    _readonly(_c("audited_by")),
-    _readonly(_c("created_at", TIMESTAMP)),
+    _readonly(_c("audit_status", "審核狀態")),
+    _readonly(_c("audit_note", "審核備註", TEXT)),
+    _readonly(_c("audited_at", "審核時間", TIMESTAMP)),
+    _readonly(_c("audited_by", "審核人")),
+    _readonly(_c("created_at", "建立時間", TIMESTAMP)),
 )
+
+
+def is_code_of(columns: tuple[ColumnSpec, ...]) -> Callable[[str], bool]:
+    """Whether a header cell is one of `columns`' codes or a dynamic field's (`prop.…`).
+
+    What `read_table` tells an export's code row from the Chinese label row above it by (#285).
+    """
+    codes = frozenset(column.header for column in columns)
+    return lambda cell: cell in codes or cell.startswith(DYNAMIC_PREFIX)
 
 
 @dataclass(frozen=True)
@@ -187,6 +205,8 @@ def _dynamic_column(config) -> ColumnSpec:
         data_type=_WIDGET_COERCION.get(config.data_type, STRING),
         enum_options=tuple(config.enum_options) if config.enum_options else None,
         is_dynamic=True,
+        # The config's display name, as the forms show it; a field without one reads as its name.
+        label=(config.label or "").strip() or config.property_name,
     )
 
 
