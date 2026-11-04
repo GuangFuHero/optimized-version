@@ -56,7 +56,7 @@ import {
 import { EMPTY_FILTERS } from './model/station-filters';
 import { formatTaiwanDateTime } from '../../../time';
 
-const { color, radius, typography } = designTokens;
+const { color, radius, shadow, typography } = designTokens;
 
 const PENDING_FILTERS = { ...EMPTY_FILTERS, pending: true };
 // The timeline's largest page (backend `MAX_PAGE`); a conflict past it reads as unknown.
@@ -104,7 +104,17 @@ export function ReviewQueueDialog({
       maxWidth={false}
       slotProps={{
         paper: {
-          sx: { width: 'min(1060px, 96vw)', height: 'min(82vh, 760px)', m: 0 },
+          sx: {
+            width: 'min(1060px, 96vw)',
+            height: 'min(82vh, 760px)',
+            m: 0,
+            borderRadius: `${radius.lg}px`,
+            background: color.bg.neutral.default,
+            border: 'none',
+            backdropFilter: 'none',
+            WebkitBackdropFilter: 'none',
+            boxShadow: shadow.lg,
+          },
         },
       }}
     >
