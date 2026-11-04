@@ -7,6 +7,7 @@ import type {
 } from '@rescue-frontend/data-access/admin';
 
 import {
+  byHighestSimilarity,
   byLatestCreated,
   defaultPlan,
   decidedSides,
@@ -257,6 +258,23 @@ describe('byLatestCreated', () => {
       id: string;
     }[];
     expect(sorted.map((p) => p.id)).toEqual(['new', 'deleted-side', 'old']);
+  });
+});
+
+describe('byHighestSimilarity', () => {
+  it('puts the highest score first and a card with no score last, the uuid breaking ties', () => {
+    const sorted = byHighestSimilarity([
+      { uuid: 'no-score', similarity: null },
+      { uuid: 'low', similarity: 0.41 },
+      { uuid: 'tie-b', similarity: 0.9 },
+      { uuid: 'tie-a', similarity: 0.9 },
+    ]);
+    expect(sorted.map((pair) => pair.uuid)).toEqual([
+      'tie-a',
+      'tie-b',
+      'low',
+      'no-score',
+    ]);
   });
 });
 
