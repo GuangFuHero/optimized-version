@@ -797,33 +797,29 @@ function AllTeamsTable({ selfTeamUuid }: { selfTeamUuid: string }) {
 }
 
 /**
- * 我的團隊: the team of the acting identity, as its admin or one of its members. What each tab
- * needs is a capability of the team role (Spec/026): the roster `team.member.view`, managing it
- * and the queue `team.member.manage`, editing `team.edit`, the log `team.audit.view`.
+ * 我的團隊: the team of the acting identity, as its admin. A team member does not get this page,
+ * although they hold `team.view`. What each tab needs is a capability of the team role
+ * (Spec/026): the roster `team.member.view`, managing it and the queue `team.member.manage`,
+ * editing `team.edit`, the log `team.audit.view`.
  */
 function MyTeamView({
   teamUuid,
   teamName,
-  isAdmin,
   selfUuid,
   can,
   siteUrl,
 }: {
   teamUuid: string;
   teamName: string;
-  isAdmin: boolean;
   selfUuid: string;
   can: (perm: Perm) => boolean;
   siteUrl?: string;
 }) {
   const teamsQuery = useTeams();
-  const canManage = can('team.member.manage');
   const membersQuery = useTeamMembers(teamUuid, {
     enabled: can('team.member.view'),
   });
-  const pendingRequests = usePendingRoleRequests(teamUuid, {
-    enabled: canManage,
-  });
+  const pendingRequests = usePendingRoleRequests(teamUuid);
   const [tab, setTab] = useState('members');
   const [inviting, setInviting] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -844,22 +840,18 @@ function MyTeamView({
   const queueCount = pendingRequests.data?.length ?? 0;
 
   const tabs = [
-    { value: 'members', label: isAdmin ? '成員列表' : '夥伴列表' },
-    ...(canManage
-      ? [
-          {
-            value: 'queue',
-            label: (
-              <Stack direction="row" sx={{ alignItems: 'center', gap: 0.75 }}>
-                審核佇列
-                {queueCount > 0 ? (
-                  <CountBadge count={queueCount} tone="warning" />
-                ) : null}
-              </Stack>
-            ),
-          },
-        ]
-      : []),
+    { value: 'members', label: '成員列表' },
+    {
+      value: 'queue',
+      label: (
+        <Stack direction="row" sx={{ alignItems: 'center', gap: 0.75 }}>
+          審核佇列
+          {queueCount > 0 ? (
+            <CountBadge count={queueCount} tone="warning" />
+          ) : null}
+        </Stack>
+      ),
+    },
     ...(can('team.audit.view') ? [{ value: 'audit', label: '團隊紀錄' }] : []),
     { value: 'all', label: '所有團隊' },
   ];
@@ -883,15 +875,11 @@ function MyTeamView({
                 {team.name}
               </Typography>
               {team.type ? <TeamTypeBadge type={team.type} /> : null}
-              <Badge tone={isAdmin ? 'primary' : 'neutral'}>
-                {isAdmin ? '我是管理員' : '我是成員'}
-              </Badge>
+              <Badge tone="primary">我是管理員</Badge>
             </Stack>
             <TeamFacts team={team} />
             <Typography sx={captionSx}>
-              {isAdmin
-                ? '您可邀請與調整本隊成員的團隊角色。別隊的成員名單看不到，也無法變更任何人的平台角色。'
-                : '您在此團隊的角色是成員 —— 僅能檢視夥伴基本資訊；成員管理與團隊紀錄只有管理員看得到。'}
+              您可邀請與調整本隊成員的團隊角色。別隊的成員名單看不到，也無法變更任何人的平台角色。
             </Typography>
           </Stack>
           <Stack
@@ -907,14 +895,12 @@ function MyTeamView({
                 編輯團隊資料
               </Button>
             ) : null}
-            {canManage ? (
-              <Button
-                startIcon={<QrCode size={17} />}
-                onClick={() => setInviting(true)}
-              >
-                邀請成員
-              </Button>
-            ) : null}
+            <Button
+              startIcon={<QrCode size={17} />}
+              onClick={() => setInviting(true)}
+            >
+              邀請成員
+            </Button>
           </Stack>
         </Stack>
       </Panel>
@@ -941,16 +927,12 @@ function MyTeamView({
             rows={roster}
             selfUuid={selfUuid}
             basic
-            actionsFor={canManage ? actionsFor : undefined}
+            actionsFor={actionsFor}
             empty={
               <EmptyState
                 icon={<Users />}
                 title="尚無成員"
-                description={
-                  canManage
-                    ? '用「邀請成員」產生 QR，讓夥伴掃碼申請加入。'
-                    : '管理員核准加入申請後，夥伴會列在這裡。'
-                }
+                description="用「邀請成員」產生 QR，讓夥伴掃碼申請加入。"
               />
             }
           />
@@ -999,23 +981,24 @@ function TeamsView({ siteUrl }: { siteUrl?: string }) {
   const identity = user?.active_identity;
   // Capabilities carry no scope, and a team admin now holds `team.edit` for their own team
   // (ADR-357): the platform view is for an identity that is not a team's.
-  if (identity?.team_uuid && can('team.view')) {
+  // A team member holds `team.view` but not `team.member.manage`, and gets the 403 below even
+  // when they open /teams directly.
+  if (identity?.team_uuid && can('team.member.manage')) {
     return (
       <MyTeamView
         siteUrl={siteUrl}
         teamUuid={identity.team_uuid}
         teamName={identity.team ?? ''}
-        isAdmin={identity.role === 'admin'}
         selfUuid={user?.uuid ?? ''}
         can={can}
       />
     );
   }
-  if (can('team.edit')) {
+  if (!identity?.team_uuid && can('team.edit')) {
     return <SuperTeamsView siteUrl={siteUrl} />;
   }
-  // A platform identity with team.view but neither a team nor team.edit: the nav already hides
-  // 團隊 from anyone without team.view, so this is only a guard.
+  // A team member, or a platform identity without team.edit: the nav already hides 團隊 from
+  // anyone without team.member.manage, so this only stops a direct visit.
   return <AdminErrorPage code="403" />;
 }
 

@@ -89,7 +89,8 @@ export const ADMIN_NAV_SECTIONS: readonly {
         href: '/teams',
         Icon: Building2,
         description: '團隊與成員',
-        capability: 'team.view',
+        // Team admins and super admins only: a team member holds `team.view` but not this.
+        capability: 'team.member.manage',
       },
       {
         id: 'members',
