@@ -293,6 +293,7 @@ export function HelpRequestHost({ isAuthenticated }: HelpRequestHostProps) {
   /**
    * Off to one of the tickets it looks like. The drawer closes as the prototype's does, but what was
    * typed is kept for the tab, and a toast says it was not sent: closing alone looks like sending.
+   * It stays while they read that ticket, which takes longer than a toast lasts.
    */
   const leaveHeld = () => {
     setHeldOpen(false);
@@ -304,6 +305,22 @@ export function HelpRequestHost({ isAuthenticated }: HelpRequestHostProps) {
   // Stable, so a re-render does not restart the toast's timer.
   const closeToast = useCallback(() => setToastOpen(false), []);
   const closeUnsent = useCallback(() => setUnsentOpen(false), []);
+
+  /** It was the same thing after all: what was typed goes, as 取消 lets it go. */
+  const dropUnsent = () => {
+    if (userId) {
+      clearHelpRequestDraft(sessionDraftStorage(), userId);
+    }
+
+    setUnsentOpen(false);
+  };
+
+  // A sign-out takes the draft with it, so nothing is left to go back to.
+  useEffect(() => {
+    if (!userId) {
+      setUnsentOpen(false);
+    }
+  }, [userId]);
 
   return (
     <>
@@ -369,6 +386,8 @@ export function HelpRequestHost({ isAuthenticated }: HelpRequestHostProps) {
       />
       <SiteToast
         open={unsentOpen}
+        tone="info"
+        persistent
         title="剛才的單還沒送出"
         description="填的內容都留著。"
         action={{
@@ -378,6 +397,7 @@ export function HelpRequestHost({ isAuthenticated }: HelpRequestHostProps) {
             openDrawer(null);
           },
         }}
+        discardAction={{ label: '不開了', onClick: dropUnsent }}
         onClose={closeUnsent}
       />
     </>
