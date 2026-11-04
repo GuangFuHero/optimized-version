@@ -250,7 +250,14 @@ export function notMarkedRead(
   return uuids.filter((_, index) => results[index]?.status !== 'fulfilled');
 }
 
-/** The bell's name, with the count the badge shows only to the eye. */
-export function bellLabel(count: number): string {
-  return count > 0 ? `通知，${count} 則未讀` : '通知';
+/**
+ * The bell's name, with the count the badge shows only to the eye. The site's badge counts what is
+ * unread (未讀). The back office's counts what came in since its list was last opened (新通知), and
+ * keeps 「未讀」 for the list's own rows (`Design/後台/docs/通知鈴鐺.md`).
+ */
+export function bellLabel(
+  count: number,
+  counted: '未讀' | '新通知' = '未讀',
+): string {
+  return count > 0 ? `通知，${count} 則${counted}` : '通知';
 }

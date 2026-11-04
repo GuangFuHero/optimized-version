@@ -251,9 +251,12 @@ function TileContent({
 export function StatTilesRetry({
   retrying,
   onRetry,
+  message = '無法載入統計',
 }: {
   retrying: boolean;
   onRetry: () => void;
+  /** What did not load. The 通知清單 says 讀不到通知 with the same 重試. */
+  message?: string;
 }) {
   return (
     <Box
@@ -272,7 +275,7 @@ export function StatTilesRetry({
         aria-hidden
         sx={{ width: 14, height: 14, flexShrink: 0 }}
       />
-      無法載入統計
+      {message}
       <ButtonBase
         disabled={retrying}
         onClick={onRetry}

@@ -1,13 +1,6 @@
 'use client';
 
 import { Box, ButtonBase, Stack, Typography } from '@mui/material';
-import {
-  useInfiniteQuery,
-  useMutation,
-  useQueryClient,
-  type InfiniteData,
-  type QueryClient,
-} from '@tanstack/react-query';
 import Link from 'next/link';
 import { useEffect, useState, type MouseEvent, type ReactNode } from 'react';
 import { useQuery } from 'urql';
@@ -31,21 +24,15 @@ import {
   myClaimTicketHref,
   openClaimedTicket,
 } from '../ticket/my-claims/my-claims';
+import { siteNotificationKeys } from './api';
 import {
-  listNotificationsAsync,
-  markNotificationReadAsync,
-  siteNotificationKeys,
-  type NotificationPage,
-} from './api';
-import {
-  notMarkedRead,
   readSiteNotices,
-  readsNextPageUnasked,
   ticketOfNeed,
-  withReadState,
   type SiteNotice,
   type SiteNoticeKind,
 } from './site-notices';
+import { useMarkNotificationsRead } from './use-mark-notifications-read';
+import { useNotificationPages } from './use-notification-pages';
 
 const { color, radius, typography } = designTokens;
 
@@ -92,29 +79,6 @@ const KIND_LOOKS: Record<SiteNoticeKind, { icon: ReactNode; tone: string }> = {
     tone: color.fg.neutral.subtle,
   },
 };
-
-/** The drawer's cached pages with those in `uuids` read, or unread again. */
-function setCachedReadState(
-  queryClient: QueryClient,
-  uuids: readonly string[],
-  read: boolean,
-) {
-  if (uuids.length === 0) {
-    return;
-  }
-
-  queryClient.setQueryData<InfiniteData<NotificationPage>>(
-    siteNotificationKeys.list,
-    (data) =>
-      data && {
-        ...data,
-        pages: data.pages.map((page) => ({
-          ...page,
-          items: withReadState(page.items, uuids, read),
-        })),
-      },
-  );
-}
 
 interface SiteNotifyDrawerProps {
   open: boolean;
@@ -322,7 +286,6 @@ function SiteNotifyContent({
   onEmpty: (empty: boolean) => void;
 }) {
   const route = useSiteRouteState();
-  const queryClient = useQueryClient();
   const [requests] = useQuery({
     query: MyTicketsDocument,
     requestPolicy: 'network-only',
@@ -333,40 +296,19 @@ function SiteNotifyContent({
     requestPolicy: 'network-only',
     context: NEED_LISTS_QUERY_CONTEXT,
   });
-  const list = useInfiniteQuery({
-    queryKey: siteNotificationKeys.list,
-    queryFn: ({ pageParam }) => listNotificationsAsync({ page: pageParam }),
-    initialPageParam: 1,
-    getNextPageParam: (last, pages) =>
-      last.has_more ? pages.length + 1 : undefined,
-    refetchOnMount: 'always',
-    // The drawer says so itself, in place of the notices.
-    meta: { quietErrors: true },
+  const { list, notices, searching } = useNotificationPages({
+    listKey: siteNotificationKeys.list,
+    read: readSiteNotices,
   });
-  // Shown read at once, and read for good in the background. A PATCH that fails (offline, a 5xx)
-  // puts its notice back to unread, and 全部標為已讀 with it, to try again; then both the list and
-  // the bell's count are read again from the backend.
-  const markRead = useMutation({
-    mutationFn: (uuids: string[]) =>
-      Promise.allSettled(uuids.map(markNotificationReadAsync)),
-    onMutate: async (uuids) => {
-      // A read of the list still on its way would put the notices back as they were.
-      await queryClient.cancelQueries({ queryKey: siteNotificationKeys.list });
-      setCachedReadState(queryClient, uuids, true);
-    },
-    onSuccess: (results, uuids) =>
-      setCachedReadState(queryClient, notMarkedRead(uuids, results), false),
-    onSettled: () =>
-      queryClient.invalidateQueries({ queryKey: siteNotificationKeys.all }),
+  const markRead = useMarkNotificationsRead({
+    listKey: siteNotificationKeys.list,
+    invalidateKeys: [siteNotificationKeys.all],
   });
 
   // A list that could not be read leaves its needs' notices unlinked rather than holding up the rest.
   const listsSettled =
     Boolean(requests.data || requests.error) &&
     Boolean(claims.data || claims.error);
-  const notices = list.data
-    ? readSiteNotices(list.data.pages.flatMap((page) => page.items))
-    : null;
   // Told once the notices are in, and not taken back while they load again at the next opening:
   // the subtitle would come and go each time. A page that shows nothing is not empty while another
   // follows it, as the site shows only some kinds of notice; a read that fails puts the subtitle back
@@ -384,26 +326,6 @@ function SiteNotifyContent({
     }
   }, [empty, onEmpty]);
 
-  // Pages that show nothing, with more after them, would leave only 載入更多 under the subtitle: the
-  // next is read without a tap, a round at a time. Not while a read is on its way (each opening reads
-  // the pages it has again first), nor after one failed, which 載入更多 tries again.
-  const readingOn =
-    notices !== null &&
-    readsNextPageUnasked({
-      shown: notices.length,
-      pagesRead: list.data?.pages.length ?? 0,
-      hasNextPage: list.hasNextPage,
-      nextPageFailed: list.isFetchNextPageError,
-    });
-  const readNext = readingOn && !list.isFetching;
-  const { fetchNextPage } = list;
-
-  useEffect(() => {
-    if (readNext) {
-      void fetchNextPage();
-    }
-  }, [readNext, fetchNextPage]);
-
   if (!notices || !listsSettled) {
     return list.isError ? (
       <Notice>讀不到通知，請稍後再試一次。</Notice>
@@ -417,9 +339,6 @@ function SiteNotifyContent({
     claims: claims.data?.myTaskAssignments ?? [],
   };
   const unread = notices.filter((notice) => !notice.read);
-  // Nothing shown yet and the next page on its way, by itself or from a tap: one loading line, no button.
-  const searching =
-    notices.length === 0 && (readingOn || list.isFetchingNextPage);
 
   const openNotice = (
     event: MouseEvent<HTMLElement>,
