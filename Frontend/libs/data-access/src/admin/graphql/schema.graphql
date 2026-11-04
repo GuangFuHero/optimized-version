@@ -1016,6 +1016,32 @@ type Query {
     Only tickets outside this box: those `bounds` leaves out for it, each matched as `bounds` matches it, so the two split the matches between them. A point on its edge is inside; a ticket with no point is outside
     """
     outsideBounds: BoundsInput = null
+
+    """
+    Only tickets in a 責任區 of this team, as `responsibleTeams` names them (ADR-422). Matched on the exact point, so a ticket the caller is shown as a cell never matches
+    """
+    responsibleTeamUuid: UUID = null
+
+    """
+    Only tickets in no 責任區: those whose `responsibleTeams` is empty. As `responsibleTeamUuid`, a ticket the caller is shown as a cell never matches
+    """
+    unassignedOnly: Boolean! = false
+
+    """
+    Only tickets whose address is in this 縣市. The address is detail (ADR-281): a ticket the caller is shown as a cell never matches
+    """
+    county: String = null
+
+    """
+    Only tickets whose address is in this 鄉鎮市區 of `county`, which it needs: 鄉鎮 names repeat across counties. As `county`, never one shown as a cell
+    """
+    town: String = null
+
+    """Only tickets last updated (`updatedAt`) at or after this moment"""
+    updatedAfter: DateTime = null
+
+    """Only tickets last updated (`updatedAt`) before this moment"""
+    updatedBefore: DateTime = null
   ): TicketConnection!
   ticketCells(
     bounds: BoundsInput!
@@ -1056,7 +1082,38 @@ type Query {
 
     """Only tickets filed under this disaster type (a disaster_types key)"""
     disasterType: String = null
+
+    """
+    Only tickets in a 責任區 of this team, as `responsibleTeams` names them (ADR-422). Matched on the exact point, so a ticket the caller is shown as a cell never matches
+    """
+    responsibleTeamUuid: UUID = null
+
+    """
+    Only tickets in no 責任區: those whose `responsibleTeams` is empty. As `responsibleTeamUuid`, a ticket the caller is shown as a cell never matches
+    """
+    unassignedOnly: Boolean! = false
+
+    """
+    Only tickets whose address is in this 縣市. The address is detail (ADR-281): a ticket the caller is shown as a cell never matches
+    """
+    county: String = null
+
+    """
+    Only tickets whose address is in this 鄉鎮市區 of `county`, which it needs: 鄉鎮 names repeat across counties. As `county`, never one shown as a cell
+    """
+    town: String = null
+
+    """Only tickets last updated (`updatedAt`) at or after this moment"""
+    updatedAfter: DateTime = null
+
+    """Only tickets last updated (`updatedAt`) before this moment"""
+    updatedBefore: DateTime = null
   ): TicketsExtentType!
+
+  """
+  The choices of the ticket board's 行政區域 and 組織分配 filters: the areas the addresses of the tickets the caller sees in detail name, and the teams holding a 責任區. Both empty to a caller without ticket.view_detail, as the filters then match nothing
+  """
+  ticketFacets: TicketFacetsType!
   ticketStats: TicketStatsType!
   ticket(
     uuid: UUID!
@@ -1783,6 +1840,15 @@ type TeamZoneType {
   assignedTeams: [AssignedTeamType!]!
 }
 
+"""One 縣市 and its 鄉鎮市區, as a listed ticket's address names them"""
+type TicketAreaType {
+  """縣市"""
+  county: String!
+
+  """鄉鎮市區"""
+  town: String!
+}
+
 """One field that differs from the content the last verdict was given on"""
 type TicketAuditChangeType {
   """
@@ -1893,6 +1959,17 @@ type TicketDisasterDetailType {
 type TicketDuplicateRefType {
   uuid: UUID!
   title: String!
+}
+
+"""What the board's 行政區域 and 組織分配 filters can pick"""
+type TicketFacetsType {
+  """
+  Every county and town pair the addresses of the tickets the caller sees in detail name
+  """
+  areas: [TicketAreaType!]!
+
+  """Every team whose 責任區 holds a ticket the caller sees in detail, by name"""
+  teams: [AssignedTeamType!]!
 }
 
 enum TicketListOrder {

@@ -1388,6 +1388,26 @@ class TicketsExtentType:
     max_lng: float | None = strawberry.field(description="Eastern edge; null when none match")
 
 
+@strawberry.type(description="One 縣市 and its 鄉鎮市區, as a listed ticket's address names them")
+class TicketAreaType:
+    """A `ticketFacets` area: a place the board's 行政區域 filter can pick."""
+
+    county: str = strawberry.field(description="縣市")
+    town: str = strawberry.field(description="鄉鎮市區")
+
+
+@strawberry.type(description="What the board's 行政區域 and 組織分配 filters can pick")
+class TicketFacetsType:
+    """`ticketFacets`: the choices of the ticket board's filter panel."""
+
+    areas: list[TicketAreaType] = strawberry.field(
+        description="Every county and town pair the addresses of the tickets the caller sees in detail name"
+    )
+    teams: list[AssignedTeamType] = strawberry.field(
+        description="Every team whose 責任區 holds a ticket the caller sees in detail, by name"
+    )
+
+
 @strawberry.type
 class TicketConnection:
     """Paginated list of tickets with page metadata."""

@@ -19,9 +19,53 @@ export interface TicketFilters {
   priority: TicketPriority | null;
   /** A need type, sent to the server as `needType`. */
   taskType: string | null;
-  /** A disaster type, sent to the server as `disasterType`. */
-  disaster: string | null;
+  /** 行政區域: a 縣市, sent as `county`. */
+  county: string | null;
+  /** 行政區域: a 鄉鎮市區 in `county`, sent as `town`; null for the whole county. */
+  town: string | null;
+  /** 組織分配: a team's uuid, its 責任區's tickets; or UNASSIGNED_TEAM, those in no 責任區. */
+  team: string | null;
+  /** 時間: last updated within the last 24 hours, or before that. */
+  time: TicketTimeFilter | null;
   q: string;
+}
+
+export const TICKET_TIME_FILTERS = ['today', 'earlier'] as const;
+export type TicketTimeFilter = (typeof TICKET_TIME_FILTERS)[number];
+
+/** The 組織分配 value for tickets in nobody's 責任區. */
+export const UNASSIGNED_TEAM = '__none__';
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+/**
+ * The 時間 filter's cut, `now` less 24 hours, rounded down to 5 minutes: the board's loads, read at
+ * different moments, then mostly agree on it, and re-rendering does not ask for new rows every second.
+ */
+const CUT_STEP_MS = 5 * 60 * 1000;
+
+/** The moment 24 小時內 starts and 更早 ends. */
+export function ticketTimeCut(now: number = Date.now()): string {
+  return new Date(
+    Math.floor(now / CUT_STEP_MS) * CUT_STEP_MS - DAY_MS,
+  ).toISOString();
+}
+
+/**
+ * Whether a ticket last updated at `updatedAt` passes the 時間 filter, as the server cuts it. No time
+ * passes neither.
+ */
+export function passesTimeFilter(
+  updatedAt: string | null | undefined,
+  time: TicketTimeFilter,
+  now: number = Date.now(),
+): boolean {
+  const at = updatedAt ? Date.parse(updatedAt) : NaN;
+  if (Number.isNaN(at)) return false;
+  const cut = Date.parse(ticketTimeCut(now));
+  return time === 'today' ? at >= cut : at < cut;
 }
 
 /**
@@ -39,7 +83,10 @@ export const EMPTY_TICKET_FILTERS: TicketFilters = {
   status: null,
   priority: null,
   taskType: null,
-  disaster: null,
+  county: null,
+  town: null,
+  team: null,
+  time: null,
   q: '',
 };
 
@@ -47,7 +94,10 @@ const KEYS = {
   status: 'status',
   priority: 'priority',
   taskType: 'task',
-  disaster: 'disaster',
+  county: 'county',
+  town: 'town',
+  team: 'team',
+  time: 'time',
   q: 'q',
 } as const;
 
@@ -56,6 +106,8 @@ export function parseTicketFilters(params: URLSearchParams): TicketFilters {
     const value = params.get(key) as T | null;
     return value && allowed.includes(value) ? value : null;
   };
+  const county = params.get(KEYS.county) || null;
+  const team = params.get(KEYS.team);
   return {
     status: pick(
       KEYS.status,
@@ -63,9 +115,52 @@ export function parseTicketFilters(params: URLSearchParams): TicketFilters {
     ),
     priority: pick(KEYS.priority, TICKET_PRIORITIES),
     taskType: params.get(KEYS.taskType) || null,
-    disaster: params.get(KEYS.disaster) || null,
+    county,
+    // A town means nothing without its county.
+    town: county ? params.get(KEYS.town) || null : null,
+    // The server takes a uuid only: anything else from a hand-edited link would fail every load.
+    team:
+      team && (team === UNASSIGNED_TEAM || UUID_PATTERN.test(team))
+        ? team
+        : null,
+    time: pick(KEYS.time, TICKET_TIME_FILTERS),
     q: params.get(KEYS.q) ?? '',
   };
+}
+
+/**
+ * Whether the 組織分配 choice names a team the panel cannot show: one without a ticket the caller
+ * sees (a link from someone else, or a team since gone), or any team for a caller without
+ * ticket.view_detail, who has no 組織分配 row. The board then clears it. `canViewDetail` and
+ * `listedTeams` (the facets' teams) are undefined until they load, which keeps the choice.
+ */
+export function isUnlistedTeam(
+  team: string | null,
+  canViewDetail: boolean | undefined,
+  listedTeams: readonly string[] | undefined,
+): boolean {
+  if (!team || canViewDetail === undefined) return false;
+  if (!canViewDetail) return true;
+  if (team === UNASSIGNED_TEAM || !listedTeams) return false;
+  return !listedTeams.includes(team);
+}
+
+/**
+ * Whether the 行政區域 choice names a place the panel has no chip for: a county alone, a town no
+ * ticket the caller sees is in, or any place for a caller without ticket.view_detail. The board then
+ * clears it. `canViewDetail` and `listedAreas` (the facets' areas) are undefined until they load,
+ * which keeps the choice.
+ */
+export function isUnlistedArea(
+  county: string | null,
+  town: string | null,
+  canViewDetail: boolean | undefined,
+  listedAreas: readonly { county: string; town: string }[] | undefined,
+): boolean {
+  if (!county || canViewDetail === undefined) return false;
+  if (!canViewDetail) return true;
+  if (!listedAreas) return false;
+  return !listedAreas.some((a) => a.county === county && a.town === town);
 }
 
 /** Writes the filters into a copy of `params`, keeping every other param except `page`. */
@@ -79,22 +174,39 @@ export function writeTicketFilters(
   set(KEYS.status, filters.status);
   set(KEYS.priority, filters.priority);
   set(KEYS.taskType, filters.taskType);
-  set(KEYS.disaster, filters.disaster);
+  set(KEYS.county, filters.county);
+  set(KEYS.town, filters.county ? filters.town : null);
+  set(KEYS.team, filters.team);
+  set(KEYS.time, filters.time);
   set(KEYS.q, filters.q.trim() || null);
   next.delete('page');
   return next;
 }
 
-/** The filters as `tickets` query variables: the server applies every one of them. */
+/**
+ * The filters as `tickets` query variables: the server applies every one of them. `now` sets where
+ * the 時間 filter cuts (ticketTimeCut).
+ */
 export function toServerVariables(
   filters: TicketFilters,
+  now: number = Date.now(),
 ): AdminTicketsQueryVariables {
   const search = resolveTicketSearch(filters.q);
   return {
     ...(filters.status ? { status: filters.status } : {}),
     ...(filters.priority ? { priority: filters.priority } : {}),
     ...(filters.taskType ? { needType: filters.taskType } : {}),
-    ...(filters.disaster ? { disasterType: filters.disaster } : {}),
+    ...(filters.county ? { county: filters.county } : {}),
+    ...(filters.county && filters.town ? { town: filters.town } : {}),
+    ...(filters.team === UNASSIGNED_TEAM
+      ? { unassignedOnly: true }
+      : filters.team
+        ? { responsibleTeamUuid: filters.team }
+        : {}),
+    ...(filters.time === 'today' ? { updatedAfter: ticketTimeCut(now) } : {}),
+    ...(filters.time === 'earlier'
+      ? { updatedBefore: ticketTimeCut(now) }
+      : {}),
     ...(search.kind === 'query' ? { q: search.q } : {}),
   };
 }
@@ -104,7 +216,9 @@ export function countActiveFilters(filters: TicketFilters): number {
     filters.status,
     filters.priority,
     filters.taskType,
-    filters.disaster,
+    filters.county,
+    filters.team,
+    filters.time,
   ].filter(Boolean).length;
 }
 
@@ -125,14 +239,18 @@ export function parseTicketPage(params: URLSearchParams): number {
   return Number.isFinite(page) && page >= 1 ? page : 1;
 }
 
-/** One board page: the filters plus that page's window. Pages count from 1. */
+/**
+ * One board page: the filters plus that page's window. Pages count from 1. `now` sets where the 時間
+ * filter cuts, as in toServerVariables.
+ */
 export function toPageVariables(
   filters: TicketFilters,
   page: number,
+  now: number = Date.now(),
 ): AdminTicketsQueryVariables {
   const index = Math.max(1, Math.trunc(page) || 1) - 1;
   return {
-    ...toServerVariables(filters),
+    ...toServerVariables(filters, now),
     skip: index * TICKET_PAGE_SIZE,
     limit: TICKET_PAGE_SIZE,
   };
@@ -191,8 +309,9 @@ const up = (value: number) => Math.ceil(value * SNAP) / SNAP;
  */
 export function toExtentVariables(
   filters: TicketFilters,
+  now: number = Date.now(),
 ): AdminTicketsExtentQueryVariables {
-  return toServerVariables(filters);
+  return toServerVariables(filters, now);
 }
 
 /**
@@ -200,16 +319,25 @@ export function toExtentVariables(
  * remembers the one it last showed.
  */
 export function ticketFiltersKey(filters: TicketFilters): string {
-  return JSON.stringify(toExtentVariables(filters));
+  // The 時間 filter by its choice, not its cut: the key holds still as the clock moves on.
+  return JSON.stringify({
+    ...toExtentVariables({ ...filters, time: null }),
+    ...(filters.time ? { time: filters.time } : {}),
+  });
 }
 
-/** The tickets inside `viewport` that match the filters, up to the map's limit. */
+/**
+ * The tickets inside `viewport` that match the filters, up to the map's limit. `now` is the board's
+ * cut, taken with the filters: read afresh on each pan, a pan past a 5-minute step would load other
+ * tickets rather than only another area.
+ */
 export function toMapVariables(
   filters: TicketFilters,
   viewport: MapViewport,
+  now: number = Date.now(),
 ): AdminTicketMapPinsQueryVariables {
   return {
-    ...toServerVariables(filters),
+    ...toServerVariables(filters, now),
     bounds: {
       minLat: clamp(down(viewport.south), -90, 90),
       maxLat: clamp(up(viewport.north), -90, 90),

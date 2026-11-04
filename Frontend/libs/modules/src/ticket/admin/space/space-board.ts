@@ -7,6 +7,8 @@
 
 import {
   countActiveFilters,
+  passesTimeFilter,
+  UNASSIGNED_TEAM,
   type TicketFilters,
 } from '../ticket-board/model/ticket-filters';
 import {
@@ -21,6 +23,7 @@ import {
 export function spaceTicketPasses(
   ticket: SpaceTicket,
   filters: TicketFilters,
+  now: number = Date.now(),
 ): boolean {
   if (filters.status && ticket.status !== filters.status) return false;
   if (filters.priority && ticket.priority !== filters.priority) return false;
@@ -29,7 +32,21 @@ export function spaceTicketPasses(
     !ticket.tasks.some((task) => task.taskType === filters.taskType)
   )
     return false;
-  if (filters.disaster && !ticket.disasterTypes.includes(filters.disaster))
+  const place = ticket.secondaryLocation;
+  if (filters.county && place?.county !== filters.county) return false;
+  if (filters.county && filters.town && place?.town !== filters.town)
+    return false;
+  const teams = ticket.responsibleTeams.map((team) => team.uuid);
+  if (
+    filters.team === UNASSIGNED_TEAM
+      ? teams.length > 0
+      : filters.team && !teams.includes(filters.team)
+  )
+    return false;
+  if (
+    filters.time &&
+    !passesTimeFilter(ticket.updatedAt, filters.time, now)
+  )
     return false;
   return true;
 }
@@ -57,6 +74,7 @@ export function visibleSpaceRows(
     tickets: readonly SpaceTicket[] | null;
   }[],
   filters: TicketFilters,
+  now: number = Date.now(),
 ): SpaceListRow[] {
   const hasFilters = countActiveFilters(filters) > 0;
   return sortSpaceRows(
@@ -68,7 +86,7 @@ export function visibleSpaceRows(
           hasFilters,
           anyTicketPasses:
             space.tickets === null ||
-            space.tickets.some((ticket) => spaceTicketPasses(ticket, filters)),
+            space.tickets.some((ticket) => spaceTicketPasses(ticket, filters, now)),
         }),
       )
       .map((space) => space.row),
