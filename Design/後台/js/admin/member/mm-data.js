@@ -26,13 +26,13 @@ window.MM_PERSONAS = {
 // t5 光復福安宮志工隊、t9 鳳林鎮義消協會原本是「其他」——「其他」推不出平台角色
 // （8/14 裁示平台角色由 team type 推導）。兩者都不是政府機關，歸 ngo。
 window.MM_TEAMS = [
-  { id: "t1", name: "慈濟基金會",       type: "ngo", status: "active",    contact: { name: "王秀蘭", phone: "0937-221-405" }, created: "2026-05-02", zones: ["光復鄉大同村", "大平村"], tickets: 126 },
-  { id: "t2", name: "壯闊台灣",         type: "ngo", status: "active",    contact: { name: "黃曉芳", phone: "0921-334-556" }, created: "2026-05-03", zones: ["大馬村", "大華村"],       tickets: 89 },
-  { id: "t3", name: "台灣世界展望會",   type: "ngo", status: "active",    contact: { name: "林佩珊", phone: "0912-808-117" }, created: "2026-05-05", zones: ["北富村"],                 tickets: 41 },
-  { id: "t4", name: "中華民國紅十字會", type: "ngo", status: "active",    contact: { name: "徐國堂", phone: "0989-456-230" }, created: "2026-05-05", zones: ["東富村", "西富村"],       tickets: 64 },
+  { id: "t1", name: "慈濟基金會",       type: "ngo", status: "active",    contact: { name: "王秀蘭", phone: "0937 221 405" }, created: "2026-05-02", zones: ["光復鄉大同村", "大平村"], tickets: 126 },
+  { id: "t2", name: "壯闊台灣",         type: "ngo", status: "active",    contact: { name: "黃曉芳", phone: "0921 334 556" }, created: "2026-05-03", zones: ["大馬村", "大華村"],       tickets: 89 },
+  { id: "t3", name: "台灣世界展望會",   type: "ngo", status: "active",    contact: { name: "林佩珊", phone: "0912 808 117" }, created: "2026-05-05", zones: ["北富村"],                 tickets: 41 },
+  { id: "t4", name: "中華民國紅十字會", type: "ngo", status: "active",    contact: { name: "徐國堂", phone: "0989 456 230" }, created: "2026-05-05", zones: ["東富村", "西富村"],       tickets: 64 },
   { id: "t5", name: "光復福安宮志工隊", type: "ngo", status: "active",    contact: { name: "張金水", phone: "03-870-1182" },  created: "2026-06-12", zones: [],                         tickets: 7 },
   { id: "t6", name: "花蓮縣政府災防辦", type: "gov", status: "active",    contact: { name: "吳政憲", phone: "03-822-5101" },  created: "2026-05-01", zones: ["全鄉協調"],               tickets: 18 },
-  { id: "t8", name: "馬太鞍溪志工聯隊", type: "ngo", status: "suspended", contact: { name: "潘正豪", phone: "0958-114-672" }, created: "2026-05-06", zones: ["待重新指派"],             tickets: 33, statusNote: "Zone 認領衝突調查中（2026-06-11 起）" },
+  { id: "t8", name: "馬太鞍溪志工聯隊", type: "ngo", status: "suspended", contact: { name: "潘正豪", phone: "0958 114 672" }, created: "2026-05-06", zones: ["待重新指派"],             tickets: 33, statusNote: "Zone 認領衝突調查中（2026-06-11 起）" },
   { id: "t10", name: "玉里鄉親服務隊",  type: "ngo", status: "active",    contact: { name: "", phone: "" }, created: "2026-11-03", zones: [], tickets: 0 }, // 示範：還沒有管理員的團隊（TEAM-ADMIN-102）
   { id: "t9", name: "鳳林鎮義消協會",   type: "ngo", status: "inactive",  contact: { name: "李火旺", phone: "03-876-4420" },  created: "2026-05-04", zones: [],                         tickets: 21, statusNote: "已於 2026-06-06 解散，原 Ticket 保留並標示來源" },
 ];
@@ -40,50 +40,50 @@ window.MM_TEAMS = [
 // 各團隊名單。role: admin / member（2026-08-14 裁示：團隊角色移除 Guest，只留這兩種）
 window.MM_ROSTERS = {
   t10: [
-    { id: "m-t10a", name: "邱雅惠", phone: "0963-204-118", rbac: "ngo", role: "member", status: "active", joined: "2026-11-03", last: "今天 09:10" },
+    { id: "m-t10a", name: "邱雅惠", phone: "0963 204 118", rbac: "ngo", role: "member", status: "active", joined: "2026-11-03", last: "今天 09:10" },
   ],
   t1: [
-    { id: "u-lin",   name: "林承翰", phone: "0908-211-345", rbac: "super", role: "member", status: "active", joined: "2026-06-18", last: "剛剛", note: "同時為平台超級管理員（T-1 測試：一人跨平台與團隊身份）" },
-    { id: "m-wang",  name: "王秀蘭", phone: "0937-221-405", rbac: "ngo",  role: "admin", email: "wang@example.tw",  status: "active",    joined: "2026-05-02", last: "10 分鐘前" },
-    { id: "m-lin2",  name: "林志明", phone: "0910-484-227", rbac: "ngo",  role: "admin",  status: "active",    joined: "2026-05-02", last: "1 小時前" },
-    { id: "m-su",    name: "蘇麗華", phone: "0928-771-934", rbac: "ngo",  role: "member", status: "active",    joined: "2026-05-04", last: "今天 08:20" },
-    { id: "m-kao",   name: "高銘輝", phone: "0987-310-665", rbac: "ngo",  role: "member", status: "active",    joined: "2026-05-06", last: "昨天 19:05" },
-    { id: "m-chen",  name: "陳小傑", phone: "0976-552-810", rbac: "ngo" , role: "member", status: "active",    joined: "2026-06-09", last: "30 分鐘前" },
-    { id: "m-yeh",   name: "葉佳穎", phone: "0955-208-441", rbac: "ngo",  role: "member", status: "active",    joined: "2026-05-12", last: "06-10" },
-    { id: "u-huang", name: "黃曉芳", phone: "0921-334-556", rbac: "ngo",  role: "member", status: "active",    joined: "2026-06-05", last: "剛剛", note: "同時為壯闊台灣管理員（一人多身份）" },
+    { id: "u-lin",   name: "林承翰", phone: "0908 211 345", rbac: "super", role: "member", status: "active", joined: "2026-06-18", last: "剛剛", note: "同時為平台超級管理員（T-1 測試：一人跨平台與團隊身份）" },
+    { id: "m-wang",  name: "王秀蘭", phone: "0937 221 405", rbac: "ngo",  role: "admin", email: "wang@example.tw",  status: "active",    joined: "2026-05-02", last: "10 分鐘前" },
+    { id: "m-lin2",  name: "林志明", phone: "0910 484 227", rbac: "ngo",  role: "admin",  status: "active",    joined: "2026-05-02", last: "1 小時前" },
+    { id: "m-su",    name: "蘇麗華", phone: "0928 771 934", rbac: "ngo",  role: "member", status: "active",    joined: "2026-05-04", last: "今天 08:20" },
+    { id: "m-kao",   name: "高銘輝", phone: "0987 310 665", rbac: "ngo",  role: "member", status: "active",    joined: "2026-05-06", last: "昨天 19:05" },
+    { id: "m-chen",  name: "陳小傑", phone: "0976 552 810", rbac: "ngo" , role: "member", status: "active",    joined: "2026-06-09", last: "30 分鐘前" },
+    { id: "m-yeh",   name: "葉佳穎", phone: "0955 208 441", rbac: "ngo",  role: "member", status: "active",    joined: "2026-05-12", last: "06-10" },
+    { id: "u-huang", name: "黃曉芳", phone: "0921 334 556", rbac: "ngo",  role: "member", status: "active",    joined: "2026-06-05", last: "剛剛", note: "同時為壯闊台灣管理員（一人多身份）" },
   ],
   t2: [
-    { id: "u-huang", name: "黃曉芳", phone: "0921-334-556", rbac: "ngo",  role: "admin", email: "huang@example.tw",  status: "active",    joined: "2026-05-03", last: "剛剛" },
-    { id: "m-lee",   name: "李國豪", phone: "0911-672-300", rbac: "ngo",  role: "member", status: "active",    joined: "2026-05-03", last: "5 分鐘前" },
-    { id: "m-chenm", name: "陳美惠", phone: "0936-115-892", rbac: "ngo",  role: "member", status: "active",    joined: "2026-05-04", last: "今天 09:55" },
-    { id: "m-liu",   name: "劉建宏", phone: "0972-440-183", rbac: "ngo",  role: "member", status: "active",    joined: "2026-05-07", last: "今天 07:42" },
-    { id: "m-chang", name: "張志偉", phone: "0918-993-247", rbac: "ngo",  role: "member", status: "active",    joined: "2026-05-15", last: "昨天 21:10" },
-    { id: "m-lin3",  name: "林雅婷", phone: "0930-562-778", rbac: "ngo",  role: "member", status: "suspended", joined: "2026-05-08", last: "06-08", statusNote: "借調離隊（團隊內暫停）" },
-    { id: "m-chou",  name: "周庭瑜", phone: "0966-301-554", rbac: "ngo" , role: "member", status: "pending",   joined: "—",          last: "—" },
-    { id: "m-panai", name: "巴奈·達瑙", phone: "0905-887-160", rbac: "ngo", role: "member", status: "active",  joined: "2026-05-20", last: "今天 06:30" },
+    { id: "u-huang", name: "黃曉芳", phone: "0921 334 556", rbac: "ngo",  role: "admin", email: "huang@example.tw",  status: "active",    joined: "2026-05-03", last: "剛剛" },
+    { id: "m-lee",   name: "李國豪", phone: "0911 672 300", rbac: "ngo",  role: "member", status: "active",    joined: "2026-05-03", last: "5 分鐘前" },
+    { id: "m-chenm", name: "陳美惠", phone: "0936 115 892", rbac: "ngo",  role: "member", status: "active",    joined: "2026-05-04", last: "今天 09:55" },
+    { id: "m-liu",   name: "劉建宏", phone: "0972 440 183", rbac: "ngo",  role: "member", status: "active",    joined: "2026-05-07", last: "今天 07:42" },
+    { id: "m-chang", name: "張志偉", phone: "0918 993 247", rbac: "ngo",  role: "member", status: "active",    joined: "2026-05-15", last: "昨天 21:10" },
+    { id: "m-lin3",  name: "林雅婷", phone: "0930 562 778", rbac: "ngo",  role: "member", status: "suspended", joined: "2026-05-08", last: "06-08", statusNote: "借調離隊（團隊內暫停）" },
+    { id: "m-chou",  name: "周庭瑜", phone: "0966 301 554", rbac: "ngo" , role: "member", status: "pending",   joined: "—",          last: "—" },
+    { id: "m-panai", name: "巴奈·達瑙", phone: "0905 887 160", rbac: "ngo", role: "member", status: "active",  joined: "2026-05-20", last: "今天 06:30" },
   ],
   t3: [
-    { id: "u-chang", name: "張育成", phone: "0921-008-664", rbac: "auditor", role: "member", status: "active", joined: "2026-06-18", last: "今天 09:18", note: "同時為平台資料檢核員（T-4 測試：切到成員身份時檢核頁要消失）" },
-    { id: "m-linp",  name: "林佩珊", phone: "0912-808-117", rbac: "ngo",  role: "admin",  status: "active", joined: "2026-05-05", last: "1 小時前" },
-    { id: "m-hsieh", name: "謝文彬", phone: "0935-664-902", rbac: "ngo",  role: "member", status: "active", joined: "2026-05-06", last: "今天 08:11" },
-    { id: "m-tsao",  name: "曹雅雯", phone: "0917-228-543", rbac: "ngo",  role: "member", status: "active", joined: "2026-05-10", last: "昨天 16:48" },
-    { id: "m-weng",  name: "翁啟峰", phone: "0961-770-235", rbac: "ngo",  role: "member", status: "active", joined: "2026-05-18", last: "06-11" },
+    { id: "u-chang", name: "張育成", phone: "0921 008 664", rbac: "auditor", role: "member", status: "active", joined: "2026-06-18", last: "今天 09:18", note: "同時為平台資料檢核員（T-4 測試：切到成員身份時檢核頁要消失）" },
+    { id: "m-linp",  name: "林佩珊", phone: "0912 808 117", rbac: "ngo",  role: "admin",  status: "active", joined: "2026-05-05", last: "1 小時前" },
+    { id: "m-hsieh", name: "謝文彬", phone: "0935 664 902", rbac: "ngo",  role: "member", status: "active", joined: "2026-05-06", last: "今天 08:11" },
+    { id: "m-tsao",  name: "曹雅雯", phone: "0917 228 543", rbac: "ngo",  role: "member", status: "active", joined: "2026-05-10", last: "昨天 16:48" },
+    { id: "m-weng",  name: "翁啟峰", phone: "0961 770 235", rbac: "ngo",  role: "member", status: "active", joined: "2026-05-18", last: "06-11" },
   ],
   t4: [
-    { id: "m-hsu",   name: "徐國堂", phone: "0989-456-230", rbac: "ngo",  role: "admin",  status: "active", joined: "2026-05-05", last: "20 分鐘前" },
-    { id: "m-kuo",   name: "郭芷瑄", phone: "0926-103-887", rbac: "ngo",  role: "member", status: "active", joined: "2026-05-05", last: "今天 09:02" },
-    { id: "m-tu",    name: "涂景翔", phone: "0978-554-019", rbac: "ngo",  role: "member", status: "active", joined: "2026-05-09", last: "昨天 14:33" },
-    { id: "m-fang",  name: "方淑娟", phone: "0919-667-482", rbac: "ngo",  role: "member", status: "active", joined: "2026-05-14", last: "06-10" },
-    { id: "m-chien", name: "錢柏宇", phone: "0958-220-794", rbac: "ngo",  role: "member", status: "active", joined: "2026-05-22", last: "06-09" },
+    { id: "m-hsu",   name: "徐國堂", phone: "0989 456 230", rbac: "ngo",  role: "admin",  status: "active", joined: "2026-05-05", last: "20 分鐘前" },
+    { id: "m-kuo",   name: "郭芷瑄", phone: "0926 103 887", rbac: "ngo",  role: "member", status: "active", joined: "2026-05-05", last: "今天 09:02" },
+    { id: "m-tu",    name: "涂景翔", phone: "0978 554 019", rbac: "ngo",  role: "member", status: "active", joined: "2026-05-09", last: "昨天 14:33" },
+    { id: "m-fang",  name: "方淑娟", phone: "0919 667 482", rbac: "ngo",  role: "member", status: "active", joined: "2026-05-14", last: "06-10" },
+    { id: "m-chien", name: "錢柏宇", phone: "0958 220 794", rbac: "ngo",  role: "member", status: "active", joined: "2026-05-22", last: "06-09" },
   ],
   t5: [
-    { id: "u-lin",   name: "林承翰", phone: "0908-211-345", rbac: "super", role: "admin",  status: "active", joined: "2026-06-18", last: "剛剛" },
+    { id: "u-lin",   name: "林承翰", phone: "0908 211 345", rbac: "super", role: "admin",  status: "active", joined: "2026-06-18", last: "剛剛" },
     { id: "m-changk", name: "張金水", phone: "03-870-1182",  rbac: "ngo", role: "admin",  status: "active",  joined: "2026-06-12", last: "剛剛" },
-    { id: "m-wu2",    name: "巫春枝", phone: "0920-455-661", rbac: "ngo", role: "member", status: "pending", joined: "—",          last: "—" },
-    { id: "m-tien",   name: "田明德", phone: "0931-094-528", rbac: "ngo", role: "member", status: "pending", joined: "—",          last: "—" },
+    { id: "m-wu2",    name: "巫春枝", phone: "0920 455 661", rbac: "ngo", role: "member", status: "pending", joined: "—",          last: "—" },
+    { id: "m-tien",   name: "田明德", phone: "0931 094 528", rbac: "ngo", role: "member", status: "pending", joined: "—",          last: "—" },
   ],
   t6: [
-    { id: "u-huang", name: "黃曉芳", phone: "0921-334-556", rbac: "ngo",   role: "member", status: "active", joined: "2026-06-18", last: "剛剛", note: "同時為壯闊台灣管理員（T-2 測試：跨型別 —— NGO 隊與政府隊）" },
+    { id: "u-huang", name: "黃曉芳", phone: "0921 334 556", rbac: "ngo",   role: "member", status: "active", joined: "2026-06-18", last: "剛剛", note: "同時為壯闊台灣管理員（T-2 測試：跨型別 —— NGO 隊與政府隊）" },
     { id: "u-wu",    name: "吳政憲", phone: "03-822-5101",  rbac: "gov", role: "admin",  status: "active", joined: "2026-05-01", last: "剛剛" },
     { id: "m-hung",  name: "洪佳蓉", phone: "03-822-5102",  rbac: "gov", role: "member", status: "active", joined: "2026-05-01", last: "今天 09:30" },
     { id: "m-chao2", name: "趙啟元", phone: "03-822-5103",  rbac: "gov", role: "member", status: "active", joined: "2026-05-02", last: "昨天 17:55" },
@@ -91,14 +91,14 @@ window.MM_ROSTERS = {
   ],
 
   t8: [
-    { id: "u-lee",   name: "李國豪", phone: "0911-672-300", rbac: "ngo",   role: "member", status: "suspended", joined: "2026-05-20", last: "06-11", note: "同時為壯闊台灣成員（T-5 測試：一隊 active、一隊 suspended）" },
-    { id: "m-pan",   name: "潘正豪", phone: "0958-114-672", rbac: "ngo", role: "admin",  status: "suspended", joined: "2026-05-06", last: "06-11" },
-    { id: "m-ku",    name: "古秀英", phone: "0924-385-710", rbac: "ngo", role: "member", status: "suspended", joined: "2026-05-07", last: "06-11" },
-    { id: "m-lo",    name: "羅竣文", phone: "0970-552-906", rbac: "ngo", role: "member", status: "suspended", joined: "2026-05-13", last: "06-10" },
+    { id: "u-lee",   name: "李國豪", phone: "0911 672 300", rbac: "ngo",   role: "member", status: "suspended", joined: "2026-05-20", last: "06-11", note: "同時為壯闊台灣成員（T-5 測試：一隊 active、一隊 suspended）" },
+    { id: "m-pan",   name: "潘正豪", phone: "0958 114 672", rbac: "ngo", role: "admin",  status: "suspended", joined: "2026-05-06", last: "06-11" },
+    { id: "m-ku",    name: "古秀英", phone: "0924 385 710", rbac: "ngo", role: "member", status: "suspended", joined: "2026-05-07", last: "06-11" },
+    { id: "m-lo",    name: "羅竣文", phone: "0970 552 906", rbac: "ngo", role: "member", status: "suspended", joined: "2026-05-13", last: "06-10" },
   ],
   t9: [
     { id: "m-lih",   name: "李火旺", phone: "03-876-4420",  rbac: "ngo", role: "admin",  status: "inactive", joined: "2026-05-04", last: "06-05" },
-    { id: "m-feng",  name: "馮國彰", phone: "0916-774-358", rbac: "ngo", role: "member", status: "inactive", joined: "2026-05-04", last: "06-04" },
+    { id: "m-feng",  name: "馮國彰", phone: "0916 774 358", rbac: "ngo", role: "member", status: "inactive", joined: "2026-05-04", last: "06-04" },
   ],
 };
 
@@ -106,18 +106,18 @@ window.MM_ROSTERS = {
 // ⚠️ 這裡的人「也可以」同時有團隊身份（2026-08-17：林承翰、張育成都加了測試隊），
 //    兩者不衝突 —— 那正是切換清單要分兩組的原因。
 window.MM_PLATFORM = [
-  { id: "u-lin",  name: "林承翰", phone: "0908-211-345", rbac: "super",   status: "active",    assigned: "2026-05-01", last: "剛剛", self: true },
-  { id: "p-chang", name: "張育成", phone: "0921-008-664", rbac: "auditor", status: "active",    assigned: "2026-06-04", last: "今天 09:18" },
-  { id: "p-su",   name: "蘇怡靜", phone: "0939-457-201", rbac: "auditor", status: "active",    assigned: "2026-06-11", last: "今天 10:02" },
-  { id: "p-kao",  name: "高世豪", phone: "0911-655-090", rbac: "auditor", status: "suspended", assigned: "2026-05-20", last: "06-02" },
+  { id: "u-lin",  name: "林承翰", phone: "0908 211 345", rbac: "super",   status: "active",    assigned: "2026-05-01", last: "剛剛", self: true },
+  { id: "p-chang", name: "張育成", phone: "0921 008 664", rbac: "auditor", status: "active",    assigned: "2026-06-04", last: "今天 09:18" },
+  { id: "p-su",   name: "蘇怡靜", phone: "0939 457 201", rbac: "auditor", status: "active",    assigned: "2026-06-11", last: "今天 10:02" },
+  { id: "p-kao",  name: "高世豪", phone: "0911 655 090", rbac: "auditor", status: "suspended", assigned: "2026-05-20", last: "06-02" },
 ];
 
 // 審核佇列。audience: "super"（平台角色申請）或 teamId（加入該團隊的申請）
 window.MM_QUEUE = [
-  { id: "q1", audience: "super", kind: "platform-role", applicant: "蔡承佑", phone: "0922-417-836", current: "前台帳號", request: "資料檢核員", time: "今天 09:12", note: "災後曾於光復鄉協助資料核對 14 天，熟悉站點與單據格式。" },
-  { id: "q2", audience: "super", kind: "platform-role", applicant: "鄭文龍", phone: "0933-805-114", current: "前台帳號", request: "政府",   time: "昨天 17:40", note: "花蓮縣消防局第三大隊聯絡官，需檢視轄區任務單據。" },
-  { id: "q3", audience: "t2",    kind: "join-team",     applicant: "王俊凱", phone: "0987-226-905", request: "加入「壯闊台灣」", time: "今天 08:55", note: "光復在地居民，平日可支援上午時段清淤與物資搬運。" },
-  { id: "q4", audience: "t2",    kind: "qr-pending",    applicant: "馬耀·谷木", phone: "0905-371-448", request: "掃描成員邀請 QR", time: "今天 10:21", note: "已完成手機 OTP 驗證，等待該隊管理員確認。" },
+  { id: "q1", audience: "super", kind: "platform-role", applicant: "蔡承佑", phone: "0922 417 836", current: "前台帳號", request: "資料檢核員", time: "今天 09:12", note: "災後曾於光復鄉協助資料核對 14 天，熟悉站點與單據格式。" },
+  { id: "q2", audience: "super", kind: "platform-role", applicant: "鄭文龍", phone: "0933 805 114", current: "前台帳號", request: "政府",   time: "昨天 17:40", note: "花蓮縣消防局第三大隊聯絡官，需檢視轄區任務單據。" },
+  { id: "q3", audience: "t2",    kind: "join-team",     applicant: "王俊凱", phone: "0987 226 905", request: "加入「壯闊台灣」", time: "今天 08:55", note: "光復在地居民，平日可支援上午時段清淤與物資搬運。" },
+  { id: "q4", audience: "t2",    kind: "qr-pending",    applicant: "馬耀·谷木", phone: "0905 371 448", request: "掃描成員邀請 QR", time: "今天 10:21", note: "已完成手機 OTP 驗證，等待該隊管理員確認。" },
 ];
 
 // Audit Log。scope: "platform" 或 teamId；cat: team / member / rbac / qr
@@ -135,3 +135,14 @@ window.MM_AUDIT = [
   { id: "a11", time: "06-04 13:50", actor: "林承翰", action: "指派 張育成 為資料檢核員",                            cat: "rbac",   scope: "platform" },
   { id: "a12", time: "05-28 08:30", actor: "林承翰", action: "建立團隊「壯闊台灣」並產生 團隊邀請 QR（72 小時）",     cat: "team",   scope: "platform" },
 ];
+
+// 🆕 2026-10-16 空白版（js/shared/wg-blank.js 設 WG_BLANK）：給 PM 看每一頁的空白狀態。只在 /blank/ 生效
+// 10-16 改：全部清空 —— 沒有團隊、沒有成員；全平台人員只剩登入中的超級管理員自己（他一定存在）
+// 角色視角的其他人仍可切換，但不屬於任何團隊（全新部署本來就還沒有人加入）
+if (window.WG_BLANK) {
+  window.MM_TEAMS.length = 0;
+  Object.keys(window.MM_ROSTERS).forEach((t) => { delete window.MM_ROSTERS[t]; });
+  window.MM_PLATFORM = window.MM_PLATFORM.filter((p) => p.id === "u-lin");
+  window.MM_QUEUE.length = 0; window.MM_AUDIT.length = 0;
+  Object.values(window.MM_PERSONAS).forEach((p) => { p.teams = []; if (p.rbac === "ngo" || p.rbac === "gov") p.title = "尚未加入團隊"; });
+}

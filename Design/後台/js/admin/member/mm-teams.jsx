@@ -39,6 +39,10 @@
   function SuperTeamsView() {
     const mm = useMM();
     const [selectedId, setSelectedId] = React.useState("t2");
+    // 2026-11-01 多裝置（WG-RWD-108）：手機先看團隊清單，點一隊才進詳情（有「所有團隊」返回鈕）；平板清單收窄到 240
+    const bp = window.useWGBreakpoint ? window.useWGBreakpoint() : "desktop";
+    const isPhone = bp === "phone";
+    const [phoneDetail, setPhoneDetail] = React.useState(false);
     const [query, setQuery] = React.useState("");
     const [create, setCreate] = React.useState(false);
     const [invite, setInvite] = React.useState(null);
@@ -46,6 +50,24 @@
 
     const teams = mm.teams.filter((t) => !query || t.name.includes(query));
     const team = mm.teams.find((t) => t.id === selectedId) || mm.teams[0];
+
+    // 🔴 2026-10-16 修：一個團隊都沒有時（全新部署的第一個畫面）`team` 是 undefined，
+    //    下一行讀 team.id 整頁白掉。❌ 不可以把這段拿掉或移到 hooks 之後的別處 —— 早退要在讀 team 之前
+    if (!team) {
+      return (
+        <Card style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, textAlign: "center", padding: "48px 24px" }}>
+          <Icon n="Building2" s={36} c="var(--color-fg-neutral-muted)" />
+          <div className="wg-h600" style={{ color: "var(--color-fg-neutral-subtle)" }}>還沒有任何團隊</div>
+          <div className="wg-caption" style={{ color: "var(--color-fg-neutral-muted)", lineHeight: 1.8, maxWidth: 520 }}>
+            團隊是平台上做事的單位：政府單位與非政府組織各自成一隊。<br />
+            任務單、資源站點、互助地圖的責任區都是指派給團隊的 —— 所以開站後通常先建團隊。<br />
+            建好之後產生邀請 QR，讓夥伴掃碼加入。
+          </div>
+          <Button variant="primary" startIcon={<Icon n="Plus" s={17} />} onClick={() => setCreate(true)}>新增團隊</Button>
+          {create && <window.CreateTeamModal onClose={() => setCreate(false)} />}
+        </Card>
+      );
+    }
     const roster = mm.rosters[team.id] || [];
     const adminCount = roster.filter((r) => r.role === "admin").length;
 
@@ -61,23 +83,28 @@
     ];
 
     return (
-      <div style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: 20, alignItems: "start" }}>
+      <div style={{ display: "grid", gridTemplateColumns: isPhone ? "minmax(0, 1fr)" : bp === "tablet" ? "240px minmax(0, 1fr)" : "300px minmax(0, 1fr)", gap: isPhone ? 12 : 20, alignItems: "start" }}>
         {/* 左：團隊列表 */}
-        <Card padding="16px" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        {!(isPhone && phoneDetail) && <Card padding="16px" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <Button variant="primary" startIcon={<Icon n="Plus" s={17} />} onClick={() => setCreate(true)} style={{ width: "100%" }}>新增團隊</Button>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, height: 38, padding: "0 12px", borderRadius: "var(--radius-full)", background: "var(--color-bg-neutral-subtle)", boxShadow: "inset 0 0 0 1px var(--color-border-default)" }}>
-            <Icon n="Search" s={16} c="var(--color-fg-neutral-muted)" />
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜尋團隊…" style={{ flex: 1, minWidth: 0, border: "none", background: "transparent", outline: "none", font: "var(--font-body-300)", color: "var(--color-fg-neutral-default)" }} />
-          </div>
+          {/* 2026-11-01 共用搜尋框 sm（INP-103）：側欄裡用 36px，跟上面的「新增團隊」不同高沒關係 —— 不在同一列 */}
+          <WGSearch size="sm" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜尋團隊…" aria-label="搜尋團隊"
+            icon={<Icon n="Search" s={16} c="var(--color-fg-neutral-muted)" />} style={{ width: "100%" }} />
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             {teams.map((t) => (
-              <TeamRailItem key={t.id} team={t} active={t.id === team.id} count={(mm.rosters[t.id] || []).length} onClick={() => setSelectedId(t.id)} />
+              <TeamRailItem key={t.id} team={t} active={t.id === team.id} count={(mm.rosters[t.id] || []).length} onClick={() => { setSelectedId(t.id); setPhoneDetail(true); }} />
             ))}
           </div>
-        </Card>
+        </Card>}
 
         {/* 右：團隊詳情 */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
+        {!(isPhone && !phoneDetail) && <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
+          {isPhone && (
+            <button type="button" data-wg-back onClick={() => setPhoneDetail(false)}
+              style={{ alignSelf: "flex-start", display: "inline-flex", alignItems: "center", gap: 4, minHeight: 44, padding: "0 6px", border: "none", background: "transparent", cursor: "pointer", font: "var(--font-label-400)", color: "var(--color-brand-secondary-default)" }}>
+              <Icon n="ChevronLeft" s={18} c="currentColor" />所有團隊
+            </button>
+          )}
           {team.status === "suspended" && (
             <Alert tone="danger" title={`此團隊已暫停 — ${team.statusNote || ""}`}>
               暫停期間成員無法存取本隊的任務與資料，原資料保留。
@@ -125,11 +152,8 @@
             </div>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               <StatPill icon="Users" label="成員" value={roster.length} />
-              {/* 2026-08-17：比照「我的團隊」拿掉常駐紅色。
-                  ⚠️ 這裡的條件是 `=== 0`，不是 `<= 1` —— 「一個運作中的團隊沒有任何管理員」
-                  是真正的異常狀態（EA1 被破壞），不是提醒。這種情況保留 danger 是對的，
-                  因為它確實需要超級管理員介入指派接班人。*/}
-              <StatPill icon="KeySquare" label="管理員" value={adminCount} tone={adminCount === 0 ? "danger" : undefined} />
+              {/* TEAM-ADMIN-103（Sucre 11-04）：管理員 0 不用紅色，紅色讀起來像系統出錯。下面的黃色提示條負責說明要怎麼處理。 */}
+              <StatPill icon="KeySquare" label="管理員" value={adminCount} />
               <StatPill icon="MapPin" label="認領 Zone" value={team.zones.length ? team.zones.join("、") : "—"} />
               <StatPill icon="ClipboardList" label="Ticket" value={team.tickets} />
             </div>
@@ -144,12 +168,12 @@
 
           <Card padding="0">
             <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "16px 16px 6px" }}>
-              <h3 className="wg-h600" style={{ margin: 0, fontSize: 17, flex: 1 }}>成員名單</h3>
+              <h3 className="wg-h600" style={{ margin: 0, fontSize: 17, flex: 1, minWidth: 96, whiteSpace: "nowrap" }}>成員名單</h3>
               <span className="wg-caption" style={{ color: "var(--color-fg-neutral-muted)" }}>超級管理員全域可見；各隊的管理員只看得到自己那一隊</span>
             </div>
             <MemberTable rows={roster} actionsFor={team.status === "active" ? memberActions : null} />
           </Card>
-        </div>
+        </div>}
 
         {create && <window.CreateTeamModal onClose={() => setCreate(false)} />}
         {invite && <window.InviteMemberModal team={invite} onClose={() => setInvite(null)} />}
@@ -231,9 +255,11 @@
                   <span style={{ gridColumn: "3 / 6", font: "var(--font-body-300)", color: "var(--color-fg-neutral-muted)" }}>還沒有管理員</span>
                 ) : (
                   <div style={{ gridColumn: "3 / 6", display: "grid", gridTemplateColumns: adminCols, gap: isPhone ? 0 : "6px 12px", width: isPhone ? "100%" : undefined }}>
+                    {/* TEAM-ADMIN-101 手機：卡片裡標「管理員」、名字不用隊名那種粗字，不然名字跟隊名相同時看起來印了兩次。 */}
+                    {isPhone && <span className="wg-caption" style={{ color: "var(--color-fg-neutral-muted)", marginBottom: 4 }}>管理員</span>}
                     {admins.map((a) => (
                       <React.Fragment key={a.id}>
-                        <span style={{ font: isPhone ? "var(--font-label-400)" : "var(--font-body-300)", color: "var(--color-fg-neutral-default)", marginTop: isPhone ? 6 : 0 }}>{a.name}</span>
+                        <span style={{ font: "var(--font-body-300)", color: "var(--color-fg-neutral-default)", marginTop: isPhone ? 6 : 0 }}>{a.name}</span>
                         <span style={{ font: "var(--font-data-300)", color: "var(--color-fg-neutral-subtle)" }}>{a.phone || "—"}</span>
                         <span style={{ font: "var(--font-body-300)", color: "var(--color-fg-neutral-subtle)", overflowWrap: "anywhere" }}>{a.email || ""}</span>
                       </React.Fragment>
