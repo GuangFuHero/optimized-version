@@ -1,16 +1,24 @@
 """The team directory the 申請成為後台人員 form picks from (Spec/026, `roleRequestTeams`).
 
 An applicant is in no team yet, and `GET /admin/teams` lists only the caller's own, so the form
-needs its own list: every active team, by name, with nothing beyond what the picker shows.
+needs its own list: every active team, by name. Team admins and super admins also read each team's
+admins there, so admins of different teams can reach each other (ADR-357 point 5).
 """
 
 import uuid
 from datetime import UTC, datetime
 
 import pytest
+from sqlalchemy import event
 
-from app.models.rbac import Role
+from app.core.identity import encode_act
+from app.core.security import create_access_token
+from app.db.session import engine as app_engine
+from app.models.auth import User, UserContact
+from app.models.rbac import Role, UserRoleAssign
 from app.models.team import Team
+from app.repositories.session_repository import SessionRepository
+from tests.conftest import ensure_role
 from tests.test_graphql.conftest import _create_user_with_role, auth_header
 from tests.test_graphql.conftest import test_db as graphql_db  # renamed so pytest does not collect it
 
@@ -103,12 +111,248 @@ async def test_type_narrows_the_list(client, redis):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("field", ["taxId", "contactName", "contactPhone", "status", "members"])
-async def test_the_entry_has_nothing_beyond_uuid_name_and_type(client, redis, field):
-    """Tax ID, contact and members stay behind team.view (ADR-357 point 5)."""
+@pytest.mark.parametrize("field", ["taxId", "status", "members", "contactName", "contactPhone"])
+async def test_the_entry_has_nothing_beyond_uuid_name_type_and_admins(client, redis, field):
+    """Tax ID, status, members and the team's own contact stay behind team.view (ADR-357 point 5)."""
     token = await _plain_user_token(redis)
     query = "{ roleRequestTeams { uuid " + field + " } }"
 
     response = await client.post("/graphql", json={"query": query}, headers=auth_header(token))
 
     assert response.json()["errors"][0]["message"].startswith(f"Cannot query field '{field}'")
+
+
+ADMINS = "{ roleRequestTeams { uuid admins { name phone email } } }"
+
+
+def _phone() -> str:
+    """A phone number no other test uses: contact values are unique across accounts."""
+    return f"+8869{uuid.uuid4().int % 10**8:08d}"
+
+
+def _email() -> str:
+    """An email no other test uses."""
+    return f"admin-{uuid.uuid4().hex[:12]}@example.test"
+
+
+async def _team(**row) -> str:
+    """One team, active unless `row` says otherwise, under a name of its own; its uuid."""
+    teams = await _teams({"name": f"名錄-{uuid.uuid4().hex[:8]}", "type": "ngo", **row})
+    return next(iter(teams.values()))
+
+
+async def _team_with_admins(*admins: dict, **row) -> tuple[str, list[dict]]:
+    """A team whose admins are new accounts shaped by `admins`; its uuid and the entries it should list.
+
+    Each dict may give `name`, `real_name`, a verified `phone` and `email`, an `unverified_phone` or
+    `unverified_email`, and `deleted` for a soft-deleted account, which is not listed.
+    """
+    team_uuid = await _team(**row)
+    async with graphql_db() as db:
+        role = await ensure_role(db, "admin", kind="team")
+        for admin in admins:
+            user = User(
+                name=admin.get("name", f"acct_{uuid.uuid4().hex[:8]}"),
+                real_name=admin.get("real_name"),
+                delete_at=datetime.now(UTC) if admin.get("deleted") else None,
+            )
+            db.add(user)
+            await db.flush()
+            db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid, team_uuid=team_uuid))
+            for kind in ("phone", "email"):
+                for key, verified in ((kind, True), (f"unverified_{kind}", False)):
+                    if admin.get(key):
+                        db.add(
+                            UserContact(user_uuid=user.uuid, type=kind, value=admin[key], verified=verified)
+                        )
+            admin["name"] = user.name
+    listed = [
+        {"name": a.get("real_name") or a["name"], "phone": a.get("phone"), "email": a.get("email")}
+        for a in admins
+        if not a.get("deleted")
+    ]
+    return team_uuid, sorted(listed, key=lambda entry: entry["name"])
+
+
+async def _token(redis, *, platform: str, team_grants: tuple[tuple[str, str], ...] = ()) -> str:
+    """A token acting as the platform role `platform`; the account also holds each (role, team uuid) given.
+
+    Acting as the platform role shows the answer depends on what the account holds, not on the identity it
+    acts as.
+    """
+    async with graphql_db() as db:
+        user = User(name=f"dir_{uuid.uuid4().hex[:8]}")
+        db.add(user)
+        platform_role = await ensure_role(db, platform)
+        await db.flush()
+        db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=platform_role.uuid))
+        for team_role, team_uuid in team_grants:
+            role = await ensure_role(db, team_role, kind="team")
+            db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid, team_uuid=team_uuid))
+        user_uuid, role_uuid = str(user.uuid), str(platform_role.uuid)
+    act = encode_act(role_uuid, None)
+    sid, _ = await SessionRepository(redis).create_session(user_uuid, "test", act=act)
+    return create_access_token(data={"sub": user_uuid}, sid=sid, act=act)
+
+
+async def _post_query(client, token: str | None, query: str) -> dict:
+    headers = auth_header(token) if token else {}
+    return (await client.post("/graphql", json={"query": query}, headers=headers)).json()
+
+
+async def _admins(client, token: str) -> dict[str, list[dict] | None]:
+    """Each listed team's `admins` by uuid, sorted by name so the database collation does not matter."""
+    body = await _post_query(client, token, ADMINS)
+    assert "errors" not in body, body
+    return {
+        team["uuid"]: None if team["admins"] is None else sorted(team["admins"], key=lambda a: a["name"])
+        for team in body["data"]["roleRequestTeams"]
+    }
+
+
+async def _add_member(team_uuid: str) -> None:
+    """A `member` of the team with a real name and verified contacts, whom the directory must not list."""
+    async with graphql_db() as db:
+        role = await ensure_role(db, "member", kind="team")
+        user = User(name=f"member_{uuid.uuid4().hex[:8]}", real_name="隊員")
+        db.add(user)
+        await db.flush()
+        db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid, team_uuid=team_uuid))
+        db.add_all(
+            [
+                UserContact(user_uuid=user.uuid, type="phone", value=_phone(), verified=True),
+                UserContact(user_uuid=user.uuid, type="email", value=_email(), verified=True),
+            ]
+        )
+
+
+async def _directory() -> dict[str, list[dict]]:
+    """A team with two admins (one fully filled in, one with only an account name) and a team with none.
+
+    The second admin's email was never verified, so it is not listed; each team also has a member, who is not.
+    """
+    two, two_listed = await _team_with_admins(
+        {"name": "帳號甲", "real_name": "王小明", "phone": _phone(), "email": _email()},
+        {"name": "帳號乙", "phone": _phone(), "unverified_email": _email()},
+    )
+    none, none_listed = await _team_with_admins(type="gov")
+    for team_uuid in (two, none):
+        await _add_member(team_uuid)
+    return {two: two_listed, none: none_listed}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("own_type", ["gov", "ngo"])
+async def test_a_team_admin_reads_every_teams_admins(client, redis, own_type):
+    """A government or NGO team's admin reads the admins of every active team, not only their own."""
+    expected = await _directory()
+    own = await _team(type=own_type)
+    token = await _token(redis, platform="plain-holder", team_grants=(("admin", own),))
+
+    admins = await _admins(client, token)
+
+    assert {uuid_: admins[uuid_] for uuid_ in expected} == expected
+    assert len(admins[own]) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_super_admin_reads_every_teams_admins(client, redis):
+    """A super admin is in no team and still reads every team's admins."""
+    expected = await _directory()
+    token = await _token(redis, platform="super_admin")
+
+    admins = await _admins(client, token)
+
+    assert {uuid_: admins[uuid_] for uuid_ in expected} == expected
+    assert all(entry is not None for entry in admins.values())
+
+
+@pytest.mark.asyncio
+async def test_each_admin_is_listed_with_verified_contacts_and_a_name(client, redis):
+    """Both live admins are listed; no real name shows the account name, unverified contacts are null.
+
+    A soft-deleted account's grant is left out.
+    """
+    phone, email = _phone(), _email()
+    team, _ = await _team_with_admins(
+        {"name": "帳號甲", "real_name": "王小明", "phone": phone, "email": email},
+        {"name": "帳號乙", "unverified_phone": _phone(), "unverified_email": _email()},
+        {"name": "帳號丙", "real_name": "已刪除", "phone": _phone(), "deleted": True},
+    )
+    token = await _token(redis, platform="super_admin")
+
+    admins = (await _admins(client, token))[team]
+
+    assert admins == [
+        {"name": "帳號乙", "phone": None, "email": None},
+        {"name": "王小明", "phone": phone, "email": email},
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "caller",
+    [
+        "member of an active team",
+        "data auditor",
+        "applicant in no team",
+        "admin of a suspended team only",
+        "admin of a deleted team only",
+        "admin of a suspended team and member of an active one",
+    ],
+)
+async def test_anyone_else_reads_no_admins(client, redis, caller):
+    """Members, data auditors, applicants and admins of a team that is off get null for every team."""
+    expected = await _directory()
+    grants = {
+        "member of an active team": (("member", await _team()),),
+        "data auditor": (),
+        "applicant in no team": (),
+        "admin of a suspended team only": (("admin", await _team(status="suspended")),),
+        "admin of a deleted team only": (("admin", await _team(delete_at=datetime.now(UTC))),),
+        "admin of a suspended team and member of an active one": (
+            ("admin", await _team(status="suspended")),
+            ("member", await _team()),
+        ),
+    }[caller]
+    platform = "data_auditor" if caller == "data auditor" else "plain-holder"
+    token = await _token(redis, platform=platform, team_grants=grants)
+
+    admins = await _admins(client, token)
+
+    assert set(expected) <= set(admins)
+    assert set(map(type, admins.values())) == {type(None)}
+
+
+@pytest.mark.asyncio
+async def test_the_query_count_does_not_grow_with_the_teams(client, redis):
+    """Every team's admins come in one query, however many teams there are."""
+    await _directory()
+    token = await _token(redis, platform="super_admin")
+
+    async def statements() -> int:
+        seen = []
+
+        def on_execute(conn, cursor, statement, params, context, executemany):
+            seen.append(statement)
+
+        event.listen(app_engine.sync_engine, "before_cursor_execute", on_execute)
+        try:
+            await _admins(client, token)
+        finally:
+            event.remove(app_engine.sync_engine, "before_cursor_execute", on_execute)
+        return len(seen)
+
+    before = await statements()
+    for _ in range(3):
+        await _team_with_admins({"phone": _phone(), "email": _email()}, {"real_name": "副管理員"})
+
+    assert await statements() == before
+
+
+@pytest.mark.asyncio
+async def test_a_guest_is_refused_the_admins_too(client):
+    """Asking for the admins does not open the list to signed-out callers."""
+    body = await _post_query(client, None, ADMINS)
+
+    assert body["errors"][0]["message"].startswith("401")

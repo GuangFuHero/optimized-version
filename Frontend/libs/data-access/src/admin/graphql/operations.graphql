@@ -589,15 +589,19 @@ query AdminTicketPropertyConfigs(
     isActive
   }
 }
-# Every active team's name and type (Spec/026): the 所有團隊 directory a team identity reads,
-# since `GET /admin/teams` lists only its own team.
+# Every active team's name, type and admins (Spec/026): the 所有團隊 directory, since
+# `GET /admin/teams` lists only one's own team. `admins` is null for a caller who is neither a
+# team admin nor a super admin (ADR-357 point 5).
 query AdminTeamDirectory {
   roleRequestTeams {
     uuid
     name
     type
-    contactName
-    contactPhone
+    admins {
+      name
+      phone
+      email
+    }
   }
 }
 

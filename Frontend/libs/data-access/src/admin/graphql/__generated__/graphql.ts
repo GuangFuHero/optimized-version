@@ -1341,10 +1341,8 @@ export type RoleRequestStatus =
   (typeof RoleRequestStatus)[keyof typeof RoleRequestStatus];
 export type RoleRequestTeam = {
   __typename?: 'RoleRequestTeam';
-  /** In `roleRequestTeams` for a caller holding a team identity or super admin, else null */
-  contactName?: Maybe<Scalars['String']['output']>;
-  /** In `roleRequestTeams` for a caller holding a team identity or super admin, else null */
-  contactPhone?: Maybe<Scalars['String']['output']>;
+  /** Every admin of the team, `[]` if it has none, in `roleRequestTeams` for a caller who is a team admin or super admin. Null for anyone else, and always null on a role request's `team` and `grantedTeam` */
+  admins?: Maybe<Array<TeamAdmin>>;
   name: Scalars['String']['output'];
   type: RoleRequestTeamType;
   uuid: Scalars['UUID']['output'];
@@ -1806,6 +1804,16 @@ export type TaskPropertyType = {
   /** UUID of the parent ticket task */
   taskUuid: Scalars['String']['output'];
   uuid: Scalars['UUID']['output'];
+};
+
+export type TeamAdmin = {
+  __typename?: 'TeamAdmin';
+  /** The account's verified email, if any */
+  email?: Maybe<Scalars['String']['output']>;
+  /** The real name given on applying, else the account name */
+  name: Scalars['String']['output'];
+  /** The account's verified phone, if any */
+  phone?: Maybe<Scalars['String']['output']>;
 };
 
 export type TeamZoneConnection = {
@@ -3239,8 +3247,12 @@ export type AdminTeamDirectoryQuery = {
     uuid: string;
     name: string;
     type: RoleRequestTeamType;
-    contactName?: string | null;
-    contactPhone?: string | null;
+    admins?: Array<{
+      __typename?: 'TeamAdmin';
+      name: string;
+      phone?: string | null;
+      email?: string | null;
+    }> | null;
   }>;
 };
 
@@ -7951,10 +7963,17 @@ export const AdminTeamDirectoryDocument = {
                 { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'name' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'type' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },
                 {
                   kind: 'Field',
-                  name: { kind: 'Name', value: 'contactPhone' },
+                  name: { kind: 'Name', value: 'admins' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      { kind: 'Field', name: { kind: 'Name', value: 'name' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'phone' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'email' } },
+                    ],
+                  },
                 },
               ],
             },

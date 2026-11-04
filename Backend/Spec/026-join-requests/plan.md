@@ -136,13 +136,13 @@ export TEST_REDIS_URL="redis://localhost:6394/15"
 
 **Files:** `app/graphql/role_requests/queries.py`、`types.py`、`app/repositories/team_repository.py`
 
-- [ ] `roleRequestTeams(type: GOV|NGO = null)` → `[{ uuid, name, type }]`，只列 `status='active'` 且未刪除，依名稱排序
-- [ ] 需登入，不檢查 capability；不回稅籍、聯絡人、成員
+- [ ] `roleRequestTeams(type: GOV|NGO = null)` → `[{ uuid, name, type, admins: [{ name, phone, email }] }]`，只列 `status='active'` 且未刪除，依名稱排序
+- [ ] 需登入，不檢查 capability；`admins`（每隊所有團隊管理員的實名、已驗證電話、已驗證 Email）只給在啟用團隊當 `admin` 的人和超級管理員，沒有管理員的隊回 `[]`，其他人為 null；所有隊一次查完；不回稅籍、狀態、成員、團隊聯絡窗口（ADR-357 point 5）
 
 **Tests:** `tests/test_graphql/test_role_request_teams.py`（新）
 - 未登入 → 401；登入的一般使用者看得到全部啟用中團隊
 - 停用、已刪除的團隊不出現；`type` 篩選正確
-- 回應欄位只有 `uuid`／`name`／`type`
+- 回應欄位只有 `uuid`／`name`／`type`／`admins`；`admins` 給團隊管理員（政府、NGO）和超級管理員，成員、資料檢核員、沒有團隊身分、只在停用或已刪除團隊當管理員的人拿到 null；沒有管理員的隊 `[]`、兩位管理員都列；沒有已驗證 Email 為 null、沒有實名用帳號名稱；查詢數不隨團隊數增加
 
 ## Task 3: 送出申請帶團隊與申請人資料
 

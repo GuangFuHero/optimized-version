@@ -120,7 +120,7 @@ No `revoked_at`, no `max_uses`, no `uses` (BE-038 step 1). The table is in `AUDI
 
 | Column | Type | Notes |
 |---|---|---|
-| `contact_name` | varchar(100) NULL | Shown where the team is already visible — its own members and super admins, not other teams (ADR-357 point 5) |
+| `contact_name` | varchar(100) NULL | Shown to the team's own members and super admins in `TeamResponse`; not in `roleRequestTeams` (ADR-357 point 5) |
 | `contact_phone` | varchar(20) NULL | Same |
 
 `status` (exists, default `active`) gains the value `suspended` with a CHECK on the two; there is no disbanding
@@ -139,6 +139,7 @@ One new capability, `team.audit.view` (ADR-358). Who may do what:
 | Review list | `role_request.review` → every request. Otherwise `team.member.manage` at `team` → member requests for the caller's active team |
 | Decide a member request | `role_request.review`, or `team.member.manage` covering the request's team |
 | Decide a new-team or data auditor request | `role_request.review` only |
+| Read every team's admins in `roleRequestTeams` | Holds the team role `admin` in an active team, or super admin; no capability (ADR-357 point 5) |
 
 Team admins reusing `team.member.manage` (ADR-354): approving a member is adding a member, which the
 capability already allows; a separate capability would always be granted with it.
@@ -151,7 +152,7 @@ capability already allows; a separate capability would always be granted with it
 |---|---|
 | `submitRoleRequest(input)` | `input` gains `teamUuid`, `newTeamName`, `name`, `email`; loses `contact`. Phone is not in the input: it is the account's verified phone |
 | `myRoleRequests` | Each request gains `team { uuid, name }`, `grantedTeam { uuid, name, type }` (ADR-418), `newTeamName`, `viaInvite`, `applicantName`, `applicantPhone` (masked), `applicantEmail`. `canApply` keeps its name: no pending request and `role_request.add` on; it no longer requires having no back-office identity (ADR-351) |
-| `roleRequestTeams(type: GOV \| NGO)` *(new)* | The public team directory: active teams only, `[{ uuid, name, type }]`, by name; `type` optional. Signed in, no capability. Nothing else about a team (tax ID, contact, members) — `team.view` is not widened (ADR-357 point 5) |
+| `roleRequestTeams(type: GOV \| NGO)` *(new)* | The team directory: active teams only, `[{ uuid, name, type, admins: [{ name, phone, email }] }]`, by name; `type` optional. Signed in, no capability. `admins` lists every team admin (real name else account name, verified phone, verified email) for a caller who is a team admin in an active team or a super admin, `[]` for a team with none, null for everyone else. No tax ID, status or members — `team.view` is not widened (ADR-357 point 5) |
 | `withdrawRoleRequest` | Unchanged |
 
 New refusals on submit (message is the contract):
@@ -222,7 +223,7 @@ Approval does not also send `team_member_added`; the approval notice says it.
 |---|---|---|
 | Last-admin guard | `add_team_member` (changing an `admin` to another role) and `remove_team_member` refuse when the target is the team's only `admin`: 409 `Cannot remove the team's only admin`. Locks the team's admin rows `FOR UPDATE`, as `_remaining_super_admins` does (ADR-356) | Designed |
 | Last-super-admin guard | Already enforced in `assign_role` and `rbac_admin` user-role revoke (ADR-032, ADR-056). Only tests are added for the paths BE-038 names | Exists |
-| Team contact fields | `contact_name`, `contact_phone` on `teams`; in `TeamResponse`, visible where the team already is — not to other teams (ADR-356, ADR-357 point 5) | Designed |
+| Team contact fields | `contact_name`, `contact_phone` on `teams`; in `TeamResponse` for the team's own members and super admins. The team directory lists each team's admins instead (ADR-356, ADR-357 point 5) | Designed |
 | Team edit | `PATCH /api/v1/admin/teams/{uuid}`: name, tax ID, contact fields. Super admin any team, team admin own team, via `team.edit` (seed adds `admin` at `team`) (ADR-357) | Designed |
 | Suspend / restore | `POST /api/v1/admin/teams/{uuid}/status`, super admin only. Suspended: grants kept but give no permission, identity cannot be used. No disbanding (ADMIN-027 Story 4, ADR-357) | Designed |
 | Member list | `GET /api/v1/admin/teams/{uuid}/members` on a user directory base shared with `/admin/users` (ADR-362) | Designed |
@@ -235,8 +236,9 @@ Chinese as Spec 019 does.
 
 ### User site — 申請成為後台人員
 
-1. **Team list**: `roleRequestTeams(type: GOV | NGO)` → `[{ uuid, name, type }]`. 政府單位人員 asks for `GOV`,
-   社福團體人員 for `NGO`. The form's last option, 「＋ 清單裡沒有，建立新的單位／團隊」, sends `newTeamName` instead.
+1. **Team list**: `roleRequestTeams(type: GOV | NGO)` → `[{ uuid, name, type, admins }]`; the
+   form reads `uuid`, `name` and `type`. 政府單位人員 asks for `GOV`, 社福團體人員 for `NGO`. The form's last
+   option, 「＋ 清單裡沒有，建立新的單位／團隊」, sends `newTeamName` instead.
 2. **Phone first** (phone only, by the team's decision): if `/users/me` has no verified phone, add one with
    the contact flow before submitting:
    `POST /api/v1/auth/contacts` then `POST /api/v1/auth/contacts/verify`. **An account that already has a
