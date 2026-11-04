@@ -6,7 +6,7 @@
  * against the buttons in front of them: a line naming a button they do not have reads as a broken
  * page or a wrong account.
  *
- * Left out until the page they describe is in: 互助地圖 (its areas), 重複審核, 團隊, 成員與權限 —
+ * Left out until the page they describe is in: 互助地圖 (its areas), 重複審核, 成員與權限 —
  * the prototype has their words. The 權限 tables follow the permissions as decided, which the
  * backend is still being brought up to; ask before matching them to its grants instead.
  */
@@ -136,6 +136,16 @@ export const ADMIN_PAGE_HELP: Partial<Record<string, PageHelp>> = {
     what: '志工出發前須知：如何參與、交通、攜帶物品、注意事項。',
     can: ['發布到前台或下架', '查看過去版本'],
     note: '前台一次只顯示一份，發布新版會取代舊版。',
+  },
+  '/teams': {
+    title: '團隊',
+    what: '管理自己團隊的成員，也找得到其他團隊的管理員。',
+    can: [
+      '查看各隊管理員的電話與 Email',
+      '管理自己團隊的成員',
+      '審核加入團隊的申請',
+    ],
+    note: '只有團隊管理員與超級管理員看得到這一頁。',
   },
   '/settings': {
     title: '設定',
