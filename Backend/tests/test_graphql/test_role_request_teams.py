@@ -144,31 +144,32 @@ async def _team(**row) -> str:
 async def _team_with_admins(*admins: dict, **row) -> tuple[str, list[dict]]:
     """A team whose admins are new accounts shaped by `admins`; its uuid and the entries it should list.
 
-    Each dict may give `name`, `real_name`, a verified `phone` and `email`, and an `unverified_email`.
+    Each dict may give `name`, `real_name`, a verified `phone` and `email`, an `unverified_phone` or
+    `unverified_email`, and `deleted` for a soft-deleted account, which is not listed.
     """
     team_uuid = await _team(**row)
     async with graphql_db() as db:
         role = await ensure_role(db, "admin", kind="team")
         for admin in admins:
             user = User(
-                name=admin.get("name", f"acct_{uuid.uuid4().hex[:8]}"), real_name=admin.get("real_name")
+                name=admin.get("name", f"acct_{uuid.uuid4().hex[:8]}"),
+                real_name=admin.get("real_name"),
+                delete_at=datetime.now(UTC) if admin.get("deleted") else None,
             )
             db.add(user)
             await db.flush()
             db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid, team_uuid=team_uuid))
             for kind in ("phone", "email"):
-                if admin.get(kind):
-                    db.add(UserContact(user_uuid=user.uuid, type=kind, value=admin[kind], verified=True))
-            if admin.get("unverified_email"):
-                db.add(
-                    UserContact(
-                        user_uuid=user.uuid, type="email", value=admin["unverified_email"], verified=False
-                    )
-                )
+                for key, verified in ((kind, True), (f"unverified_{kind}", False)):
+                    if admin.get(key):
+                        db.add(
+                            UserContact(user_uuid=user.uuid, type=kind, value=admin[key], verified=verified)
+                        )
             admin["name"] = user.name
     listed = [
         {"name": a.get("real_name") or a["name"], "phone": a.get("phone"), "email": a.get("email")}
         for a in admins
+        if not a.get("deleted")
     ]
     return team_uuid, sorted(listed, key=lambda entry: entry["name"])
 
@@ -250,11 +251,15 @@ async def test_a_super_admin_reads_every_teams_admins(client, redis):
 
 @pytest.mark.asyncio
 async def test_each_admin_is_listed_with_verified_contacts_and_a_name(client, redis):
-    """Both admins are listed; no real name shows the account name, and an unverified email is null."""
+    """Both live admins are listed; no real name shows the account name, unverified contacts are null.
+
+    A soft-deleted account's grant is left out.
+    """
     phone, email = _phone(), _email()
     team, _ = await _team_with_admins(
         {"name": "帳號甲", "real_name": "王小明", "phone": phone, "email": email},
-        {"name": "帳號乙", "unverified_email": _email()},
+        {"name": "帳號乙", "unverified_phone": _phone(), "unverified_email": _email()},
+        {"name": "帳號丙", "real_name": "已刪除", "phone": _phone(), "deleted": True},
     )
     token = await _token(redis, platform="super_admin")
 
