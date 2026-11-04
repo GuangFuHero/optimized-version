@@ -78,9 +78,16 @@
       }
       // Notion PRD v5.2 §3 A1：「Data Auditor 不顯示此頁」。乾淨切之後這條終於成立 ——
       // 舊版讀 persona.rbac，所以張育成加入某隊之後不管切到哪都看得到團隊頁。
-      if (id === "teams") return !isAuditor;
+      // 🔒 2026-11-03 Carol（BE-RBAC-3 決策紀錄）：團隊頁只給團隊管理員（政府、NGO）與超級管理員。
+      //    團隊成員、資料檢核員看不到；這一頁是給管理員管身份的，也盡量少人看得到個資。
+      //    只藏頁面，後端成員的 team.view／team.member.view 不動。
+      if (id === "teams") {
+        const ident = window.wgActingIdentity ? window.wgActingIdentity(persona) : null;
+        return isSuper || !!(ident && ident.kind === "team" && ident.role === "admin");
+      }
       return true;
-    });
+    // 一個分組底下都被濾掉時，分組標題也不留（團隊成員的「協作與權限」就是這樣）。
+    }).filter((item, i, list) => item[0] !== "__sep__" || (list[i + 1] && list[i + 1][0] !== "__sep__"));
   };
 
   // 各導覽項的實際落點；未獨立成頁者回成員管理頁以佔位呈現

@@ -101,9 +101,11 @@
                   <TeamStatusBadge status={team.status} />
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6, font: "var(--font-body-300)", color: "var(--color-fg-neutral-subtle)" }}>
-                    <Icon n="Phone" s={15} c="var(--color-fg-neutral-muted)" />聯絡窗口 {team.contact.name} · {team.contact.phone}
-                  </span>
+                  {team.contact && team.contact.name && (
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, font: "var(--font-body-300)", color: "var(--color-fg-neutral-subtle)" }}>
+                      <Icon n="Phone" s={15} c="var(--color-fg-neutral-muted)" />聯絡窗口 {team.contact.name} · {team.contact.phone}
+                    </span>
+                  )}
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 6, font: "var(--font-body-300)", color: "var(--color-fg-neutral-subtle)" }}>
                     <Icon n="Clock" s={15} c="var(--color-fg-neutral-muted)" />建立於 {team.created}
                   </span>
@@ -132,6 +134,13 @@
               <StatPill icon="ClipboardList" label="Ticket" value={team.tickets} />
             </div>
           </Card>
+
+          {/* TEAM-ADMIN-103：沒有管理員時，加入申請只有超管能審，也沒有人能邀請或編輯這一隊。🚨 文案 Claude 擬的。 */}
+          {team.status === "active" && adminCount === 0 && (
+            <Alert tone="warning" title="這一隊還沒有管理員">
+              加入申請只有超級管理員能審，也沒有人能代表這一隊。請把一位成員升為管理員，或用「加入成員」直接指定。
+            </Alert>
+          )}
 
           <Card padding="0">
             <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "16px 16px 6px" }}>
@@ -180,43 +189,57 @@
   //    ⚠️ **A2（成員名單）一個字都不動。** 別家的名單、別家成員的手機仍然關著。
   //    ⚠️ 覆蓋 Notion v5.2 與正典驗收兩條 → PRD 的 ADR-6，需補簽。
   //
-  // D-5：聯絡方式用 `teams.contact`（該隊自己填的對外窗口），**不從名單撈
-  //      role=admin**。理由：窗口是「這一隊願意對外的號碼」，管理員是「這個人的
-  //      號碼」，兩者不該畫上等號；而且一隊可能有多位管理員（t1 慈濟就有兩位）。
+  // 🔄 2026-11-03 Carol（BE-RBAC-3 決策紀錄，後端 #284、前端 #146）：取代 D-5。
+  //    這張表列**每個團隊的所有管理員**：實名（沒有就用帳號名稱）、已驗證電話、
+  //    已驗證 Email（沒有就留空）。不用 `teams.contact`。只有團隊管理員與超管看得到。
+  //
+  // TEAM-ADMIN-101 版面（Sucre 11-04 選 A）：一隊一列，管理員在同一格多行。
+  //    姓名、電話、Email 要用同一個格線排 —— 各自成欄的話，有人換行時電話會對到別人的名字。
+  //    管理員一律全列、不收合。長 Email 要換行不截斷，截掉就抄不到完整地址。
+  // TEAM-ADMIN-102 一位管理員都沒有的隊：照樣列出，寫「還沒有管理員」。
+  //    不寫「未提供」：那會讀成對方沒填資料，實際是這一隊還沒有人能代表它。
+  //    🚨 管理員沒有已驗證電話時寫「—」是 Claude 建議的，待 Sucre 確認。
   function AllTeamsView({ selfTeamId }) {
     const mm = useMM();
-    const cols = "minmax(180px,1.6fr) 110px 100px minmax(140px,1.2fr) 150px minmax(140px,1.4fr)";
+    const cols = "minmax(160px,1.2fr) 88px 100px 120px minmax(170px,1.4fr)";
+    // 手機上一位管理員排成三行：Email 橫排會超出卡片（WG-RWD-109 的表格列本來就會變卡片）
+    const bp = window.useWGBreakpoint ? window.useWGBreakpoint() : "desktop";
+    const isPhone = bp === "phone";
+    const adminCols = isPhone ? "minmax(0,1fr)" : "100px 120px minmax(170px,1.4fr)";
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        <Alert tone="info" title="唯讀 —— 只有團隊名稱與對外聯絡窗口">
-          供劃區、轉介與跨隊聯繫時挑選對象。依個資原則，別隊的成員名單與成員電話一律不顯示；
-          這裡的電話是各隊自己填的對外窗口，不是成員個人號碼。
+        <Alert tone="info" title="唯讀 —— 各隊管理員的聯絡方式">
+          供劃區、轉介與跨隊聯繫時找人。這是管理員本人的電話與 Email，請只用在救災協調。
         </Alert>
         <Card padding="0">
-          <div style={{ display: "grid", gridTemplateColumns: cols, gap: 12, padding: "10px 16px", borderBottom: "1px solid var(--color-border-default)" }}>
-            {["團隊名稱", "類型", "狀態", "聯絡窗口", "電話", "責任區"].map((h, i) => (
+          <div data-wg-thead style={{ display: "grid", gridTemplateColumns: cols, gap: 12, padding: "10px 16px", borderBottom: "1px solid var(--color-border-default)" }}>
+            {["團隊名稱", "類型", "管理員", "電話", "Email"].map((h, i) => (
               <span key={i} className="wg-caption" style={{ fontWeight: 700, color: "var(--color-fg-neutral-muted)" }}>{h}</span>
             ))}
           </div>
-          {mm.teams.map((t) => {
+          {mm.teams.filter((t) => t.status === "active").map((t) => {
             const isSelf = t.id === selfTeamId;
-            // 🔴 待決（PRD U-4）：`teams.contact` 沒填時要顯示什麼。現有假資料每隊都有值。
-            const cName = (t.contact && t.contact.name) || "未提供";
-            const cPhone = (t.contact && t.contact.phone) || "未提供";
+            const admins = (mm.rosters[t.id] || []).filter((r) => r.role === "admin");
             return (
-              <div key={t.id} className="mm-row" style={{ display: "grid", gridTemplateColumns: cols, gap: 12, alignItems: "center", padding: mm.pad, borderBottom: "1px solid var(--color-border-default)", opacity: t.status === "inactive" ? 0.6 : 1, background: isSelf ? "var(--color-bg-primary-subtle)" : undefined }}>
-                <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-                  <span style={{ font: "var(--font-label-400)", color: "var(--color-fg-neutral-default)", overflow: "hidden", textOverflow: "ellipsis" }}>{t.name}</span>
+              <div key={t.id} className="mm-row" style={{ display: "grid", gridTemplateColumns: cols, gap: 12, alignItems: "start", padding: mm.pad, borderBottom: "1px solid var(--color-border-default)", background: isSelf ? "var(--color-bg-primary-subtle)" : undefined }}>
+                <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flexWrap: "wrap" }}>
+                  <span style={{ font: "var(--font-label-400)", color: "var(--color-fg-neutral-default)" }}>{t.name}</span>
                   {isSelf && <Badge tone="primary">目前身份</Badge>}
                 </span>
                 <span><TypeBadge type={t.type} /></span>
-                <span><TeamStatusBadge status={t.status} /></span>
-                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <Avatar name={cName} size={28} tone="neutral" />
-                  <span style={{ font: "var(--font-body-300)", color: "var(--color-fg-neutral-default)" }}>{cName}</span>
-                </span>
-                <span style={{ font: "var(--font-data-300)", color: "var(--color-fg-neutral-subtle)" }}>{cPhone}</span>
-                <span style={{ font: "var(--font-body-300)", color: "var(--color-fg-neutral-subtle)" }}>{t.zones.length ? t.zones.join("、") : "—"}</span>
+                {admins.length === 0 ? (
+                  <span style={{ gridColumn: "3 / 6", font: "var(--font-body-300)", color: "var(--color-fg-neutral-muted)" }}>還沒有管理員</span>
+                ) : (
+                  <div style={{ gridColumn: "3 / 6", display: "grid", gridTemplateColumns: adminCols, gap: isPhone ? 0 : "6px 12px", width: isPhone ? "100%" : undefined }}>
+                    {admins.map((a) => (
+                      <React.Fragment key={a.id}>
+                        <span style={{ font: isPhone ? "var(--font-label-400)" : "var(--font-body-300)", color: "var(--color-fg-neutral-default)", marginTop: isPhone ? 6 : 0 }}>{a.name}</span>
+                        <span style={{ font: "var(--font-data-300)", color: "var(--color-fg-neutral-subtle)" }}>{a.phone || "—"}</span>
+                        <span style={{ font: "var(--font-body-300)", color: "var(--color-fg-neutral-subtle)", overflowWrap: "anywhere" }}>{a.email || ""}</span>
+                      </React.Fragment>
+                    ))}
+                  </div>
+                )}
               </div>
             );
           })}
@@ -229,6 +252,5 @@
     );
   }
 
-  // GovTeamsView 保留為別名 —— 這一層現在不是政府專屬了，但還有呼叫點沿用舊名。
   Object.assign(window, { SuperTeamsView, AllTeamsView, GovTeamsView: AllTeamsView });
 })();

@@ -225,7 +225,10 @@
     //    第一個導覽項。這不是降權提示，是把使用者放到一個合法的位置。
     React.useEffect(() => {
       const ids = nav.map((n) => n[0]);
-      if (view !== "settings" && !ids.includes(view)) setView(ids[0]);
+      if (view === "settings" || ids.includes(view)) return;
+      // 🔒 2026-11-03 Carol：成員、資料檢核員沒有這一頁可看；直接打開就是 403，跟正式版一樣。
+      if (ids.includes("teams") || ids.includes("members")) setView(ids.includes("teams") ? "teams" : "members");
+      else window.location.replace("後台沒有權限 Forbidden.html" + window.location.search);
     }, [role, identity && identity.key]);
 
     // ── 審核佇列：跟著身份收斂（2026-08-17 D-6）───────────────────────────

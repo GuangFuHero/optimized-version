@@ -8,7 +8,7 @@
  * 🚨 2026-10-20 Claude 定的（待 Sucre 確認）：
  *    - 顯示「目前身份」那一列（用 wgIdentityLabel，跟右上角同一套字）
  *    - 有 2 個以上身份才提示「從右上角切換身份」（只有一個身份時切換器不存在）
- *    - 找誰：團隊成員 → 團隊管理員；超級管理員 → 不寫找誰；其他 → 超級管理員
+ *    - 找誰：團隊成員、超級管理員 → 不寫找誰；其他 → 超級管理員
  *    - 下一步選項與 404 相同：wgNavFor() 前三項
  * 交付版：總覽儀表板尚未交付（重複審核 2026-10-29 已交付），下一步先跳過它們（NOT_DELIVERED，同 404）。正式版直接取 wgNavFor() 前三項。
  * 角色：交付版沒有角色視角列（WGRoleBar 回傳 null），用網址 ?as=ngo-member 等預覽，見 docs/角色與權限.md。
@@ -40,14 +40,17 @@
     }));
 
     const isTeamMember = identity && identity.kind === "team" && identity.role !== "admin";
-    const who = isTeamMember ? "你的團隊管理員" : "平台的超級管理員";
+    // 🔒 2026-11-04 Sucre：成員查不到本隊管理員是誰（Carol 11-03），不寫「請聯絡」。
+    const who = "平台的超級管理員";
     const canSwitch = identities.length > 1;
     // 超級管理員自己就是最高權限，不叫他「聯絡超級管理員」（正式版超管不會看到這頁，原型才切得到）
     const isSuper = identity && identity.kind === "platform" && identity.role === "super";
-    const lead = (isSuper ? "你目前的身份沒有開放這個頁面"
+    const lead = (isSuper || isTeamMember ? "你目前的身份沒有開放這個頁面"
         : "你目前的身份沒有開放這個頁面。如果工作上需要，請聯絡" + who + "開通")
-      + (canSwitch ? "；或從右上角的人名切換到其他身份再試一次。" : "。")
-      + "也可以從左邊的選單，或從這裡繼續：";
+      + (canSwitch
+          ? (isSuper || isTeamMember ? "。可以從右上角的人名切換到其他身份再試一次。" : "；或從右上角的人名切換到其他身份再試一次。")
+          : "。")
+      + ((isSuper || isTeamMember) && !canSwitch ? "可以" : "也可以") + "從左邊的選單，或從這裡繼續：";
 
     const label = window.wgIdentityLabel ? window.wgIdentityLabel(identity) : rbacDef.label;
     const note = (
