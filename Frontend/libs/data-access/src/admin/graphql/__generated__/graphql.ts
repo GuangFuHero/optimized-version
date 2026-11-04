@@ -1341,6 +1341,8 @@ export type RoleRequestStatus =
   (typeof RoleRequestStatus)[keyof typeof RoleRequestStatus];
 export type RoleRequestTeam = {
   __typename?: 'RoleRequestTeam';
+  /** Every admin of the team, `[]` if it has none, in `roleRequestTeams` for a caller who is a team admin or super admin. Null for anyone else, and always null on a role request's `team` and `grantedTeam` */
+  admins?: Maybe<Array<TeamAdmin>>;
   name: Scalars['String']['output'];
   type: RoleRequestTeamType;
   uuid: Scalars['UUID']['output'];
@@ -1802,6 +1804,16 @@ export type TaskPropertyType = {
   /** UUID of the parent ticket task */
   taskUuid: Scalars['String']['output'];
   uuid: Scalars['UUID']['output'];
+};
+
+export type TeamAdmin = {
+  __typename?: 'TeamAdmin';
+  /** The account's verified email, if any */
+  email?: Maybe<Scalars['String']['output']>;
+  /** The real name given on applying, else the account name */
+  name: Scalars['String']['output'];
+  /** The account's verified phone, if any */
+  phone?: Maybe<Scalars['String']['output']>;
 };
 
 export type TeamZoneConnection = {

@@ -265,7 +265,7 @@ teams {
     string type "gov/ngo, String(10)"
     string status "String(20), default active, CHECK active/suspended — suspended switches its identities off (026/ADR-357)"
     string tax_id "nullable, String(8), 統一編號 (UBN)"
-    string contact_name "nullable, String(100) — shown where the team is visible (026/ADR-357)"
+    string contact_name "nullable, String(100) — own members and super admins via GET /admin/teams (026/ADR-357)"
     string contact_phone "nullable, String(20)"
     timestamp created_at
     timestamp updated_at

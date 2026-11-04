@@ -30,7 +30,7 @@ from app.models.team import Team
 from app.repositories.active_identity_repository import active_identity_repository
 from app.repositories.auth_repository import role_repository
 from app.repositories.team_repository import joinable, team_repository
-from app.services.admin import DEFAULT_TEAM_ROLE, TEAM_ADMIN_ROLE_NAME, grant_team_role
+from app.services.admin import DEFAULT_TEAM_ROLE, SUPER_ADMIN_ROLE_NAME, TEAM_ADMIN_ROLE_NAME, grant_team_role
 from app.services.auth_account import DEFAULT_PLATFORM_ROLE
 from app.services.authz import require_scope
 from app.services.notification_resolver import NotificationRecipientResolver
@@ -208,6 +208,27 @@ async def _has_backoffice_identity(db: AsyncSession, user_uuid, *, besides: str 
         db, str(user_uuid), include_inactive_teams=True
     )
     return any(identity.team_uuid is not None or identity.role_name not in plain for identity in identities)
+
+
+async def sees_team_admins(db: AsyncSession, user_uuid) -> bool:
+    """Whether the account reads every team's admins: a team `admin` or a super admin (ADR-357 point 5).
+
+    Judged on the identities the account may act as rather than the one it acts as now, which on the public
+    site is `user`; a grant in a suspended or deleted team counts for nothing here, as it does for acting.
+    """
+    identities = await active_identity_repository.list_for_user(db, str(user_uuid))
+    return any(
+        (identity.team_uuid is not None and identity.role_name == TEAM_ADMIN_ROLE_NAME)
+        or (identity.team_uuid is None and identity.role_name == SUPER_ADMIN_ROLE_NAME)
+        for identity in identities
+    )
+
+
+async def team_directory_admins(db: AsyncSession, user_uuid, team_uuids: list) -> dict | None:
+    """Each team's admins by team uuid for an account that may read them, else None (ADR-357 point 5)."""
+    if not await sees_team_admins(db, user_uuid):
+        return None
+    return await team_repository.admins_by_team(db, team_uuids, role_name=TEAM_ADMIN_ROLE_NAME)
 
 
 async def submit(

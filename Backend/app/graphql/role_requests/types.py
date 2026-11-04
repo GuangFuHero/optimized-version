@@ -39,12 +39,30 @@ class RoleRequestTeamType(enum.Enum):
 
 
 @strawberry.type
+class TeamAdmin:
+    """One admin of a team in the team directory, so admins of different teams can reach each other."""
+
+    name: str = strawberry.field(description="The real name given on applying, else the account name")
+    phone: str | None = strawberry.field(description="The account's verified phone, if any")
+    email: str | None = strawberry.field(description="The account's verified email, if any")
+
+
+@strawberry.type
 class RoleRequestTeam:
-    """One entry of the team picker. Nothing else about a team is shown here (ADR-357 point 5)."""
+    """One entry of the team picker and team directory, plus the team's admins for admins (ADR-357 point 5).
+
+    Tax ID, status and members are never shown here.
+    """
 
     uuid: UUID
     name: str
     type: RoleRequestTeamType
+    admins: list[TeamAdmin] | None = strawberry.field(
+        default=None,
+        description="Every admin of the team, `[]` if it has none, in `roleRequestTeams` for a caller who is "
+        "a team admin or super admin. Null for anyone else, and always null on a role request's `team` and "
+        "`grantedTeam`",
+    )
 
 
 async def _team_by_uuid(info: strawberry.types.Info, team_uuid: UUID | None) -> RoleRequestTeam | None:
