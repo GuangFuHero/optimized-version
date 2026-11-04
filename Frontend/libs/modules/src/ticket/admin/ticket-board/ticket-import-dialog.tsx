@@ -54,10 +54,10 @@ type Result = components['schemas']['BulkImportResponse'];
 const PASTE_PREVIEW_DEBOUNCE_MS = 600;
 
 /**
- * 匯入任務單 (ADMIN-025 MVP 6; the ticket design has none, so it follows the station import,
- * `station-v2/station-import.jsx`): 1 · the need type the file holds, 2 · the file, chosen or
- * pasted as CSV text, with that type's template (its export's header row), then the preview and
- * 確認匯入.
+ * 匯入任務單 (ADMIN-025 MVP 6; the prototype's `TicketImportDialog`, tk-import.jsx): 1 · the need
+ * type the file holds, 2 · the file, chosen or pasted as CSV text, with that type's template (its
+ * export's header row), then the preview and 確認匯入. The prototype's 欄位對應 step is not drawn:
+ * the file is previewed as soon as it is chosen.
  */
 export function TicketImportDialog({ onClose }: { onClose: () => void }) {
   const [taskType, setTaskType] = useState<NeedType | null>(null);

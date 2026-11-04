@@ -128,6 +128,22 @@ export function stationSuggestionField(
   );
 }
 
+// A station property's fields: the backend takes them, the site's form does not offer them. Named
+// as the backend's notices name them.
+const PROPERTY_FIELD_LABELS: Partial<Record<string, string>> = {
+  property_name: '項目名稱',
+  quantity: '數量',
+};
+
+/** A suggested field's name, a station's or a property's, as the backend's notices word it; else its code. */
+export function suggestionFieldLabel(name: string): string {
+  return (
+    STATION_SUGGESTION_FIELDS.find((field) => field.name === name)?.label ??
+    PROPERTY_FIELD_LABELS[name] ??
+    name
+  );
+}
+
 /** A value as the form shows it: a choice by its label, an empty one as 未提供. */
 export function describeSuggestionValue(
   field: StationSuggestionField,

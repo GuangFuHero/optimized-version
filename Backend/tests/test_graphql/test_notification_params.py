@@ -47,6 +47,29 @@ async def test_a_new_suggestion_names_the_station_and_the_field_label(
 
 
 @pytest.mark.asyncio
+async def test_a_new_suggestion_points_at_its_station(
+    client, auditor_auth, login_user_auth, sample_station, sample_station_property
+):
+    """The reviewers' notice opens the station to review, a property's suggestion included."""
+    auditor_uuid, _ = auditor_auth
+    _, user_token = login_user_auth
+    await _create(client, user_token, "station", sample_station, "operational_status", "temporarily_closed")
+    await _create(client, user_token, "station_property", sample_station_property, "quantity", "3")
+
+    async with test_db() as db:
+        refs = await db.execute(
+            select(Notification.ref_type, Notification.ref_uuid).where(
+                Notification.type == "station_suggestion_created",
+                Notification.recipient_uuid == auditor_uuid,
+            )
+        )
+    assert sorted((ref_type, str(ref_uuid)) for ref_type, ref_uuid in refs) == [
+        ("station", str(sample_station)),
+        ("station", str(sample_station)),
+    ]
+
+
+@pytest.mark.asyncio
 async def test_a_station_without_a_name_is_left_out_of_the_sentence(
     client, auditor_auth, login_user_auth, sample_station
 ):

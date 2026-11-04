@@ -10,8 +10,10 @@ export const ticketKeys = {
   lists: () => ['admin', 'tickets', 'tickets'] as const,
   mapPins: () => [...ticketKeys.lists(), 'mapPins'] as const,
   extents: () => [...ticketKeys.lists(), 'extent'] as const,
-  /** Each need type's export rows (the 匯出 popover's 「N 筆」). */
+  /** Each need type's export rows (the 匯出 popover's 「N 筆」), one entry per 組織分配 under it. */
   exportCounts: () => [...ticketKeys.lists(), 'exportCounts'] as const,
+  /** The filter panel's 行政區域 and 組織分配 choices: a new address can add an area. */
+  facets: () => [...ticketKeys.lists(), 'facets'] as const,
   stats: () => ['admin', 'tickets', 'stats'] as const,
   details: () => ['admin', 'tickets', 'ticket'] as const,
   tasks: () => ['admin', 'tickets', 'ticketTasks'] as const,

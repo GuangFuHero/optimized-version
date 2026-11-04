@@ -15,6 +15,7 @@ import { timeAgo } from '../../time';
 import {
   describeSuggestionValue,
   STATION_SUGGESTION_FIELDS,
+  suggestionFieldLabel,
   type StationSuggestionField,
 } from './fields';
 
@@ -74,13 +75,6 @@ export function stationReportOutcome(
   return OUTCOMES[row.status] ?? 'pending';
 }
 
-// A station property's fields: the backend takes them, the site's form does not offer them. Named
-// as the backend's notices name them.
-const PROPERTY_FIELD_LABELS: Partial<Record<string, string>> = {
-  property_name: '項目名稱',
-  quantity: '數量',
-};
-
 function suggestionField(name: string): StationSuggestionField | null {
   return STATION_SUGGESTION_FIELDS.find((field) => field.name === name) ?? null;
 }
@@ -130,8 +124,7 @@ export function readMyStationReports(
       uuid: row.uuid,
       stationUuid: row.station?.uuid ?? null,
       stationName: row.station?.name?.trim() || '這個站點已經下架',
-      fieldLabel:
-        field?.label ?? PROPERTY_FIELD_LABELS[row.fieldName] ?? row.fieldName,
+      fieldLabel: suggestionFieldLabel(row.fieldName),
       previous:
         row.previousValue == null
           ? null

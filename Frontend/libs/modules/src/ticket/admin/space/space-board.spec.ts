@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { EMPTY_TICKET_FILTERS } from '../ticket-board/model/ticket-filters';
+import {
+  EMPTY_TICKET_FILTERS,
+  UNASSIGNED_TEAM,
+} from '../ticket-board/model/ticket-filters';
 import type { SpaceListRow, SpaceTicket } from './space-analysis';
 import {
   sortSpaceRows,
@@ -17,7 +20,13 @@ function ticket(overrides: Partial<SpaceTicket> = {}): SpaceTicket {
     priority: 'high',
     disasterTypes: ['flood'],
     updatedAt: '2026-10-29T01:00:00Z',
-    secondaryLocation: { floor: '3F', room: 'A' },
+    secondaryLocation: {
+      county: '花蓮縣',
+      town: '光復鄉',
+      floor: '3F',
+      room: 'A',
+    },
+    responsibleTeams: [{ uuid: 'team-a' }],
     tasks: [
       {
         uuid: 'k1',
@@ -65,8 +74,27 @@ describe('spaceTicketPasses', () => {
     expect(spaceTicketPasses(ticket(), { ...f, taskType: 'supply' })).toBe(
       false,
     );
-    expect(spaceTicketPasses(ticket(), { ...f, disaster: 'flood' })).toBe(true);
-    expect(spaceTicketPasses(ticket(), { ...f, disaster: 'quake' })).toBe(
+    expect(spaceTicketPasses(ticket(), { ...f, county: '花蓮縣' })).toBe(true);
+    expect(
+      spaceTicketPasses(ticket(), { ...f, county: '花蓮縣', town: '鳳林鎮' }),
+    ).toBe(false);
+    expect(spaceTicketPasses(ticket(), { ...f, county: '臺東縣' })).toBe(false);
+    expect(spaceTicketPasses(ticket(), { ...f, team: 'team-a' })).toBe(true);
+    expect(spaceTicketPasses(ticket(), { ...f, team: 'team-b' })).toBe(false);
+    expect(spaceTicketPasses(ticket(), { ...f, team: UNASSIGNED_TEAM })).toBe(
+      false,
+    );
+    expect(
+      spaceTicketPasses(ticket({ responsibleTeams: [] }), {
+        ...f,
+        team: UNASSIGNED_TEAM,
+      }),
+    ).toBe(true);
+    const now = Date.parse('2026-10-29T12:00:00Z');
+    expect(spaceTicketPasses(ticket(), { ...f, time: 'today' }, now)).toBe(
+      true,
+    );
+    expect(spaceTicketPasses(ticket(), { ...f, time: 'earlier' }, now)).toBe(
       false,
     );
   });

@@ -8,17 +8,33 @@ from app.services.bulk_dedup import SuspectedRow
 from app.services.bulk_import import ImportOutcome, PreviewResult
 
 
+class OwnTeamResponse(BaseModel):
+    """The team a caller's ticket export is limited to."""
+
+    uuid: str
+    name: str | None = Field(description="團隊名稱，取自目前身分")
+
+
 class TicketExportCountsResponse(BaseModel):
     """How many rows each task type's export would hold, and the most one export may hold."""
 
-    counts: dict[str, int] = Field(description="任務型別 → 匯出會有幾列；沒有列的型別不列")
+    counts: dict[str, int] = Field(
+        description="任務型別 → 匯出會有幾列；沒有列的型別不列。「全部種類」是各型別相加"
+    )
     max_rows: int = Field(description="單次匯出的上限；筆數超過的型別，匯出會被拒絕")
+    own_team: OwnTeamResponse | None = Field(
+        None,
+        description=(
+            "呼叫者的 ticket.export 範圍只到自己團隊的責任區（zone）時，是目前身分的團隊；"
+            "all 或其他範圍是 null。有值時組織分配固定是這個團隊"
+        ),
+    )
 
 
 class RowErrorResponse(BaseModel):
     """One problem with one row, addressed the way the user sees the file."""
 
-    line: int = Field(description="試算表的列號，表頭是第 1 列")
+    line: int = Field(description="試算表上的列號，從第 1 列算起")
     column: str = Field(description="出問題的欄位；`-` 代表整列層級的問題")
     message: str
 
@@ -26,7 +42,7 @@ class RowErrorResponse(BaseModel):
 class SuspectedRowResponse(BaseModel):
     """A row that looks like something already there (ADR-398). No similarity, no contact details."""
 
-    line: int = Field(description="試算表的列號，表頭是第 1 列")
+    line: int = Field(description="試算表上的列號，從第 1 列算起")
     row_title: str | None = Field(
         description="這一列自己的站點名稱或單標題，照檔案寫的；加到既有單的任務，是那張單的標題"
     )

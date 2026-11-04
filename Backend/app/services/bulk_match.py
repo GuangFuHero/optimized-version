@@ -168,14 +168,16 @@ async def match_task(db: AsyncSession, *, ticket_uuid: str, task_type: str, task
     return MatchIndex(by_key={wanted: candidates}).look_up(wanted)
 
 
-def duplicate_key_rows(keys: list[tuple]) -> dict[int, tuple[int, ...]]:
+def duplicate_key_rows(keys: list[tuple], line_of=None) -> dict[int, tuple[int, ...]]:
     """Map each row index sharing a key with another to the row numbers it collides with.
 
-    Rows are numbered as the user sees them in a spreadsheet: the header is line 1, so the
-    first data row is line 2. All colliding rows fail — the last one does not win. "Two rows
-    with the same name" is very often two genuinely different stations, and silently keeping
-    one of them would throw the other away (ADR-113).
+    Rows are numbered as the user sees them in a spreadsheet, from line 1: `line_of`
+    (`Table.line_of`) numbers them as the file does, label row and blank rows included; without
+    it the header is taken to be line 1. All colliding rows fail — the last one does not win.
+    "Two rows with the same name" is very often two genuinely different stations, and silently
+    keeping one of them would throw the other away (ADR-113).
     """
+    line_of = line_of or (lambda index: index + 2)
     positions: dict[tuple, list[int]] = {}
     for index, key in enumerate(keys):
         positions.setdefault(key, []).append(index)
@@ -184,5 +186,5 @@ def duplicate_key_rows(keys: list[tuple]) -> dict[int, tuple[int, ...]]:
     for shared in positions.values():
         if len(shared) > 1:
             for index in shared:
-                collisions[index] = tuple(other + 2 for other in shared if other != index)
+                collisions[index] = tuple(line_of(other) for other in shared if other != index)
     return collisions

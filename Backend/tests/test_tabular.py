@@ -106,9 +106,7 @@ def test_xlsx_blank_cells_become_empty_strings():
 
 def test_xlsx_trailing_blank_rows_are_dropped():
     """Excel commonly reports thousands of empty rows below the data."""
-    table = read_table(
-        _xlsx_bytes([["name"], ["光復國小"], [None], [None]]), "stations.xlsx"
-    )
+    table = read_table(_xlsx_bytes([["name"], ["光復國小"], [None], [None]]), "stations.xlsx")
 
     assert len(table.rows) == 1
 
@@ -265,7 +263,7 @@ def test_xlsx_round_trips_a_formula_looking_value_unchanged():
 
 def test_a_header_from_an_uploaded_file_is_neutralized_too():
     """The error report echoes the file's own headers back (`_as_report`)."""
-    content = write_csv(("=HYPERLINK(\"http://x\")",), []).decode("utf-8-sig")
+    content = write_csv(('=HYPERLINK("http://x")',), []).decode("utf-8-sig")
 
     assert content.splitlines()[0].lstrip('"').startswith("'")
 
@@ -303,3 +301,59 @@ def test_trailing_blank_rows_do_not_consume_the_row_allowance():
     table = read_table(raw, "stations.xlsx", max_rows=2)
 
     assert [row["name"] for row in table.rows] == ["光復國小", "中山堂"]
+
+
+# --- the label row above the codes (#285) ---
+
+_CODES = frozenset({"uuid", "name", "contact_phone", "level"})
+_LABELS = ("編號", "名稱", "聯絡電話", "等級")
+
+
+def _is_code(cell: str) -> bool:
+    return cell in _CODES or cell.startswith("prop.")
+
+
+@pytest.mark.parametrize("write", [write_csv, write_xlsx], ids=["csv", "xlsx"])
+def test_a_label_row_above_the_codes_is_skipped_and_lines_still_count_it(write):
+    """Row 1 labels, row 2 codes: the codes are the header and the first data row is line 3."""
+    filename = "f.csv" if write is write_csv else "f.xlsx"
+    table = read_table(write(HEADERS, ROWS, labels=_LABELS), filename, is_code=_is_code)
+
+    assert table.headers == HEADERS
+    assert [row["name"] for row in table.rows] == ["光復國小", "Zhongshan Hall"]
+    assert table.lines == (3, 4)
+
+
+def test_a_code_row_alone_keeps_line_2_for_the_first_row():
+    """A file with only the code row reads as before."""
+    table = read_table(write_csv(HEADERS, ROWS), "f.csv", is_code=_is_code)
+
+    assert table.headers == HEADERS
+    assert table.lines == (2, 3)
+
+
+def test_headers_of_the_user_s_own_are_not_mistaken_for_a_label_row():
+    """Neither row is codes: the first row stays the header, the second is data."""
+    raw = write_csv(("名稱", "電話", "備註"), [{"名稱": "uuid", "電話": "name", "備註": "x"}])
+
+    table = read_table(raw, "f.csv", is_code=_is_code)
+
+    assert table.headers == ("名稱", "電話", "備註")
+    assert len(table.rows) == 1
+
+
+def test_without_is_code_the_label_row_is_the_header():
+    """The format layer skips nothing it was not told how to recognise."""
+    table = read_table(write_csv(HEADERS, ROWS, labels=_LABELS), "f.csv")
+
+    assert table.headers == _LABELS
+
+
+def test_xlsx_lines_count_the_blank_and_title_rows():
+    """A title row and blank rows above and between still number the rows as the sheet does."""
+    raw = _xlsx_bytes([["名冊"], [], list(HEADERS), ["", "甲", "", ""], [], ["", "乙", "", ""]])
+
+    table = read_table(raw, "f.xlsx", is_code=_is_code)
+
+    assert table.headers == HEADERS
+    assert table.lines == (4, 6)

@@ -41,12 +41,16 @@ from app.services import station as station_service
 from app.services import ticket as ticket_service
 from app.services.authz import refresh_actor, require_scope, stable_actor
 from app.services.bulk_columns import (
+    STATION_COLUMNS,
+    TICKET_COLUMNS,
     ColumnSpec,
     dynamic_columns_skipped_for_station,
+    is_code_of,
     station_columns,
     ticket_columns,
 )
 from app.services.bulk_dedup import Comparison, RowDraft, SuspectedRow
+from app.services.bulk_export import ALL_TASK_TYPES
 from app.services.bulk_match import (
     AMBIGUOUS,
     MATCHED,
@@ -82,6 +86,12 @@ logger = logging.getLogger(__name__)
 
 class BulkImportError(ValueError):
     """The upload cannot be processed at all (mapped to 400 by the endpoint)."""
+
+
+def _require_one_kind(task_type: str) -> None:
+    """An import file is one kind of need: `all`, every kind on the export, is not a type of its own."""
+    if task_type == ALL_TASK_TYPES:
+        raise BulkImportError("匯入要選一種需求種類，不能是全部種類（all）")
 
 
 @dataclass(frozen=True)
@@ -231,11 +241,9 @@ class RowPlan:
     match_uuid: str | None
     is_update: bool
     errors: tuple[RowError, ...]
-
-    @property
-    def line(self) -> int:
-        """Spreadsheet line number, counting the header as line 1."""
-        return self.index + 2
+    # The row's spreadsheet line (`Table.line_of`): a label row above the header (#285) and
+    # blank rows in between count, as they do on the user's screen.
+    line: int
 
     @property
     def ok(self) -> bool:
@@ -291,15 +299,15 @@ def _station_key(row: dict[str, str]) -> tuple:
 
 
 async def _plan_stations(
-    db: AsyncSession, *, station_type: str, rows: list[dict[str, str]], columns
+    db: AsyncSession, *, station_type: str, rows: list[dict[str, str]], columns, line_of
 ) -> list[RowPlan]:
     index = await build_station_index(db)
     keys = [_station_key(row) for row in rows]
-    collisions = duplicate_key_rows(keys)
+    collisions = duplicate_key_rows(keys, line_of)
 
     plans = []
     for position, (row, key) in enumerate(zip(rows, keys, strict=True)):
-        line = position + 2
+        line = line_of(position)
         errors: list[RowError] = []
         if position in collisions:
             errors.append(_collision_error(line, collisions[position], "name"))
@@ -313,7 +321,7 @@ async def _plan_stations(
             errors.append(_ambiguous_error(line, match.candidates, "name"))
 
         is_update = match.kind == MATCHED
-        errors += validate_row(columns, row, index=position, is_update=is_update)
+        errors += validate_row(columns, row, index=position, is_update=is_update, line=line)
         plans.append(
             RowPlan(
                 index=position,
@@ -321,6 +329,7 @@ async def _plan_stations(
                 match_uuid=match.uuid if is_update else None,
                 is_update=is_update,
                 errors=tuple(errors),
+                line=line,
             )
         )
     return plans
@@ -456,17 +465,17 @@ _TASK_COLUMNS = ("task_type", "task_name", "task_description", "task_quantity")
 
 
 async def _plan_tickets(
-    db: AsyncSession, *, task_type: str, rows: list[dict[str, str]], columns
+    db: AsyncSession, *, task_type: str, rows: list[dict[str, str]], columns, line_of
 ) -> tuple[list[RowPlan], object]:
     index = await build_ticket_index(db)
     keys = [ticket_key(row.get("title"), row.get("contact_phone")) for row in rows]
     task_keys = [(*key, (row.get("task_name") or "").strip()) for key, row in zip(keys, rows, strict=True)]
-    collisions = duplicate_key_rows(task_keys)
+    collisions = duplicate_key_rows(task_keys, line_of)
 
     seen_keys: set[tuple] = set()
     plans = []
     for position, (row, key) in enumerate(zip(rows, keys, strict=True)):
-        line = position + 2
+        line = line_of(position)
         errors: list[RowError] = []
         if position in collisions:
             errors.append(_collision_error(line, collisions[position], "title"))
@@ -489,7 +498,7 @@ async def _plan_tickets(
         # (ADR-120) — not a duplicate. The first line creates it; the rest attach to it, and
         # the writer resolves the uuid once it exists.
         is_update = match.kind == MATCHED or key in seen_keys
-        errors += validate_row(columns, row, index=position, is_update=is_update)
+        errors += validate_row(columns, row, index=position, is_update=is_update, line=line)
 
         # Only a row that will actually be written can be the line a later row attaches to.
         # Planning a follower as an update when its leader failed validation drops every
@@ -503,6 +512,7 @@ async def _plan_tickets(
                 match_uuid=match.uuid if match.kind == MATCHED else None,
                 is_update=is_update,
                 errors=tuple(errors),
+                line=line,
             )
         )
     return plans, index
@@ -809,11 +819,15 @@ async def _checked_task(db: AsyncSession, *, actor: User, task: dict):
 
 
 async def _read(
-    raw: bytes, filename: str, mapping: dict[str, str] | None
+    raw: bytes, filename: str, mapping: dict[str, str] | None, *, columns: tuple[ColumnSpec, ...]
 ) -> tuple[Table, list[dict[str, str]]]:
-    """Parse the upload, with both limits bounding the work rather than only its result."""
+    """Parse the upload, with both limits bounding the work rather than only its result.
+
+    `columns` are the file type's fixed columns: a row of their codes, or of `prop.` fields, under a
+    row that is not is an export's code row under its Chinese labels (#285), and the labels go.
+    """
     _check_size(raw)
-    table = read_table(raw, filename, max_rows=MAX_ROWS)
+    table = read_table(raw, filename, max_rows=MAX_ROWS, is_code=is_code_of(columns))
     _check_rows(table)
     return table, [_apply_mapping(row, mapping or {}) for row in table.rows]
 
@@ -871,9 +885,11 @@ async def preview_stations(
     """
     async with stable_actor(db, actor):
         await require_scope(actor, Perm.STATION_IMPORT, db)
-        table, rows = await _read(raw, filename, mapping)
+        table, rows = await _read(raw, filename, mapping, columns=STATION_COLUMNS)
         columns = await station_columns(db, station_type)
-        plans = await _plan_stations(db, station_type=station_type, rows=rows, columns=columns)
+        plans = await _plan_stations(
+            db, station_type=station_type, rows=rows, columns=columns, line_of=table.line_of
+        )
         skipped = tuple(
             {"property_name": s.property_name, "data_type": s.data_type, "reason": s.reason}
             for s in await dynamic_columns_skipped_for_station(db, station_type)
@@ -900,11 +916,14 @@ async def preview_tickets(
     mapping: dict[str, str] | None = None,
 ) -> PreviewResult:
     """Dry-run a ticket file. Same contract as `preview_stations`."""
+    _require_one_kind(task_type)
     async with stable_actor(db, actor):
         await require_scope(actor, Perm.TICKET_IMPORT, db)
-        table, rows = await _read(raw, filename, mapping)
+        table, rows = await _read(raw, filename, mapping, columns=TICKET_COLUMNS)
         columns = await ticket_columns(db, task_type)
-        plans, _ = await _plan_tickets(db, task_type=task_type, rows=rows, columns=columns)
+        plans, _ = await _plan_tickets(
+            db, task_type=task_type, rows=rows, columns=columns, line_of=table.line_of
+        )
         drafts = await _ticket_drafts(db, actor=actor, plans=plans, columns=columns, task_type=task_type)
         comparison = await bulk_dedup.compare(
             db, actor=actor, drafts=drafts, decisions={}, now=datetime.now(UTC)
@@ -1090,9 +1109,11 @@ async def commit_stations(
     """
     async with stable_actor(db, actor):
         await require_scope(actor, Perm.STATION_IMPORT, db)
-        table, rows = await _read(raw, filename, mapping)
+        table, rows = await _read(raw, filename, mapping, columns=STATION_COLUMNS)
         columns = await station_columns(db, station_type)
-        plans = await _plan_stations(db, station_type=station_type, rows=rows, columns=columns)
+        plans = await _plan_stations(
+            db, station_type=station_type, rows=rows, columns=columns, line_of=table.line_of
+        )
         drafts = await _station_drafts(
             db, actor=actor, plans=plans, columns=columns, station_type=station_type
         )
@@ -1146,11 +1167,14 @@ async def commit_tickets(
     Every new task is put to the fast dedup layer before any row is written, as for stations
     (`commit_stations`, ADR-398). A declined first line holds the lines after it.
     """
+    _require_one_kind(task_type)
     async with stable_actor(db, actor):
         await require_scope(actor, Perm.TICKET_IMPORT, db)
-        table, rows = await _read(raw, filename, mapping)
+        table, rows = await _read(raw, filename, mapping, columns=TICKET_COLUMNS)
         columns = await ticket_columns(db, task_type)
-        plans, index = await _plan_tickets(db, task_type=task_type, rows=rows, columns=columns)
+        plans, index = await _plan_tickets(
+            db, task_type=task_type, rows=rows, columns=columns, line_of=table.line_of
+        )
         drafts = await _ticket_drafts(db, actor=actor, plans=plans, columns=columns, task_type=task_type)
         comparison = await bulk_dedup.compare(
             db,

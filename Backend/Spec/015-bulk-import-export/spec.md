@@ -275,7 +275,7 @@ preview 與 commit 的回應都帶逐列錯誤，commit 另外附上可以直接
 
 | 欄位 | 內容 |
 |---|---|
-| `errors[]` | `{ line, column, message }`。`line` 是試算表列號（表頭是第 1 列）；`column` 是出問題的欄位，`-` 代表整列層級的問題 |
+| `errors[]` | `{ line, column, message }`。`line` 是試算表上的列號（從第 1 列算起）；`column` 是出問題的欄位，`-` 代表整列層級的問題 |
 | `error_report` | `{ filename, media_type, content_base64 }`，沒有失敗列、也沒有被擋的疑似重複列時為 `null`。內容是**失敗或被擋的原始列 + 最後一欄原因**，格式與上傳的檔相同 |
 | `partial_rows[]` | 主資料已寫入、後續步驟才失敗的列號（ADR-212） |
 | `batch_id` | 這次匯入的識別碼，只出現在回應裡（ADR-124） |

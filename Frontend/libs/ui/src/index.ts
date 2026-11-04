@@ -55,6 +55,7 @@ export type { ModalProps } from './components/Modal';
 export { SelectionCard } from './components/SelectionCard';
 export type { SelectionCardProps } from './components/SelectionCard';
 export { EmptyState } from './components/EmptyState';
+export { VisuallyHidden } from './components/VisuallyHidden';
 export type { EmptyStateProps } from './components/EmptyState';
 export { ListPagination } from './components/ListPagination';
 export type { ListPaginationProps } from './components/ListPagination';
@@ -125,6 +126,8 @@ export {
   getRescueColorScheme,
   Icons,
   layoutSizes,
+  siteMapControls,
+  siteMapLeftControlsMaxWidth,
   theme,
   themedIcon,
 } from './foundation';

@@ -17,6 +17,12 @@ interface SiteSubTypeFilterProps {
   pinned?: readonly string[];
   onToggle: (value: string) => void;
   onTogglePinned?: (value: string) => void;
+  /**
+   * On a phone, the icon alone: the map's one row of controls (站點／任務, 篩選, 列表, 圖層) has no
+   * room for the word. While a filter is on, the whole button turns orange and the count hangs on its
+   * corner, as the bell's does, instead of squeezing in beside the icon. From 768px up, as before.
+   */
+  iconOnlyOnPhone?: boolean;
 }
 
 /**
@@ -32,11 +38,16 @@ export function SiteSubTypeFilter({
   pinned = [],
   onToggle,
   onTogglePinned,
+  iconOnlyOnPhone = false,
 }: SiteSubTypeFilterProps) {
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const options = SITE_SUB_DATA_TYPE_OPTIONS[dataType];
   const open = Boolean(anchorEl);
   const selectedCount = selected.length;
+  const filtering = selectedCount > 0;
+  // The phone-only values; from `tablet` up each falls back to the button as it always was.
+  const phone = <T, U>(onPhone: T, fromTablet: U) =>
+    iconOnlyOnPhone ? { mobile: onPhone, tablet: fromTablet } : fromTablet;
 
   const handleOpen = (event: MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -50,25 +61,38 @@ export function SiteSubTypeFilter({
     <>
       <SiteControlSurface
         sx={{
+          position: 'relative',
           display: 'inline-flex',
           alignItems: 'center',
-          px: '9px',
-          py: '5px',
+          justifyContent: 'center',
+          px: phone(0, '9px'),
+          py: phone(0, '5px'),
+          width: phone(44, 'auto'),
           height: 44,
+          flexShrink: 0,
+          ...(filtering
+            ? { bgcolor: phone(color.bg.primary.subtle, color.bg.neutral.default) }
+            : {}),
         }}
       >
         <ButtonBase
           disableRipple
-          aria-label="篩選子分類"
+          aria-label={filtering ? `篩選子分類，已選 ${selectedCount} 項` : '篩選子分類'}
           aria-haspopup="menu"
           aria-expanded={open}
           onClick={handleOpen}
           sx={{
             display: 'inline-flex',
             alignItems: 'center',
+            justifyContent: 'center',
+            // The icon alone is 16px: the whole 44px circle is what a finger has to hit.
+            width: phone('100%', 'auto'),
+            height: phone('100%', 'auto'),
             gap: `${spacing[1]}px`,
             borderRadius: `${radius.full}px`,
-            color: color.fg.neutral.default,
+            color: filtering
+              ? phone(color.brand.primary.default, color.fg.neutral.default)
+              : color.fg.neutral.default,
             fontFamily: typography.label[400].fontFamily,
             fontSize: displayTextSize[14],
             lineHeight: 1.33,
@@ -77,21 +101,29 @@ export function SiteSubTypeFilter({
           }}
         >
           <Icons.sliders sx={{ fontSize: 16 }} />
-          篩選
-          {selectedCount > 0 ? (
+          <Box component="span" sx={{ display: phone('none', 'inline') }}>
+            篩選
+          </Box>
+          {filtering ? (
             <Box
+              aria-hidden
               sx={{
-                ml: '2px',
-                minWidth: 18,
-                height: 18,
+                // On a phone it hangs on the corner, ringed in white to stand off the map.
+                position: phone('absolute', 'static'),
+                top: phone(-4, 'auto'),
+                right: phone(-4, 'auto'),
+                ml: phone(0, '2px'),
+                minWidth: phone(20, 18),
+                height: phone(20, 18),
                 px: '5px',
                 borderRadius: `${radius.full}px`,
                 bgcolor: color.bg.primary.default,
                 color: color.fg.onPrimary,
+                boxShadow: phone(`0 0 0 2px ${color.bg.neutral.default}`, 'none'),
                 fontFamily: typography.data[300].fontFamily,
                 fontSize: displayTextSize[11],
                 fontWeight: 700,
-                lineHeight: '18px',
+                lineHeight: phone('20px', '18px'),
                 textAlign: 'center',
               }}
             >

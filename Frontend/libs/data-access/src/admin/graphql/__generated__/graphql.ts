@@ -1081,6 +1081,8 @@ export type Query = {
   /** Whether ticket(uuid) gives this ticket, and if not, whether it was merged into another, deleted, or never was, so a share link can say which and send a merged one on. Ask it beside ticket(uuid). The state and the kept ticket's uuid alone, nothing of the ticket (ADR-444) */
   ticketAvailability: TicketAvailabilityType;
   ticketCells: Array<TicketCellType>;
+  /** The choices of the ticket board's 行政區域 and 組織分配 filters: the areas the addresses of the tickets the caller sees in detail name, and the teams holding a 責任區. Both empty to a caller without ticket.view_detail, as the filters then match nothing */
+  ticketFacets: TicketFacetsType;
   ticketPropertyConfigs: Array<TicketPropertyConfigType>;
   ticketStats: TicketStatsType;
   ticketTasks: Array<TicketTaskType>;
@@ -1276,6 +1278,7 @@ export type QueryTicketTasksArgs = {
 export type QueryTicketsArgs = {
   auditStatus?: InputMaybe<AuditStatus>;
   bounds?: InputMaybe<BoundsInput>;
+  county?: InputMaybe<Scalars['String']['input']>;
   disasterType?: InputMaybe<Scalars['String']['input']>;
   limit?: Scalars['Int']['input'];
   locationCell?: InputMaybe<Scalars['String']['input']>;
@@ -1285,21 +1288,32 @@ export type QueryTicketsArgs = {
   outsideBounds?: InputMaybe<BoundsInput>;
   priority?: InputMaybe<Scalars['String']['input']>;
   q?: InputMaybe<Scalars['String']['input']>;
+  responsibleTeamUuid?: InputMaybe<Scalars['UUID']['input']>;
   skip?: Scalars['Int']['input'];
   status?: InputMaybe<Scalars['String']['input']>;
   statuses?: InputMaybe<Array<TicketStatus>>;
+  town?: InputMaybe<Scalars['String']['input']>;
+  unassignedOnly?: Scalars['Boolean']['input'];
+  updatedAfter?: InputMaybe<Scalars['DateTime']['input']>;
+  updatedBefore?: InputMaybe<Scalars['DateTime']['input']>;
   zoom?: InputMaybe<Scalars['Float']['input']>;
 };
 
 export type QueryTicketsExtentArgs = {
+  county?: InputMaybe<Scalars['String']['input']>;
   disasterType?: InputMaybe<Scalars['String']['input']>;
   locationCell?: InputMaybe<Scalars['String']['input']>;
   needType?: InputMaybe<Scalars['String']['input']>;
   openNeedsOnly?: Scalars['Boolean']['input'];
   priority?: InputMaybe<Scalars['String']['input']>;
   q?: InputMaybe<Scalars['String']['input']>;
+  responsibleTeamUuid?: InputMaybe<Scalars['UUID']['input']>;
   status?: InputMaybe<Scalars['String']['input']>;
   statuses?: InputMaybe<Array<TicketStatus>>;
+  town?: InputMaybe<Scalars['String']['input']>;
+  unassignedOnly?: Scalars['Boolean']['input'];
+  updatedAfter?: InputMaybe<Scalars['DateTime']['input']>;
+  updatedBefore?: InputMaybe<Scalars['DateTime']['input']>;
 };
 
 export type QueryZonesByTeamArgs = {
@@ -1817,6 +1831,15 @@ export type TeamZoneType = {
   uuid: Scalars['UUID']['output'];
 };
 
+/** One 縣市 and its 鄉鎮市區, as a listed ticket's address names them */
+export type TicketAreaType = {
+  __typename?: 'TicketAreaType';
+  /** 縣市 */
+  county: Scalars['String']['output'];
+  /** 鄉鎮市區 */
+  town: Scalars['String']['output'];
+};
+
 /** One field that differs from the content the last verdict was given on */
 export type TicketAuditChangeType = {
   __typename?: 'TicketAuditChangeType';
@@ -1906,6 +1929,15 @@ export type TicketDuplicateRefType = {
   __typename?: 'TicketDuplicateRefType';
   title: Scalars['String']['output'];
   uuid: Scalars['UUID']['output'];
+};
+
+/** What the board's 行政區域 and 組織分配 filters can pick */
+export type TicketFacetsType = {
+  __typename?: 'TicketFacetsType';
+  /** Every county and town pair the addresses of the tickets the caller sees in detail name */
+  areas: Array<TicketAreaType>;
+  /** Every team whose 責任區 holds a ticket the caller sees in detail, by name */
+  teams: Array<AssignedTeamType>;
 };
 
 export const TicketListOrder = {
@@ -2402,7 +2434,12 @@ export type AdminTicketsQueryVariables = Exact<{
   priority?: InputMaybe<Scalars['String']['input']>;
   q?: InputMaybe<Scalars['String']['input']>;
   needType?: InputMaybe<Scalars['String']['input']>;
-  disasterType?: InputMaybe<Scalars['String']['input']>;
+  responsibleTeamUuid?: InputMaybe<Scalars['UUID']['input']>;
+  unassignedOnly?: InputMaybe<Scalars['Boolean']['input']>;
+  county?: InputMaybe<Scalars['String']['input']>;
+  town?: InputMaybe<Scalars['String']['input']>;
+  updatedAfter?: InputMaybe<Scalars['DateTime']['input']>;
+  updatedBefore?: InputMaybe<Scalars['DateTime']['input']>;
   zoom?: InputMaybe<Scalars['Float']['input']>;
   skip?: InputMaybe<Scalars['Int']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
@@ -2498,7 +2535,12 @@ export type AdminTicketMapPinsQueryVariables = Exact<{
   priority?: InputMaybe<Scalars['String']['input']>;
   q?: InputMaybe<Scalars['String']['input']>;
   needType?: InputMaybe<Scalars['String']['input']>;
-  disasterType?: InputMaybe<Scalars['String']['input']>;
+  responsibleTeamUuid?: InputMaybe<Scalars['UUID']['input']>;
+  unassignedOnly?: InputMaybe<Scalars['Boolean']['input']>;
+  county?: InputMaybe<Scalars['String']['input']>;
+  town?: InputMaybe<Scalars['String']['input']>;
+  updatedAfter?: InputMaybe<Scalars['DateTime']['input']>;
+  updatedBefore?: InputMaybe<Scalars['DateTime']['input']>;
   zoom?: InputMaybe<Scalars['Float']['input']>;
   skip?: InputMaybe<Scalars['Int']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
@@ -2534,7 +2576,12 @@ export type AdminTicketsExtentQueryVariables = Exact<{
   priority?: InputMaybe<Scalars['String']['input']>;
   q?: InputMaybe<Scalars['String']['input']>;
   needType?: InputMaybe<Scalars['String']['input']>;
-  disasterType?: InputMaybe<Scalars['String']['input']>;
+  responsibleTeamUuid?: InputMaybe<Scalars['UUID']['input']>;
+  unassignedOnly?: InputMaybe<Scalars['Boolean']['input']>;
+  county?: InputMaybe<Scalars['String']['input']>;
+  town?: InputMaybe<Scalars['String']['input']>;
+  updatedAfter?: InputMaybe<Scalars['DateTime']['input']>;
+  updatedBefore?: InputMaybe<Scalars['DateTime']['input']>;
 }>;
 
 export type AdminTicketsExtentQuery = {
@@ -2546,6 +2593,25 @@ export type AdminTicketsExtentQuery = {
     maxLat?: number | null;
     minLng?: number | null;
     maxLng?: number | null;
+  };
+};
+
+export type AdminTicketFacetsQueryVariables = Exact<{ [key: string]: never }>;
+
+export type AdminTicketFacetsQuery = {
+  __typename?: 'Query';
+  ticketFacets: {
+    __typename?: 'TicketFacetsType';
+    areas: Array<{
+      __typename?: 'TicketAreaType';
+      county: string;
+      town: string;
+    }>;
+    teams: Array<{
+      __typename?: 'AssignedTeamType';
+      uuid: string;
+      name: string;
+    }>;
   };
 };
 
@@ -4257,9 +4323,12 @@ export type AdminSpaceTicketFieldsFragment = {
   updatedAt?: string | null;
   secondaryLocation?: {
     __typename?: 'SecondaryLocationType';
+    county?: string | null;
+    town?: string | null;
     floor?: string | null;
     room?: string | null;
   } | null;
+  responsibleTeams: Array<{ __typename?: 'AssignedTeamType'; uuid: string }>;
   tasks: Array<{
     __typename?: 'TicketTaskType';
     uuid: string;
@@ -4347,9 +4416,12 @@ export type AdminBuildingMapTicketsQuery = {
     updatedAt?: string | null;
     secondaryLocation?: {
       __typename?: 'SecondaryLocationType';
+      county?: string | null;
+      town?: string | null;
       floor?: string | null;
       room?: string | null;
     } | null;
+    responsibleTeams: Array<{ __typename?: 'AssignedTeamType'; uuid: string }>;
     tasks: Array<{
       __typename?: 'TicketTaskType';
       uuid: string;
@@ -4774,8 +4846,20 @@ export const AdminSpaceTicketFieldsFragmentDoc = {
             selectionSet: {
               kind: 'SelectionSet',
               selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'county' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'town' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'floor' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'room' } },
+              ],
+            },
+          },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'responsibleTeams' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
               ],
             },
           },
@@ -4853,9 +4937,53 @@ export const AdminTicketsDocument = {
           kind: 'VariableDefinition',
           variable: {
             kind: 'Variable',
-            name: { kind: 'Name', value: 'disasterType' },
+            name: { kind: 'Name', value: 'responsibleTeamUuid' },
+          },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'unassignedOnly' },
+          },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'Boolean' } },
+          defaultValue: { kind: 'BooleanValue', value: false },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'county' },
           },
           type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'town' } },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'updatedAfter' },
+          },
+          type: {
+            kind: 'NamedType',
+            name: { kind: 'Name', value: 'DateTime' },
+          },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'updatedBefore' },
+          },
+          type: {
+            kind: 'NamedType',
+            name: { kind: 'Name', value: 'DateTime' },
+          },
         },
         {
           kind: 'VariableDefinition',
@@ -4924,10 +5052,50 @@ export const AdminTicketsDocument = {
               },
               {
                 kind: 'Argument',
-                name: { kind: 'Name', value: 'disasterType' },
+                name: { kind: 'Name', value: 'responsibleTeamUuid' },
                 value: {
                   kind: 'Variable',
-                  name: { kind: 'Name', value: 'disasterType' },
+                  name: { kind: 'Name', value: 'responsibleTeamUuid' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'unassignedOnly' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'unassignedOnly' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'county' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'county' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'town' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'town' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'updatedAfter' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'updatedAfter' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'updatedBefore' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'updatedBefore' },
                 },
               },
               {
@@ -5242,9 +5410,53 @@ export const AdminTicketMapPinsDocument = {
           kind: 'VariableDefinition',
           variable: {
             kind: 'Variable',
-            name: { kind: 'Name', value: 'disasterType' },
+            name: { kind: 'Name', value: 'responsibleTeamUuid' },
+          },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'unassignedOnly' },
+          },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'Boolean' } },
+          defaultValue: { kind: 'BooleanValue', value: false },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'county' },
           },
           type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'town' } },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'updatedAfter' },
+          },
+          type: {
+            kind: 'NamedType',
+            name: { kind: 'Name', value: 'DateTime' },
+          },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'updatedBefore' },
+          },
+          type: {
+            kind: 'NamedType',
+            name: { kind: 'Name', value: 'DateTime' },
+          },
         },
         {
           kind: 'VariableDefinition',
@@ -5313,10 +5525,50 @@ export const AdminTicketMapPinsDocument = {
               },
               {
                 kind: 'Argument',
-                name: { kind: 'Name', value: 'disasterType' },
+                name: { kind: 'Name', value: 'responsibleTeamUuid' },
                 value: {
                   kind: 'Variable',
-                  name: { kind: 'Name', value: 'disasterType' },
+                  name: { kind: 'Name', value: 'responsibleTeamUuid' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'unassignedOnly' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'unassignedOnly' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'county' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'county' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'town' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'town' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'updatedAfter' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'updatedAfter' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'updatedBefore' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'updatedBefore' },
                 },
               },
               {
@@ -5468,9 +5720,53 @@ export const AdminTicketsExtentDocument = {
           kind: 'VariableDefinition',
           variable: {
             kind: 'Variable',
-            name: { kind: 'Name', value: 'disasterType' },
+            name: { kind: 'Name', value: 'responsibleTeamUuid' },
+          },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'unassignedOnly' },
+          },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'Boolean' } },
+          defaultValue: { kind: 'BooleanValue', value: false },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'county' },
           },
           type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'town' } },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'updatedAfter' },
+          },
+          type: {
+            kind: 'NamedType',
+            name: { kind: 'Name', value: 'DateTime' },
+          },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'updatedBefore' },
+          },
+          type: {
+            kind: 'NamedType',
+            name: { kind: 'Name', value: 'DateTime' },
+          },
         },
       ],
       selectionSet: {
@@ -5511,10 +5807,50 @@ export const AdminTicketsExtentDocument = {
               },
               {
                 kind: 'Argument',
-                name: { kind: 'Name', value: 'disasterType' },
+                name: { kind: 'Name', value: 'responsibleTeamUuid' },
                 value: {
                   kind: 'Variable',
-                  name: { kind: 'Name', value: 'disasterType' },
+                  name: { kind: 'Name', value: 'responsibleTeamUuid' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'unassignedOnly' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'unassignedOnly' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'county' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'county' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'town' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'town' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'updatedAfter' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'updatedAfter' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'updatedBefore' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'updatedBefore' },
                 },
               },
             ],
@@ -5536,6 +5872,58 @@ export const AdminTicketsExtentDocument = {
 } as unknown as DocumentNode<
   AdminTicketsExtentQuery,
   AdminTicketsExtentQueryVariables
+>;
+export const AdminTicketFacetsDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'AdminTicketFacets' },
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'ticketFacets' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'areas' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'county' },
+                      },
+                      { kind: 'Field', name: { kind: 'Name', value: 'town' } },
+                    ],
+                  },
+                },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'teams' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'name' } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  AdminTicketFacetsQuery,
+  AdminTicketFacetsQueryVariables
 >;
 export const AdminTicketStatsDocument = {
   kind: 'Document',
@@ -11892,8 +12280,20 @@ export const AdminBuildingMapTicketsDocument = {
             selectionSet: {
               kind: 'SelectionSet',
               selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'county' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'town' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'floor' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'room' } },
+              ],
+            },
+          },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'responsibleTeams' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
               ],
             },
           },

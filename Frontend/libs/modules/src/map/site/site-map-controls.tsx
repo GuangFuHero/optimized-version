@@ -20,7 +20,15 @@ import { SiteDataTypeToggle } from '../../route/controls/data-type-toggle';
 import { SiteSubTypeFilter } from '../../route/controls/sub-type-filter';
 import { SiteViewSwitch } from '../../route/controls/view-switch';
 
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import {
+  designTokens,
+  displayTextSize,
+  siteMapControls,
+  siteMapLeftControlsMaxWidth,
+} from '@rescue-frontend/ui';
+
+/** A phone too narrow for the controls' one row. */
+const NARROW_PHONE = `@media (max-width: ${siteMapControls.oneRowMinWidth - 0.05}px)`;
 
 const { color } = designTokens;
 
@@ -262,14 +270,39 @@ export function SiteMapControls({ controller }: SiteMapControlsProps) {
       <Box
         sx={{
           position: 'absolute',
-          top: 16,
-          left: { mobile: 16, tablet: 24 },
+          // 12 on a phone, as the prototype: at 16 the one row (站點／任務, 篩選, 列表, 圖層) is 5px
+          // too wide for a 375px screen.
+          top: siteMapControls.top,
+          left: siteMapControls.left,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'flex-start',
           gap: 1,
           width: 'fit-content',
-          maxWidth: 'calc(100vw - 112px)',
+          // Clear of the buttons on the right: 列表 and 圖層 side by side on a phone, one column on a
+          // phone too narrow for that row, 圖層 alone from 768px up.
+          maxWidth: {
+            mobile: siteMapLeftControlsMaxWidth({
+              left: siteMapControls.left.mobile,
+              right: siteMapControls.right.mobile,
+              columns: 2,
+              clearance: siteMapControls.gap,
+            }),
+            tablet: siteMapLeftControlsMaxWidth({
+              left: siteMapControls.left.tablet,
+              right: siteMapControls.right.tablet,
+              columns: 1,
+              clearance: 28,
+            }),
+          },
+          [NARROW_PHONE]: {
+            maxWidth: siteMapLeftControlsMaxWidth({
+              left: siteMapControls.left.mobile,
+              right: siteMapControls.right.mobile,
+              columns: 1,
+              clearance: siteMapControls.gap,
+            }),
+          },
           pointerEvents: 'auto',
         }}
       >
@@ -277,7 +310,7 @@ export function SiteMapControls({ controller }: SiteMapControlsProps) {
           sx={{
             display: 'flex',
             alignItems: 'center',
-            gap: 1.5,
+            gap: { mobile: 1, tablet: 1.5 },
             minWidth: 0,
             maxWidth: '100%',
           }}
@@ -292,6 +325,7 @@ export function SiteMapControls({ controller }: SiteMapControlsProps) {
             pinned={pinnedSubDataTypes}
             onToggle={controller.toggleSubDataType}
             onTogglePinned={handleTogglePinnedSubDataType}
+            iconOnlyOnPhone
           />
         </Box>
         <SitePinnedFilterRow
@@ -304,18 +338,21 @@ export function SiteMapControls({ controller }: SiteMapControlsProps) {
       <Box
         sx={{
           position: 'absolute',
-          top: 16,
-          right: 16,
+          top: siteMapControls.top,
+          right: siteMapControls.right,
           display: 'flex',
-          flexDirection: 'column',
-          gap: 1,
+          // A phone's controls are one row: 站點／任務, 篩選, 列表, 圖層. The 篩選 beside them is its icon
+          // alone there, so 列表 fits beside 圖層 rather than hanging in a second row under it.
+          flexDirection: { mobile: 'row', tablet: 'column' },
+          // Narrower than that row (a 360px Android, a 320px iPhone SE, or a phone set to show things
+          // larger), 列表 goes back under 圖層, so it covers neither 篩選 nor its count.
+          [NARROW_PHONE]: { flexDirection: 'column-reverse' },
+          gap: `${siteMapControls.gap}px`,
           pointerEvents: 'auto',
         }}
       >
-        <SiteLayerButton controller={controller} />
-        {/* 地圖 ⇄ 列表，只在手機：平板以上的側欄已經有地圖與列表（2026-09-21 Sucre），手機的側欄
-            收在漢堡選單裡。跟圖層按鈕同一種形狀；直向疊在它下方而不是並排：390px 實測並排會蓋住
-            「篩選」。 */}
+        {/* 地圖 ⇄ 列表，只在手機：平板以上的側欄已經有地圖與列表，手機的側欄收在漢堡選單裡。
+            跟圖層按鈕同一種形狀，排在它左邊。 */}
         <SiteControlSurface
           sx={{
             display: { mobile: 'grid', tablet: 'none' },
@@ -326,6 +363,7 @@ export function SiteMapControls({ controller }: SiteMapControlsProps) {
         >
           <SiteViewSwitch module="map" />
         </SiteControlSurface>
+        <SiteLayerButton controller={controller} />
       </Box>
     </Box>
   );

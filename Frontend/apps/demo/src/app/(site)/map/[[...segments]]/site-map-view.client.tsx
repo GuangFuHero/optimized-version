@@ -483,6 +483,9 @@ function SiteMapViewportDataLayer({
             routeState={baseRouteState}
             onRouteStateChange={onMapRouteStateChange}
             showScale
+            // Under 圖層 (top 16, 44px tall, then 8px between).
+            showZoomControl
+            zoomControlTop={68}
             viewportStore={viewportStore}
             isAuthenticated={isAuthenticated}
             guestLayerCopy={!isAuthenticated}

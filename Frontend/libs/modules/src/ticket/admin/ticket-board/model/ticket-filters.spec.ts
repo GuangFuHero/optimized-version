@@ -6,16 +6,21 @@ import {
   listsEveryTicket,
   NEED_FILTER_TYPES,
   EMPTY_TICKET_FILTERS,
+  isUnlistedArea,
+  isUnlistedTeam,
   pageCountOf,
   parseTicketFilters,
   parseTicketPage,
+  passesTimeFilter,
   ticketFiltersKey,
+  ticketTimeCut,
   TICKET_MAP_AREA_KEYS,
   TICKET_PAGE_KEYS,
   toExtentVariables,
   toMapVariables,
   toPageVariables,
   toServerVariables,
+  UNASSIGNED_TEAM,
   writeTicketFilters,
 } from './ticket-filters';
 import { NEED_TYPES } from './ticket-row';
@@ -64,25 +69,98 @@ describe('ticket filters', () => {
     );
   });
 
-  it('maps taskType and disaster onto needType and disasterType', () => {
+  it('maps taskType and the area onto needType, county and town', () => {
     expect(
       toServerVariables({
         ...EMPTY_TICKET_FILTERS,
         status: 'pending',
         priority: 'high',
         taskType: 'supply',
-        disaster: 'flood',
+        county: '花蓮縣',
+        town: '光復鄉',
       }),
     ).toEqual({
       status: 'pending',
       priority: 'high',
       needType: 'supply',
-      disasterType: 'flood',
+      county: '花蓮縣',
+      town: '光復鄉',
     });
     expect(toServerVariables(EMPTY_TICKET_FILTERS)).toEqual({});
   });
 
-  it('counts active filters, not the keyword', () => {
+  it('sends a team as its 責任區, and 未指派 as unassignedOnly', () => {
+    expect(toServerVariables({ ...EMPTY_TICKET_FILTERS, team: 't-1' })).toEqual(
+      { responsibleTeamUuid: 't-1' },
+    );
+    expect(
+      toServerVariables({ ...EMPTY_TICKET_FILTERS, team: UNASSIGNED_TEAM }),
+    ).toEqual({ unassignedOnly: true });
+  });
+
+  it('cuts 時間 24 hours back, rounded down to 5 minutes', () => {
+    const now = Date.parse('2026-11-03T10:07:30Z');
+    expect(ticketTimeCut(now)).toBe('2026-11-02T10:05:00.000Z');
+    expect(
+      toServerVariables({ ...EMPTY_TICKET_FILTERS, time: 'today' }, now),
+    ).toEqual({ updatedAfter: '2026-11-02T10:05:00.000Z' });
+    expect(
+      toServerVariables({ ...EMPTY_TICKET_FILTERS, time: 'earlier' }, now),
+    ).toEqual({ updatedBefore: '2026-11-02T10:05:00.000Z' });
+  });
+
+  it('puts every ticket with a time in exactly one 時間 half', () => {
+    const now = Date.parse('2026-11-03T10:07:30Z');
+    for (const at of [
+      '2026-11-03T09:00:00Z',
+      '2026-11-02T10:05:00Z',
+      '2026-11-01T00:00:00Z',
+    ]) {
+      expect(
+        passesTimeFilter(at, 'today', now) !==
+          passesTimeFilter(at, 'earlier', now),
+      ).toBe(true);
+    }
+    expect(passesTimeFilter(null, 'today', now)).toBe(false);
+    expect(passesTimeFilter(null, 'earlier', now)).toBe(false);
+  });
+
+  it('round-trips the area, team and time, and drops a town without its county', () => {
+    const filters = {
+      ...EMPTY_TICKET_FILTERS,
+      county: '花蓮縣',
+      town: '光復鄉',
+      team: UNASSIGNED_TEAM,
+      time: 'earlier' as const,
+    };
+    expect(
+      parseTicketFilters(writeTicketFilters(new URLSearchParams(), filters)),
+    ).toEqual(filters);
+    expect(
+      parseTicketFilters(new URLSearchParams('town=光復鄉&time=bogus')),
+    ).toMatchObject({ county: null, town: null, time: null });
+  });
+
+  it('takes a team from the URL only as a uuid or 未指派, as the server takes no other', () => {
+    const uuid = '3f2b8c1e-9a4d-4e6f-8b7a-1c2d3e4f5a6b';
+    expect(parseTicketFilters(new URLSearchParams(`team=${uuid}`)).team).toBe(
+      uuid,
+    );
+    expect(
+      parseTicketFilters(new URLSearchParams(`team=${UNASSIGNED_TEAM}`)).team,
+    ).toBe(UNASSIGNED_TEAM);
+    expect(parseTicketFilters(new URLSearchParams('team=foo')).team).toBeNull();
+    expect(
+      toServerVariables(parseTicketFilters(new URLSearchParams('team=foo'))),
+    ).toEqual({});
+  });
+
+  it('keys the 時間 filter by its choice, so the key holds as the clock moves', () => {
+    const filters = { ...EMPTY_TICKET_FILTERS, time: 'today' as const };
+    expect(ticketFiltersKey(filters)).toBe(JSON.stringify({ time: 'today' }));
+  });
+
+  it('counts active filters, not the keyword; an area counts once', () => {
     expect(
       countActiveFilters({
         ...EMPTY_TICKET_FILTERS,
@@ -90,6 +168,15 @@ describe('ticket filters', () => {
         q: 'xx',
       }),
     ).toBe(1);
+    expect(
+      countActiveFilters({
+        ...EMPTY_TICKET_FILTERS,
+        county: '花蓮縣',
+        town: '光復鄉',
+        team: 't-1',
+        time: 'today',
+      }),
+    ).toBe(3);
   });
 
   it('asks the server for one page of 50, from page 1', () => {
@@ -112,7 +199,7 @@ describe('ticket filters', () => {
   it('asks for the tickets in view, up to 200, with the filters', () => {
     expect(
       toMapVariables(
-        { ...EMPTY_TICKET_FILTERS, disaster: 'flood' },
+        { ...EMPTY_TICKET_FILTERS, county: '花蓮縣' },
         {
           west: 121.512345,
           south: 23.912341,
@@ -122,7 +209,7 @@ describe('ticket filters', () => {
         },
       ),
     ).toEqual({
-      disasterType: 'flood',
+      county: '花蓮縣',
       // Snapped outward, so a ticket on the edge of the screen stays in.
       bounds: {
         minLat: 23.9123,
@@ -214,6 +301,52 @@ describe('ticket filters', () => {
     expect(
       toExtentVariables({ ...EMPTY_TICKET_FILTERS, status: 'pending' }),
     ).toEqual({ status: 'pending' });
+  });
+});
+
+describe('isUnlistedTeam', () => {
+  const team = '10000000-0000-4000-8000-000000000002';
+
+  it('clears a team the facets do not list, once they have loaded', () => {
+    expect(isUnlistedTeam(team, true, [])).toBe(true);
+    expect(isUnlistedTeam(team, true, [team])).toBe(false);
+    expect(isUnlistedTeam(team, true, undefined)).toBe(false);
+  });
+
+  it('keeps 未指派 and no choice', () => {
+    expect(isUnlistedTeam(UNASSIGNED_TEAM, true, [])).toBe(false);
+    expect(isUnlistedTeam(null, true, [])).toBe(false);
+  });
+
+  it('clears any team for a caller without the 組織分配 row', () => {
+    expect(isUnlistedTeam(team, false, undefined)).toBe(true);
+    expect(isUnlistedTeam(UNASSIGNED_TEAM, false, undefined)).toBe(true);
+  });
+
+  it('keeps any team while the capabilities are unknown (a fresh load)', () => {
+    expect(isUnlistedTeam(team, undefined, undefined)).toBe(false);
+    expect(isUnlistedTeam(UNASSIGNED_TEAM, undefined, [])).toBe(false);
+  });
+});
+
+describe('isUnlistedArea', () => {
+  const listed = [{ county: '花蓮縣', town: '光復鄉' }];
+
+  it('keeps a listed town, and every choice until the facets load', () => {
+    expect(isUnlistedArea('花蓮縣', '光復鄉', true, listed)).toBe(false);
+    expect(isUnlistedArea('花蓮縣', '鳳林鎮', true, undefined)).toBe(false);
+    expect(isUnlistedArea(null, null, true, [])).toBe(false);
+  });
+
+  it('clears a town not listed, a county alone, and any place without the row', () => {
+    expect(isUnlistedArea('花蓮縣', '鳳林鎮', true, listed)).toBe(true);
+    expect(isUnlistedArea('花蓮縣', null, true, listed)).toBe(true);
+    expect(isUnlistedArea('花蓮縣', '光復鄉', false, undefined)).toBe(true);
+  });
+
+  it('keeps any place while the capabilities are unknown (a fresh load)', () => {
+    expect(isUnlistedArea('花蓮縣', '光復鄉', undefined, undefined)).toBe(false);
+    expect(isUnlistedArea('花蓮縣', null, undefined, listed)).toBe(false);
   });
 });
 

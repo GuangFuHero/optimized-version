@@ -44,7 +44,7 @@ class RowError:
 
 
 def _line_of(index: int) -> int:
-    """Spreadsheet line number for a zero-based data-row index (the header is line 1)."""
+    """A zero-based data-row index's spreadsheet line when none is given: the header is line 1."""
     return index + 2
 
 
@@ -111,9 +111,7 @@ def coerce(column: ColumnSpec, raw: str):
     if not value:
         return None
     if column.max_length is not None and len(value) > column.max_length:
-        raise ValueError(
-            f"長度 {len(value)} 超過上限 {column.max_length} 字，請縮短後再匯入"
-        )
+        raise ValueError(f"長度 {len(value)} 超過上限 {column.max_length} 字，請縮短後再匯入")
     if column.data_type == INTEGER:
         number = _to_integer(value)
         if column.min_value is not None and number < column.min_value:
@@ -168,9 +166,7 @@ def _check_coordinates(row: dict[str, str], line: int, *, is_update: bool) -> li
             errors.append(RowError(line=line, column=column, message=f"「{value}」不是座標數字"))
             continue
         if not low <= number <= high:
-            errors.append(
-                RowError(line=line, column=column, message=f"座標超出範圍（{low}~{high}）")
-            )
+            errors.append(RowError(line=line, column=column, message=f"座標超出範圍（{low}~{high}）"))
     return errors
 
 
@@ -180,9 +176,14 @@ def validate_row(
     *,
     index: int,
     is_update: bool,
+    line: int | None = None,
 ) -> list[RowError]:
-    """Return every problem with one row; an empty list means it is writable as-is."""
-    line = _line_of(index)
+    """Return every problem with one row; an empty list means it is writable as-is.
+
+    `line` is the row's spreadsheet line when the file says (`Table.line_of`); without it, the
+    header is taken to be line 1.
+    """
+    line = _line_of(index) if line is None else line
     known = {column.header: column for column in columns}
     errors: list[RowError] = []
 
@@ -199,9 +200,7 @@ def validate_row(
             # headers we do not recognise are simply ignored, since a file may legitimately
             # carry extra notes columns.
             if value and header.startswith(DYNAMIC_PREFIX):
-                errors.append(
-                    RowError(line=line, column=header, message="這個動態欄位不在目前的欄位設定裡")
-                )
+                errors.append(RowError(line=line, column=header, message="這個動態欄位不在目前的欄位設定裡"))
             continue
 
         if header in ("latitude", "longitude"):

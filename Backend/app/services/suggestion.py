@@ -144,8 +144,10 @@ async def create_station_suggestion(
         params=params,
         priority="medium",
         actor_uuid=actor_uid,
-        ref_type="station_suggestion",
-        ref_uuid=suggestion_uuid,
+        # The station, not the suggestion: a reviewer opens the station to review it (the admin
+        # bell's 點了去哪裡, Design/後台/docs/通知鈴鐺.md), and no route reads one suggestion.
+        ref_type="station",
+        ref_uuid=station_uuid,
         explicit_recipients=recipients,
     )
     await db.refresh(suggestion)
