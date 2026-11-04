@@ -33,6 +33,10 @@ import { SITE_FALLBACK_DATA_TYPE } from '../route';
 import { useSiteRouteState } from '../route';
 import { SiteDataTypeToggle } from '../route/controls/data-type-toggle';
 import { SiteControlSurface } from '../route/controls/control-surface';
+import {
+  SitePinnedFilterRow,
+  usePinnedSubDataTypes,
+} from '../route/controls/pinned-sub-types';
 import { SiteSubTypeFilter } from '../route/controls/sub-type-filter';
 import { SiteViewSwitch } from '../route/controls/view-switch';
 import { useAuthSession } from '../session/auth-session';
@@ -103,6 +107,8 @@ export function SiteListView() {
   });
 
   const dataType = controller.dataType ?? SITE_FALLBACK_DATA_TYPE;
+  const { pinned, pinnedOptions, togglePinned } =
+    usePinnedSubDataTypes(dataType);
 
   // The open buildings, for 這些大樓可以看各樓層 and for 在這一層請求協助 in their drawer: on 任務 only.
   const { buildings, loading: buildingsLoading } = useBuildingMaps({
@@ -431,6 +437,8 @@ export function SiteListView() {
           minWidth: 0,
           minHeight: 0,
           display: 'grid',
+          // Without a track width, a long row of pins sets it and pushes the page off the screen.
+          gridTemplateColumns: 'minmax(0, 1fr)',
           gridTemplateRows: 'auto minmax(0, 1fr)',
         }}
       >
@@ -453,7 +461,9 @@ export function SiteListView() {
           <SiteSubTypeFilter
             dataType={dataType}
             selected={controller.subDataTypes}
+            pinned={pinned}
             onToggle={controller.toggleSubDataType}
+            onTogglePinned={togglePinned}
           />
           {/* 與地圖頁同一顆（2026-09-18），只在手機：平板以上的側欄已經有地圖與列表（2026-09-21）。 */}
           <SiteControlSurface
@@ -518,6 +528,16 @@ export function SiteListView() {
               />
             ) : null}
           </Stack>
+          {/* A line of its own that scrolls sideways: wrapping would make this bar's height unpredictable. */}
+          {pinnedOptions.length > 0 ? (
+            <Box sx={{ flex: '1 0 100%', minWidth: 0 }}>
+              <SitePinnedFilterRow
+                items={pinnedOptions}
+                selected={controller.subDataTypes}
+                onToggle={controller.toggleSubDataType}
+              />
+            </Box>
+          ) : null}
         </Box>
 
         <Box
