@@ -16,6 +16,7 @@ export {
   boundaryChange,
   countInsideArea,
   isInArea,
+  isInView,
   viewOfArea,
   type AreaContents,
   type BoundaryChange,

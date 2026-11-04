@@ -1,6 +1,12 @@
 'use client';
 
-import { forwardRef, type ComponentProps, type ReactNode } from 'react';
+import {
+  forwardRef,
+  useEffect,
+  useRef,
+  type ComponentProps,
+  type ReactNode,
+} from 'react';
 
 import { Box, ButtonBase, Stack, Typography } from '@mui/material';
 import { useStation, useTicket } from '@rescue-frontend/data-access/admin';
@@ -53,6 +59,7 @@ function PanelFrame({
   onBack,
   href,
   linkLabel,
+  loaded,
   children,
 }: {
   heading: string;
@@ -60,10 +67,23 @@ function PanelFrame({
   onBack: () => void;
   href: string;
   linkLabel: string;
+  /** Measured again once the content is in: it is what makes the panel tall. */
+  loaded: boolean;
   children: ReactNode;
 }) {
+  // On a phone the panel sits under the map: a pin tapped must not open below the fold.
+  const panelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    panelRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [loaded]);
+
   return (
-    <Stack sx={{ flex: 1, minHeight: 0 }}>
+    <Stack
+      ref={panelRef}
+      component="section"
+      aria-label={heading}
+      sx={{ flex: 1, minHeight: 0 }}
+    >
       <Stack
         direction="row"
         spacing={1}
@@ -162,6 +182,7 @@ function TicketPanel({
       onBack={onBack}
       href={adminTicketHref(marker.id)}
       linkLabel="到任務管理看完整內容"
+      loaded={!query.isPending}
     >
       <Title>{view?.title ?? marker.title}</Title>
       {view ? (
@@ -242,6 +263,7 @@ function StationPanel({
       onBack={onBack}
       href={`/stations?station=${encodeURIComponent(marker.id)}`}
       linkLabel="到資源站點管理看完整內容"
+      loaded={!query.isPending}
     >
       <Title>{view?.title ?? marker.title}</Title>
       {station && view ? (

@@ -34,6 +34,7 @@ import {
   useAdminMapAreas,
   useAdminMapLiveMarkers,
   AdminMapPinPanel,
+  isInView,
   isLocationCellId,
   viewOfArea,
   type AdminMapFilters,
@@ -301,26 +302,31 @@ export function AdminMapPageClient() {
     setSelectedAreaId(null);
     setRouteState((current) => ({ ...current, selectedMarkerId: undefined }));
   }, []);
-  // Opens the ticket's detail the way a pin does, and brings the map to it.
+  // Opens the ticket's detail the way a pin does. The map moves only if the ticket is out of view:
+  // an area is being read, and the whole of it should stay on screen.
   const handleSelectAreaTicket = useCallback(
     (ticket: RescueMapMarkerItem) => {
       setRouteState((current) => ({
         ...current,
         selectedMarkerId: ticket.id,
       }));
-      viewportStore.setState({
-        ...viewportStore.getSnapshot(),
-        position: {
-          center: ticket.position,
-          zoom: viewportStore.getSnapshot().position?.zoom ?? 16,
-        },
-      });
+      const view = viewportStore.getSnapshot();
+
+      if (!isInView(ticket.position, view.bbox)) {
+        viewportStore.setState({
+          ...view,
+          position: {
+            center: ticket.position,
+            zoom: view.position?.zoom ?? 16,
+          },
+        });
+      }
     },
     [viewportStore],
   );
   useEffect(() => {
     // While its boundary is changed, Esc is for that: back to the area, not out of it.
-    if (!selectedAreaId || editing) {
+    if ((!selectedAreaId && !pickedPin) || editing) {
       return;
     }
 
@@ -331,14 +337,19 @@ export function AdminMapPageClient() {
         event.target instanceof HTMLTextAreaElement;
 
       if (event.key === 'Escape' && !typing) {
-        handleBackToAreaList();
+        // One step back at a time: the pin's panel first, then the area under it.
+        if (pickedPin) {
+          closePin();
+        } else {
+          handleBackToAreaList();
+        }
       }
     };
 
     window.addEventListener('keydown', closeOnEscape);
 
     return () => window.removeEventListener('keydown', closeOnEscape);
-  }, [editing, handleBackToAreaList, selectedAreaId]);
+  }, [closePin, editing, handleBackToAreaList, pickedPin, selectedAreaId]);
   const handleSelectArea = useCallback(
     (areaId: string) => {
       const area = [...visibleClosureAreas, ...visiblePublicZones].find(
@@ -824,7 +835,11 @@ export function AdminMapPageClient() {
       return;
     }
 
-    setSelectedAreaId(null);
+    if (pickedPin) {
+      closePin();
+    } else {
+      setSelectedAreaId(null);
+    }
   };
 
   return (
@@ -845,9 +860,11 @@ export function AdminMapPageClient() {
           ref={mapBoxRef}
           sx={{
             position: 'relative',
-            flex: 1,
+            flex: { mobile: 'none', tablet: 1 },
             minWidth: 0,
-            minHeight: '60dvh',
+            // A height, not a min-height: the map inside is 100% of this box, and 100% of a
+            // min-height is nothing, which left the phone with no map at all.
+            height: { mobile: '60dvh', tablet: 'auto' },
           }}
         >
           <Map
