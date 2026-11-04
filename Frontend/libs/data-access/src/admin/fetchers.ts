@@ -2,6 +2,7 @@
 
 import {
   queryOptions,
+  useInfiniteQuery,
   useMutation,
   useQuery,
   useQueryClient,
@@ -14,6 +15,7 @@ import {
   invalidateTicketWrite,
   type AdminQueryOptions,
 } from './graphql-fetchers';
+import { readAllPages } from './team-members';
 import { SILENT_ERROR_META } from './query-client';
 import { ticketKeys } from './ticket-query-keys';
 
@@ -58,6 +60,33 @@ export function useUsers(
   return useQuery({ ...usersQuery(params), enabled: options.enabled });
 }
 
+/** `/admin/users` pages by `skip`/`limit`; the member pages need every account to build rosters. */
+const ALL_USERS_PAGE_SIZE = 200;
+
+export const allUsersQuery = () =>
+  queryOptions({
+    queryKey: ['admin', 'users', 'AllUsers'],
+    queryFn: async ({ signal }) => {
+      const users: components['schemas']['AdminUserListItem'][] = [];
+      for (;;) {
+        const page = await adminRestClient
+          .GET('/api/v1/admin/users', {
+            params: {
+              query: { skip: users.length, limit: ALL_USERS_PAGE_SIZE },
+            },
+            signal,
+          })
+          .then(responseData);
+        users.push(...page);
+        if (page.length < ALL_USERS_PAGE_SIZE) return users;
+      }
+    },
+  });
+
+export function useAllUsers(options: AdminQueryOptions = {}) {
+  return useQuery({ ...allUsersQuery(), enabled: options.enabled });
+}
+
 export const teamsQuery = () =>
   queryOptions({
     queryKey: ['admin', 'teams', 'Teams'],
@@ -73,18 +102,20 @@ export type TeamMember = components['schemas']['TeamMemberItem'];
 
 /**
  * One team's members and their role in it (`team.member.view` covering the team); another team
- * answers 404. The first 500, the backend's cap for one page.
+ * answers 404. Every page, so a roster or a last-administrator check sees the whole team.
  */
 export const teamMembersQuery = (teamUuid: string) =>
   queryOptions({
     queryKey: ['admin', 'teams', 'TeamMembers', { teamUuid }],
     queryFn: ({ signal }): Promise<TeamMember[]> =>
-      adminRestClient
-        .GET('/api/v1/admin/teams/{team_uuid}/members', {
-          params: { path: { team_uuid: teamUuid }, query: { limit: 500 } },
-          signal,
-        })
-        .then(responseData),
+      readAllPages((skip, limit) =>
+        adminRestClient
+          .GET('/api/v1/admin/teams/{team_uuid}/members', {
+            params: { path: { team_uuid: teamUuid }, query: { skip, limit } },
+            signal,
+          })
+          .then(responseData),
+      ),
   });
 
 export function useTeamMembers(
@@ -491,6 +522,95 @@ export function useRevokeUserSessions() {
   });
 }
 
+export type RoleRequestsQuery = NonNullable<
+  paths['/api/v1/admin/role-requests']['get']['parameters']['query']
+>;
+export interface RoleRequestsParams {
+  query?: RoleRequestsQuery;
+}
+
+/**
+ * Every matching request, page by page: the backend's first page holds only the oldest 100, so
+ * the queue's badge and kind chips would miss whatever waits behind them.
+ */
+export const roleRequestsQuery = (params: RoleRequestsParams = {}) =>
+  queryOptions({
+    queryKey: ['admin', 'role-requests', 'RoleRequests', params],
+    queryFn: ({ signal }) =>
+      readAllPages((skip, limit) =>
+        adminRestClient
+          .GET('/api/v1/admin/role-requests', {
+            params: { ...params, query: { ...params.query, skip, limit } },
+            signal,
+          })
+          .then(responseData),
+      ),
+  });
+
+export function useRoleRequests(
+  params: RoleRequestsParams = {},
+  options: AdminQueryOptions = {},
+) {
+  return useQuery({ ...roleRequestsQuery(params), enabled: options.enabled });
+}
+
+export interface DecideRoleRequestInput {
+  params: paths['/api/v1/admin/role-requests/{request_uuid}/approve']['post']['parameters'];
+  body: paths['/api/v1/admin/role-requests/{request_uuid}/approve']['post']['requestBody']['content']['application/json'];
+}
+
+/**
+ * A decision answers 409 when it cannot be made as asked — most often because the other queue
+ * decided first (first decision wins, Spec/026). The caller says why; the queue is read again
+ * so a request decided elsewhere leaves it.
+ */
+const DECISION_META = { handledStatuses: [409] };
+
+function refetchQueueOnConflict(
+  queryClient: ReturnType<typeof useQueryClient>,
+) {
+  return (error: Error) => {
+    if (error instanceof ApiError && error.status === 409) {
+      void queryClient.invalidateQueries({
+        queryKey: ['admin', 'role-requests'],
+      });
+    }
+  };
+}
+
+export function useApproveRoleRequest() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ params, body }: DecideRoleRequestInput) =>
+      adminRestClient
+        .POST('/api/v1/admin/role-requests/{request_uuid}/approve', {
+          params,
+          body,
+        })
+        .then(responseData),
+    meta: DECISION_META,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin'] }),
+    onError: refetchQueueOnConflict(queryClient),
+  });
+}
+
+export function useRejectRoleRequest() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ params, body }: DecideRoleRequestInput) =>
+      adminRestClient
+        .POST('/api/v1/admin/role-requests/{request_uuid}/reject', {
+          params,
+          body,
+        })
+        .then(responseData),
+    meta: DECISION_META,
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ['admin', 'role-requests'] }),
+    onError: refetchQueueOnConflict(queryClient),
+  });
+}
+
 export interface CreateTeamInput {
   body: paths['/api/v1/admin/teams']['post']['requestBody']['content']['application/json'];
 }
@@ -534,6 +654,110 @@ export function useRemoveTeamMember() {
         })
         .then(responseData),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin'] }),
+  });
+}
+
+export interface UpdateTeamInput {
+  params: paths['/api/v1/admin/teams/{team_uuid}']['patch']['parameters'];
+  body: paths['/api/v1/admin/teams/{team_uuid}']['patch']['requestBody']['content']['application/json'];
+}
+
+export function useUpdateTeam() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ params, body }: UpdateTeamInput) =>
+      adminRestClient
+        .PATCH('/api/v1/admin/teams/{team_uuid}', { params, body })
+        .then(responseData),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin'] }),
+  });
+}
+
+export interface SetTeamStatusInput {
+  params: paths['/api/v1/admin/teams/{team_uuid}/status']['post']['parameters'];
+  body: paths['/api/v1/admin/teams/{team_uuid}/status']['post']['requestBody']['content']['application/json'];
+}
+
+export function useSetTeamStatus() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ params, body }: SetTeamStatusInput) =>
+      adminRestClient
+        .POST('/api/v1/admin/teams/{team_uuid}/status', { params, body })
+        .then(responseData),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin'] }),
+  });
+}
+
+export const teamInvitesQuery = (teamUuid: string) =>
+  queryOptions({
+    queryKey: ['admin', 'teams', 'TeamInvites', teamUuid],
+    queryFn: ({ signal }) =>
+      adminRestClient
+        .GET('/api/v1/admin/teams/{team_uuid}/invites', {
+          params: { path: { team_uuid: teamUuid } },
+          signal,
+        })
+        .then(responseData),
+  });
+
+export function useTeamInvites(
+  teamUuid: string,
+  options: AdminQueryOptions = {},
+) {
+  return useQuery({ ...teamInvitesQuery(teamUuid), enabled: options.enabled });
+}
+
+export function useCreateTeamInvite() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ teamUuid }: { teamUuid: string }) =>
+      adminRestClient
+        .POST('/api/v1/admin/teams/{team_uuid}/invites', {
+          params: { path: { team_uuid: teamUuid } },
+        })
+        .then(responseData),
+    onSuccess: (_, { teamUuid }) =>
+      queryClient.invalidateQueries({
+        queryKey: teamInvitesQuery(teamUuid).queryKey,
+      }),
+  });
+}
+
+export type AuditLogsQuery = Omit<
+  NonNullable<paths['/api/v1/admin/audit-logs']['get']['parameters']['query']>,
+  'limit' | 'offset'
+>;
+
+/** The backend's page cap (ADR-358). */
+export const AUDIT_LOGS_PAGE_SIZE = 100;
+
+/** Newest first, a page at a time; `fetchNextPage` reads older entries. */
+export function useAuditLogs(
+  query: AuditLogsQuery = {},
+  options: AdminQueryOptions = {},
+) {
+  return useInfiniteQuery({
+    queryKey: ['admin', 'audit-logs', 'AuditLogs', query],
+    queryFn: ({ pageParam, signal }) =>
+      adminRestClient
+        .GET('/api/v1/admin/audit-logs', {
+          params: {
+            query: {
+              ...query,
+              limit: AUDIT_LOGS_PAGE_SIZE,
+              offset: pageParam,
+            },
+          },
+          signal,
+        })
+        .then(responseData),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, pages) =>
+      lastPage.length < AUDIT_LOGS_PAGE_SIZE
+        ? undefined
+        : pages.length * AUDIT_LOGS_PAGE_SIZE,
+    enabled: options.enabled,
   });
 }
 

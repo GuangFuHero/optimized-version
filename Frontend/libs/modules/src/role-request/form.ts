@@ -48,6 +48,22 @@ export const ROLE_REQUEST_LABELS: Record<RoleRequestRole, string> = {
   data_auditor: '資料檢核員',
 };
 
+/**
+ * What the invite page calls the applicant's other pending request: the team it is for or would
+ * found, else its role. A request from before Spec 026 names no team whatever its role.
+ */
+export function pendingRequestName(pending: {
+  team_name: string | null;
+  new_team_name: string | null;
+  requested_role: RoleRequestRole;
+}): string {
+  return (
+    pending.team_name ??
+    pending.new_team_name ??
+    ROLE_REQUEST_LABELS[pending.requested_role]
+  );
+}
+
 /** The free-text 可聯絡到你的方式 is gone: a reviewer calls the verified phone instead (G-2). */
 export interface RoleRequestFormValues {
   role: RoleRequestRole | null;

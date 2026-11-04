@@ -89,7 +89,8 @@ export const ADMIN_NAV_SECTIONS: readonly {
         href: '/teams',
         Icon: Building2,
         description: '團隊與成員',
-        capability: 'team.view',
+        // Team admins and super admins only: a team member holds `team.view` but not this.
+        capability: 'team.member.manage',
       },
       {
         id: 'members',
@@ -97,7 +98,9 @@ export const ADMIN_NAV_SECTIONS: readonly {
         href: '/users',
         Icon: UserCog,
         description: '全平台人員與權限',
-        capability: 'user.view',
+        // Super admins only (ADMIN-027: 成員與權限 is super_admin only). Data auditors also hold
+        // user.view, so gating on it would show them a page that only says 沒有權限.
+        capability: 'rbac.assign',
       },
       {
         id: 'audit',
@@ -137,10 +140,26 @@ export function useAdminNavSections() {
   })).filter((section) => section.items.length > 0);
 }
 
-export function useActiveAdminNavItem() {
-  const pathname = usePathname();
-
+/** The sidebar item a path is under, if any. */
+export function adminNavItemFor(pathname: string): AdminNavItem | undefined {
   return ADMIN_NAV_SECTIONS.flatMap((section) => section.items).find(
     (item) => pathname === item.href || pathname.startsWith(`${item.href}/`),
   );
+}
+
+/**
+ * Whether an identity with these capabilities may open a link: the shell answers 沒有權限 on a
+ * page whose sidebar item needs a capability the identity lacks, and the query never matters.
+ */
+export function canOpenAdminHref(
+  href: string,
+  capabilities: readonly string[],
+): boolean {
+  const capability = adminNavItemFor(href.split('?', 1)[0])?.capability;
+
+  return !capability || capabilities.includes(capability);
+}
+
+export function useActiveAdminNavItem() {
+  return adminNavItemFor(usePathname());
 }

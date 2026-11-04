@@ -36,6 +36,11 @@ export interface DataTableProps<TData extends RowData> {
   density?: DataTableDensity;
   minWidth?: number;
   empty?: ReactNode;
+  /**
+   * How a row's cells line up. `start` for a table whose cells run several lines, so each row's
+   * first line reads across; header cells stay centred.
+   */
+  rowAlign?: 'center' | 'start';
 }
 
 const ROW_PADDING: Record<DataTableDensity, string> = {
@@ -52,6 +57,7 @@ export function DataTable<TData extends RowData>({
   density = 'regular',
   minWidth,
   empty,
+  rowAlign = 'center',
 }: DataTableProps<TData>) {
   const table = useTable({
     features: dataTableFeatures,
@@ -143,6 +149,7 @@ export function DataTable<TData extends RowData>({
                 sx={[
                   {
                     ...gridSx,
+                    alignItems: rowAlign,
                     p: ROW_PADDING[density],
                     cursor: onRowClick ? 'pointer' : 'default',
                     transition: `background-color ${motion.transition.fast}`,

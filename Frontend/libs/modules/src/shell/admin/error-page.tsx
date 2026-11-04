@@ -12,6 +12,36 @@ import { useAdminNavSections } from './nav';
 
 const { color, focusRing, radius, typography } = designTokens;
 
+/**
+ * What a 403 says. A team member is not pointed anywhere: members cannot look up who their team's
+ * admins are (ADR-357 point 5), and a super admin has no one above to ask; without that clause the
+ * other two read as sentences of their own. Switching is offered only to who has another identity.
+ */
+export function forbiddenLead(
+  identity:
+    | { role?: string | null; team_uuid?: string | null }
+    | null
+    | undefined,
+  canSwitch: boolean,
+): string {
+  const askSuperAdmin =
+    identity?.role !== 'super_admin' &&
+    !(identity?.team_uuid && identity.role !== 'admin');
+
+  if (askSuperAdmin) {
+    return (
+      '你目前的身份沒有開放這個頁面。如果工作上需要，請聯絡平台的超級管理員開通' +
+      (canSwitch ? '；或從右上角的人名切換到其他身份再試一次。' : '。') +
+      '也可以從左邊的選單，或從這裡繼續：'
+    );
+  }
+  return (
+    '你目前的身份沒有開放這個頁面。' +
+    (canSwitch ? '可以從右上角的人名切換到其他身份再試一次。也可以' : '可以') +
+    '從左邊的選單，或從這裡繼續：'
+  );
+}
+
 export function AdminErrorPage({ code }: { code: '404' | '403' }) {
   const { data: user } = useCurrentUser();
   const sections = useAdminNavSections();
@@ -21,18 +51,11 @@ export function AdminErrorPage({ code }: { code: '404' | '403' }) {
     .slice(0, 3);
   const identity = user?.active_identity;
   const forbidden = code === '403';
-  const contact =
-    identity?.team_uuid && identity.role !== 'admin'
-      ? '你的團隊管理員'
-      : '平台的超級管理員';
   const lead = forbidden
-    ? (identity?.role === 'super_admin'
-        ? '你目前的身份沒有開放這個頁面'
-        : `你目前的身份沒有開放這個頁面。如果工作上需要，請聯絡${contact}開通`) +
-      (backOfficeIdentities(user?.identities ?? []).length > 1
-        ? '；或從右上角的人名切換到其他身份再試一次。'
-        : '。') +
-      '也可以從左邊的選單，或從這裡繼續：'
+    ? forbiddenLead(
+        identity,
+        backOfficeIdentities(user?.identities ?? []).length > 1,
+      )
     : '網址可能打錯了，或這個頁面已經移除。可以從左邊的選單前往其他頁面，或從這裡繼續：';
 
   return (

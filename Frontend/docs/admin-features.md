@@ -26,6 +26,7 @@ Admin 使用獨立的 Next.js 16 app `apps/admin`，預設 port 為 3001。頁�
 - `admin/announcement`
 - `admin/field-configuration`
 - `admin/invite-side-sheet`
+- `admin/members`（正式團隊與成員權限頁）
 - `admin/user/user-list`
 - `shell/admin/*`
 - `station/admin/station-create`
@@ -141,8 +142,20 @@ Admin 使用獨立的 Next.js 16 app `apps/admin`，預設 port 為 3001。頁�
 
 ### `/users`
 
-- 已有 page 檔案
-- 對應的 reusable modules 位於 `admin/user/user-list`
+- 使用 `admin/members/members-page`，包含平台級人員、全平台人員、申請審核與操作紀錄
+- 已串接角色調整、強制登出與申請核准／拒絕 API
+
+### `/teams`
+
+- 使用 `admin/members/teams-page`；超級管理員可新增、編輯、停用／恢復團隊及調整成員
+- 只開放給團隊管理員與超級管理員；團隊成員、資料檢核員看到沒有權限（側欄與頁面都看 `team.member.manage`）
+- 管理員可編輯資料、產生邀請、審核申請及查閱團隊紀錄
+- 「所有團隊」列出每個運作中團隊的所有管理員：實名（沒有就用帳號名稱）、已驗證電話、已驗證 Email，讀 `roleRequestTeams` 的 `admins`；沒有管理員的團隊寫「還沒有管理員」
+- 通知連到目前身份開不了的頁面時（例：成員收到「你已加入團隊」），改開總覽儀表板
+- 成員名單透過 `skip`／`limit` 讀取所有頁，避免 200 人之後漏列或誤判最後一位管理員
+- 邀請 QR 與分享連結指向公開網站的 `/invites/{token}`，由伺服器的 `SITE_APP_URL` 決定網域；正式環境必填，未設定或格式錯誤時停止產生分享連結
+- 前台邀請頁支援登入／註冊返回、姓名與理由、既有手機驗證（含 LINE 再驗證返回草稿）、送出及撤回申請，並處理失效連結、已是成員、已有待審申請及同時送出衝突
+- 驗證方式與限制見 [團隊邀請驗證](./team-invite-verification.md)
 
 ### `/announcements`
 
