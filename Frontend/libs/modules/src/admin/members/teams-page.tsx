@@ -477,7 +477,7 @@ function TeamDetail({
       </Panel>
 
       {/* Without an admin, join requests wait on super admins alone and nobody speaks for the
-          team (EA1), so the super admin looking at it is asked to appoint one. */}
+          team (EA1), so the super admin looking at it is asked to appoint one (TEAM-ADMIN-103). */}
       {running && admins === 0 ? (
         <Callout tone="warning">
           <b>這一隊還沒有管理員</b>
@@ -696,16 +696,17 @@ const allTeamsColumn = createColumnHelper<DataTableFeatures, DirectoryTeam>();
 
 /**
  * 管理員, 電話 and Email share one grid, header included, so each admin's three values stay on
- * one line even when a long email wraps.
+ * one line even when a long email wraps; every admin is listed, none folded (TEAM-ADMIN-101).
  */
 const ADMIN_GRID_SX = {
   display: 'grid',
-  gridTemplateColumns: 'minmax(96px, 1fr) 130px minmax(0, 1.6fr)',
+  gridTemplateColumns: '100px 120px minmax(170px, 1fr)',
   columnGap: '12px',
-  rowGap: 1,
+  rowGap: '6px',
   alignItems: 'baseline',
 } as const;
 
+/** Not 未提供, which reads as a team that left it blank (TEAM-ADMIN-102). */
 const NO_ADMIN = '還沒有管理員';
 
 function AdminContactsHeader() {
@@ -739,7 +740,7 @@ function AdminContactsCell({ admins }: { admins: readonly DirectoryAdmin[] }) {
           <Typography
             sx={{
               ...typography.body[300],
-              color: color.fg.neutral.default,
+              color: color.fg.neutral.subtle,
               overflowWrap: 'anywhere',
             }}
           >
@@ -871,14 +872,13 @@ function AllTeamsTable({ selfTeamUuid }: { selfTeamUuid: string }) {
   const columns = allTeamsColumn.columns([
     allTeamsColumn.accessor('name', {
       header: '團隊名稱',
-      meta: { width: 'minmax(160px, 1.4fr)' },
+      meta: { width: 'minmax(160px, 1.2fr)' },
       cell: ({ row }) => (
         <Stack
           direction="row"
-          sx={{ alignItems: 'center', gap: 1, minWidth: 0 }}
+          sx={{ alignItems: 'center', gap: 1, minWidth: 0, flexWrap: 'wrap' }}
         >
           <Typography
-            noWrap
             sx={{ ...typography.label[400], color: color.fg.neutral.default }}
           >
             {row.original.name}
@@ -891,7 +891,7 @@ function AllTeamsTable({ selfTeamUuid }: { selfTeamUuid: string }) {
     }),
     allTeamsColumn.accessor('type', {
       header: '類型',
-      meta: { width: '100px' },
+      meta: { width: '88px' },
       cell: ({ getValue }) => <TeamTypeBadge type={getValue()} />,
     }),
     ...(showAdmins
@@ -899,7 +899,7 @@ function AllTeamsTable({ selfTeamUuid }: { selfTeamUuid: string }) {
           allTeamsColumn.display({
             id: 'admins',
             header: () => <AdminContactsHeader />,
-            meta: { width: 'minmax(0, 3.6fr)' },
+            meta: { width: 'minmax(414px, 1.4fr)' },
             cell: ({ row }) => (
               <AdminContactsCell admins={row.original.admins ?? []} />
             ),
@@ -930,6 +930,7 @@ function AllTeamsTable({ selfTeamUuid }: { selfTeamUuid: string }) {
           columns={columns}
           data={teams}
           getRowId={(row) => row.uuid}
+          rowAlign="start"
           getRowSx={(row) => ({
             bgcolor:
               row.uuid === selfTeamUuid ? color.bg.primary.subtle : undefined,
