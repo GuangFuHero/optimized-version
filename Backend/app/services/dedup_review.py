@@ -144,7 +144,10 @@ async def list_pairs(
     skip: int = 0,
     limit: int = DEFAULT_LIMIT,
 ) -> PairPage:
-    """Cards matching the filters, pending ones by default, newest first, with both sides."""
+    """Cards matching the filters, pending ones by default, newest first, with both sides.
+
+    A pending card with a side gone is left out (ADR-461); a decided one is listed as it is.
+    """
     await require_scope(actor, Perm.AI_DUP_VIEW, db)
     statuses = _checked(statuses, PAIR_STATUSES, "status") or list(PENDING_STATUSES)
     entity_kinds = _checked(entity_kinds, ENTITY_KINDS, "entity kind")
@@ -160,6 +163,7 @@ async def list_pairs(
         order_by=(*_SORTS[sort], DuplicatePair.uuid),
         skip=skip,
         limit=limit,
+        gone_side_hides=PENDING_STATUSES,
     )
     return PairPage(items=await _with_sides(db, pairs), total=total)
 

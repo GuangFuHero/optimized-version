@@ -76,6 +76,8 @@ ROLE-BASED TIMELINE →「Super admin access to AI 重複審核 (DEDUP-008)」�
 | `sort` | `-created_at` | `similarity`、`-similarity`、`created_at`、`-created_at` |
 | `skip`、`limit` | 0、50 | `limit` 上限 200 |
 
+待審狀態的卡，有一邊被刪除、取消或合併時被併掉就不列，`total` 也不算（Spec 028 ADR-461）。
+
 回傳 `{ items, total }`。每個 item：
 
 - 卡本身：`uuid`、`entity_kind`、`status`、`similarity`、`evidence`（原樣，結構由 engine 決定）、

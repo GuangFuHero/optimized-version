@@ -3857,7 +3857,7 @@
           "重複審核"
         ],
         "summary": "List Duplicate Pairs",
-        "description": "Pending cards by default (ADR-339), newest first, each with both sides (ADR-340).",
+        "description": "Pending cards by default (ADR-339), newest first, each with both sides (ADR-340).\n\nA pending card with a side deleted or cancelled is not listed, nor counted in `total` (ADR-461);\na decided card is listed whatever its sides are.",
         "operationId": "list_duplicate_pairs_api_v1_admin_duplicate_pairs_get",
         "security": [
           {

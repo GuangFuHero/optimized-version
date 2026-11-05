@@ -106,7 +106,11 @@ async def list_duplicate_pairs(
     db: AsyncSession = Depends(security.get_db),
     current_user: User = Depends(security.get_current_user),
 ):
-    """Pending cards by default (ADR-339), newest first, each with both sides (ADR-340)."""
+    """Pending cards by default (ADR-339), newest first, each with both sides (ADR-340).
+
+    A pending card with a side deleted or cancelled is not listed, nor counted in `total` (ADR-461);
+    a decided card is listed whatever its sides are.
+    """
     try:
         page = await dedup_review.list_pairs(
             db,

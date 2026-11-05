@@ -5,7 +5,7 @@ Candidate retrieval belongs to the engine (`app/dedup_engine/candidates.py`).
 
 from collections.abc import Collection, Iterable
 
-from sqlalchemy import exists, func, select
+from sqlalchemy import and_, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -56,13 +56,21 @@ class DuplicatePairRepository(GenericRepository[DuplicatePair]):
         order_by: Iterable[ColumnElement],
         skip: int,
         limit: int,
+        gone_side_hides: Collection[str] = (),
     ) -> tuple[list[DuplicatePair], int]:
-        """One page of not-deleted cards matching the filters, and how many match in all."""
+        """One page of not-deleted cards matching the filters, and how many match in all.
+
+        A card whose status is in `gone_side_hides` is left out when either side is gone
+        (`side_gone`); a card in any other status is listed whatever its sides are.
+        """
         conditions = [self.model.delete_at.is_(None), self.model.status.in_(statuses)]
         if entity_kinds is not None:
             conditions.append(self.model.entity_kind.in_(entity_kinds))
         if source_layers is not None:
             conditions.append(self.model.source_layer.in_(source_layers))
+        if gone_side_hides:
+            either_gone = or_(side_gone(self.model.low_uuid), side_gone(self.model.high_uuid))
+            conditions.append(~and_(self.model.status.in_(gone_side_hides), either_gone))
         total = (await db.execute(select(func.count()).where(*conditions))).scalar_one()
         rows = await db.execute(
             select(self.model).where(*conditions).order_by(*order_by).offset(skip).limit(limit)
@@ -90,6 +98,28 @@ class DuplicatePairRepository(GenericRepository[DuplicatePair]):
         query = _SUMMARY_QUERIES[entity_kind]().where(_ENTITY_MODELS[entity_kind].uuid.in_(list(uuids)))
         rows = (await db.execute(query)).mappings().all()
         return {str(row["uuid"]): dict(row) for row in rows}
+
+
+def side_gone(side: ColumnElement) -> ColumnElement[bool]:
+    """Whether the entity a card's `side` (its low or high uuid) names is gone (ADR-461).
+
+    A ticket is gone when deleted or cancelled; a need when deleted or on a ticket that is gone,
+    its own `canceled` aside, since stopping recruitment once left a need `canceled` and still
+    there; a station when deleted; any of them when missing. A resolve deletes the ticket and the
+    needs it folds into the primary, so those are gone too, though their content lives on there.
+    """
+    # ORM selects, not bare exists(): a ticket's and a station's delete_at is on base_geometries,
+    # which only the entity's own select joins in.
+    live_ticket = (Tickets.delete_at.is_(None), Tickets.status != "cancelled")
+    live = {
+        "ticket": select(Tickets.uuid).where(Tickets.uuid == side, *live_ticket).exists(),
+        "ticket_task": select(TicketTask.uuid)
+        .join(Tickets, Tickets.uuid == TicketTask.ticket_uuid)
+        .where(TicketTask.uuid == side, TicketTask.delete_at.is_(None), *live_ticket)
+        .exists(),
+        "station": select(Station.uuid).where(Station.uuid == side, Station.delete_at.is_(None)).exists(),
+    }
+    return or_(*(and_(DuplicatePair.entity_kind == kind, ~is_live) for kind, is_live in live.items()))
 
 
 def _point(model):

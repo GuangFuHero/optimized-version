@@ -302,13 +302,13 @@ async def test_station_cards_carry_both_sides(db):
     assert (side.longitude, side.latitude) == pytest.approx((121.4, 23.6))
 
 
-async def test_a_deleted_side_is_marked_and_the_card_still_listed(db):
-    """The reviewer can still judge a card whose side was deleted."""
+async def test_a_deleted_side_is_marked(db):
+    """A decided card whose side was deleted is listed, that side marked; a pending one is not (ADR-461)."""
     actor = await _actor(db, Perm.AI_DUP_VIEW)
     a, b = await _two_tasks(db, actor, deleted_second=True)
-    pair = await _pair(db, a, b)
+    pair = await _pair(db, a, b, status="not_duplicate")
 
-    (item,) = (await dedup_review.list_pairs(db, actor=actor)).items
+    (item,) = (await dedup_review.list_pairs(db, actor=actor, statuses=["not_duplicate"])).items
 
     gone = item.low if pair.low_uuid == b.uuid else item.high
     kept = item.high if gone is item.low else item.low
