@@ -1184,6 +1184,31 @@ async def test_duplicate_count_leaves_out_tickets_that_are_gone(db):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("left", ["need deleted", "ticket cancelled by hand", "needs on one ticket"])
+async def test_duplicate_count_leaves_out_what_the_review_queue_leaves_out(db, left):
+    """A card whose sides leave nothing to decide flags neither ticket (ADR-461).
+
+    A need deleted on a ticket still there; a ticket cancelled before statuses were derived, with no
+    delete_at; or b's need moved onto a, as a resolve moves one, so the card has a on both sides.
+    """
+    user_uuid = await _make_user(db)
+    (a, a_need), (b, b_need) = await _tickets_with_a_need(db, user_uuid, 2)
+    db.add(_pair("ticket_task", a_need, b_need))
+    await db.flush()
+    assert await _duplicates(db) == [{"count": 2}]
+
+    if left == "need deleted":
+        (await db.get(TicketTask, b_need)).delete_at = datetime.now(UTC)
+    elif left == "ticket cancelled by hand":
+        (await db.get(Tickets, b)).status = "cancelled"
+    else:
+        (await db.get(TicketTask, b_need)).ticket_uuid = uuid.UUID(a)
+    await db.flush()
+
+    assert await _duplicates(db) == [{"count": 0}]
+
+
+@pytest.mark.asyncio
 async def test_duplicate_count_dates_a_ticket_by_its_cards(db):
     """The range filters on the card's created_at, and x=date puts a ticket on its earliest card."""
     user_uuid = await _make_user(db)

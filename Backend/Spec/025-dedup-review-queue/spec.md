@@ -76,7 +76,7 @@ ROLE-BASED TIMELINE →「Super admin access to AI 重複審核 (DEDUP-008)」�
 | `sort` | `-created_at` | `similarity`、`-similarity`、`created_at`、`-created_at` |
 | `skip`、`limit` | 0、50 | `limit` 上限 200 |
 
-待審狀態的卡，有一邊被刪除、取消或合併時被併掉就不列，`total` 也不算（Spec 028 ADR-461）。
+待審狀態的卡，有一邊被刪除、取消或合併時被併掉，或兩邊的需求變成在同一張單上，就不列，`total` 也不算（Spec 028 ADR-461）。
 
 回傳 `{ items, total }`。每個 item：
 

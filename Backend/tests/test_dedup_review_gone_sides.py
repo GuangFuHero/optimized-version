@@ -1,12 +1,14 @@
-"""Pending cards the 重複審核 queue leaves out because a side is gone (ADR-461).
+"""Pending cards the 重複審核 queue leaves out because their sides leave nothing to decide (ADR-461).
 
 A pending card naming a deleted or cancelled ticket, need or station is neither listed nor counted,
 and its status stays. A side a resolve folded into the primary is deleted, so it leaves too; a need
-the resolve moved over is still there. Sides are deleted and merged by the real services where
-there is one, so a change to what those write shows here.
+the resolve moved over is still there, but a card it now shares one ticket with leaves. The
+疑似重複 mark and the dashboard count drop the same cards. Sides are deleted and merged by the
+real services where there is one, so a change to what those write shows here.
 """
 
 from datetime import UTC, datetime
+from zoneinfo import ZoneInfo
 
 import pytest
 from sqlalchemy import func, select
@@ -15,7 +17,7 @@ from app.core.permissions import Perm
 from app.models.dedup import DedupAuditEvent, DuplicatePair
 from app.models.request import Tickets
 from app.models.ticket_task import TicketTask
-from app.services import dedup_review
+from app.services import dedup_review, ticket_analytics, ticket_verification
 from app.services import ticket as ticket_service
 from tests import test_dedup_resolve as resolving
 from tests.test_dedup_review_read import _actor, _pair, _station, _task, _ticket
@@ -27,6 +29,19 @@ async def _listed(db, actor, **filters) -> tuple[set[str], int]:
     await db.refresh(actor)  # a delete or resolve earlier in the test commits, which expires it
     page = await dedup_review.list_pairs(db, actor=actor, **filters)
     return {str(item.pair.uuid) for item in page.items}, page.total
+
+
+async def _marked(db, *tickets: str) -> set[str]:
+    """Which of `tickets` read as 疑似重複."""
+    return set(await ticket_verification.disputes_by_ticket(db, tickets))
+
+
+async def _dashboard(db) -> int:
+    """How many tickets the dashboard counts as flagged duplicates."""
+    (row,) = await ticket_analytics.get_duplicate_count(
+        db, x=None, x_granularity="day", start_date=None, end_date=None, tz=ZoneInfo("UTC")
+    )
+    return row["count"]
 
 
 async def _reviewer(db):
@@ -53,6 +68,25 @@ async def test_a_card_on_a_deleted_need_leaves_the_queue_as_it_stands(db):
     assert (card.status, card.delete_at, card.reviewed_by) == ("dup_ignored", None, None)
     events = await db.scalar(select(func.count()).where(DedupAuditEvent.pair_uuid == gone_card))
     assert events == 0
+
+
+async def test_a_deleted_need_takes_the_mark_and_the_dashboard_count_off_its_card(db):
+    """Both tickets are still there, but the requester deleted b's need: nothing is left to duplicate.
+
+    It was b's one need, so b is completed now, not cancelled; it is still not marked.
+    """
+    actor = await _reviewer(db)
+    a, b = await _ticket(db, actor), await _ticket(db, actor, title="二樓淹水")
+    doomed = await _task(db, actor, b)
+    await _pair(db, await _task(db, actor, a), doomed)
+    a_uuid, b_uuid, doomed_uuid = str(a.uuid), str(b.uuid), str(doomed.uuid)
+    assert (await _marked(db, a_uuid, b_uuid), await _dashboard(db)) == ({a_uuid, b_uuid}, 2)
+
+    await ticket_service.delete_ticket_task(db, actor=actor, uuid=doomed_uuid)
+
+    assert await _listed(db, actor) == (set(), 0)
+    assert (await _marked(db, a_uuid, b_uuid), await _dashboard(db)) == (set(), 0)
+    assert (await db.get(Tickets, b_uuid, populate_existing=True)).status == "completed"
 
 
 async def test_deleting_a_ticket_takes_its_ticket_and_need_cards_out(db):
@@ -163,6 +197,20 @@ async def test_sides_folded_into_the_primary_leave_and_a_moved_need_stays(db):
     assert await _listed(db, reviewer) == ({cards["b3_c3"]}, 1)
 
 
+def _a1_absorbs_b1(ids) -> dict:
+    """a1 takes b1 in, as in example one, dropping b1's item."""
+    return {
+        "task": ids["a1"],
+        "action": "keep",
+        "absorb": [ids["b1"]],
+        "values": {"quantity": 7},
+        "properties": [
+            {"property": ids["pa1"], "action": "keep"},
+            {"property": ids["pb1"], "action": "cancel"},
+        ],
+    }
+
+
 async def test_a_need_the_resolve_cancelled_leaves_as_well(db):
     """b2 cancelled with B rather than folded: b2↔c2 leaves all the same."""
     reviewer, ids = await resolving._world(db)
@@ -171,19 +219,7 @@ async def test_a_need_the_resolve_cancelled_leaves_as_well(db):
     request = resolving._example_one(
         ids,
         versions,
-        primary_tasks=[
-            {
-                "task": ids["a1"],
-                "action": "keep",
-                "absorb": [ids["b1"]],
-                "values": {"quantity": 7},
-                "properties": [
-                    {"property": ids["pa1"], "action": "keep"},
-                    {"property": ids["pb1"], "action": "cancel"},
-                ],
-            },
-            {"task": ids["a2"], "action": "keep", "properties": []},
-        ],
+        primary_tasks=[_a1_absorbs_b1(ids), {"task": ids["a2"], "action": "keep", "properties": []}],
         secondary_tasks=[
             {"task": ids["b2"], "action": "cancel"},
             {"task": ids["b3"], "action": "move", "properties": []},
@@ -193,3 +229,32 @@ async def test_a_need_the_resolve_cancelled_leaves_as_well(db):
     await resolving._resolve(db, reviewer, ids, request)
 
     assert await _listed(db, reviewer) == ({cards["b3_c3"]}, 1)
+
+
+async def test_a_card_the_resolve_leaves_with_one_ticket_on_both_sides_leaves(db):
+    """a2↔b2, both water: b2 moves over to A rather than folding into a2, so the card is A against A.
+
+    There is nothing to merge any more: the queue, the mark and the dashboard all drop it, and A,
+    with no other card left, is not marked.
+    """
+    reviewer, ids = await resolving._world(db)
+    a2, b2 = await db.get(TicketTask, ids["a2"]), await db.get(TicketTask, ids["b2"])
+    water = str((await _pair(db, a2, b2)).uuid)
+    assert await _listed(db, reviewer) == ({ids["pair"], water}, 2)
+    versions = await resolving._versions(db, reviewer, ids)
+    request = resolving._example_one(
+        ids,
+        versions,
+        primary_tasks=[_a1_absorbs_b1(ids), {"task": ids["a2"], "action": "keep", "properties": []}],
+        secondary_tasks=[
+            {"task": ids["b2"], "action": "move", "properties": []},
+            {"task": ids["b3"], "action": "move", "properties": []},
+        ],
+    )
+
+    await resolving._resolve(db, reviewer, ids, request)
+
+    moved = await db.get(TicketTask, ids["b2"], populate_existing=True)
+    assert (str(moved.ticket_uuid), moved.delete_at) == (ids["a"], None)
+    assert await _listed(db, reviewer) == (set(), 0)
+    assert (await _marked(db, ids["a"]), await _dashboard(db)) == (set(), 0)

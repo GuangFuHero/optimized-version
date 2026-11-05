@@ -269,10 +269,7 @@ async def test_each_far_ticket_is_named_once_oldest_card_first(client, redis):
 
 @pytest.mark.asyncio
 async def test_a_need_card_counts_on_the_ticket_the_need_is_on_now(client, redis):
-    """A merge moves a need onto the kept ticket, and its waiting card goes along.
-
-    A need taken off keeps its card, which still waits in 重複審核.
-    """
+    """A merge moves a need onto the kept ticket, and its waiting card goes along."""
     _, token = await _create_user_with_grants(redis, REVIEWER)
     tag = uuid_mod.uuid4().hex[:10]
     a, b, kept = await _ticket(f"{tag} a"), await _ticket(f"{tag} b"), await _ticket(f"{tag} kept")
@@ -280,13 +277,38 @@ async def test_a_need_card_counts_on_the_ticket_the_need_is_on_now(client, redis
     await _card(need_a, need_b)
     async with gql_conftest.test_db() as db:
         await db.execute(update(TicketTask).where(TicketTask.uuid == need_b).values(ticket_uuid=kept))
-        taken_off = {"delete_at": datetime.now(UTC)}
-        await db.execute(update(TicketTask).where(TicketTask.uuid == need_a).values(**taken_off))
 
     assert await _states(client, token, tag) == {
         "a": _disputed((kept, f"{tag} kept")),
         "b": None,
         "kept": _disputed((a, f"{tag} a")),
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["dup_ignored", "confirmed_duplicate"])
+async def test_a_card_on_a_deleted_need_marks_neither_ticket(client, redis, status):
+    """The one need on b was deleted: both tickets are still there, but b has nothing left to duplicate.
+
+    Deleting a ticket's last need leaves it completed, not cancelled. The queue leaves the card out
+    as well (ADR-461); a's card on a need still there counts as before.
+    """
+    _, token = await _create_user_with_grants(redis, REVIEWER)
+    tag = uuid_mod.uuid4().hex[:10]
+    a, b, c = await _ticket(f"{tag} a"), await _ticket(f"{tag} b"), await _ticket(f"{tag} c")
+    need_b = await _need(b)
+    await _card(await _need(a), need_b, status=status)
+    await _card(await _need(a), await _need(c))
+    async with gql_conftest.test_db() as db:
+        now = datetime.now(UTC)
+        deleted = {"status": "canceled", "canceled_at": now, "delete_at": now}
+        await db.execute(update(TicketTask).where(TicketTask.uuid == need_b).values(**deleted))
+        (await db.get(Tickets, uuid_mod.UUID(b))).status = "completed"
+
+    assert await _states(client, token, tag) == {
+        "a": _disputed((c, f"{tag} c")),
+        "b": None,
+        "c": _disputed((a, f"{tag} a")),
     }
 
 

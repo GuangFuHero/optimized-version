@@ -108,8 +108,8 @@ async def list_duplicate_pairs(
 ):
     """Pending cards by default (ADR-339), newest first, each with both sides (ADR-340).
 
-    A pending card with a side deleted or cancelled is not listed, nor counted in `total` (ADR-461);
-    a decided card is listed whatever its sides are.
+    A pending card with a side deleted or cancelled, or with both needs now on one ticket, is not
+    listed, nor counted in `total` (ADR-461); a decided card is listed whatever its sides are.
     """
     try:
         page = await dedup_review.list_pairs(
