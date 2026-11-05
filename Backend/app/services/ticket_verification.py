@@ -1,9 +1,11 @@
 """Which tickets 重複審核 still waits on, read from the duplicate pair cards (ADR-443).
 
-A ticket is disputed while a live card on it, or on one of its needs, can still be merged in
-重複審核: it waits for a verdict, or was judged a duplicate and not merged yet, and its two sides are
-two different tickets, neither cancelled nor deleted. That is the card `dedup_resolve` will still
-resolve, so the condition is taken from there. Nothing is stored on the ticket: the cards are
+A ticket is disputed while a live card on it, or on one of its needs, still has a merge to decide
+in 重複審核: it waits for a verdict, or was judged a duplicate and not merged yet, and its sides
+leave something to decide (ADR-461): two different tickets, neither cancelled nor deleted, and on a
+need card two needs that are not deleted. The statuses are those `dedup_resolve` takes. A resolve
+still takes a card whose need was deleted, but that need has nothing left to duplicate, so the card
+does not count here, as the queue leaves it out. Nothing is stored on the ticket: the cards are
 written by the dedup layers and the review page, and read here as they stand.
 
 Anyone reads it: `TicketType.verification_status` as a state with the far tickets (ADR-455), and
@@ -20,6 +22,7 @@ from sqlalchemy.orm import aliased
 from app.models.dedup import DedupAuditEvent, DuplicatePair
 from app.models.request import Tickets
 from app.models.ticket_task import TicketTask
+from app.repositories.dedup_repository import nothing_to_decide
 from app.services.dedup_resolve import RESOLVABLE_STATUSES
 from app.services.dedup_resolve_plan import RESOLVABLE_KINDS
 
@@ -37,10 +40,9 @@ async def disputes_by_ticket(db: AsyncSession, ticket_uuids: Iterable[str]) -> d
 
     A ticket absent from the result is not disputed. A need card counts on the ticket the need is on
     now, as `dedup_review_tickets.ticket_uuids_for_pair` reads it, so a need a merge moved takes its
-    cards along, and a need taken off keeps its card in the queue. A card whose far ticket is gone,
-    or that a merge left with the same ticket on both sides, cannot be resolved and does not count,
-    so a disputed ticket names at least one other: each once, oldest card first. Two statements at
-    most.
+    cards along. A card with a side gone, a deleted need included, or that a merge left with the
+    same ticket on both sides, does not count (`dedup_repository.nothing_to_decide`), so a disputed
+    ticket names at least one other: each once, oldest card first. Two statements at most.
     """
     wanted = {str(uuid) for uuid in ticket_uuids}
     if not wanted:
@@ -63,6 +65,7 @@ async def disputes_by_ticket(db: AsyncSession, ticket_uuids: Iterable[str]) -> d
                 DuplicatePair.entity_kind.in_(RESOLVABLE_KINDS),
                 DuplicatePair.status.in_(RESOLVABLE_STATUSES),
                 ~merged,
+                ~nothing_to_decide(),
                 or_(low_ticket.in_(wanted), high_ticket.in_(wanted)),
             )
             .order_by(DuplicatePair.created_at, DuplicatePair.uuid)
@@ -73,8 +76,8 @@ async def disputes_by_ticket(db: AsyncSession, ticket_uuids: Iterable[str]) -> d
     found: dict[str, list[DuplicateRef]] = {}
     for low, high in rows:
         sides = (str(low) if low else None, str(high) if high else None)
-        # What a resolve refuses: a side cancelled, deleted or missing, or one ticket on both sides.
-        if sides[0] == sides[1] or not all(side in titles for side in sides):
+        # A ticket may have gone between the two statements.
+        if not all(side in titles for side in sides):
             continue
         for mine, theirs in (sides, sides[::-1]):
             if mine not in wanted:

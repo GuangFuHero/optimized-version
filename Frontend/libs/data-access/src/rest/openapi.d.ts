@@ -1212,6 +1212,9 @@ export interface paths {
     /**
      * List Duplicate Pairs
      * @description Pending cards by default (ADR-339), newest first, each with both sides (ADR-340).
+     *
+     *     A pending card with a side deleted or cancelled, or with both needs now on one ticket, is not
+     *     listed, nor counted in `total` (ADR-461); a decided card is listed whatever its sides are.
      */
     get: operations['list_duplicate_pairs_api_v1_admin_duplicate_pairs_get'];
     put?: never;

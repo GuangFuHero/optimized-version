@@ -69,6 +69,7 @@ from app.models.audit import AuditLog
 from app.models.dedup import DedupAuditEvent, DuplicatePair
 from app.models.request import Tickets
 from app.models.ticket_task import TaskAssignment, TicketTask
+from app.repositories.dedup_repository import nothing_to_decide
 from app.services.analytics_common import (
     DEFAULT_TREND_DAYS,
     MAX_TREND_DAYS,
@@ -765,8 +766,9 @@ async def get_duplicate_count(
     """Count tickets the AI duplicate review has flagged and nobody has settled yet.
 
     A ticket counts once, however many cards name it, when at least one card about tickets still
-    waits for a reviewer (dedup_review.PENDING_STATUSES) and was not resolved by a merge. A need
-    card counts the ticket its need belongs to. The date range filters on the card's `created_at`;
+    waits for a reviewer (dedup_review.PENDING_STATUSES), was not resolved by a merge, and is in the
+    review queue: its sides leave something to decide (`dedup_repository.nothing_to_decide`, ADR-461).
+    A need card counts the ticket its need belongs to. The date range filters on the card's `created_at`;
     `x="date"` groups a ticket by its earliest such card, `x="category"` by its need types.
 
     Both tickets of a card must be live and inside `extra_filters`: scoping only the counted side
@@ -793,6 +795,7 @@ async def get_duplicate_count(
             DuplicatePair.entity_kind.in_(_TICKET_PAIR_KINDS),
             DuplicatePair.status.in_(PENDING_STATUSES),
             ~merged,
+            ~nothing_to_decide(),
         )
     )
     if lower is not None:
