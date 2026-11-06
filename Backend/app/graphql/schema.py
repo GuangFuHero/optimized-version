@@ -55,7 +55,7 @@ class Query(
     SuggestionQuery,
     AreaQuery,
     RoleRequestQuery,
-):  # noqa: E501
+):
     """Root query type composing all domain query mixins."""
 
 
@@ -71,7 +71,7 @@ class Mutation(
     SuggestionMutation,
     AreaMutation,
     RoleRequestMutation,
-):  # noqa: E501
+):
     """Root mutation type composing all domain mutation mixins."""
 
 
