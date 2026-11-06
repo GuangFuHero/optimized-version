@@ -44,4 +44,17 @@ function contentSecurityPolicy(
   ].join('; ');
 }
 
-module.exports = { contentSecurityPolicy };
+/**
+ * Where the site sends its security headers: every path but the MCP consent page. The backend serves that
+ * page itself with frame headers of its own, which the API proxy passes on and the site's would replace,
+ * and allowing there answers with a redirect to the MCP client's own address, which `form-action 'self'`
+ * would block. The page keeps the site's HSTS and nosniff (apps/demo/next.config.js).
+ */
+const SITE_SECURITY_HEADERS_SOURCE = '/:path((?!api/v1/mcp/consent$).*)';
+const MCP_CONSENT_PATH = '/api/v1/mcp/consent';
+
+module.exports = {
+  contentSecurityPolicy,
+  MCP_CONSENT_PATH,
+  SITE_SECURITY_HEADERS_SOURCE,
+};
