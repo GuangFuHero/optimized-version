@@ -30,6 +30,8 @@ ENV/
 .env.*
 !.env.example
 *.lock
+# The dependency lock is committed: every install and image build takes exactly these versions.
+!uv.lock
 
 # IDEs
 .idea/
