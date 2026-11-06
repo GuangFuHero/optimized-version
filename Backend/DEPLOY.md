@@ -156,6 +156,8 @@ plan.
 | `OAUTH_REDIRECT_BASE_URL` | `https://wan-guard.com` | `https://staging.wan-guard.com` | `http://localhost:3000` (default) |
 | `GOOGLE_CLIENT_SECRET`, `LINE_CHANNEL_SECRET` | Secret Manager | `staging-backend-google-client-secret`, `staging-backend-line-channel-secret`, written by `gen_env` | `Backend/.env` |
 | `REFRESH_REUSE_GRACE_SECONDS` | `30` (default) | `30` (default) | `30` (default) |
+| `TRUSTED_PROXIES` | the default, while every proxy reaches the backend over the docker network | `127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7`, the default | the default |
+| `MCP_BASE_URL` | the public URL routed to the MCP paths (not chosen yet) | not set until the MCP route exists (see [MCP clients](#mcp-clients)) | `http://localhost:8000` (default) |
 
 - **Why `admin-staging` and not `admin.staging`**: Cloudflare's free certificate covers `wan-guard.com` and
   one level of subdomain below it. `admin.staging.wan-guard.com` is two levels deep and would get no
@@ -180,6 +182,22 @@ plan.
 Both are public hostnames of the staging tunnel, set in the Cloudflare Zero Trust dashboard.
 
 `APP_BASE_URL`, the base of the links in emails and SMS, moved to `https://staging.wan-guard.com` too.
+
+### MCP clients
+
+The backend serves a read-only MCP server (`mcp_server/README.md`). MCP clients reach it at seven paths that
+no tunnel route serves yet, so it is off on staging. To open it:
+
+1. In the Cloudflare Zero Trust dashboard, add a public hostname of the staging tunnel whose service is
+   `http://backend:8000`, limited to these paths, and nothing else of the backend:
+   `/mcp`, `/register`, `/authorize`, `/token`, `/revoke`,
+   `/.well-known/oauth-protected-resource/mcp`, `/.well-known/oauth-authorization-server`.
+2. Set `MCP_BASE_URL` in `scripts/deploy-config.staging.env` to that hostname's `https://` URL and deploy.
+   Without it, the OAuth metadata points clients at `http://localhost:8000` and every sign-in fails.
+3. Leave `TRUSTED_PROXIES` at the default: cloudflared reaches the backend from the docker network and puts
+   the caller's IP last in `X-Forwarded-For`.
+
+Signing in goes through the site's own `/api/v1/mcp/consent` page, so the site needs nothing new.
 
 ### Redirect URIs to register
 
