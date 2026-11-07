@@ -4,12 +4,12 @@ import { Alert, Button, TextField } from '@mui/material';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { startTransition, useEffect, useId, useState } from 'react';
 
-import { type AuthIdentityType } from '@rescue-frontend/data-access';
 import {
   AuthFormError,
   authHref,
   RegisterForm,
   type AuthFormInitialValues,
+  type AuthIdentityType,
 } from './index';
 import {
   registerAsync,

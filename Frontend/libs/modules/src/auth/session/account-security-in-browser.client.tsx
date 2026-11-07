@@ -2,13 +2,11 @@
 
 import { Alert, Box, CircularProgress } from '@mui/material';
 import { ApiError } from '@rescue-frontend/data-access';
-import type { components } from '@rescue-frontend/data-access/openapi';
-import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useEffect } from 'react';
 
 import { getCurrentUserAsync } from '../api/client';
 import { AccountSecurityClient } from './account-security.client';
-
-type UserResponse = components['schemas']['UserResponse'];
 
 const SIGN_IN_HREF = '/login?callbackUrl=%2Faccount%2Fsecurity';
 
@@ -17,20 +15,22 @@ const SIGN_IN_HREF = '/login?callbackUrl=%2Faccount%2Fsecurity';
  * (`READ_IN_BROWSER`): the account is read here instead, through the proxy, which refreshes it.
  */
 export function AccountSecurityInBrowser() {
-  const [user, setUser] = useState<UserResponse>();
-  const [failed, setFailed] = useState(false);
+  const { data: user, error } = useQuery({
+    queryKey: ['users', 'me'],
+    queryFn: getCurrentUserAsync,
+    retry: false,
+    meta: { quietErrors: true },
+  });
+  // Signed out after all: the refresh was refused, and the backend cleared the cookies.
+  const signedOut = error instanceof ApiError && error.status === 401;
+  // The refresh could not happen just now (503): still signed in, so no login page.
+  const failed = Boolean(error) && !signedOut;
 
   useEffect(() => {
-    getCurrentUserAsync().then(setUser, (error: unknown) => {
-      if (error instanceof ApiError && error.status === 401) {
-        // Signed out after all: the refresh was refused, and the backend cleared the cookies.
-        window.location.assign(SIGN_IN_HREF);
-      } else {
-        // The refresh could not happen just now (503): still signed in, so no login page.
-        setFailed(true);
-      }
-    });
-  }, []);
+    if (signedOut) {
+      window.location.assign(SIGN_IN_HREF);
+    }
+  }, [signedOut]);
 
   if (user) {
     return (

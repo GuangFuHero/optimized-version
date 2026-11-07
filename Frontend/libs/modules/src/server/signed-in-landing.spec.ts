@@ -8,8 +8,8 @@ function fakeBackend(respond: () => Response) {
 
   vi.stubGlobal(
     'fetch',
-    async (_input: RequestInfo | URL, init?: RequestInit) => {
-      calls.push(new Headers(init?.headers));
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push(new Request(input, init).headers);
       return respond();
     },
   );
