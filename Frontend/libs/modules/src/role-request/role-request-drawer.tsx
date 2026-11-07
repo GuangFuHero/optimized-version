@@ -1,5 +1,7 @@
 'use client';
 
+import { useForm, useStore } from '@tanstack/react-form';
+
 import {
   Alert,
   AlertTitle,
@@ -97,14 +99,30 @@ export function RoleRequestDrawer({
   applyReturn = null,
   onApplyReturnHandled,
 }: RoleRequestDrawerProps) {
-  const [values, setValues] = useState<RoleRequestFormValues>(EMPTY_FORM);
-  // The name starts from the nickname until the person types one of their own.
-  const [nameEdited, setNameEdited] = useState(false);
-  const [touched, setTouched] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
+  const formApi = useForm({
+    defaultValues: EMPTY_FORM,
+    validators: {
+      onSubmit: (): ReturnType<typeof validateRoleRequestForm> | undefined =>
+        problems.length ? errors : undefined,
+    },
+    onSubmit: () => submit(),
+  });
+  const values = useStore(formApi.store, (state) => state.values);
+  const touched = useStore(
+    formApi.store,
+    (state) => state.submissionAttempts > 0,
+  );
+  const nameEdited = useStore(
+    formApi.store,
+    (state) => state.fieldMeta.name?.isDirty ?? false,
+  );
   const submission = useMutation(
     siteGraphqlMutation(SubmitRoleRequestDocument),
   );
+  const { reset: resetSubmission } = submission;
+  const submitError = submission.error
+    ? roleRequestErrorMessage(submission.error)
+    : null;
   const withdraw = useWithdrawRoleRequest(onSubmitted);
   const resetWithdraw = withdraw.reset;
   const roleLabelId = useId();
@@ -157,14 +175,19 @@ export function RoleRequestDrawer({
     wasOpen.current = open;
 
     if (opening && !applyReturn) {
-      setValues(EMPTY_FORM);
-      setNameEdited(false);
-      setTouched(false);
-      setSubmitError(null);
+      formApi.reset(EMPTY_FORM, { keepDefaultValues: true });
+      resetSubmission();
       resetWithdraw();
       resetVerification();
     }
-  }, [applyReturn, open, resetVerification, resetWithdraw]);
+  }, [
+    applyReturn,
+    formApi,
+    open,
+    resetSubmission,
+    resetVerification,
+    resetWithdraw,
+  ]);
 
   useEffect(() => {
     if (!open || !applyReturn || !userId) {
@@ -173,27 +196,31 @@ export function RoleRequestDrawer({
 
     const draft = takeDraft();
 
-    setTouched(false);
-    setSubmitError(null);
+    resetSubmission();
 
     if (draft) {
-      setValues({
-        role: draft.role,
-        team: draft.team,
-        newTeamName: draft.newTeamName,
-        reason: draft.reason,
-        name: draft.name,
-      });
-      setNameEdited(true);
+      formApi.reset(
+        {
+          role: draft.role,
+          team: draft.team,
+          newTeamName: draft.newTeamName,
+          reason: draft.reason,
+          name: draft.name,
+        },
+        { keepDefaultValues: true },
+      );
+      formApi.setFieldValue('name', draft.name);
       resumeVerification(draft.phone, applyReturn.stepUp);
     }
 
     onApplyReturnHandled?.();
   }, [
     applyReturn,
+    formApi,
     onApplyReturnHandled,
     open,
     resumeVerification,
+    resetSubmission,
     takeDraft,
     userId,
   ]);
@@ -202,9 +229,9 @@ export function RoleRequestDrawer({
 
   useEffect(() => {
     if (open && nickname && !nameEdited) {
-      setValues((current) => ({ ...current, name: nickname }));
+      formApi.setFieldValue('name', nickname, { dontUpdateMeta: true });
     }
-  }, [nameEdited, nickname, open]);
+  }, [formApi, nameEdited, nickname, open]);
 
   if (!myRoleRequests) {
     return null;
@@ -319,7 +346,7 @@ export function RoleRequestDrawer({
   });
   const problems = roleRequestFormProblems(errors, values.role);
   const set = (field: 'name' | 'reason' | 'newTeamName') => (value: string) =>
-    setValues((current) => ({ ...current, [field]: value }));
+    formApi.setFieldValue(field, value);
   const invite = inviteHint(values.role);
   // A new name already on the list is said at once, not only after 送出申請 (prototype).
   const nameTaken = Boolean(
@@ -329,27 +356,23 @@ export function RoleRequestDrawer({
   );
 
   // Another identity picks from another list: the team picked for the last one is dropped.
-  const pickRole = (role: RoleRequestFormValues['role']) =>
-    setValues((current) =>
-      current.role === role
-        ? current
-        : { ...current, role, team: null, newTeamName: '' },
-    );
+  const pickRole = (role: RoleRequestFormValues['role']) => {
+    if (formApi.state.values.role === role) return;
+    formApi.setFieldValue('role', role);
+    formApi.setFieldValue('team', null);
+    formApi.setFieldValue('newTeamName', '');
+  };
 
   const submit = () => {
-    setTouched(true);
-
     if (problems.length || !values.role) {
       return;
     }
 
-    setSubmitError(null);
+    resetSubmission();
     submission.mutate(
       { input: toSubmitRoleRequestInput({ ...values, role: values.role }) },
       {
         onError: (error) => {
-          setSubmitError(roleRequestErrorMessage(error));
-
           if (isTeamListRefusal(error)) {
             void teamList.reload();
           }
@@ -373,7 +396,7 @@ export function RoleRequestDrawer({
           </Button>
           <Button
             variant="contained"
-            onClick={submit}
+            onClick={() => void formApi.handleSubmit()}
             disabled={view.paused || submission.isPending}
             sx={{ flex: 2 }}
           >
@@ -454,7 +477,7 @@ export function RoleRequestDrawer({
             failed={teamList.failed}
             onReload={teamList.reload}
             team={values.team}
-            onPick={(team) => setValues((current) => ({ ...current, team }))}
+            onPick={(team) => formApi.setFieldValue('team', team)}
             newTeamName={values.newTeamName}
             onNewTeamName={set('newTeamName')}
             teamError={touched ? (errors.team ?? null) : null}
@@ -469,7 +492,6 @@ export function RoleRequestDrawer({
             account={applicant.data}
             name={values.name}
             onNameChange={(name) => {
-              setNameEdited(true);
               set('name')(name);
             }}
             nameError={touched ? (errors.name ?? null) : null}

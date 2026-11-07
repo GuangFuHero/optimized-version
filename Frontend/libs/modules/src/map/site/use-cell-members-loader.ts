@@ -1,8 +1,10 @@
 'use client';
 
+import { useEventCallback } from 'usehooks-ts';
+
 import { GetCellTicketsDocument } from '@rescue-frontend/data-access';
 import { infiniteQueryOptions } from '@tanstack/react-query';
-import { useCallback, useRef } from 'react';
+import { useCallback } from 'react';
 
 import { siteGraphql, SITE_READ_OPTIONS } from '../../session/site-clients';
 import { LOCATION_CELL_MEMBERS_PAGE_SIZE } from '../location-cells';
@@ -23,8 +25,7 @@ export function useCellMembersLoader(
   subDataTypes: readonly string[] | undefined,
   onLoaded: (members: readonly RescueMapMarkerItem[]) => void,
 ): LocationCellMembersLoader {
-  const onLoadedRef = useRef(onLoaded);
-  onLoadedRef.current = onLoaded;
+  const reportLoaded = useEventCallback(onLoaded);
   // By value: a new array with the same statuses is the same filter, and keeps an open list as it is.
   const statusesKey = (ticketCellStatuses(subDataTypes) ?? []).join(',');
 
@@ -56,7 +57,7 @@ export function useCellMembersLoader(
             .map((ticket) => mapTicketToMarker(ticket))
             .filter((marker): marker is RescueMapMarkerItem => Boolean(marker));
 
-          onLoadedRef.current(members);
+          reportLoaded(members);
 
           return {
             members,
@@ -68,6 +69,6 @@ export function useCellMembersLoader(
         getNextPageParam: (last, _pages, skip) =>
           last.hasMore ? skip + last.read : undefined,
       }),
-    [statusesKey],
+    [statusesKey, reportLoaded],
   );
 }

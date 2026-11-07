@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 
 import { Box, Stack, Typography } from '@mui/material';
 import { useQueries, type UseQueryResult } from '@tanstack/react-query';
@@ -247,13 +247,10 @@ export function ChartPanel({
   // Recoloured once per response: `AnalyticsChart` redraws the plot whenever the figure is a new
   // object, which would drop a hover each time the page re-renders.
   const tone = chart.fixed?.tone;
-  const drawn = useMemo(
-    () =>
-      query.data && tone
-        ? toneFigure(query.data, ACCENT_COLORS[tone])
-        : query.data,
-    [query.data, tone],
-  );
+  const drawn =
+    query.data && tone
+      ? toneFigure(query.data, ACCENT_COLORS[tone])
+      : query.data;
   const title = chart.fixed?.title ?? spec?.label;
   const xOptions = chart.fixed ? [] : knownOptions(spec?.allowed_x, X_LABELS);
   const chartTypeOptions = chart.fixed

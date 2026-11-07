@@ -1,7 +1,8 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useIsClient } from 'usehooks-ts';
 
 import {
   CURRENT_DISASTER_WAIT_MS,
@@ -64,7 +65,7 @@ export function useEventMapView({
     return () => window.clearTimeout(timer);
   }, [held, isFetchedAfterMount]);
 
-  return useMemo(() => {
+  return (() => {
     const { ready, eventView } = settleEventMapView({
       data,
       fresh,
@@ -73,7 +74,7 @@ export function useEventMapView({
     });
 
     return { ready, eventView, view: eventView ?? MAP_VIEW_TAIWAN };
-  }, [data, fresh, isFetchedAfterMount, waitedOut]);
+  })();
 }
 
 /**
@@ -100,22 +101,21 @@ export function useMapOpening({
 }): MapOpening | null {
   const event = useEventMapView({ fresh: remembersOpening });
   const [opening, setOpening] = useState<MapOpening | null>(null);
+  const isClient = useIsClient();
 
-  useEffect(() => {
-    if (opening) {
-      return;
-    }
-
+  if (!opening && isClient) {
     const remembered =
       memoryKey && !addressHasPosition
         ? readRememberedMapView(memoryKey)
         : null;
 
-    if (!remembered && !event.ready) {
-      return;
-    }
+    if (remembered || event.ready)
+      setOpening(resolveMapOpening(remembered, event.eventView));
+  }
 
-    const decided = resolveMapOpening(remembered, event.eventView);
+  useEffect(() => {
+    if (!opening) return;
+    const decided = opening;
 
     if (
       memoryKey &&
@@ -128,8 +128,6 @@ export function useMapOpening({
     ) {
       rememberMapView(memoryKey, decided.view);
     }
-
-    setOpening(decided);
   }, [addressHasPosition, event, memoryKey, opening, remembersOpening]);
 
   return opening;

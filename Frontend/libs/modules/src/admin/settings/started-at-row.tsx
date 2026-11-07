@@ -4,6 +4,7 @@ import { Clock } from 'lucide-react';
 
 import { Stack, Typography } from '@mui/material';
 import { useState } from 'react';
+import { useForm, useStore } from '@tanstack/react-form';
 import { toast } from 'sonner';
 
 import { useUpdateProjectSettings } from '@rescue-frontend/data-access/admin';
@@ -39,7 +40,15 @@ function StartedAtDialog({
   onClose: () => void;
 }) {
   const first = !current;
-  const [value, setValue] = useState(() => toDateTimeLocal(current));
+  const [openedValues] = useState(() => ({ value: toDateTimeLocal(current) }));
+  const form = useForm({
+    defaultValues: openedValues,
+    validators: {
+      onSubmit: ({ value }) => startedAtProblem(value.value, new Date()),
+    },
+    onSubmit: (): void => save(),
+  });
+  const value = useStore(form.store, (state) => state.values.value);
   const update = useUpdateProjectSettings();
   const now = new Date();
   const problem = startedAtProblem(value, now);
@@ -71,7 +80,7 @@ function StartedAtDialog({
     <Dialog
       open
       onClose={onClose}
-      onConfirm={save}
+      onConfirm={() => void form.handleSubmit()}
       title={first ? '設定起始時間' : '修正起始時間'}
       confirmLabel={first ? '設定' : '確認修正'}
       confirmDisabled={Boolean(problem) || same}
@@ -87,7 +96,7 @@ function StartedAtDialog({
         required
         type="datetime-local"
         value={value}
-        onChange={(event) => setValue(event.target.value)}
+        onChange={(event) => form.setFieldValue('value', event.target.value)}
         error={value && problem ? problem : undefined}
         inputProps={{ max: toDateTimeLocal(now.toISOString()) }}
       />

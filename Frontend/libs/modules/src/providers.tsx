@@ -3,6 +3,7 @@
 import { AppRouterCacheProvider } from '@mui/material-nextjs/v13-appRouter';
 import { ThemeProvider } from '@mui/material/styles';
 import { useState, type ReactNode } from 'react';
+import { NuqsAdapter } from 'nuqs/adapters/next/app';
 
 import { AuthSessionProvider } from './session/auth-session';
 import { QueryClientProvider } from '@tanstack/react-query';
@@ -12,20 +13,22 @@ import { theme } from '@rescue-frontend/ui';
 
 export function ApplicationProviders({ children }: { children: ReactNode }) {
   return (
-    <AppRouterCacheProvider>
-      <AuthSessionProvider>
-        <ThemeProvider
-          theme={theme}
-          defaultMode="light"
-          storageManager={null}
-          modeStorageKey="mui-mode-disabled"
-          colorSchemeStorageKey="mui-color-scheme-disabled"
-        >
-          {children}
-          <Toaster richColors closeButton />
-        </ThemeProvider>
-      </AuthSessionProvider>
-    </AppRouterCacheProvider>
+    <NuqsAdapter>
+      <AppRouterCacheProvider>
+        <AuthSessionProvider>
+          <ThemeProvider
+            theme={theme}
+            defaultMode="light"
+            storageManager={null}
+            modeStorageKey="mui-mode-disabled"
+            colorSchemeStorageKey="mui-color-scheme-disabled"
+          >
+            {children}
+            <Toaster richColors closeButton />
+          </ThemeProvider>
+        </AuthSessionProvider>
+      </AppRouterCacheProvider>
+    </NuqsAdapter>
   );
 }
 

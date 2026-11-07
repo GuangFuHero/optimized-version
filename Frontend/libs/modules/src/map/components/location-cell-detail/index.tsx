@@ -129,10 +129,6 @@ export function LocationCellDetail({
   // Where a page asked for under the list starts. The button pressed for it goes away when the
   // last page is in or the page fails, and a keyboard user's focus would go with it.
   const askedFromRef = useRef<number | null>(null);
-  const askFromFoot = (ask: () => void) => () => {
-    askedFromRef.current = members.length;
-    ask();
-  };
 
   useEffect(() => {
     const from = askedFromRef.current;
@@ -310,8 +306,14 @@ export function LocationCellDetail({
           hasMore={hasMore}
           listed={members.length > 0}
           retryRef={retryRef}
-          onLoadMore={askFromFoot(loadMore)}
-          onRetry={askFromFoot(retry)}
+          onLoadMore={() => {
+            askedFromRef.current = members.length;
+            loadMore();
+          }}
+          onRetry={() => {
+            askedFromRef.current = members.length;
+            retry();
+          }}
         />
       </Stack>
     </Box>

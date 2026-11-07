@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useMemo } from 'react';
+import { useEffect } from 'react';
 
 import { GetBuildingMapsDocument } from '@rescue-frontend/data-access';
 
@@ -61,19 +61,15 @@ export function useBuildingMaps({
     };
   }, [enabled, refetch]);
 
-  const buildings = useMemo<BuildingMapEntry[]>(
-    () =>
-      (data?.buildingMaps.items ?? []).map((map) => ({
-        uuid: map.uuid,
-        name: map.name,
-        address: formatTicketStreet(map.secondaryLocation),
-        point: stationPoint(map.geometry),
-        floors: map.floors,
-        ticketCount: map.ticketCount ?? null,
-        shortfall: map.shortfall ?? null,
-      })),
-    [data?.buildingMaps.items],
-  );
+  const buildings = (data?.buildingMaps.items ?? []).map((map) => ({
+    uuid: map.uuid,
+    name: map.name,
+    address: formatTicketStreet(map.secondaryLocation),
+    point: stationPoint(map.geometry),
+    floors: map.floors,
+    ticketCount: map.ticketCount ?? null,
+    shortfall: map.shortfall ?? null,
+  })) satisfies BuildingMapEntry[];
 
   return {
     buildings,

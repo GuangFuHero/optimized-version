@@ -243,7 +243,7 @@ export function DuplicateWarnDialog({
     const map = mapRoute
       ? {
           state: mapRoute.state,
-          zoom: mapViewport?.getSnapshot().position?.zoom ?? 0,
+          zoom: mapViewport?.getState().position?.zoom ?? 0,
         }
       : null;
     // Near what is being sent, should the ticket's own point not have been read yet.

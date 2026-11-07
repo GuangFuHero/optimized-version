@@ -1,5 +1,7 @@
 'use client';
 
+import { useReturnQuery } from '../../route/use-return-query';
+
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useMutation } from '@tanstack/react-query';
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
@@ -17,22 +19,18 @@ import {
   toCreateStationSuggestionInput,
   type StationSuggestionForm,
 } from './fields';
-import { onOpenStationSuggestion } from './open-station-suggestion';
+import {
+  openStationSuggestion,
+  useStationSuggestionState,
+} from './open-station-suggestion';
 import { StationSuggestionDrawer } from './station-suggestion-drawer';
 import {
   buildSuggestionSignInHref,
   readSuggestionReturn,
-  stripSuggestionReturn,
 } from './suggestion-return';
 
 interface StationSuggestionHostProps {
   isAuthenticated: boolean;
-}
-
-interface Opening {
-  /** Keys the drawer, so each opening starts from the station as it is and an untouched form. */
-  id: number;
-  stationUuid: string;
 }
 
 /**
@@ -45,6 +43,7 @@ function StationSuggestionReturn({
 }: {
   onReturn: (stationUuid: string) => void;
 }) {
+  const consumeReturn = useReturnQuery();
   const searchParams = useSearchParams();
   const { status } = useAuthSession();
   const [stationUuid] = useState(() => readSuggestionReturn(searchParams));
@@ -59,17 +58,12 @@ function StationSuggestionReturn({
 
     // Off the address either way, so a reload or a copied link does not open it again. A guest
     // here did not sign in — the link came some other way — and has nothing to reopen.
-    const address = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-    const withoutSuggest = stripSuggestionReturn(address);
-
-    if (withoutSuggest !== address) {
-      window.history.replaceState(window.history.state, '', withoutSuggest);
-    }
+    consumeReturn(['suggest']);
 
     if (status === 'authenticated') {
       onReturn(stationUuid);
     }
-  }, [onReturn, stationUuid, status]);
+  }, [consumeReturn, onReturn, stationUuid, status]);
 
   return null;
 }
@@ -86,24 +80,15 @@ export function StationSuggestionHost({
   const { mutateAsync: createStationSuggestion } = useMutation(
     siteGraphqlMutation(CreateStationSuggestionDocument),
   );
-  const [opening, setOpening] = useState<Opening | null>(null);
-  const [open, setOpen] = useState(false);
+  const { opening, open, submitError } = useStationSuggestionState();
   // The opening whose suggestion is on its way: a drawer opened after it is not kept waiting on it.
   const [submittingId, setSubmittingId] = useState<number | null>(null);
-  const [submitError, setSubmitError] = useState<string | null>(null);
   const [toastOpen, setToastOpen] = useState(false);
-  // Read as a suggestion comes back: one sent from a drawer since closed and opened again — on
-  // another station, say — must not close the new drawer, nor leave its error there.
-  const lastOpeningId = useRef(0);
-
-  const openDrawer = useCallback((stationUuid: string) => {
-    lastOpeningId.current += 1;
-    setOpening({ id: lastOpeningId.current, stationUuid });
-    setSubmitError(null);
-    setOpen(true);
-  }, []);
-
-  useEffect(() => onOpenStationSuggestion(openDrawer), [openDrawer]);
+  useEffect(
+    () => () =>
+      useStationSuggestionState.setState({ open: false, submitError: null }),
+    [],
+  );
 
   /** To sign in and back here with the drawer to open again on the same station. */
   const signIn = () => {
@@ -111,7 +96,7 @@ export function StationSuggestionHost({
       return;
     }
 
-    setOpen(false);
+    useStationSuggestionState.setState({ open: false });
     router.push(
       buildSuggestionSignInHref(window.location, opening.stationUuid),
     );
@@ -123,10 +108,11 @@ export function StationSuggestionHost({
     }
 
     const { id } = opening;
-    const stillOpen = () => lastOpeningId.current === id;
+    const stillOpen = () =>
+      useStationSuggestionState.getState().opening?.id === id;
 
     setSubmittingId(id);
-    setSubmitError(null);
+    useStationSuggestionState.setState({ submitError: null });
 
     try {
       const refusal = await createStationSuggestion({
@@ -139,13 +125,15 @@ export function StationSuggestionHost({
       // What was typed stays for another try.
       if (refusal) {
         if (stillOpen()) {
-          setSubmitError(stationSuggestionErrorMessage(refusal));
+          useStationSuggestionState.setState({
+            submitError: stationSuggestionErrorMessage(refusal),
+          });
         }
         return;
       }
 
       if (stillOpen()) {
-        setOpen(false);
+        useStationSuggestionState.setState({ open: false });
       }
 
       // Sent all the same, wherever the drawer went meanwhile.
@@ -168,13 +156,13 @@ export function StationSuggestionHost({
           isAuthenticated={isAuthenticated}
           submitting={submittingId === opening.id}
           submitError={submitError}
-          onClose={() => setOpen(false)}
+          onClose={() => useStationSuggestionState.setState({ open: false })}
           onSignIn={signIn}
           onSubmit={(form) => void submit(form)}
         />
       ) : null}
       <Suspense fallback={null}>
-        <StationSuggestionReturn onReturn={openDrawer} />
+        <StationSuggestionReturn onReturn={openStationSuggestion} />
       </Suspense>
       <SiteToast
         open={toastOpen}

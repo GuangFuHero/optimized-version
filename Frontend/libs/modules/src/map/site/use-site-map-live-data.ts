@@ -13,7 +13,7 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 
 import type {
   RescueMapClosureArea,
@@ -153,7 +153,6 @@ export function useSiteMapLiveData(
 
   // The counts on screen, for a read that fails to keep: they still count what the filter asks
   // for while the map is only panned or zoomed. Another filter starts with none.
-  const shownCells = useRef<readonly RescueMapLocationCell[]>([]);
   const cellsFilter = JSON.stringify([dataType, statuses ?? null]);
   // Every cell's count: a page of tickets holds 200, a cell can hold more (ADR-387). Asked beside
   // the rest, which goes up without waiting for it: near the backend's time limit it takes seconds.
@@ -165,7 +164,15 @@ export function useSiteMapLiveData(
     queryFn:
       bounds && dataType === 'ticket'
         ? ({ signal }) => {
-            const kept = shownCells.current;
+            const latest = queryClient
+              .getQueryCache()
+              .findAll({ queryKey: ['site-map', 'cells', cellsFilter] })
+              .sort((a, b) => b.state.dataUpdatedAt - a.state.dataUpdatedAt)
+              .find((query) => query.state.data !== undefined);
+            const kept = latest
+              ? (queryClient.getQueryData<TicketCellsRead>(latest.queryKey)
+                  ?.cells ?? [])
+              : [];
 
             return siteGraphql(
               GetTicketCellsDocument,
@@ -182,7 +189,6 @@ export function useSiteMapLiveData(
   });
   const counted =
     bounds && dataType === 'ticket' ? (cellsQuery.data ?? NO_CELLS) : NO_CELLS;
-  shownCells.current = counted.cells;
 
   const [dismissed, setDismissed] = useState<ReadonlySet<string>>(new Set());
   const dismissMarker = useCallback(
@@ -210,13 +216,10 @@ export function useSiteMapLiveData(
   );
 
   const shown = bounds ? (view.data ?? NO_VIEW) : NO_VIEW;
-  const markers = useMemo(
-    () =>
-      dismissed.size === 0
-        ? shown.markers
-        : shown.markers.filter((marker) => !dismissed.has(marker.id)),
-    [dismissed, shown.markers],
-  );
+  const markers =
+    dismissed.size === 0
+      ? shown.markers
+      : shown.markers.filter((marker) => !dismissed.has(marker.id));
 
   return {
     markers,

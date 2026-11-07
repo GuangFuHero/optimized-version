@@ -124,6 +124,8 @@ export {
   useCellMembersLoader,
   useCreatedTicketMarker,
   useLinkedTicket,
+  useLinkedSelection,
+  type LinkedSelectionOptions,
   useSiteMapLiveData,
   usePaginatedRescueMapMarkers,
   useSiteMapBuildings,

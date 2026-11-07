@@ -13,7 +13,7 @@ import {
 } from './need-claim';
 import { NeedClaimButton } from './need-claim-button';
 import { useNeedClaim } from './need-claim-provider';
-import { NeedProgressBar, needTypeIcon } from './need-parts';
+import { NeedProgressBar, NeedTypeIcon } from './need-parts';
 import { useNeedActions } from './use-need-actions';
 
 const { color, typography } = designTokens;
@@ -43,12 +43,15 @@ export function NeedLine({
   divider = false,
 }: NeedLineProps) {
   const { requestClaim, requestSignIn } = useNeedClaim();
-  const actions = useNeedActions(need, { ticketUuid, ticketStatus, ticketCreatedBy });
+  const actions = useNeedActions(need, {
+    ticketUuid,
+    ticketStatus,
+    ticketCreatedBy,
+  });
   const claim = resolveNeedClaim(need, { ticketStatus, isAuthenticated });
   const quota = formatNeedQuota(need, claim.kind);
   const closed = claim.kind === 'fulfilled';
   const full = !closed && isNeedFull(need);
-  const TypeIcon = needTypeIcon(need.taskType);
 
   return (
     <Stack
@@ -61,7 +64,10 @@ export function NeedLine({
         opacity: closed ? 0.55 : 1,
       }}
     >
-      <TypeIcon sx={{ fontSize: 16, color: color.fg.neutral.muted, flexShrink: 0 }} />
+      <NeedTypeIcon
+        taskType={need.taskType}
+        sx={{ fontSize: 16, color: color.fg.neutral.muted, flexShrink: 0 }}
+      />
 
       {/* At most 460px from the tablet up: across a full-width card the count drifts away from the
           name and the bar stretches into a line nobody can read a ratio off (prototype
@@ -73,7 +79,12 @@ export function NeedLine({
             2026-09-11). */}
         <Stack
           direction="row"
-          sx={{ alignItems: 'baseline', flexWrap: 'wrap', columnGap: 1, rowGap: 0.25 }}
+          sx={{
+            alignItems: 'baseline',
+            flexWrap: 'wrap',
+            columnGap: 1,
+            rowGap: 0.25,
+          }}
         >
           <Typography
             sx={{
@@ -117,14 +128,25 @@ export function NeedLine({
 
       {/* Kept at the card's right edge, in line with the card's other actions below it — the
           requester's ⋯ last, pulled into the padding so its glyph lines up with them. */}
-      <Stack direction="row" sx={{ ml: 'auto', flexShrink: 0, alignItems: 'center', gap: 0.5 }}>
+      <Stack
+        direction="row"
+        sx={{ ml: 'auto', flexShrink: 0, alignItems: 'center', gap: 0.5 }}
+      >
         <NeedClaimButton
           claim={claim}
           needName={need.taskName}
           onClaim={() => requestClaim(ticketUuid, need.uuid)}
-          onSignIn={requestSignIn ? () => requestSignIn(ticketUuid, need.uuid) : undefined}
+          onSignIn={
+            requestSignIn
+              ? () => requestSignIn(ticketUuid, need.uuid)
+              : undefined
+          }
         />
-        <NeedActionsMenu needName={need.taskName} items={actions} sx={{ mr: -1 }} />
+        <NeedActionsMenu
+          needName={need.taskName}
+          items={actions}
+          sx={{ mr: -1 }}
+        />
       </Stack>
     </Stack>
   );

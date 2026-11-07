@@ -1,10 +1,9 @@
 'use client';
 
 import { Menu } from 'lucide-react';
-import { useEffect, useState, type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
+import { type ReactNode } from 'react';
 
-import { Box, IconButton, Stack, Typography } from '@mui/material';
+import { Box, IconButton, Portal, Stack, Typography } from '@mui/material';
 
 import { designTokens, layoutSizes } from '@rescue-frontend/ui';
 
@@ -96,7 +95,9 @@ export function AdminHeader({
  * list/map switch). The shell owns the header, so the page portals into it rather than passing props.
  */
 export function AdminHeaderSlot({ children }: { children: ReactNode }) {
-  const [target, setTarget] = useState<HTMLElement | null>(null);
-  useEffect(() => setTarget(document.getElementById(TITLE_SLOT_ID)), []);
-  return target ? createPortal(children, target) : null;
+  return (
+    <Portal container={() => document.getElementById(TITLE_SLOT_ID)}>
+      {children}
+    </Portal>
+  );
 }

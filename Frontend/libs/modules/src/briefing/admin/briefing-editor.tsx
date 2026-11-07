@@ -2,7 +2,9 @@
 
 import { Box, Stack, Typography } from '@mui/material';
 import { ArrowLeft, Check, EyeOff, Save, Send, Trash2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useForm, useStore } from '@tanstack/react-form';
+import { useEventListener } from 'usehooks-ts';
 import { toast } from 'sonner';
 
 import {
@@ -25,6 +27,8 @@ import { BriefingPreview, BriefingStamp } from './briefing-preview';
 import { TakeDownBriefingConfirm } from './take-down-briefing-confirm';
 
 const { color, typography } = designTokens;
+type BriefingSave = { action: 'save' | 'leave' | 'publish' };
+const SAVE_BRIEFING: BriefingSave = { action: 'save' };
 
 export function BriefingEditor({
   draft,
@@ -45,7 +49,13 @@ export function BriefingEditor({
   canDiscard: boolean;
   onClose: () => void;
 }) {
-  const [content, setContent] = useState(draft.content);
+  const [openedValues] = useState(() => ({ content: draft.content }));
+  const form = useForm({
+    defaultValues: openedValues,
+    onSubmitMeta: SAVE_BRIEFING,
+    onSubmit: ({ meta }): Promise<void> => save(meta.action),
+  });
+  const content = useStore(form.store, (state) => state.values.content);
   const [confirm, setConfirm] = useState<
     'publish' | 'leave' | 'discard' | 'takeDown' | null
   >(null);
@@ -59,15 +69,12 @@ export function BriefingEditor({
   const dirty = content !== draft.content;
   const empty = !content.trim();
 
-  useEffect(() => {
-    if (!dirty) return;
-    const beforeUnload = (event: BeforeUnloadEvent) => {
+  useEventListener('beforeunload', (event) => {
+    if (dirty) {
       event.preventDefault();
       event.returnValue = '';
-    };
-    window.addEventListener('beforeunload', beforeUnload);
-    return () => window.removeEventListener('beforeunload', beforeUnload);
-  }, [dirty]);
+    }
+  });
 
   async function save(action: 'save' | 'leave' | 'publish') {
     if (
@@ -180,7 +187,7 @@ export function BriefingEditor({
       >
         <MarkdownEditor
           defaultValue={draft.content}
-          onChange={setContent}
+          onChange={(value) => form.setFieldValue('content', value)}
           label="行前資訊內容"
           helperText="用段落標題分段，段裡再用小標題細分。可勾項目讓志工在前台逐項打勾。"
           disabled={pending || !available}
@@ -210,7 +217,7 @@ export function BriefingEditor({
                 <Button
                   size="sm"
                   disabled={pending || empty || !canPublish || !available}
-                  onClick={() => void save('publish')}
+                  onClick={() => void form.handleSubmit({ action: 'publish' })}
                 >
                   {publish.isPending ? '發布中…' : '確認發布'}
                 </Button>
@@ -256,7 +263,7 @@ export function BriefingEditor({
                 <Button
                   size="sm"
                   disabled={pending || !available}
-                  onClick={() => void save('leave')}
+                  onClick={() => void form.handleSubmit({ action: 'leave' })}
                 >
                   {update.isPending ? '儲存中…' : '存成草稿再離開'}
                 </Button>
@@ -300,7 +307,7 @@ export function BriefingEditor({
                   variant="outline"
                   startIcon={<Save size={16} />}
                   disabled={pending || !dirty || !available}
-                  onClick={() => void save('save')}
+                  onClick={() => void form.handleSubmit({ action: 'save' })}
                 >
                   {update.isPending ? '儲存中…' : '儲存草稿'}
                 </Button>

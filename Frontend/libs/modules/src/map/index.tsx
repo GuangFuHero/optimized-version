@@ -8,8 +8,6 @@ import {
   memo,
   useCallback,
   useEffect,
-  useMemo,
-  useReducer,
   useRef,
   useState,
   type ReactNode,
@@ -32,7 +30,7 @@ import { RescueMapLayerPanel } from './components/rescue-map-layer-panel';
 import { RescueMapStatusMessage } from './components/rescue-map-status-message';
 import { RescueMapTopBar } from './components/rescue-map-top-bar';
 import { RESCUE_MAP_DESKTOP_DETAIL_DRAWER_WIDTH } from './constants';
-import { countDetailOpenings } from './detail-openings';
+import { useMarkerDetail } from './hooks/use-marker-detail';
 import {
   designTokens,
   displayTextSizeCss,
@@ -365,7 +363,7 @@ export const Map = memo(function Map({
   // the map opens, at once. Without one, the map waits to know where to open (MAP-VIEW-101–104);
   // so does one from a `bbox` alone, which names no zoom, for the event's.
   const [addressPosition] = useState(
-    () => viewportStore?.getSnapshot().position ?? routeState?.position,
+    () => viewportStore?.getState().position ?? routeState?.position,
   );
   const opening = useMapOpening({
     memoryKey: viewMemoryKey,
@@ -408,80 +406,52 @@ export const Map = memo(function Map({
 
   // 訪客的概略區塊不在 markers 裡（見 buildLocationCells），但一樣可以被選取、開詳情。後端數好的
   // 格子（`locationCells`）優先：markers 只有一頁。
-  const locationCells = useMemo(
-    () => countedCells ?? buildLocationCells(controller.markers),
-    [controller.markers, countedCells],
-  );
-  const selectedMarker = useMemo<RescueMapDetailItem | null>(
-    () =>
-      controller.markers.find(
-        (marker) => marker.id === controller.selectedMarkerId,
-      ) ??
-      locationCells.find((cell) => cell.id === controller.selectedMarkerId) ??
-      (linkedItem && linkedItem.id === controller.selectedMarkerId
-        ? linkedItem
-        : null),
-    [
-      controller.markers,
-      controller.selectedMarkerId,
-      linkedItem,
-      locationCells,
-    ],
-  );
+  const locationCells = countedCells ?? buildLocationCells(controller.markers);
+  const selectedMarker =
+    controller.markers.find(
+      (marker) => marker.id === controller.selectedMarkerId,
+    ) ??
+    locationCells.find((cell) => cell.id === controller.selectedMarkerId) ??
+    ((linkedItem && linkedItem.id === controller.selectedMarkerId
+      ? linkedItem
+      : null) satisfies RescueMapDetailItem | null);
   const isTicketTone = controller.dataType === 'ticket';
-  const globalStyles = useMemo(
-    () => ({
-      ...rescueMapMarkerStyles,
-      ...MAP_STATIC_GLOBAL_STYLES,
-      '.leaflet-control-scale-line': {
-        padding: '2px 8px',
-        // Leaflet's own chrome stays off the display scale — `site.css` pins the scale line,
-        // attribution and tooltip to raw px. It is map furniture, not content to be read at arm's
-        // length, and it has to fit Leaflet's fixed control geometry.
-        fontSize: 11,
-        fontWeight: 700,
-        color: color.fg.neutral.default,
-        lineHeight: '16px',
-        background: isTicketTone
-          ? color.bg.primary.subtle
-          : color.bg.secondary.subtle,
-        backdropFilter: 'blur(6px)',
-        border: 'none',
-        borderTop: `5px solid ${
-          isTicketTone
-            ? color.bg.primary.default
-            : color.brand.secondary.default
-        }`,
-        borderRadius: `0 0 ${radius.md}px ${radius.md}px`,
-        boxShadow: shadow.sm,
-      },
-    }),
-    [isTicketTone],
-  );
+  const globalStyles = {
+    ...rescueMapMarkerStyles,
+    ...MAP_STATIC_GLOBAL_STYLES,
+    '.leaflet-control-scale-line': {
+      padding: '2px 8px',
+      // Leaflet's own chrome stays off the display scale — `site.css` pins the scale line,
+      // attribution and tooltip to raw px. It is map furniture, not content to be read at arm's
+      // length, and it has to fit Leaflet's fixed control geometry.
+      fontSize: 11,
+      fontWeight: 700,
+      color: color.fg.neutral.default,
+      lineHeight: '16px',
+      background: isTicketTone
+        ? color.bg.primary.subtle
+        : color.bg.secondary.subtle,
+      backdropFilter: 'blur(6px)',
+      border: 'none',
+      borderTop: `5px solid ${
+        isTicketTone ? color.bg.primary.default : color.brand.secondary.default
+      }`,
+      borderRadius: `0 0 ${radius.md}px ${radius.md}px`,
+      boxShadow: shadow.sm,
+    },
+  };
 
   // 保留最後選取的標記，讓行動版抽屜在關閉動畫期間仍有內容可渲染。
-  const [displayMarker, setDisplayMarker] =
-    useState<RescueMapDetailItem | null>(selectedMarker);
-  const [{ open: detailOpen, openings: detailOpenings }, setDetailOpen] =
-    useReducer(countDetailOpenings, {
-      open: Boolean(selectedMarker),
-      openings: 0,
-    });
+  const {
+    displayMarker,
+    detailOpen,
+    detailOpenings,
+    setDetailOpen,
+    setDisplayMarker,
+  } = useMarkerDetail(selectedMarker, Boolean(controller.selectedMarkerId));
   // The phone's drawer opens on a phone only. Hidden by CSS on a wider screen, it was still an open
   // modal, and MUI hid the rest of the page — the map, the detail panel — from screen readers.
   const isPhone = useMediaQuery((theme) => theme.breakpoints.down('tablet'));
-
-  useEffect(() => {
-    if (selectedMarker) {
-      setDisplayMarker(selectedMarker);
-      setDetailOpen(true);
-      return;
-    }
-
-    if (!controller.selectedMarkerId) {
-      setDetailOpen(false);
-    }
-  }, [controller.selectedMarkerId, selectedMarker]);
 
   const closeDetail = () => {
     setDetailOpen(false);

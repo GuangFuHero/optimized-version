@@ -3,7 +3,9 @@
 import { responseData } from '@rescue-frontend/data-access';
 import type { components } from '@rescue-frontend/data-access/openapi';
 import { skipToken, useQuery } from '@tanstack/react-query';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
+import { useEventCallback, useIsClient } from 'usehooks-ts';
+import { create } from 'zustand';
 
 import { siteRestClient } from '../../session/site-clients';
 
@@ -194,6 +196,8 @@ export function writeLayerPreferences(preferences: RescueMapLayerPreferences) {
   }
 }
 
+const useLayerPreferences = create(readLayerPreferences);
+
 export function useRescueMapController({
   routeState,
   onRouteStateChange,
@@ -210,17 +214,16 @@ export function useRescueMapController({
   const isControlled = onRouteStateChange != null;
   const [internalState, setInternalState] =
     useState<RescueMapRouteState>(EMPTY_ROUTE_STATE);
-  const [layerPreferences, setLayerPreferences] =
-    useState<RescueMapLayerPreferences>(FALLBACK_LAYER_PREFERENCES);
+  const isClient = useIsClient();
+  const storedPreferences = useLayerPreferences();
+  const layerPreferences: RescueMapLayerPreferences = isClient
+    ? storedPreferences
+    : FALLBACK_LAYER_PREFERENCES;
   const state = isControlled
     ? (routeState ?? EMPTY_ROUTE_STATE)
     : internalState;
   const baseLayer: RescueMapBaseLayer =
     state.baseLayer ?? layerPreferences.baseLayer ?? DEFAULT_BASE_LAYER;
-
-  useEffect(() => {
-    setLayerPreferences(readLayerPreferences());
-  }, []);
 
   // Without an answer — the API unavailable — the layer keeps the attribution it is configured with.
   const attributionSource = BASE_LAYER_CONFIG[baseLayer]?.attributionSource;
@@ -247,53 +250,45 @@ export function useRescueMapController({
         current: RescueMapLayerPreferences,
       ) => RescueMapLayerPreferences,
     ) => {
-      setLayerPreferences((current) => {
-        const next = normalizeLayerPreferences(updater(current));
-        writeLayerPreferences(next);
-        return next;
-      });
+      const next = normalizeLayerPreferences(
+        updater(useLayerPreferences.getState()),
+      );
+      useLayerPreferences.setState(next, true);
+      writeLayerPreferences(next);
     },
     [],
   );
 
-  const stateRef = useRef(state);
-  stateRef.current = state;
-
-  const commit = useCallback(
-    (next: RescueMapRouteState) => {
-      stateRef.current = next;
-
-      if (isControlled) {
-        onRouteStateChange(next);
-        return;
-      }
-
-      setInternalState(next);
-    },
-    [isControlled, onRouteStateChange],
+  const pending = useRef<{
+    previous: RescueMapRouteState;
+    next: RescueMapRouteState;
+  } | null>(null);
+  const readState = useEventCallback(() =>
+    pending.current?.previous === state ? pending.current.next : state,
   );
+
+  const commit = useEventCallback((next: RescueMapRouteState) => {
+    pending.current = { previous: state, next };
+
+    if (isControlled) {
+      onRouteStateChange(next);
+      return;
+    }
+
+    setInternalState(next);
+  });
 
   const [layerPanelOpen, setLayerPanelOpen] = useState(false);
   const openLayerPanel = useCallback(() => setLayerPanelOpen(true), []);
   const closeLayerPanel = useCallback(() => setLayerPanelOpen(false), []);
 
   const dataType = state.dataType;
-  const subDataTypes = useMemo(
-    () => state.subDataTypes ?? [],
-    [state.subDataTypes],
+  const subDataTypes = state.subDataTypes ?? [];
+  const enabledOverlayLayers = normalizeOverlayLayers(
+    layerPreferences.enabledOverlayLayers,
+    FALLBACK_LAYER_PREFERENCES.enabledOverlayLayers,
   );
-  const enabledOverlayLayers = useMemo(
-    () =>
-      normalizeOverlayLayers(
-        layerPreferences.enabledOverlayLayers,
-        FALLBACK_LAYER_PREFERENCES.enabledOverlayLayers,
-      ),
-    [layerPreferences.enabledOverlayLayers],
-  );
-  const enabledOverlayLayerSet = useMemo(
-    () => new Set(enabledOverlayLayers),
-    [enabledOverlayLayers],
-  );
+  const enabledOverlayLayerSet = new Set(enabledOverlayLayers);
   const selectedMarkerId = state.selectedMarkerId;
 
   const setBaseLayer = useCallback(
@@ -302,10 +297,10 @@ export function useRescueMapController({
         return;
       }
 
-      commit({ ...stateRef.current, baseLayer: layer });
+      commit({ ...readState(), baseLayer: layer });
       updateLayerPreferences((current) => ({ ...current, baseLayer: layer }));
     },
-    [commit, updateLayerPreferences],
+    [commit, updateLayerPreferences, readState],
   );
 
   const toggleOverlayLayer = useCallback(
@@ -341,24 +336,24 @@ export function useRescueMapController({
 
   const setDataType = useCallback(
     (nextDataType: RescueMapDataType) => {
-      if (stateRef.current.dataType === nextDataType) {
+      if (readState().dataType === nextDataType) {
         return;
       }
 
       // 切換維度時清除子分類與詳情，避免殘留另一維度的選取。
       commit({
-        ...stateRef.current,
+        ...readState(),
         dataType: nextDataType,
         subDataTypes: [],
         selectedMarkerId: undefined,
       });
     },
-    [commit],
+    [commit, readState],
   );
 
   const toggleSubDataType = useCallback(
     (value: string) => {
-      const current = new Set(stateRef.current.subDataTypes ?? []);
+      const current = new Set(readState().subDataTypes ?? []);
 
       if (current.has(value)) {
         current.delete(value);
@@ -366,14 +361,14 @@ export function useRescueMapController({
         current.add(value);
       }
 
-      commit({ ...stateRef.current, subDataTypes: [...current] });
+      commit({ ...readState(), subDataTypes: [...current] });
     },
     [commit],
   );
 
   const setSelectedMarkerId = useCallback(
     (markerId: string | undefined) => {
-      commit({ ...stateRef.current, selectedMarkerId: markerId });
+      commit({ ...readState(), selectedMarkerId: markerId });
     },
     [commit],
   );
@@ -384,7 +379,7 @@ export function useRescueMapController({
       zoom: number;
       bbox: RescueMapBoundingBox;
     }) => {
-      const current = stateRef.current;
+      const current = readState();
       const currentPosition = current.position;
       const currentBbox = current.bbox;
 
@@ -414,13 +409,16 @@ export function useRescueMapController({
     [commit],
   );
 
-  const tileLayer = useMemo(() => {
+  const tileLayer = (() => {
     const baseConfig = BASE_LAYER_CONFIG[baseLayer];
     const resolvedAttribution =
       attributionPayload &&
       buildAttributionMarkup(attributionPayload, baseConfig.attribution);
 
-    if (!resolvedAttribution || resolvedAttribution === baseConfig.attribution) {
+    if (
+      !resolvedAttribution ||
+      resolvedAttribution === baseConfig.attribution
+    ) {
       return baseConfig;
     }
 
@@ -428,36 +426,27 @@ export function useRescueMapController({
       ...baseConfig,
       attribution: resolvedAttribution,
     };
-  }, [attributionPayload, baseLayer]);
+  })();
   // 只取用過濾真正需要的欄位；視角（position／bbox）提交不應重建 markers 陣列，
   // 否則地圖每次移動都會觸發下游 marker 圖層重新同步。
   const filterBbox = filterMarkersByBbox ? state.bbox : undefined;
   const filterSearch = filterMarkersBySearch ? state.search : undefined;
-  const markerFilterState = useMemo<RescueMapRouteState>(
-    () => ({
-      dataType: state.dataType,
-      subDataTypes: state.subDataTypes,
-      search: filterSearch,
-      bbox: filterBbox,
-    }),
-    [filterBbox, filterSearch, state.dataType, state.subDataTypes],
-  );
-  const markers = useMemo(() => {
+  const markerFilterState = {
+    dataType: state.dataType,
+    subDataTypes: state.subDataTypes,
+    search: filterSearch,
+    bbox: filterBbox,
+  } satisfies RescueMapRouteState;
+  const markers = (() => {
     return filterRescueMapMarkers(sourceMarkers, markerFilterState);
-  }, [markerFilterState, sourceMarkers]);
-  const closureAreas = useMemo(
-    () =>
-      enabledOverlayLayerSet.has('closure-areas')
-        ? [...sourceClosureAreas]
-        : [],
-    [enabledOverlayLayerSet, sourceClosureAreas],
-  );
-  const publicZones = useMemo(
-    () =>
-      enabledOverlayLayerSet.has('public-zones') ? [...sourcePublicZones] : [],
-    [enabledOverlayLayerSet, sourcePublicZones],
-  );
-  const overlayLayerMeta = useMemo(() => {
+  })();
+  const closureAreas = enabledOverlayLayerSet.has('closure-areas')
+    ? [...sourceClosureAreas]
+    : [];
+  const publicZones = enabledOverlayLayerSet.has('public-zones')
+    ? [...sourcePublicZones]
+    : [];
+  const overlayLayerMeta = (() => {
     return {
       'closure-areas': {
         itemCount: sourceClosureAreas.length,
@@ -476,14 +465,11 @@ export function useRescueMapController({
         sourceLabel: 'secondary_locations + base_geometries',
       },
     } as const;
-  }, [sourceClosureAreas.length, sourcePublicZones.length]);
-  const initialView = useMemo(
-    () => ({
-      center: state.position?.center ?? defaultView.center,
-      zoom: state.position?.zoom ?? defaultView.zoom,
-    }),
-    [defaultView, state.position],
-  );
+  })();
+  const initialView = {
+    center: state.position?.center ?? defaultView.center,
+    zoom: state.position?.zoom ?? defaultView.zoom,
+  };
 
   return {
     baseLayer,

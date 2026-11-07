@@ -12,7 +12,7 @@ import {
 import type { RescueMapMarkerItem } from '../map/types';
 import { SiteBadge } from '../shell/site/site-badge';
 import { resolveStationAvailability } from '../station/availability';
-import { getStationTypeIcon } from '../station/station-type-icon';
+import { StationTypeIcon } from '../station/station-type-icon';
 import { NeedLine, type TicketNeed } from '../ticket/needs';
 import { TicketPriorityBadge } from '../ticket/priority-badge';
 import { getTicketStatusTone } from '../ticket/status';
@@ -57,9 +57,6 @@ export function SiteListRow({
   onShare,
 }: SiteListRowProps) {
   const isStation = marker.detailType === 'station';
-  const TypeIcon = isStation
-    ? getStationTypeIcon(marker.stationMeta?.type)
-    : Icons.clipboardList;
   const needs =
     marker.detailType === 'ticket' ? (listedNeeds ?? marker.needs ?? []) : [];
   const availability = isStation
@@ -110,10 +107,15 @@ export function SiteListRow({
             }}
           >
             {/* Named for a screen reader: the badge on the right no longer says the type. */}
-            <TypeIcon
-              titleAccess={isStation ? marker.label : undefined}
-              sx={{ fontSize: ICON_SIZE }}
-            />
+            {isStation ? (
+              <StationTypeIcon
+                type={marker.stationMeta?.type}
+                titleAccess={marker.label}
+                sx={{ fontSize: ICON_SIZE }}
+              />
+            ) : (
+              <Icons.clipboardList sx={{ fontSize: ICON_SIZE }} />
+            )}
           </Box>
 
           <Box sx={{ flex: 1, minWidth: 0, containerType: 'inline-size' }}>

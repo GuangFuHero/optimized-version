@@ -38,7 +38,11 @@ interface PhotoThumbProps {
  * error, an image the host answered with an HTML page (no error, but no width), or none at all
  * in time.
  */
-export function PhotoThumb({
+export function PhotoThumb(props: PhotoThumbProps) {
+  return <PhotoThumbImage key={props.url} {...props} />;
+}
+
+function PhotoThumbImage({
   url,
   index,
   linksOut = false,
@@ -59,15 +63,10 @@ export function PhotoThumb({
     }
   }, []);
 
-  // Read again when the link changes; and an image already in the cache may have loaded before
-  // this ran, when onLoad will not fire again.
-  useEffect(() => {
-    setState('loading');
-
-    if (imageRef.current?.complete) {
-      settle();
-    }
-  }, [settle, url]);
+  const attachImage = useCallback((image: HTMLImageElement | null) => {
+    imageRef.current = image;
+    if (image?.complete) setState(image.naturalWidth > 0 ? 'ok' : 'fail');
+  }, []);
 
   useEffect(() => {
     if (state !== 'loading') {
@@ -86,7 +85,7 @@ export function PhotoThumb({
   const image = (
     <Box
       component="img"
-      ref={imageRef}
+      ref={attachImage}
       src={url}
       alt={alt}
       // Not lazy, unlike the prototype: a lazy image below the fold has not started when the

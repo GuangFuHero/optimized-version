@@ -1,5 +1,7 @@
 'use client';
 
+import { useReturnQuery } from '../../route/use-return-query';
+
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   Suspense,
@@ -39,11 +41,7 @@ import {
   type HelpRequestForm,
   type PickedPoint,
 } from './help-request-form';
-import {
-  buildHelpSignInHref,
-  readHelpReturn,
-  stripHelpReturn,
-} from './help-return';
+import { buildHelpSignInHref, readHelpReturn } from './help-return';
 import {
   onOpenHelpRequest,
   type HelpRequestPlace,
@@ -94,6 +92,7 @@ function HelpRequestReturn({
 }: {
   onReturn: (seed: Seed, bringsBackDraft: boolean) => void;
 }) {
+  const consumeReturn = useReturnQuery();
   const searchParams = useSearchParams();
   const { status } = useAuthSession();
   const [helpReturn] = useState(() => readHelpReturn(searchParams));
@@ -108,18 +107,13 @@ function HelpRequestReturn({
 
     // Off the address either way, so a reload or a copied link does not open it again. A guest
     // here did not sign in — the link came some other way — and has nothing to reopen.
-    const address = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-    const withoutHelp = stripHelpReturn(address);
-
-    if (withoutHelp !== address) {
-      window.history.replaceState(window.history.state, '', withoutHelp);
-    }
+    consumeReturn(['help', 'helpBuilding', 'helpFloor']);
 
     // What was typed before the sign-in comes back, at whatever point it was opened.
     if (status === 'authenticated') {
       onReturn(helpReturn.seed, true);
     }
-  }, [helpReturn, onReturn, status]);
+  }, [consumeReturn, helpReturn, onReturn, status]);
 
   return null;
 }
@@ -199,7 +193,7 @@ export function HelpRequestHost({ isAuthenticated }: HelpRequestHostProps) {
       };
 
       if (mapRoute) {
-        const zoom = mapViewport?.getSnapshot().position?.zoom ?? 0;
+        const zoom = mapViewport?.getState().position?.zoom ?? 0;
 
         mapRoute.replace({
           ...mapRoute.state,
@@ -320,11 +314,7 @@ export function HelpRequestHost({ isAuthenticated }: HelpRequestHostProps) {
   };
 
   // A sign-out takes the draft with it, so nothing is left to go back to.
-  useEffect(() => {
-    if (!userId) {
-      setUnsentOpen(false);
-    }
-  }, [userId]);
+  if (!userId && unsentOpen) setUnsentOpen(false);
 
   return (
     <>

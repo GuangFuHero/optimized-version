@@ -3,7 +3,9 @@
 import { Check, Lock } from 'lucide-react';
 
 import { Box, Radio, Stack, Typography } from '@mui/material';
-import { useMemo, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
+import { revalidateLogic, useForm, useStore } from '@tanstack/react-form';
+import type { components } from '@rescue-frontend/data-access/openapi';
 import { toast } from 'sonner';
 
 import {
@@ -11,6 +13,8 @@ import {
   useAssignUserRole,
   useCreateTeam,
   useUpdateTeam,
+  type AddTeamMemberInput,
+  type AssignUserRoleInput,
 } from '@rescue-frontend/data-access/admin';
 import {
   Avatar,
@@ -30,7 +34,6 @@ import {
   platformOf,
   type AdminUser,
   type Team,
-  type TeamRole,
 } from './roster';
 
 const { color, radius, typography } = designTokens;
@@ -105,9 +108,17 @@ export function ReasonDialog({
   onConfirm: (reason: string) => void;
   onClose: () => void;
 }) {
-  const [reason, setReason] = useState('');
-  const [touched, setTouched] = useState(false);
-  const missing = !reason.trim();
+  const form = useForm({
+    defaultValues: { reason: '' },
+    validationLogic: revalidateLogic(),
+    validators: {
+      onDynamic: ({ value }) =>
+        value.reason.trim() ? undefined : '此操作必須附上理由。',
+    },
+    onSubmit: ({ value }) => onConfirm(value.reason.trim()),
+  });
+  const reason = useStore(form.store, (state) => state.values.reason);
+  const error = useStore(form.store, (state) => state.errorMap.onDynamic);
 
   return (
     <Dialog
@@ -117,10 +128,7 @@ export function ReasonDialog({
       confirmTone={danger ? 'danger' : 'primary'}
       submitting={submitting}
       onClose={onClose}
-      onConfirm={() => {
-        setTouched(true);
-        if (!missing) onConfirm(reason.trim());
-      }}
+      onConfirm={() => void form.handleSubmit()}
     >
       <Typography
         sx={{ ...typography.body[400], color: color.fg.neutral.default }}
@@ -136,11 +144,47 @@ export function ReasonDialog({
         inputProps={{ maxLength: 500 }}
         value={reason}
         placeholder="請說明原因…"
-        onChange={(event) => setReason(event.target.value)}
-        error={touched && missing ? '此操作必須附上理由。' : undefined}
+        onChange={(event) => form.setFieldValue('reason', event.target.value)}
+        error={error}
       />
     </Dialog>
   );
+}
+
+type CreateTeamFields = Omit<
+  components['schemas']['CreateTeamRequest'],
+  'tax_id'
+> & { tax_id: string };
+const EMPTY_TEAM: CreateTeamFields = { name: '', type: 'ngo', tax_id: '' };
+
+type TeamFields = {
+  [K in keyof components['schemas']['UpdateTeamRequest']]-?: NonNullable<
+    components['schemas']['UpdateTeamRequest'][K]
+  >;
+};
+
+function teamFormErrors(
+  { name, tax_id }: Pick<TeamFields, 'name' | 'tax_id'>,
+  teams: readonly Team[],
+  uuid?: string,
+) {
+  const trimmed = name.trim();
+  const fields = {
+    name: !trimmed
+      ? '請輸入團隊名稱'
+      : teams.some(
+            (team) =>
+              team.uuid !== uuid &&
+              team.name.trim().toLowerCase() === trimmed.toLowerCase(),
+          )
+        ? '已有同名的團隊'
+        : undefined,
+    tax_id:
+      tax_id.trim() && !isValidTaxId(tax_id.trim())
+        ? '統一編號須為 8 位數字且通過檢查碼'
+        : undefined,
+  };
+  return fields.name || fields.tax_id ? { fields } : undefined;
 }
 
 /** 新增團隊. `CreateTeamRequest` takes no contact; 編輯團隊資料 sets it afterwards. */
@@ -154,24 +198,34 @@ export function CreateTeamDialog({
   onClose: () => void;
 }) {
   const createTeam = useCreateTeam();
-  const [name, setName] = useState('');
-  const [type, setType] = useState<'ngo' | 'gov'>('ngo');
-  const [taxId, setTaxId] = useState('');
-  const [touched, setTouched] = useState(false);
-
-  const trimmed = name.trim();
-  const nameError = !trimmed
-    ? '請輸入團隊名稱'
-    : // Taken ignoring case and surrounding spaces, as the backend and 編輯團隊資料 check it.
-      teams.some(
-          (team) => team.name.trim().toLowerCase() === trimmed.toLowerCase(),
-        )
-      ? '已有同名的團隊'
-      : undefined;
-  const taxIdError =
-    taxId.trim() && !isValidTaxId(taxId.trim())
-      ? '統一編號須為 8 位數字且通過檢查碼'
-      : undefined;
+  const form = useForm({
+    defaultValues: EMPTY_TEAM,
+    validationLogic: revalidateLogic(),
+    validators: { onDynamic: ({ value }) => teamFormErrors(value, teams) },
+    onSubmit: async ({ value }) => {
+      await createTeam
+        .mutateAsync({
+          body: {
+            name: value.name.trim(),
+            type: value.type,
+            tax_id: value.tax_id.trim() || null,
+          },
+        })
+        .then(
+          (team) => {
+            toast.success(`已建立「${team.name}」`);
+            onCreated(team);
+          },
+          () => undefined,
+        );
+    },
+  });
+  const {
+    name,
+    type,
+    tax_id: taxId,
+  } = useStore(form.store, (state) => state.values);
+  const errors = useStore(form.store, (state) => state.fieldMeta);
 
   return (
     <Dialog
@@ -180,19 +234,7 @@ export function CreateTeamDialog({
       confirmLabel="建立團隊"
       submitting={createTeam.isPending}
       onClose={onClose}
-      onConfirm={() => {
-        setTouched(true);
-        if (nameError || taxIdError) return;
-        createTeam.mutate(
-          { body: { name: trimmed, type, tax_id: taxId.trim() || null } },
-          {
-            onSuccess: (team) => {
-              toast.success(`已建立「${team.name}」`);
-              onCreated(team);
-            },
-          },
-        );
-      }}
+      onConfirm={() => void form.handleSubmit()}
     >
       <TextInput
         label="團隊名稱"
@@ -200,8 +242,8 @@ export function CreateTeamDialog({
         autoFocus
         value={name}
         placeholder="例：壯闊台灣"
-        onChange={(event) => setName(event.target.value)}
-        error={touched ? nameError : undefined}
+        onChange={(event) => form.setFieldValue('name', event.target.value)}
+        error={errors.name?.errors[0]}
       />
       <Stack sx={{ gap: '6px' }}>
         <Typography
@@ -225,7 +267,7 @@ export function CreateTeamDialog({
               label={platformLabel(value)}
               active={type === value}
               disabled={createTeam.isPending}
-              onSelect={() => setType(value)}
+              onSelect={() => form.setFieldValue('type', value)}
             />
           ))}
         </Stack>
@@ -240,8 +282,8 @@ export function CreateTeamDialog({
         value={taxId}
         placeholder="8 位數統一編號"
         inputProps={{ inputMode: 'numeric', maxLength: 8 }}
-        onChange={(event) => setTaxId(event.target.value)}
-        error={touched ? taxIdError : undefined}
+        onChange={(event) => form.setFieldValue('tax_id', event.target.value)}
+        error={errors.tax_id?.errors[0]}
       />
     </Dialog>
   );
@@ -262,26 +304,48 @@ export function EditTeamDialog({
   onClose: () => void;
 }) {
   const updateTeam = useUpdateTeam();
-  const [name, setName] = useState(team.name);
-  const [taxId, setTaxId] = useState(team.tax_id ?? '');
-  const [contactName, setContactName] = useState(team.contact_name ?? '');
-  const [contactPhone, setContactPhone] = useState(team.contact_phone ?? '');
-  const [touched, setTouched] = useState(false);
-
-  const trimmed = name.trim();
-  const nameError = !trimmed
-    ? '請輸入團隊名稱'
-    : teams.some(
-          (other) =>
-            other.uuid !== team.uuid &&
-            other.name.trim().toLowerCase() === trimmed.toLowerCase(),
-        )
-      ? '已有同名的團隊'
-      : undefined;
-  const taxIdError =
-    taxId.trim() && !isValidTaxId(taxId.trim())
-      ? '統一編號須為 8 位數字且通過檢查碼'
-      : undefined;
+  const [openedValues] = useState(
+    () =>
+      ({
+        name: team.name,
+        tax_id: team.tax_id ?? '',
+        contact_name: team.contact_name ?? '',
+        contact_phone: team.contact_phone ?? '',
+      }) satisfies TeamFields,
+  );
+  const form = useForm({
+    defaultValues: openedValues,
+    validationLogic: revalidateLogic(),
+    validators: {
+      onDynamic: ({ value }) => teamFormErrors(value, teams, team.uuid),
+    },
+    onSubmit: async ({ value }) => {
+      await updateTeam
+        .mutateAsync({
+          params: { path: { team_uuid: team.uuid } },
+          body: {
+            name: value.name.trim(),
+            tax_id: value.tax_id.trim() || null,
+            contact_name: value.contact_name.trim() || null,
+            contact_phone: value.contact_phone.trim() || null,
+          },
+        })
+        .then(
+          (updated) => {
+            toast.success(`已更新「${updated.name}」的資料`);
+            onClose();
+          },
+          () => undefined,
+        );
+    },
+  });
+  const {
+    name,
+    tax_id: taxId,
+    contact_name: contactName,
+    contact_phone: contactPhone,
+  } = useStore(form.store, (state) => state.values);
+  const errors = useStore(form.store, (state) => state.fieldMeta);
 
   return (
     <Dialog
@@ -290,34 +354,14 @@ export function EditTeamDialog({
       confirmLabel="儲存"
       submitting={updateTeam.isPending}
       onClose={onClose}
-      onConfirm={() => {
-        setTouched(true);
-        if (nameError || taxIdError) return;
-        updateTeam.mutate(
-          {
-            params: { path: { team_uuid: team.uuid } },
-            body: {
-              name: trimmed,
-              tax_id: taxId.trim() || null,
-              contact_name: contactName.trim() || null,
-              contact_phone: contactPhone.trim() || null,
-            },
-          },
-          {
-            onSuccess: (updated) => {
-              toast.success(`已更新「${updated.name}」的資料`);
-              onClose();
-            },
-          },
-        );
-      }}
+      onConfirm={() => void form.handleSubmit()}
     >
       <TextInput
         label="團隊名稱"
         required
         value={name}
-        onChange={(event) => setName(event.target.value)}
-        error={touched ? nameError : undefined}
+        onChange={(event) => form.setFieldValue('name', event.target.value)}
+        error={errors.name?.errors[0]}
       />
       <TextInput
         label="對應組織統編"
@@ -325,8 +369,8 @@ export function EditTeamDialog({
         value={taxId}
         placeholder="8 位數統一編號"
         inputProps={{ inputMode: 'numeric', maxLength: 8 }}
-        onChange={(event) => setTaxId(event.target.value)}
-        error={touched ? taxIdError : undefined}
+        onChange={(event) => form.setFieldValue('tax_id', event.target.value)}
+        error={errors.tax_id?.errors[0]}
       />
       <TextInput
         label="聯絡窗口姓名"
@@ -334,7 +378,9 @@ export function EditTeamDialog({
         value={contactName}
         inputProps={{ maxLength: 100 }}
         placeholder="姓名"
-        onChange={(event) => setContactName(event.target.value)}
+        onChange={(event) =>
+          form.setFieldValue('contact_name', event.target.value)
+        }
       />
       <TextInput
         label="聯絡窗口電話"
@@ -342,7 +388,9 @@ export function EditTeamDialog({
         value={contactPhone}
         placeholder="0912 345 678"
         inputProps={{ inputMode: 'tel', maxLength: 20 }}
-        onChange={(event) => setContactPhone(event.target.value)}
+        onChange={(event) =>
+          form.setFieldValue('contact_phone', event.target.value)
+        }
       />
     </Dialog>
   );
@@ -361,10 +409,9 @@ function AccountPicker({
   onSelect: (uuid: string) => void;
 }) {
   const [query, setQuery] = useState('');
-  const matches = useMemo(
-    () => users.filter((user) => matchesName(user.name, query)).slice(0, 50),
-    [users, query],
-  );
+  const matches = users
+    .filter((user) => matchesName(user.name, query))
+    .slice(0, 50);
 
   return (
     <Stack sx={{ gap: 1 }}>
@@ -437,6 +484,12 @@ function AccountPicker({
  * admin can see every account, so `POST /admin/teams/{uuid}/members` gives them this shortcut
  * beside the invite.
  */
+type MemberDraft = {
+  user_uuid: AddTeamMemberInput['body']['user_uuid'] | null;
+  team_role_name: NonNullable<AddTeamMemberInput['body']['team_role_name']>;
+};
+const EMPTY_MEMBER: MemberDraft = { user_uuid: null, team_role_name: 'member' };
+
 export function AddMemberDialog({
   team,
   candidates,
@@ -449,9 +502,31 @@ export function AddMemberDialog({
   onClose: () => void;
 }) {
   const addMember = useAddTeamMember();
-  const [selected, setSelected] = useState<string | null>(null);
-  const [role, setRole] = useState<TeamRole>('member');
+  const form = useForm({
+    defaultValues: EMPTY_MEMBER,
+    onSubmit: (): void => submit(),
+  });
+  const { user_uuid: selected, team_role_name: role } = useStore(
+    form.store,
+    (state) => state.values,
+  );
   const person = candidates.find((user) => user.uuid === selected);
+
+  const submit = () => {
+    if (!person) return;
+    addMember.mutate(
+      {
+        params: { path: { team_uuid: team.uuid } },
+        body: { user_uuid: person.uuid, team_role_name: role },
+      },
+      {
+        onSuccess: () => {
+          toast.success(`已將 ${person.name} 加入「${team.name}」`);
+          onClose();
+        },
+      },
+    );
+  };
 
   return (
     <Dialog
@@ -461,21 +536,7 @@ export function AddMemberDialog({
       confirmDisabled={!person}
       submitting={addMember.isPending}
       onClose={onClose}
-      onConfirm={() => {
-        if (!person) return;
-        addMember.mutate(
-          {
-            params: { path: { team_uuid: team.uuid } },
-            body: { user_uuid: person.uuid, team_role_name: role },
-          },
-          {
-            onSuccess: () => {
-              toast.success(`已將 ${person.name} 加入「${team.name}」`);
-              onClose();
-            },
-          },
-        );
-      }}
+      onConfirm={() => void form.handleSubmit()}
     >
       <Typography sx={captionSx}>
         選一個已註冊的帳號加入本隊。一個人可以同時在多個團隊，加入不影響他在其他團隊的身份。
@@ -484,7 +545,7 @@ export function AddMemberDialog({
         users={candidates}
         teamTypes={teamTypes}
         selected={selected}
-        onSelect={setSelected}
+        onSelect={(uuid) => form.setFieldValue('user_uuid', uuid)}
       />
       <Stack sx={{ gap: '6px', mb: 1 }}>
         <Typography
@@ -505,7 +566,7 @@ export function AddMemberDialog({
               label={ROLE_DISPLAY_NAMES.get(value) ?? value}
               active={role === value}
               disabled={addMember.isPending}
-              onSelect={() => setRole(value)}
+              onSelect={() => form.setFieldValue('team_role_name', value)}
             />
           ))}
         </Stack>
@@ -519,6 +580,15 @@ export function AddMemberDialog({
 
 const PLATFORM_ROLES = ['data_auditor', 'super_admin'] as const;
 
+type AssignedRoleDraft = {
+  user_uuid: AssignUserRoleInput['params']['path']['user_uuid'] | null;
+  role_name: AssignUserRoleInput['body']['role_name'];
+};
+const EMPTY_ROLE_ASSIGNMENT: AssignedRoleDraft = {
+  user_uuid: null,
+  role_name: 'data_auditor',
+};
+
 /** 指派平台級角色 (super admin only). Replaces whatever platform role the account held. */
 export function AssignRoleDialog({
   users,
@@ -530,11 +600,34 @@ export function AssignRoleDialog({
   onClose: () => void;
 }) {
   const assignRole = useAssignUserRole();
-  const [selected, setSelected] = useState<string | null>(null);
-  const [role, setRole] =
-    useState<(typeof PLATFORM_ROLES)[number]>('data_auditor');
+  const form = useForm({
+    defaultValues: EMPTY_ROLE_ASSIGNMENT,
+    onSubmit: (): void => submit(),
+  });
+  const { user_uuid: selected, role_name: role } = useStore(
+    form.store,
+    (state) => state.values,
+  );
   const person = users.find((user) => user.uuid === selected);
   const already = person?.platform_role === role;
+
+  const submit = () => {
+    if (!person || already) return;
+    assignRole.mutate(
+      {
+        params: { path: { user_uuid: person.uuid } },
+        body: { role_name: role },
+      },
+      {
+        onSuccess: () => {
+          toast.success(
+            `已指派 ${person.name} 為${ROLE_DISPLAY_NAMES.get(role) ?? role}`,
+          );
+          onClose();
+        },
+      },
+    );
+  };
 
   return (
     <Dialog
@@ -544,29 +637,13 @@ export function AssignRoleDialog({
       confirmDisabled={!person || already}
       submitting={assignRole.isPending}
       onClose={onClose}
-      onConfirm={() => {
-        if (!person || already) return;
-        assignRole.mutate(
-          {
-            params: { path: { user_uuid: person.uuid } },
-            body: { role_name: role },
-          },
-          {
-            onSuccess: () => {
-              toast.success(
-                `已指派 ${person.name} 為${ROLE_DISPLAY_NAMES.get(role) ?? role}`,
-              );
-              onClose();
-            },
-          },
-        );
-      }}
+      onConfirm={() => void form.handleSubmit()}
     >
       <AccountPicker
         users={users}
         teamTypes={teamTypes}
         selected={selected}
-        onSelect={setSelected}
+        onSelect={(uuid) => form.setFieldValue('user_uuid', uuid)}
       />
       <Stack
         direction="row"
@@ -581,7 +658,7 @@ export function AssignRoleDialog({
             type="button"
             role="radio"
             aria-checked={role === value}
-            onClick={() => setRole(value)}
+            onClick={() => form.setFieldValue('role_name', value)}
             sx={{
               flex: 1,
               p: '12px 14px',

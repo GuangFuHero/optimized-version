@@ -11,7 +11,8 @@ import {
   Typography,
 } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
-import { useId, useState } from 'react';
+import { useId } from 'react';
+import { useForm, useStore } from '@tanstack/react-form';
 
 import { GetStationForSuggestionDocument } from '@rescue-frontend/data-access';
 import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
@@ -35,6 +36,11 @@ import {
 const { color, radius } = designTokens;
 
 const TITLE = '修改建議';
+const EMPTY_SUGGESTION: StationSuggestionForm = {
+  field: STATION_SUGGESTION_FIELDS[0].name,
+  value: '',
+  note: '',
+};
 
 export interface StationSuggestionDrawerProps {
   open: boolean;
@@ -129,10 +135,19 @@ function StationSuggestionFormDrawer({
   // Only this opening's answer: never the one kept from the last, nor kept over a failed read.
   const station = (isFetchedAfterMount && isSuccess && data.station) || null;
   // Untouched, the form sits on the first field at its value now.
-  const [edited, setEdited] = useState<StationSuggestionForm | null>(null);
-  const form = station
-    ? (edited ?? startSuggestion(station, STATION_SUGGESTION_FIELDS[0].name))
-    : null;
+  const formApi = useForm({
+    defaultValues: station
+      ? startSuggestion(station, STATION_SUGGESTION_FIELDS[0].name)
+      : EMPTY_SUGGESTION,
+    validators: {
+      onSubmit: ({ value }) =>
+        station ? suggestionProblem(station, value) : undefined,
+    },
+    onSubmit: ({ value }) => onSubmit(value),
+  });
+  const values = useStore(formApi.store, (state) => state.values);
+  const edited = useStore(formApi.store, (state) => state.isTouched);
+  const form = station ? values : null;
   const problem = station && form ? suggestionProblem(station, form) : null;
 
   return (
@@ -153,7 +168,7 @@ function StationSuggestionFormDrawer({
             </Button>
             <Button
               variant="contained"
-              onClick={() => onSubmit(form)}
+              onClick={() => void formApi.handleSubmit()}
               disabled={Boolean(problem) || submitting}
               sx={{ flex: 2 }}
             >
@@ -170,7 +185,11 @@ function StationSuggestionFormDrawer({
           // Why 確認送出 waits, once there is something to say: not on a form just opened.
           problem={edited ? problem : null}
           submitError={submitError}
-          onChange={setEdited}
+          onChange={(next) => {
+            formApi.setFieldValue('field', next.field);
+            formApi.setFieldValue('value', next.value);
+            formApi.setFieldValue('note', next.note);
+          }}
         />
       ) : (
         <Typography

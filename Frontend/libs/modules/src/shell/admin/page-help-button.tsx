@@ -1,7 +1,7 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
-import { useCallback, useId, useState, useSyncExternalStore } from 'react';
+import { useId, useState } from 'react';
 
 import {
   ButtonBase,
@@ -14,12 +14,8 @@ import {
 
 import { designTokens, Icons } from '@rescue-frontend/ui';
 
-import { localDeviceStorage } from '../../storage';
-import {
-  hasSeenPageHelp,
-  markPageHelpSeen,
-  pageHelpWidth,
-} from '../site/page-help/page-help';
+import { pageHelpWidth } from '../site/page-help/page-help';
+import { usePageHelpSeen } from '../site/page-help/use-page-help-seen';
 import { FreshDot, PageHelpPanel } from '../site/page-help/page-help-panel';
 import { ADMIN_PAGE_HELP, adminPageHelpKey } from './page-help';
 
@@ -35,17 +31,6 @@ const panelSurface = {
   py: 2,
 } as const;
 
-const listeners = new Set<() => void>();
-// Opened this visit, for a device that will not keep the mark: the dot goes now, back next time.
-const seenThisVisit = new Set<string>();
-
-function subscribe(listener: () => void) {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
-}
-
 /**
  * 這一頁怎麼用 right after the page title (prototype `wg-shell.jsx`, the ？ beside the title). A ？,
  * not a ！, which the platform uses for warnings. It opens on a click, as a phone has no hover: a
@@ -59,25 +44,7 @@ export function AdminPageHelpButton() {
   const help = key ? ADMIN_PAGE_HELP[key] : undefined;
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const titleId = useId();
-  const seen = useSyncExternalStore(
-    subscribe,
-    () =>
-      key === null ||
-      seenThisVisit.has(key) ||
-      hasSeenPageHelp(localDeviceStorage(), key),
-    // Seen, on the server and while hydrating: the device's record is read only once on it.
-    () => true,
-  );
-
-  const markSeen = useCallback(() => {
-    if (!key) {
-      return;
-    }
-
-    seenThisVisit.add(key);
-    markPageHelpSeen(localDeviceStorage(), key);
-    listeners.forEach((listener) => listener());
-  }, [key]);
+  const { seen, markSeen } = usePageHelpSeen(key);
 
   if (!help) {
     return null;

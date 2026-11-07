@@ -1,7 +1,5 @@
 'use client';
 
-import { useMemo } from 'react';
-
 import { Alert, Box, Stack, Typography } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 
@@ -79,14 +77,10 @@ export function TaskMatchTicketDetailsPanel({
   });
   const ticket = ticketData?.ticket ?? null;
 
-  const photos = useMemo<TicketPhotoItem[]>(
-    () =>
-      (ticket?.photos ?? []).map((photo) => ({
-        uuid: photo.uuid,
-        url: photo.url,
-      })),
-    [ticket?.photos],
-  );
+  const photos = (ticket?.photos ?? []).map((photo) => ({
+    uuid: photo.uuid,
+    url: photo.url,
+  })) satisfies TicketPhotoItem[];
 
   // The ticket's tasks, as needs a volunteer can claim. Who claimed them is not shown: without
   // ticket.view_history `assignments` comes back empty, and `assignedCount` is what everyone gets.

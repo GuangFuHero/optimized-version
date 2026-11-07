@@ -1,7 +1,6 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { useMemo } from 'react';
 
 import {
   NormalizeAddressDocument,
@@ -37,17 +36,13 @@ export function usePinAddressLookup(pin: LatLng | null): AddressLookup | null {
   });
   const asked = point !== null;
 
-  return useMemo(
-    () =>
-      asked
-        ? readAddressLookup({
-            fetching: isFetching,
-            error,
-            answer: data?.reverseGeocode,
-          })
-        : null,
-    [asked, isFetching, error, data],
-  );
+  return asked
+    ? readAddressLookup({
+        fetching: isFetching,
+        error,
+        answer: data?.reverseGeocode,
+      })
+    : null;
 }
 
 /** A typed line checked against TGOS, once the address field is left. Null until then. */
@@ -60,15 +55,11 @@ export function useTypedAddressLookup(
     enabled: Boolean(check),
   });
 
-  return useMemo(
-    () =>
-      check
-        ? readAddressLookup({
-            fetching: isFetching,
-            error,
-            answer: data?.normalizeAddress,
-          })
-        : null,
-    [check, isFetching, error, data],
-  );
+  return check
+    ? readAddressLookup({
+        fetching: isFetching,
+        error,
+        answer: data?.normalizeAddress,
+      })
+    : null;
 }

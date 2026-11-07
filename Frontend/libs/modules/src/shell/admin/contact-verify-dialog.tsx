@@ -3,6 +3,7 @@
 import { Box, Stack, Typography } from '@mui/material';
 import { OTPInput, REGEXP_ONLY_DIGITS } from 'input-otp';
 import { useState } from 'react';
+import { useForm, useStore } from '@tanstack/react-form';
 import { toast } from 'sonner';
 
 import { ApiError } from '@rescue-frontend/data-access';
@@ -92,8 +93,14 @@ export function ContactVerifyDialog({
   const addContact = useAddContact();
   const verifyContact = useVerifyContact();
   const [step, setStep] = useState<Step>({ kind: 'start' });
-  const [password, setPassword] = useState('');
-  const [code, setCode] = useState('');
+  const form = useForm({
+    defaultValues: { password: '', code: '' } satisfies {
+      password: NonNullable<components['schemas']['StepUp']['password']>;
+      code: components['schemas']['VerifyContactRequest']['code'];
+    },
+    onSubmit: (): Promise<void> => submit(),
+  });
+  const { password, code } = useStore(form.store, (state) => state.values);
   const label = type === 'email' ? 'Email' : '電話';
   const hasPassword =
     user.login_methods?.some((method) => method.provider === 'password') ??
@@ -106,12 +113,12 @@ export function ContactVerifyDialog({
       { body: { type, value, step_up: stepUp } },
       {
         onSuccess: () => {
-          setCode('');
+          form.setFieldValue('code', '');
           setStep({ kind: 'code' });
         },
         onError: (error) => {
           if (error instanceof ApiError && error.code === 'step_up_required') {
-            setCode('');
+            form.setFieldValue('code', '');
             setStep({ kind: 'old-code', message: error.message });
           }
         },
@@ -161,7 +168,7 @@ export function ContactVerifyDialog({
     <Dialog
       open
       onClose={onClose}
-      onConfirm={() => void submit()}
+      onConfirm={() => void form.handleSubmit()}
       title={step.kind === 'old-code' ? '確認是你本人' : `驗證新的${label}`}
       confirmLabel={step.kind === 'code' ? '驗證' : '寄送驗證碼'}
       confirmDisabled={!canSubmit}
@@ -186,11 +193,16 @@ export function ContactVerifyDialog({
             label="目前的密碼"
             autoComplete="current-password"
             value={password}
-            onChange={(event) => setPassword(event.target.value)}
+            onChange={(event) =>
+              form.setFieldValue('password', event.target.value)
+            }
           />
         ) : null
       ) : (
-        <CodeInput value={code} onChange={setCode} />
+        <CodeInput
+          value={code}
+          onChange={(value) => form.setFieldValue('code', value)}
+        />
       )}
     </Dialog>
   );

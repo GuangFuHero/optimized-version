@@ -4,7 +4,7 @@ import { Box, Stack, Typography } from '@mui/material';
 import Link from 'next/link';
 import type { MouseEvent, ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 
 import { MyStationSuggestionsDocument } from '@rescue-frontend/data-access';
 import {
@@ -25,7 +25,7 @@ import {
   STATION_REPORT_OUTCOME_LOOKS,
   type StationReport,
 } from './my-station-reports';
-import { onOpenMyStationReports } from './open-my-station-reports';
+import { useMyStationReportsOpen } from './open-my-station-reports';
 
 const { color, iconSize, radius, typography } = designTokens;
 
@@ -291,24 +291,25 @@ function MyStationReportsContent({ onClose }: { onClose: () => void }) {
   );
 }
 
+const closeReports = () => useMyStationReportsOpen.setState(false, true);
+
 /**
  * 我回報的站點 (prototype `StationReportsDrawer`), its own entry in the account menu beside
  * 我的任務: a task is someone coming or going to help, a report is public data that was wrong.
  * Kept once in the site shell and opened through `openMyStationReports`.
  */
 export function MyStationReportsHost() {
-  const [open, setOpen] = useState(false);
-
-  useEffect(() => onOpenMyStationReports(() => setOpen(true)), []);
+  const open = useMyStationReportsOpen();
+  useEffect(() => closeReports, []);
 
   return (
     <SiteActionDrawer
       open={open}
       title="我回報的站點"
       subtitle="你對資源站點提出的修改建議，以及審核結果"
-      onClose={() => setOpen(false)}
+      onClose={closeReports}
     >
-      <MyStationReportsContent onClose={() => setOpen(false)} />
+      <MyStationReportsContent onClose={closeReports} />
     </SiteActionDrawer>
   );
 }

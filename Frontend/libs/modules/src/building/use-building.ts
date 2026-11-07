@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useMemo } from 'react';
+import { useEffect } from 'react';
 
 import {
   GetBuildingMapWithTicketsDocument,
@@ -61,7 +61,7 @@ export function useBuilding(uuid: string | null | undefined) {
     enabled: Boolean(uuid),
   });
 
-  const building = useMemo<BuildingMap | null>(() => {
+  const building = ((): BuildingMap | null => {
     const map = data?.buildingMap;
 
     return map
@@ -72,15 +72,11 @@ export function useBuilding(uuid: string | null | undefined) {
           floors: map.floors,
         }
       : null;
-  }, [data?.buildingMap]);
+  })();
 
-  const tickets = useMemo(
-    () =>
-      (data?.buildingMapTickets ?? [])
-        .map(readBuildingTicket)
-        .filter((ticket): ticket is BuildingTicket => ticket !== null),
-    [data?.buildingMapTickets],
-  );
+  const tickets = (data?.buildingMapTickets ?? [])
+    .map(readBuildingTicket)
+    .filter((ticket): ticket is BuildingTicket => ticket !== null);
 
   useEffect(
     () =>

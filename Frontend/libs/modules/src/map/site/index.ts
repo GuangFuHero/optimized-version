@@ -21,5 +21,9 @@ export {
 } from './use-site-map-viewport-state';
 export { useSiteMapLiveData } from './use-site-map-live-data';
 export { useLinkedTicket } from './use-linked-ticket';
+export {
+  useLinkedSelection,
+  type LinkedSelectionOptions,
+} from './use-linked-selection';
 export { usePaginatedRescueMapMarkers } from './use-live-rescue-map-markers';
 export { useCellMembersLoader } from './use-cell-members-loader';

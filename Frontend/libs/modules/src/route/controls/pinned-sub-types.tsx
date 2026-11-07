@@ -1,7 +1,8 @@
 'use client';
 
 import { Box, ButtonBase, Stack, Typography } from '@mui/material';
-import { useEffect, useState } from 'react';
+import { useIsClient } from 'usehooks-ts';
+import { create } from 'zustand';
 import { z } from 'zod';
 
 import { SITE_SUB_DATA_TYPE_OPTIONS } from '../constants';
@@ -77,48 +78,31 @@ function writePinnedSubDataTypes(
   }
 }
 
-/**
- * 釘選的常用篩選。地圖與列表共用同一份：在一頁釘的，另一頁也看得到。
- * The key stays `site-map:…` so that pins made before the list had them carry over.
- */
+const usePinnedFilters = create(readPinnedSubDataTypes);
+const NO_PINS: readonly string[] = [];
+
+/** Shares the existing device preference between map and list controls. */
 export function usePinnedSubDataTypes(dataType: RescueMapDataType) {
-  const [pinnedSubDataTypesByDataType, setPinnedSubDataTypesByDataType] =
-    useState<Record<RescueMapDataType, readonly string[]>>(
-      createEmptyPinnedSubDataTypes,
-    );
-
-  useEffect(() => {
-    setPinnedSubDataTypesByDataType(readPinnedSubDataTypes());
-  }, []);
-
-  const pinned = pinnedSubDataTypesByDataType[dataType] ?? [];
+  const isClient = useIsClient();
+  const stored = usePinnedFilters((state) => state[dataType]);
+  const pinned = isClient ? stored : NO_PINS;
   const pinnedOptions = SITE_SUB_DATA_TYPE_OPTIONS[dataType].filter((option) =>
     pinned.includes(option.value),
   );
-
   const togglePinned = (value: string) => {
-    setPinnedSubDataTypesByDataType((current) => {
-      const nextPinnedValues = new Set(current[dataType] ?? []);
-
-      if (nextPinnedValues.has(value)) {
-        nextPinnedValues.delete(value);
-      } else {
-        nextPinnedValues.add(value);
-      }
-
-      const nextPinnedSubDataTypes = {
-        ...current,
-        [dataType]: SITE_SUB_DATA_TYPE_OPTIONS[dataType]
-          .map((option) => option.value)
-          .filter((optionValue) => nextPinnedValues.has(optionValue)),
-      };
-
-      writePinnedSubDataTypes(nextPinnedSubDataTypes);
-
-      return nextPinnedSubDataTypes;
-    });
+    const current = usePinnedFilters.getState();
+    const values = new Set(current[dataType]);
+    if (values.has(value)) values.delete(value);
+    else values.add(value);
+    const next = {
+      ...current,
+      [dataType]: SITE_SUB_DATA_TYPE_OPTIONS[dataType]
+        .map((option) => option.value)
+        .filter((option) => values.has(option)),
+    };
+    usePinnedFilters.setState(next, true);
+    writePinnedSubDataTypes(next);
   };
-
   return { pinned, pinnedOptions, togglePinned };
 }
 

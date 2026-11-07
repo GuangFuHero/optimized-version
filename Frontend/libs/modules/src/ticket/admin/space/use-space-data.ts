@@ -1,6 +1,5 @@
 'use client';
 
-import { useMemo } from 'react';
 import { useQueries, useQuery } from '@tanstack/react-query';
 
 import {
@@ -105,20 +104,16 @@ export function useSpaces(bounds?: BoundsInput) {
     combine: combineSpaceTickets,
   });
 
-  const spaces = useMemo(
-    () =>
-      items.map((building, index): BoardSpace => {
-        const loaded = tickets.data[index]?.buildingMapTickets;
-        if (loaded) return loadedSpace(building, loaded);
-        const load = tickets.errors[index] ? 'failed' : 'loading';
-        return {
-          building,
-          tickets: null,
-          row: toUnloadedSpaceRow(building, load),
-        };
-      }),
-    [items, tickets.data, tickets.errors],
-  );
+  const spaces = items.map((building, index): BoardSpace => {
+    const loaded = tickets.data[index]?.buildingMapTickets;
+    if (loaded) return loadedSpace(building, loaded);
+    const load = tickets.errors[index] ? 'failed' : 'loading';
+    return {
+      building,
+      tickets: null,
+      row: toUnloadedSpaceRow(building, load),
+    };
+  });
 
   return {
     spaces,
@@ -167,10 +162,7 @@ export function useSpace(uuid: string | null) {
   const found = building.data?.buildingMap ?? null;
   const ticketList = tickets.data?.buildingMapTickets;
 
-  const space = useMemo(
-    () => (found ? loadedSpace(found, ticketList ?? []) : null),
-    [found, ticketList],
-  );
+  const space = found ? loadedSpace(found, ticketList ?? []) : null;
 
   return {
     space,
@@ -187,17 +179,13 @@ export function useSpace(uuid: string | null) {
 export function useHouseholdSpace(buildingMapUuid: string | null | undefined) {
   const building = useBuildingMap({ uuid: buildingMapUuid ?? '' });
   const found = building.data?.buildingMap ?? null;
-  const target = useMemo<SpaceHouseholdTarget | null>(
-    () =>
-      found
-        ? {
-            uuid: found.uuid,
-            name: found.name,
-            floorLabels: found.floors.map((floor) => floor.label),
-          }
-        : null,
-    [found],
-  );
+  const target = found
+    ? {
+        uuid: found.uuid,
+        name: found.name,
+        floorLabels: found.floors.map((floor) => floor.label),
+      }
+    : (null satisfies SpaceHouseholdTarget | null);
   // A disabled query stays pending: only a ticket in a space waits for one.
   return { target, loading: Boolean(buildingMapUuid) && building.isPending };
 }
@@ -216,18 +204,13 @@ export function useSpacePinLookup(pin: LatLng | null): AddressLookup | null {
     meta: { quietErrors: true },
   });
 
-  return useMemo(
-    () =>
-      point
-        ? readAddressLookup({
-            fetching: query.isFetching,
-            error: query.error,
-            answer: query.data?.reverseGeocode,
-          })
-        : null,
-    // `point` is rebuilt each render; its numbers are what matter.
-    [point?.lat, point?.lng, query.isFetching, query.error, query.data],
-  );
+  return point
+    ? readAddressLookup({
+        fetching: query.isFetching,
+        error: query.error,
+        answer: query.data?.reverseGeocode,
+      })
+    : null;
 }
 
 /** A typed line checked against TGOS once the address field is left. Null until then. */
@@ -241,15 +224,11 @@ export function useSpaceTypedLookup(
     meta: { quietErrors: true },
   });
 
-  return useMemo(
-    () =>
-      check
-        ? readAddressLookup({
-            fetching: query.isFetching,
-            error: query.error,
-            answer: query.data?.normalizeAddress,
-          })
-        : null,
-    [check, query.isFetching, query.error, query.data],
-  );
+  return check
+    ? readAddressLookup({
+        fetching: query.isFetching,
+        error: query.error,
+        answer: query.data?.normalizeAddress,
+      })
+    : null;
 }

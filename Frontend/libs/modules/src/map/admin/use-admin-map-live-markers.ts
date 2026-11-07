@@ -5,7 +5,7 @@ import {
   GetAdminMapTicketsDocument,
 } from '@rescue-frontend/data-access';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { useSyncExternalStore } from 'react';
+import { useStore } from 'zustand';
 
 import type { RescueMapMarkerItem } from '../types';
 import { designTokens } from '@rescue-frontend/ui';
@@ -65,11 +65,7 @@ const NO_MARKERS: readonly RescueMapMarkerItem[] = [];
 export function useAdminMapLiveMarkers(
   viewportStore: SiteMapViewportStore,
 ): readonly RescueMapMarkerItem[] {
-  const viewport = useSyncExternalStore(
-    viewportStore.subscribe,
-    viewportStore.getSnapshot,
-    viewportStore.getSnapshot,
-  );
+  const viewport = useStore(viewportStore);
   // No view yet: the map reports one once it has laid itself out.
   const bounds = toBoundsInput(viewport);
   const zoom = viewport.position?.zoom;

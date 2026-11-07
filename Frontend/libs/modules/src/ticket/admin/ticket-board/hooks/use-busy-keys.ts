@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { useEventCallback } from 'usehooks-ts';
+
 import { withBusyKey } from '../model/busy-keys';
 
 /**
@@ -30,10 +32,9 @@ export function useReportBusy(
   busy: boolean,
   onBusyChange?: (busy: boolean) => void,
 ) {
-  const report = useRef(onBusyChange);
-  report.current = onBusyChange;
+  const report = useEventCallback(onBusyChange);
   useEffect(() => {
-    report.current?.(busy);
-  }, [busy]);
-  useEffect(() => () => report.current?.(false), []);
+    report?.(busy);
+  }, [busy, report]);
+  useEffect(() => () => report?.(false), [report]);
 }

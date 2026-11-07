@@ -1,20 +1,26 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { useMemo } from 'react';
 
-import { GetTicketDocument, type GetTicketQuery } from '@rescue-frontend/data-access';
+import {
+  GetTicketDocument,
+  type GetTicketQuery,
+} from '@rescue-frontend/data-access';
 
 import { siteGraphqlQuery } from '../../session/site-clients';
 import type { TicketNeed } from './need-claim';
 
 /** A ticket's needs as `GetTicket` returns them, oldest first (the backend's `tasks_by_ticket`). */
-export function readTicketNeeds(ticket: GetTicketQuery['ticket']): TicketNeed[] {
+export function readTicketNeeds(
+  ticket: GetTicketQuery['ticket'],
+): TicketNeed[] {
   return ticket?.tasks ?? [];
 }
 
 /** The ticket's own status — a withdrawn or finished ticket closes every need on it. */
-export function readTicketStatus(ticket: GetTicketQuery['ticket']): string | null {
+export function readTicketStatus(
+  ticket: GetTicketQuery['ticket'],
+): string | null {
   return ticket?.status ?? null;
 }
 
@@ -54,7 +60,10 @@ export function readReloadedTicket(result: {
   return ticket
     ? {
         kind: 'found',
-        ticket: { needs: readTicketNeeds(ticket), ticketStatus: readTicketStatus(ticket) },
+        ticket: {
+          needs: readTicketNeeds(ticket),
+          ticketStatus: readTicketStatus(ticket),
+        },
       }
     : { kind: 'gone' };
 }
@@ -69,14 +78,14 @@ export function useTicketNeeds(ticketUuid: string) {
     enabled: Boolean(ticketUuid),
   });
 
-  return useMemo(() => {
+  return (() => {
     const ticket = data?.ticket ?? null;
 
     return {
       needs: readTicketNeeds(ticket),
       ticketStatus: readTicketStatus(ticket),
     };
-  }, [data?.ticket]);
+  })();
 }
 
 /**

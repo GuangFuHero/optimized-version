@@ -1,28 +1,35 @@
 'use client';
 
+import { useReturnQuery } from '../../route/use-return-query';
+
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   createContext,
   useCallback,
   useContext,
   useEffect,
-  useMemo,
   useRef,
   useState,
   type ReactNode,
 } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
-import { ClaimNeedDocument, GetTicketDocument, type GraphqlError } from '@rescue-frontend/data-access';
+import {
+  ClaimNeedDocument,
+  GetTicketDocument,
+  type GraphqlError,
+} from '@rescue-frontend/data-access';
 
 import { useAuthSession } from '../../session/auth-session';
-import { siteGraphqlMutation, siteGraphqlQuery } from '../../session/site-clients';
+import {
+  siteGraphqlMutation,
+  siteGraphqlQuery,
+} from '../../session/site-clients';
 import { announceTicketReread, onTicketChanged } from '../ticket-changes';
 import { claimErrorMessage } from './claim-error';
 import {
   buildClaimSignInHref,
   readClaimReturn,
-  stripClaimReturn,
   type ClaimReturn,
 } from './claim-return';
 import { DeleteNeedDialog, useDeleteNeed } from './delete-need-dialog';
@@ -30,7 +37,10 @@ import { DeleteTicketDialog, useDeleteTicket } from './delete-ticket-dialog';
 import { resolveNeedClaim } from './need-claim';
 import { NeedClaimDialog, type NeedClaimTarget } from './need-claim-dialog';
 import { NeedClaimToast } from './need-claim-toast';
-import { StopRecruitingDialog, useStopRecruiting } from './stop-recruiting-dialog';
+import {
+  StopRecruitingDialog,
+  useStopRecruiting,
+} from './stop-recruiting-dialog';
 import { readReloadedTicket, type ReloadedTicket } from './use-ticket-needs';
 
 interface NeedClaimContextValue {
@@ -64,7 +74,10 @@ interface NeedClaimProviderProps {
    * ticket turned out gone — deleted — for the view to take it off; never for a request
    * that failed, which says nothing about the ticket.
    */
-  onTicketReloaded?: (ticketUuid: string, ticket: ReloadedTicket | null) => void;
+  onTicketReloaded?: (
+    ticketUuid: string,
+    ticket: ReloadedTicket | null,
+  ) => void;
 }
 
 /**
@@ -74,14 +87,20 @@ interface NeedClaimProviderProps {
  * through here too, to sign in and come back to the ticket, and so do a requester's 停止招募 and
  * 刪除這筆需求 from a row's ⋯, and 刪除整張單 from the drawer's, each with a confirmation of its own.
  */
-export function NeedClaimProvider({ children, onTicketReloaded }: NeedClaimProviderProps) {
+export function NeedClaimProvider({
+  children,
+  onTicketReloaded,
+}: NeedClaimProviderProps) {
+  const consumeReturn = useReturnQuery();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, status: sessionStatus } = useAuthSession();
   // The account's uuid.
   const viewerId = user?.uuid ?? null;
   const queryClient = useQueryClient();
-  const { mutateAsync: executeClaim } = useMutation(siteGraphqlMutation(ClaimNeedDocument));
+  const { mutateAsync: executeClaim } = useMutation(
+    siteGraphqlMutation(ClaimNeedDocument),
+  );
   // Open is kept apart from what is being confirmed, so the dialog keeps its content while it
   // fades out instead of flashing 載入中 on the way.
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -104,7 +123,10 @@ export function NeedClaimProvider({ children, onTicketReloaded }: NeedClaimProvi
 
   const closeDialog = useCallback(() => setDialogOpen(false), []);
   // Stable, so a re-render — the list taking in new needs — does not restart the toast's timer.
-  const closeToast = useCallback(() => setToast((current) => ({ ...current, open: false })), []);
+  const closeToast = useCallback(
+    () => setToast((current) => ({ ...current, open: false })),
+    [],
+  );
 
   /**
    * Ask the server for the ticket again. The mutation returns the assignment, not the need, so
@@ -174,7 +196,9 @@ export function NeedClaimProvider({ children, onTicketReloaded }: NeedClaimProvi
       setDialogOpen(false);
       setToast({
         open: true,
-        needName: reloaded?.needs.find((need) => need.uuid === needUuid)?.taskName ?? '這筆需求',
+        needName:
+          reloaded?.needs.find((need) => need.uuid === needUuid)?.taskName ??
+          '這筆需求',
       });
     } finally {
       setSubmitting(false);
@@ -198,7 +222,10 @@ export function NeedClaimProvider({ children, onTicketReloaded }: NeedClaimProvi
       const reloaded = await reloadTicket(ticketUuid);
       const need = reloaded?.needs.find((item) => item.uuid === needUuid);
       const claim = need
-        ? resolveNeedClaim(need, { ticketStatus: reloaded?.ticketStatus, isAuthenticated: true })
+        ? resolveNeedClaim(need, {
+            ticketStatus: reloaded?.ticketStatus,
+            isAuthenticated: true,
+          })
         : null;
 
       if (claim?.action === 'claim') {
@@ -211,19 +238,18 @@ export function NeedClaimProvider({ children, onTicketReloaded }: NeedClaimProvi
   // Off the address as soon as the session is known, offered or not, so a reload or a copied link
   // does not ask again.
   useEffect(() => {
-    if (!claimReturn || claimReturnStripped.current || sessionStatus === 'loading') {
+    if (
+      !claimReturn ||
+      claimReturnStripped.current ||
+      sessionStatus === 'loading'
+    ) {
       return;
     }
 
     claimReturnStripped.current = true;
 
-    const address = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-    const withoutClaim = stripClaimReturn(address);
-
-    if (withoutClaim !== address) {
-      window.history.replaceState(window.history.state, '', withoutClaim);
-    }
-  }, [claimReturn, sessionStatus]);
+    consumeReturn(['claim']);
+  }, [claimReturn, consumeReturn, sessionStatus]);
 
   // Offered once the ticket's drawer is up. Opened before it, the confirmation ends up under the
   // drawer — a modal on a phone — hidden from screen readers and out of the keyboard's reach. No
@@ -243,26 +269,15 @@ export function NeedClaimProvider({ children, onTicketReloaded }: NeedClaimProvi
     void offerReturnedClaim(claimReturn);
   }, [claimReturn, offerReturnedClaim, sessionStatus, shownTicketUuid]);
 
-  const value = useMemo(
-    () => ({
-      requestClaim,
-      requestSignIn: sessionStatus === 'unauthenticated' ? sendToSignIn : null,
-      ticketShown: setShownTicketUuid,
-      requestStopRecruiting: stopRecruiting.request,
-      requestDeleteNeed: deleteNeed.request,
-      requestDeleteTicket: deleteTicket.request,
-      viewerId,
-    }),
-    [
-      requestClaim,
-      sendToSignIn,
-      sessionStatus,
-      stopRecruiting.request,
-      deleteNeed.request,
-      deleteTicket.request,
-      viewerId,
-    ],
-  );
+  const value = {
+    requestClaim,
+    requestSignIn: sessionStatus === 'unauthenticated' ? sendToSignIn : null,
+    ticketShown: setShownTicketUuid,
+    requestStopRecruiting: stopRecruiting.request,
+    requestDeleteNeed: deleteNeed.request,
+    requestDeleteTicket: deleteTicket.request,
+    viewerId,
+  };
 
   return (
     <NeedClaimContext.Provider value={value}>
@@ -275,7 +290,11 @@ export function NeedClaimProvider({ children, onTicketReloaded }: NeedClaimProvi
         onCancel={closeDialog}
         onConfirm={() => void confirmClaim()}
       />
-      <NeedClaimToast open={toast.open} needName={toast.needName} onClose={closeToast} />
+      <NeedClaimToast
+        open={toast.open}
+        needName={toast.needName}
+        onClose={closeToast}
+      />
       <StopRecruitingDialog {...stopRecruiting.dialogProps} />
       <DeleteNeedDialog {...deleteNeed.dialogProps} />
       <DeleteTicketDialog {...deleteTicket.dialogProps} />

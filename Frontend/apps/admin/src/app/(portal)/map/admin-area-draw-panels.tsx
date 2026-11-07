@@ -13,6 +13,8 @@ import {
   Typography,
 } from '@mui/material';
 import { useState } from 'react';
+import { useForm, useStore, type DeepValue } from '@tanstack/react-form';
+import type { CreateAreaInput } from '@rescue-frontend/data-access/admin';
 
 import {
   AREA_KIND_LABELS,
@@ -29,15 +31,16 @@ const { color, radius, typography } = designTokens;
 // More than this many tickets in one area asks for a second look before it is saved (MAP-ZD-125).
 export const HIGH_VOLUME_TICKETS = 100;
 
-export interface AreaFormValues {
-  kind: RescueMapAreaKind | null;
-  name: string;
-  note: string;
-  /** 危險區 only: the agency or link the report came from. */
-  informationSource: string;
-  teamUuid: string;
-  /** 標示區 only: shown on the public map. Off to start with. */
-  isPublic: boolean;
+type AreaTextFields = {
+  [K in
+    | 'name'
+    | 'note'
+    | 'informationSource'
+    | 'teamUuid'
+    | 'isPublic']-?: NonNullable<CreateAreaInput[K]>;
+};
+export interface AreaFormValues extends AreaTextFields {
+  kind: CreateAreaInput['type'] | null;
 }
 
 export const EMPTY_AREA_FORM: AreaFormValues = {
@@ -359,11 +362,18 @@ export function AdminAreaFormPanel({
   onCancel: () => void;
   onSubmit: (values: AreaFormValues) => void;
 }) {
-  const [values, setValues] = useState(initial);
+  const [openedValues] = useState(initial);
+  const form = useForm({
+    defaultValues: openedValues,
+    onSubmit: ({ value }) => {
+      if (canSave) onSubmit(value);
+    },
+  });
+  const values = useStore(form.store, (state) => state.values);
   const set = <K extends keyof AreaFormValues>(
     key: K,
-    value: AreaFormValues[K],
-  ) => setValues((current) => ({ ...current, [key]: value }));
+    value: DeepValue<AreaFormValues, K>,
+  ) => form.setFieldValue(key, value);
   const { kind } = values;
   const nameLength = countNameCharacters(values.name);
   const nameOver = nameLength > AREA_LABEL_NAME_MAX;
@@ -392,7 +402,7 @@ export function AdminAreaFormPanel({
           <Button
             variant="contained"
             disabled={!canSave}
-            onClick={() => onSubmit(values)}
+            onClick={() => void form.handleSubmit()}
           >
             {kind ? `建立${AREA_KIND_LABELS[kind]}` : '建立區域'}
           </Button>

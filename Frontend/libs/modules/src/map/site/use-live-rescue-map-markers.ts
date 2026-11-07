@@ -9,7 +9,7 @@ import {
   useQueryClient,
   type InfiniteData,
 } from '@tanstack/react-query';
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect } from 'react';
 import { useDebounceValue } from 'usehooks-ts';
 
 import type { RescueMapMarkerItem } from '../types';
@@ -74,16 +74,12 @@ export function usePaginatedRescueMapMarkers(state?: SiteRouteState) {
   );
   // Tickets only: stations are still filtered on the page, so a search must not reload them.
   const ticketQuery = activeDataType === 'ticket' ? settledQuery : undefined;
-  const queryKey = useMemo(
-    () =>
-      [
-        'site-list',
-        'markers',
-        activeDataType,
-        { ticketStatus, ticketQuery },
-      ] as const,
-    [activeDataType, ticketQuery, ticketStatus],
-  );
+  const queryKey = [
+    'site-list',
+    'markers',
+    activeDataType,
+    { ticketStatus, ticketQuery },
+  ] as const;
 
   const list = useInfiniteQuery({
     ...SITE_READ_OPTIONS,
@@ -178,15 +174,11 @@ export function usePaginatedRescueMapMarkers(state?: SiteRouteState) {
   }, [activeDataType, queryClient, queryKey, ticketQuery, ticketStatus]);
 
   const pages = list.data?.pages;
-  const markers = useMemo(
-    () => dedupeMarkersById(pages?.flatMap((page) => page.markers) ?? []),
-    [pages],
+  const markers = dedupeMarkersById(
+    pages?.flatMap((page) => page.markers) ?? [],
   );
   // The ids the newest page brought, so the list can tell whether any of them is listed.
-  const pageIds = useMemo(
-    () => pages?.at(-1)?.markers.map(({ id }) => id) ?? [],
-    [pages],
-  );
+  const pageIds = pages?.at(-1)?.markers.map(({ id }) => id) ?? [];
   const { isFetching, hasNextPage, fetchNextPage } = list;
 
   const loadNextPage = useCallback(() => {

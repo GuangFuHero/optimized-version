@@ -65,15 +65,15 @@ export function pendingRequestName(pending: {
 }
 
 /** The free-text 可聯絡到你的方式 is gone: a reviewer calls the verified phone instead (G-2). */
-export interface RoleRequestFormValues {
+export interface RoleRequestFormValues
+  extends Pick<SubmitRoleRequestInput, 'reason'> {
   role: RoleRequestRole | null;
   /** An existing team's uuid, or `NEW_TEAM`; government and NGO only. */
   team: string | null;
   /** The team to found, when `team` is `NEW_TEAM`. */
-  newTeamName: string;
-  reason: string;
+  newTeamName: NonNullable<SubmitRoleRequestInput['newTeamName']>;
   /** The name the application is made in; starts from the nickname, which it never changes. */
-  name: string;
+  name: NonNullable<SubmitRoleRequestInput['name']>;
 }
 
 type RoleRequestField =

@@ -7,8 +7,9 @@ import {
   useTicketStats,
 } from '@rescue-frontend/data-access/admin';
 import { Button, Callout, designTokens } from '@rescue-frontend/ui';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEventCallback, useEventListener } from 'usehooks-ts';
+import { useBoardSearchParams } from '../../../route/use-board-search-params';
+import { useCallback, useEffect, useState } from 'react';
 
 import { AdminListPageLayout } from '../../../admin/shared/admin-list-page-layout';
 import { statCountsFailed } from '../../../admin/shared/model/stat-tiles';
@@ -60,14 +61,8 @@ const COLUMN_SX = { maxWidth: 1200, mx: 'auto', width: '100%' };
 const LEAD_SX = { ...SECTION_SX, pt: FRAME_GAP, '& > *': COLUMN_SX };
 
 export function TicketBoardPage() {
-  const router = useRouter();
-  const pathname = usePathname() ?? '/tickets';
-  const searchParams = useSearchParams();
-  const params = useMemo(
-    () => new URLSearchParams(searchParams?.toString() ?? ''),
-    [searchParams],
-  );
-  const filters = useMemo(() => parseTicketFilters(params), [params]);
+  const { params, setParam, replaceParams } = useBoardSearchParams();
+  const filters = parseTicketFilters(params);
   const filtersKey = ticketFiltersKey(filters);
   // The filters the page opened with, by a link or a reload; changed here, they are the page's own.
   const [openedFiltersKey] = useState(filtersKey);
@@ -78,46 +73,28 @@ export function TicketBoardPage() {
   // Where the 時間 filter cuts, taken once with the filters so the list, the count, the map's pins
   // and the spaces all load at the same cut, however long the board stays open. Keyed on the
   // filters alone: paging or opening a ticket keeps it.
-  const cutAt = useMemo(() => Date.now(), [filtersKey]);
+  const [cutAt, setCutAt] = useState(() => Date.now());
+  useEventListener('popstate', () => {
+    const nextKey = ticketFiltersKey(
+      parseTicketFilters(new URLSearchParams(window.location.search)),
+    );
+    if (nextKey !== filtersKey) setCutAt(Date.now());
+  });
   const [filterOpen, setFilterOpen] = useState(false);
 
-  const replaceParams = useCallback(
-    (next: URLSearchParams) => {
-      const query = next.toString();
-      router.replace(query ? `${pathname}?${query}` : pathname, {
-        scroll: false,
-      });
-    },
-    [pathname, router],
-  );
-  const setFilters = useCallback(
-    (next: TicketFilters) => replaceParams(writeTicketFilters(params, next)),
-    [params, replaceParams],
-  );
-  const setParam = useCallback(
-    (key: string, value: string | null) => {
-      const next = new URLSearchParams(params);
-      if (value) next.set(key, value);
-      else next.delete(key);
-      replaceParams(next);
-    },
-    [params, replaceParams],
-  );
+  const setFilters = useEventCallback((next: TicketFilters) => {
+    if (ticketFiltersKey(next) !== filtersKey) setCutAt(Date.now());
+    replaceParams(writeTicketFilters(params, next));
+  });
 
   // One page from the server, for the table only.
-  const pageVariables = useMemo(
-    () => toPageVariables(filters, page, cutAt),
-    [filters, page, cutAt],
-  );
+  const pageVariables = toPageVariables(filters, page, cutAt);
   const tickets = useTicketRows(pageVariables, {
     enabled: view === 'table',
     keepAcross: TICKET_PAGE_KEYS,
   });
   // The map counts by the extent it frames: the same query as the map's, so no second request.
-  const extentVariables = useMemo(
-    () => toExtentVariables(filters, cutAt),
-    [filters, cutAt],
-  );
+  const extentVariables = toExtentVariables(filters, cutAt);
   const extent = useTicketsExtent(extentVariables, {
     enabled: view === 'map',
   });
@@ -170,10 +147,9 @@ export function TicketBoardPage() {
   }, [clearTeam, clearArea, filters, setFilters]);
   // The stats strip counts the whole board in the caller's scope, whatever the filters.
   const statsQuery = useTicketStats();
-  const stats = useMemo(
-    () => (statsQuery.data ? toTicketStats(statsQuery.data.ticketStats) : null),
-    [statsQuery.data],
-  );
+  const stats = statsQuery.data
+    ? toTicketStats(statsQuery.data.ticketStats)
+    : null;
   // The ticket on view lives in the URL (?ticket=<uuid>) so links can open it.
   const openTicket = useCallback(
     (uuid: string | null) => setParam('ticket', uuid),
@@ -186,22 +162,15 @@ export function TicketBoardPage() {
 
   // 開啟空間 (BE-036): every space, listed and pinned beside the tickets the filters let through.
   const spaceData = useSpaces();
-  const spaceRows = useMemo(
-    () => visibleSpaceRows(spaceData.spaces, filters, cutAt),
-    [spaceData.spaces, filters, cutAt],
-  );
-  const spaceTags = useMemo(
-    () =>
-      new Map<string, TaggedSpace>(
-        spaceData.spaces.map((space) => [
-          space.building.uuid,
-          {
-            name: space.building.name,
-            floorLabels: space.building.floors.map((floor) => floor.label),
-          },
-        ]),
-      ),
-    [spaceData.spaces],
+  const spaceRows = visibleSpaceRows(spaceData.spaces, filters, cutAt);
+  const spaceTags = new Map<string, TaggedSpace>(
+    spaceData.spaces.map((space) => [
+      space.building.uuid,
+      {
+        name: space.building.name,
+        floorLabels: space.building.floors.map((floor) => floor.label),
+      },
+    ]),
   );
   // The space on view lives in the URL too (?space=<uuid>); a ticket opened from it sits on top.
   const viewedSpace = params.get('space');

@@ -24,14 +24,7 @@ import {
 } from '@mui/material';
 import { createColumnHelper } from '@tanstack/react-table';
 import { useSearchParams } from 'next/navigation';
-import {
-  Fragment,
-  Suspense,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import { Fragment, Suspense, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import {
@@ -590,15 +583,12 @@ function SuperTeamsView({ siteUrl }: { siteUrl?: string }) {
   const [query, setQuery] = useState('');
   const [creating, setCreating] = useState(false);
 
-  const teams = useMemo(() => teamsQuery.data ?? [], [teamsQuery.data]);
-  const users = useMemo(() => usersQuery.data ?? [], [usersQuery.data]);
-  const teamTypes = useMemo(() => teamTypesOf(teams), [teams]);
-  const counts = useMemo(() => memberCounts(users), [users]);
+  const teams = teamsQuery.data ?? [];
+  const users = usersQuery.data ?? [];
+  const teamTypes = teamTypesOf(teams);
+  const counts = memberCounts(users);
   const team = teams.find((t) => t.uuid === selected) ?? teams[0];
-  const roster = useMemo(
-    () => (team ? teamRoster(users, team.uuid, teamTypes) : []),
-    [users, team, teamTypes],
-  );
+  const roster = team ? teamRoster(users, team.uuid, teamTypes) : [];
 
   if (teamsQuery.isPending || usersQuery.isPending) {
     return <Typography sx={captionSx}>載入中…</Typography>;
@@ -906,14 +896,10 @@ function AllTeamsCards({
  */
 function AllTeamsTable({ selfTeamUuid }: { selfTeamUuid: string }) {
   const directory = useTeamDirectory();
-  const teams = useMemo<DirectoryTeam[]>(
-    () =>
-      (directory.data?.roleRequestTeams ?? []).map((team) => ({
-        ...team,
-        type: team.type.toLowerCase(),
-      })),
-    [directory.data],
-  );
+  const teams = (directory.data?.roleRequestTeams ?? []).map((team) => ({
+    ...team,
+    type: team.type.toLowerCase(),
+  })) satisfies DirectoryTeam[];
   const showAdmins = teams.some((team) => team.admins != null);
   const columns = allTeamsColumn.columns([
     allTeamsColumn.accessor('name', {
@@ -1030,19 +1016,16 @@ function MyTeamView({
   const [tab, setTab] = useState('members');
   const [inviting, setInviting] = useState(false);
   const [editing, setEditing] = useState(false);
-  const teams = useMemo(() => teamsQuery.data ?? [], [teamsQuery.data]);
+  const teams = teamsQuery.data ?? [];
   const team: Team = teams.find((t) => t.uuid === teamUuid) ?? {
     uuid: teamUuid,
     name: teamName,
     type: '',
     status: 'active',
   };
-  const members = useMemo(() => membersQuery.data ?? [], [membersQuery.data]);
-  const roster = useMemo(() => rosterFromMembers(members), [members]);
-  const roles = useMemo(
-    () => members.map((m) => ({ uuid: m.role_uuid, name: m.role })),
-    [members],
-  );
+  const members = membersQuery.data ?? [];
+  const roster = rosterFromMembers(members);
+  const roles = members.map((m) => ({ uuid: m.role_uuid, name: m.role }));
   const { actionsFor, dialogs } = useRosterActions(team, roster, false);
   const queueCount = pendingRequests.data?.length ?? 0;
 

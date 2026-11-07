@@ -1,6 +1,8 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEventCallback } from 'usehooks-ts';
+
+import { useEffect } from 'react';
 
 import { onTicketCreated } from '../../ticket/ticket-changes';
 import type { RescueMapMarkerItem } from '../types';
@@ -13,9 +15,7 @@ import { mapTicketToMarker } from './markers';
 export function useCreatedTicketMarker(
   listener: (marker: RescueMapMarkerItem) => void,
 ): void {
-  const listenerRef = useRef(listener);
-
-  listenerRef.current = listener;
+  const reportCreated = useEventCallback(listener);
 
   useEffect(
     () =>
@@ -23,9 +23,9 @@ export function useCreatedTicketMarker(
         const marker = mapTicketToMarker(ticket);
 
         if (marker) {
-          listenerRef.current(marker);
+          reportCreated(marker);
         }
       }),
-    [],
+    [reportCreated],
   );
 }

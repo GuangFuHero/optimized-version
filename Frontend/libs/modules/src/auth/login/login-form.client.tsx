@@ -1,8 +1,8 @@
 'use client';
 
-import { Alert, Stack } from '@mui/material';
+import { Alert, NoSsr, Stack } from '@mui/material';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { startTransition, useEffect, useState } from 'react';
+import { startTransition, useState } from 'react';
 
 import {
   AuthFormError,
@@ -39,13 +39,6 @@ export function LoginFormClient({
   const authErrorMessage = loginErrorMessage(searchParams.get('error'));
   // Sent here by a page only a signed-in person sees (帳號安全) after the session ended there: the
   // site shell's notice never got to say why, so this page does.
-  const [sessionExpired, setSessionExpired] = useState(false);
-
-  useEffect(() => {
-    if (takeSessionExpired(sessionStorageOrNull())) {
-      setSessionExpired(true);
-    }
-  }, []);
 
   function signInWithProvider(provider: 'google' | 'line') {
     // A whole-page navigation: the backend sends the browser on to Google or LINE.
@@ -60,9 +53,9 @@ export function LoginFormClient({
 
   return (
     <Stack spacing={2}>
-      {sessionExpired ? (
-        <Alert severity="warning">你的登入狀態已失效，請重新登入。</Alert>
-      ) : null}
+      <NoSsr>
+        <ExpiredSessionAlert />
+      </NoSsr>
 
       {authErrorMessage ? (
         <Alert severity="error">{authErrorMessage}</Alert>
@@ -128,4 +121,11 @@ export function LoginFormClient({
       <AuthReturnHint />
     </Stack>
   );
+}
+
+function ExpiredSessionAlert() {
+  const [expired] = useState(() => takeSessionExpired(sessionStorageOrNull()));
+  return expired ? (
+    <Alert severity="warning">你的登入狀態已失效，請重新登入。</Alert>
+  ) : null;
 }

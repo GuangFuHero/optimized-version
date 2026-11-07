@@ -3,6 +3,7 @@ import type {
   UseInfiniteQueryOptions,
 } from '@tanstack/react-query';
 import type { LucideIcon } from 'lucide-react';
+import type { StoreApi } from 'zustand';
 import type {
   StationType,
   TicketType,
@@ -69,10 +70,10 @@ export interface RescueMapDraftPoint {
   lng: number;
 }
 
-export interface RescueMapViewportStoreLike {
-  getSnapshot: () => RescueMapViewportStoreSnapshot;
-  subscribe: (listener: () => void) => () => void;
-}
+export type RescueMapViewportStoreLike = Pick<
+  StoreApi<RescueMapViewportStoreSnapshot>,
+  'getState' | 'getInitialState' | 'subscribe'
+>;
 
 export interface RescueMapBaseLayerConfig {
   label: string;
