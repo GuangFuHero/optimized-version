@@ -206,9 +206,6 @@ importers:
       '@tanstack/react-query':
         specifier: ^5.90.0
         version: 5.104.1(react@19.2.5)
-      '@urql/exchange-graphcache':
-        specifier: ^9.0.0
-        version: 9.0.0(@urql/core@6.0.1(graphql@16.13.2))(graphql@16.13.2)
       graphql:
         specifier: ^16.13.2
         version: 16.13.2
@@ -218,9 +215,6 @@ importers:
       react:
         specifier: ^19.0.0
         version: 19.2.5
-      urql:
-        specifier: ^5.0.1
-        version: 5.0.1(@urql/core@6.0.1(graphql@16.13.2))(react@19.2.5)
       zod:
         specifier: ^4.6.6
         version: 4.6.6
@@ -251,9 +245,6 @@ importers:
       '@tanstack/react-table':
         specifier: ^9.2.4
         version: 9.2.4(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
-      '@urql/next':
-        specifier: ^2.0.0
-        version: 2.0.0(next@16.4.2(@babel/core@7.29.0(supports-color@10.2.2))(@types/node@20.19.9)(babel-plugin-macros@3.1.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(sass@1.99.0))(react@19.2.5)(urql@5.0.1(@urql/core@6.0.1(graphql@16.13.2))(react@19.2.5))
       date-fns:
         specifier: ^4.4.0
         version: 4.4.0
@@ -299,9 +290,6 @@ importers:
       sonner:
         specifier: ^2.0.7
         version: 2.0.8(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
-      urql:
-        specifier: ^5.0.1
-        version: 5.0.1(@urql/core@6.0.1(graphql@16.13.2))(react@19.2.5)
       usehooks-ts:
         specifier: ^3.1.1
         version: 3.1.1(react@19.2.5)
@@ -398,14 +386,6 @@ importers:
         version: 8.0.8(@types/node@20.19.9)(esbuild@0.27.7)(jiti@2.4.2)(less@4.5.1)(sass-embedded@1.99.0)(sass@1.99.0)(terser@5.46.1)(yaml@2.8.3)
 
 packages:
-
-  '@0no-co/graphql.web@1.2.0':
-    resolution: {integrity: sha512-/1iHy9TTr63gE1YcR5idjx8UREz1s0kFhydf3bBLCXyqjhkIc6igAzTOx3zPifCwFR87tsh/4Pa9cNts6d2otw==}
-    peerDependencies:
-      graphql: ^14.0.0 || ^15.0.0 || ^16.0.0
-    peerDependenciesMeta:
-      graphql:
-        optional: true
 
   '@adobe/css-tools@4.5.0':
     resolution: {integrity: sha512-6OzddxPio9UiWTCemp4N8cYLV2ZN1ncRnV1cVGtve7dhPOtRkleRyx32GQCYSwDYgaHU3USMm84tNsvKzRCa1Q==}
@@ -4292,21 +4272,6 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@urql/core@6.0.1':
-    resolution: {integrity: sha512-FZDiQk6jxbj5hixf2rEPv0jI+IZz0EqqGW8mJBEug68/zHTtT+f34guZDmyjJZyiWbj0vL165LoMr/TkeDHaug==}
-
-  '@urql/exchange-graphcache@9.0.0':
-    resolution: {integrity: sha512-5ACktvMFdnD5JC6DaSUrlj345c1JIUi7PwgvmnkwVOWsCRt/Vo9946UaG+sg69ku8seESMBK4xkeI41M39Dd5A==}
-    peerDependencies:
-      '@urql/core': ^6.0.0
-
-  '@urql/next@2.0.0':
-    resolution: {integrity: sha512-X7q/+MOUtX1suaDxGJdgjAqE/eyhcGr1XnTO0VpUnSPdPOkVUKm5RNDIQy4ecupTYKs++1j2YWcmAfLc9R/Gkw==}
-    peerDependencies:
-      next: '>=13.0.0'
-      react: '>=18.0.0'
-      urql: ^5.0.0
-
   '@vitest/expect@3.2.4':
     resolution: {integrity: sha512-Io0yyORnB6sikFlt8QW5K7slY4OjqNX9jmJQ02QDda8lyM6B5oNgVWoSoKPac8/kgnCUzuHQKrSLtu/uOqqrig==}
 
@@ -6275,6 +6240,7 @@ packages:
   image-size@0.5.5:
     resolution: {integrity: sha512-6TDAlDPZxUFCv+fuOkIoXT/V/f3Qbq8e37p+YOiYrUv3v9cc3/6x78VdfPgFVaB9dZYeLUfKgHRebpkm/oP2VQ==}
     engines: {node: '>=0.10.0'}
+    deprecated: Please migrate to image-size@2.x
     hasBin: true
 
   immutable@5.1.5:
@@ -9052,12 +9018,6 @@ packages:
   urlpattern-polyfill@10.1.0:
     resolution: {integrity: sha512-IGjKp/o0NL3Bso1PymYURCJxMPNAf/ILOpendP9f5B6e1rTJgdgiOvgfoT8VxCAdY+Wisb9uhGaJJf3yZ2V9nw==}
 
-  urql@5.0.1:
-    resolution: {integrity: sha512-r58gYlWvCTC19QvkTaARaCLV9/bp870byH/qbLaw3S7f8i/bC6x2Szub8RVXptiMxWmqq5dyVBjUL9G+xPEuqg==}
-    peerDependencies:
-      '@urql/core': ^6.0.0
-      react: '>= 16.8.0'
-
   use-sync-external-store@1.7.0:
     resolution: {integrity: sha512-6L+EeigHMQhdaIPNIFUKwfWJSwWFQ8gJbJ2DLOs5sDIegTwR9fRxvnM3uciHKjIZhFz+KAv2emhWMRvDmMcY8A==}
     peerDependencies:
@@ -9321,9 +9281,6 @@ packages:
   wildcard@2.0.1:
     resolution: {integrity: sha512-CC1bOL87PIWSBhDcTrdeLo6eGT7mCFtrg0uIJtqJUFyK+eJnzl8A1niH56uu7KMa5XFrtiV+AQuHO3n7DsHnLQ==}
 
-  wonka@6.3.6:
-    resolution: {integrity: sha512-MXH+6mDHAZ2GuMpgKS055FR6v0xVP3XwquxIMYXgiW+FejHQlMGlvVRZT4qMCxR+bEo/FCtIdKxwej9WV3YQag==}
-
   word-wrap@1.2.5:
     resolution: {integrity: sha512-BN22B5eaMMI9UMtjrGd5g5eCYPpCPDUy0FJXbYsaT5zYxjFOckS53SQDE3pWkVoWpHXVb3BrYcEN4Twa55B5cA==}
     engines: {node: '>=0.10.0'}
@@ -9447,10 +9404,6 @@ packages:
     resolution: {integrity: sha512-4UmzQUF5fxvfcYHlbjBmejU+w+hbDnWFx4aS8kBx7nPBHcO2SqPbpAG8snbdg+Xse4pRefR98hgjFgIMCI/UhA==}
 
 snapshots:
-
-  '@0no-co/graphql.web@1.2.0(graphql@16.13.2)':
-    optionalDependencies:
-      graphql: 16.13.2
 
   '@adobe/css-tools@4.5.0': {}
 
@@ -13757,27 +13710,6 @@ snapshots:
 
   '@unrs/resolver-binding-win32-x64-msvc@1.11.1':
     optional: true
-
-  '@urql/core@6.0.1(graphql@16.13.2)':
-    dependencies:
-      '@0no-co/graphql.web': 1.2.0(graphql@16.13.2)
-      wonka: 6.3.6
-    transitivePeerDependencies:
-      - graphql
-
-  '@urql/exchange-graphcache@9.0.0(@urql/core@6.0.1(graphql@16.13.2))(graphql@16.13.2)':
-    dependencies:
-      '@0no-co/graphql.web': 1.2.0(graphql@16.13.2)
-      '@urql/core': 6.0.1(graphql@16.13.2)
-      wonka: 6.3.6
-    transitivePeerDependencies:
-      - graphql
-
-  '@urql/next@2.0.0(next@16.4.2(@babel/core@7.29.0(supports-color@10.2.2))(@types/node@20.19.9)(babel-plugin-macros@3.1.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(sass@1.99.0))(react@19.2.5)(urql@5.0.1(@urql/core@6.0.1(graphql@16.13.2))(react@19.2.5))':
-    dependencies:
-      next: 16.4.2(@babel/core@7.29.0(supports-color@10.2.2))(@types/node@20.19.9)(babel-plugin-macros@3.1.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(sass@1.99.0)
-      react: 19.2.5
-      urql: 5.0.1(@urql/core@6.0.1(graphql@16.13.2))(react@19.2.5)
 
   '@vitest/expect@3.2.4':
     dependencies:
@@ -19180,12 +19112,6 @@ snapshots:
 
   urlpattern-polyfill@10.1.0: {}
 
-  urql@5.0.1(@urql/core@6.0.1(graphql@16.13.2))(react@19.2.5):
-    dependencies:
-      '@urql/core': 6.0.1(graphql@16.13.2)
-      react: 19.2.5
-      wonka: 6.3.6
-
   use-sync-external-store@1.7.0(react@19.2.5):
     dependencies:
       react: 19.2.5
@@ -19455,8 +19381,6 @@ snapshots:
   why-is-node-running@3.2.2: {}
 
   wildcard@2.0.1: {}
-
-  wonka@6.3.6: {}
 
   word-wrap@1.2.5: {}
 
