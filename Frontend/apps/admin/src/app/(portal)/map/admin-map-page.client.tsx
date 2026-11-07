@@ -93,7 +93,8 @@ function haveSameNonViewportState(
 
 export function AdminMapPageClient() {
   // The area layer and its list are for those who may see work zones; the rest see the map alone.
-  const canViewZones = useCapability('work_zone.view').data ?? false;
+  const { data: canViewZones = false, isSuccess: zonesAccessReady } =
+    useCapability('work_zone.view');
   // Without this the backend gives no 責任區 teams, and every ticket would read as 未指派.
   const canViewTicketDetail = useCapability('ticket.view_detail').data ?? false;
   const mapBoxRef = useRef<HTMLDivElement>(null);
@@ -128,7 +129,7 @@ export function AdminMapPageClient() {
       ).length
     : null;
   const areas = useAdminMapAreas({
-    enabled: true,
+    enabled: zonesAccessReady,
     includePrivate: canViewZones,
   });
   const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
@@ -328,7 +329,7 @@ export function AdminMapPageClient() {
     (area) => area.id === zoneParam,
   );
   useEffect(() => {
-    if (!zoneParam || !areas.hasFetchedOnce) {
+    if (!zonesAccessReady || !zoneParam || !areas.hasFetchedOnce) {
       return;
     }
 
@@ -338,6 +339,7 @@ export function AdminMapPageClient() {
 
     router.replace(pathname, { scroll: false });
   }, [
+    zonesAccessReady,
     zoneParam,
     areas.hasFetchedOnce,
     handleSelectArea,
