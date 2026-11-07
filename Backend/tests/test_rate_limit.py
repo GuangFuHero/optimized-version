@@ -89,7 +89,8 @@ async def test_ttl_is_not_extended_by_later_hits_in_the_same_window(redis):
 def test_client_ip_prefers_the_forwarded_header():
     """The BFF's forwarded browser IP wins over the container's peer address."""
     request = _FakeRequest(
-        headers={"X-Forwarded-For": "203.0.113.7, 10.1.1.1"}, client_host="172.18.0.3",
+        headers={"X-Forwarded-For": "203.0.113.7, 10.1.1.1"},
+        client_host="172.18.0.3",
     )
 
     assert resolve_client_ip(request) == "203.0.113.7"
@@ -107,6 +108,33 @@ def test_client_ip_survives_a_missing_peer():
 
 def test_client_ip_is_capped_so_a_hostile_header_cannot_bloat_the_key():
     """The header is only as trustworthy as the hop that set it; the key must stay bounded."""
-    request = _FakeRequest(headers={"X-Forwarded-For": "9" * 5000})
+    request = _FakeRequest(headers={"X-Forwarded-For": "9" * 5000}, client_host="172.18.0.3")
 
     assert len(resolve_client_ip(request)) == 64
+
+
+def test_client_ip_ignores_a_forwarded_header_from_an_untrusted_peer():
+    """A caller reaching the backend directly cannot pick its own key by sending the header."""
+    request = _FakeRequest(headers={"X-Forwarded-For": "198.51.100.9"}, client_host="203.0.113.50")
+
+    assert resolve_client_ip(request) == "203.0.113.50"
+
+
+def test_client_ip_skips_trusted_hops_and_ignores_what_the_browser_prepended():
+    """Read right to left: the first hop that is not a trusted proxy is the caller."""
+    request = _FakeRequest(
+        headers={"X-Forwarded-For": "6.6.6.6, 203.0.113.7, 10.0.0.5"},
+        client_host="127.0.0.1",
+    )
+
+    assert resolve_client_ip(request) == "203.0.113.7"
+
+
+def test_trusted_proxies_follow_the_setting(monkeypatch):
+    """With only loopback trusted, a private-network peer's header is ignored."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "TRUSTED_PROXIES", "127.0.0.1/32")
+    request = _FakeRequest(headers={"X-Forwarded-For": "203.0.113.7"}, client_host="172.18.0.3")
+
+    assert resolve_client_ip(request) == "172.18.0.3"

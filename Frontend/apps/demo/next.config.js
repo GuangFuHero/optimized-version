@@ -4,10 +4,12 @@ const { composePlugins, withNx } = require('@nx/next');
 const path = require('path');
 const {
   contentSecurityPolicy,
+  MCP_CONSENT_PATH,
+  SITE_SECURITY_HEADERS_SOURCE,
 } = require('@rescue-frontend/modules/content-security-policy');
 
-// On every response, the API's and the static files' too; the admin app sends the same
-// (apps/admin/next.config.ts).
+// On every response, the API's and the static files' too, but the MCP consent page's frame headers and CSP
+// (SITE_SECURITY_HEADERS_SOURCE says why); the admin app sends the same (apps/admin/next.config.ts).
 const securityHeaders = [
   // HTTPS only on this host and those under it, for a week: a browser keeps to it that long, with no
   // way to take it back sooner. A year once every host under the domain is known to be HTTPS only.
@@ -32,7 +34,16 @@ const nextConfig = {
   nx: {},
   poweredByHeader: false,
   async headers() {
-    return [{ source: '/:path*', headers: securityHeaders }];
+    return [
+      { source: SITE_SECURITY_HEADERS_SOURCE, headers: securityHeaders },
+      {
+        source: MCP_CONSENT_PATH,
+        headers: securityHeaders.filter(
+          ({ key }) =>
+            !['X-Frame-Options', 'Content-Security-Policy'].includes(key),
+        ),
+      },
+    ];
   },
   async redirects() {
     const adminAppUrl =
