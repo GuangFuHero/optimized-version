@@ -9,7 +9,7 @@
 - **Monorepo**：Nx 22 + pnpm workspaces，各 app 與 library 使用自己的 `package.json`
 - **App framework**：Next.js 16（App Router）、React 19
 - **UI**：MUI 9 + Emotion、Leaflet + leaflet.markercluster（地圖）
-- **資料存取**：urql 5、GraphQL Code Generator、openapi-fetch、TanStack Query；前台保留 urql graphcache
+- **資料存取**：GraphQL Code Generator、openapi-fetch、TanStack Query
 - **驗證**：後端的 `HttpOnly` session cookie + 共用 REST / GraphQL proxy（`/api/v1/*`、`/api/graphql`）
 - **語言/工具**：TypeScript 5.9（strict）、ESLint 9（flat config）、Prettier
 
@@ -77,7 +77,7 @@ Frontend/
       src/brand/              # 品牌 icon / 素材
       src/shared/             # 跨 surface 共用（目前僅 station-type-options，見 docs/known-issues.md）
 
-    data-access/            # @rescue-frontend/data-access — GraphQL documents、codegen 產物、REST client、urql client 設定
+    data-access/            # @rescue-frontend/data-access — GraphQL documents、codegen 產物、GraphQL / REST client
 
 ```
 

@@ -11,7 +11,7 @@
 | 3 | [`design-system-audit.md`](design-system-audit.md) | 修既有的設計系統偏差時照這份：各模組的 lint warning 數與修正規則 |
 | 4 | [`frontend-library-layering-inventory.md`](frontend-library-layering-inventory.md) | 對照 `libs/modules/src` 目前實際目錄與 capability 分層 |
 | 5 | [`authentication.md`](authentication.md) | 修改登入、註冊、登出、session cookie、proxy 的 refresh 前先讀 |
-| 6 | [`data-access.md`](data-access.md) | 新增或調整 GraphQL / REST client、urql client、codegen 時查閱 |
+| 6 | [`data-access.md`](data-access.md) | 新增或調整 GraphQL / REST client、codegen 時查閱 |
 | 7 | [`site-map-interaction-architecture.md`](site-map-interaction-architecture.md) | 修改前台 `/map`、`/list`、分享 metadata 或 viewport/live-data 流程前先讀 |
 | 8 | [`admin-features.md`](admin-features.md) | 了解目前 repo 內 admin 頁面與 modules 的實作狀態，以及哪些部分仍未接通 |
 | 9 | [`database-schema.md`](database-schema.md) | 快速查看前端目前依賴的後端資料契約摘要 |

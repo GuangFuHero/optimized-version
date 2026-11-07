@@ -84,8 +84,7 @@ ui -> data-access (generated types only)
 
 - GraphQL documents
 - codegen 產物
-- urql client
-- REST endpoint 封裝
+- GraphQL / REST client
 
 不適合放：
 

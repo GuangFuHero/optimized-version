@@ -3,7 +3,7 @@
 這份文件只保留前端目前實際會碰到的資料模型摘要。更細的 source of truth 以 repo 內 vendored contract 為準：
 
 - GraphQL：`libs/data-access/src/graphql/schema.graphql`
-- REST OpenAPI：`libs/data-access/openapi.json`
+- REST OpenAPI：`libs/data-access/src/rest/openapi.json`
 - Frontend queries：`libs/data-access/src/graphql/**/*.graphql`
 
 ## 前端目前主要依賴的實體
