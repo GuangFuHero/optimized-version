@@ -10,6 +10,7 @@
 - **App framework**：Next.js 16（App Router）、React 19
 - **UI**：MUI 9 + Emotion、Leaflet + leaflet.markercluster（地圖）
 - **資料存取**：GraphQL Code Generator、openapi-fetch、TanStack Query
+- **Client state / 表單 / 資料表**：Zustand、nuqs、TanStack Form / Table；兩個 app 啟用 React Compiler
 - **驗證**：後端的 `HttpOnly` session cookie + 共用 REST / GraphQL proxy（`/api/v1/*`、`/api/graphql`）
 - **語言/工具**：TypeScript 5.9（strict）、ESLint 9（flat config）、Prettier
 

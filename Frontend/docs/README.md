@@ -18,6 +18,8 @@
 | 10 | [`known-issues.md`](known-issues.md) | 先掃一遍目前已知的死碼、未串接功能與技術債 |
 | 11 | [`local-oauth-secrets-setup.md`](local-oauth-secrets-setup.md) | 要在本機測試 Google / LINE 登入時，照這份把 secret 寫進 `Backend/.env`（client ID 已在 `Backend/.env.example`） |
 
+Render 效能比較與重跑方式見 [frontend-performance.md](frontend-performance.md)。Client state、表單、資料表與 URL state 的分工見 [frontend-working-principles.md](frontend-working-principles.md#state表單與-render)。
+
 ## 維護原則
 
 - 文件要反映目前 repo 內實際存在的程式碼，不寫「理想上可能會這樣」但尚未落地的內容。

@@ -27,15 +27,14 @@ Admin 使用獨立的 Next.js 16 app `apps/admin`，預設 port 為 3001。頁�
 - `admin/field-configuration`
 - `admin/invite-side-sheet`
 - `admin/members`（正式團隊與成員權限頁）
-- `admin/user/user-list`
 - `shell/admin/*`
 - `station/admin/station-create`
 - `station/admin/station-detail`
 - `station/admin/station-drawer`
 - `station/admin/station-management`
 - `ticket/admin/ticket-detail`
-- `ticket/admin/ticket-list`
-- `ticket/admin/ticket-report`
+- `ticket/admin/ticket-board`
+- `ticket/admin/space`
 - `map/*` 與 `map/components/*`
 
 其中有些命名帶 `admin`，有些已被提升成 capability-first 結構，例如地圖核心能力在 `map/*`，而不是 `admin/map/*`。
@@ -177,5 +176,5 @@ Admin 使用獨立的 Next.js 16 app `apps/admin`，預設 port 為 3001。頁�
 
 1. 先看 `apps/admin/src/app/(portal)/layout.tsx` 與 [admin README](../apps/admin/README.md)
 2. 再看 `libs/modules/src/shell/admin/*`
-3. 再看 `station/admin/*`、`ticket/admin/*`、`admin/user/*`
+3. 再看 `station/admin/*`、`ticket/admin/*`、`admin/members/*`
 4. 地圖相關則補看 `libs/modules/src/map/*`
