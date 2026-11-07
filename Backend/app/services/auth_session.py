@@ -209,7 +209,7 @@ async def refresh_session(
     repo = SessionRepository(redis)
     record = await repo.get_refresh_for_token(raw_refresh)
     session = await repo.get_session(record["sid"]) if record else None
-    # An MCP session refreshes only through the MCP's `/token`, which names its client; refused before
+    # An MCP session refreshes only through the MCP's `/mcp/token`, which names its client; refused before
     # rotating, so the client's token survives a stray attempt elsewhere.
     if session and session.get("mcp_client") and session["mcp_client"] != mcp_client:
         raise ApiError(

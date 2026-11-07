@@ -98,7 +98,8 @@ class Settings(BaseSettings):
     TRUSTED_PROXIES: str = os.getenv(
         "TRUSTED_PROXIES", "127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7"
     )
-    # The public URL MCP clients reach this backend at; the MCP endpoint is `{MCP_BASE_URL}/mcp`.
+    # The public URL MCP clients reach this backend at; the MCP endpoint and its OAuth paths are under
+    # `{MCP_BASE_URL}/mcp`, so it can be the site's own URL.
     MCP_BASE_URL: str = os.getenv("MCP_BASE_URL", "http://localhost:8000")
 
     @property

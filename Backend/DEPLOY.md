@@ -157,7 +157,7 @@ plan.
 | `GOOGLE_CLIENT_SECRET`, `LINE_CHANNEL_SECRET` | Secret Manager | `staging-backend-google-client-secret`, `staging-backend-line-channel-secret`, written by `gen_env` | `Backend/.env` |
 | `REFRESH_REUSE_GRACE_SECONDS` | `30` (default) | `30` (default) | `30` (default) |
 | `TRUSTED_PROXIES` | the default, while every proxy reaches the backend over the docker network | `127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7`, the default | the default |
-| `MCP_BASE_URL` | the public URL routed to the MCP paths (not chosen yet) | not set until the MCP route exists (see [MCP clients](#mcp-clients)) | `http://localhost:8000` (default) |
+| `MCP_BASE_URL` | the site's URL, once its tunnel has the MCP route (not set up yet) | `https://staging.wan-guard.com` (see [MCP clients](#mcp-clients)) | `http://localhost:8000` (default) |
 
 - **Why `admin-staging` and not `admin.staging`**: Cloudflare's free certificate covers `wan-guard.com` and
   one level of subdomain below it. `admin.staging.wan-guard.com` is two levels deep and would get no
@@ -185,19 +185,34 @@ Both are public hostnames of the staging tunnel, set in the Cloudflare Zero Trus
 
 ### MCP clients
 
-The backend serves a read-only MCP server (`mcp_server/README.md`). MCP clients reach it at seven paths that
-no tunnel route serves yet, so it is off on staging. To open it:
+The backend serves a read-only MCP server (`mcp_server/README.md`). MCP clients use the site's hostname,
+`https://staging.wan-guard.com/mcp`; the backend has no public hostname of its own. Everything the MCP serves
+is under `/mcp`, plus its two discovery documents:
 
-1. In the Cloudflare Zero Trust dashboard, add a public hostname of the staging tunnel whose service is
-   `http://backend:8000`, limited to these paths, and nothing else of the backend:
-   `/mcp`, `/register`, `/authorize`, `/token`, `/revoke`,
-   `/.well-known/oauth-protected-resource/mcp`, `/.well-known/oauth-authorization-server`.
-2. Set `MCP_BASE_URL` in `scripts/deploy-config.staging.env` to that hostname's `https://` URL and deploy.
-   Without it, the OAuth metadata points clients at `http://localhost:8000` and every sign-in fails.
+```
+staging.wan-guard.com
+  /mcp, /mcp/register, /mcp/authorize, /mcp/token, /mcp/revoke     ─┐
+  /.well-known/oauth-protected-resource/mcp                          ├─▶ http://backend:8000
+  /.well-known/oauth-authorization-server/mcp                       ─┘
+  everything else (/register is the site's sign-up page)              ─▶ http://frontend:3000
+```
+
+The tunnel sends those paths to the backend, so they never pass through the site. To open it:
+
+1. In the Cloudflare Zero Trust dashboard, add a public hostname to the staging tunnel: hostname
+   `staging.wan-guard.com`, path `^/(mcp(/.*)?|\.well-known/oauth-(protected-resource|authorization-server)/mcp)$`,
+   service `http://backend:8000`. Put it above the `staging.wan-guard.com` → `http://frontend:3000` entry: the
+   tunnel uses the first entry that matches.
+2. `MCP_BASE_URL=https://staging.wan-guard.com` is already in `scripts/deploy-config.staging.env`. Without it,
+   the OAuth metadata points clients at `http://localhost:8000` and every sign-in fails.
 3. Leave `TRUSTED_PROXIES` at the default: cloudflared reaches the backend from the docker network and puts
    the caller's IP last in `X-Forwarded-For`.
+4. Check: `curl https://staging.wan-guard.com/.well-known/oauth-authorization-server/mcp` answers JSON whose
+   `issuer` is `https://staging.wan-guard.com/mcp`, and `https://staging.wan-guard.com/register` is still the
+   site's sign-up page.
 
-Signing in goes through the site's own `/api/v1/mcp/consent` page, so the site needs nothing new.
+Until step 1 is done, `/mcp` on the site answers the site's 404 and nothing else changes. Signing in goes
+through the site's own `/api/v1/mcp/consent` page, so the site needs nothing new.
 
 ### Redirect URIs to register
 

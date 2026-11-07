@@ -44,6 +44,9 @@ _PENDING_TTL = 600
 _UNUSED_CLIENT_TTL = 3600
 _CODE_TTL = 300
 CONSENT_PATH = "/api/v1/mcp/consent"
+# The MCP endpoint's path, and the prefix of every OAuth path, so that the backend's paths can share a
+# hostname with the site, whose root paths (`/register`, …) are its own pages.
+MCP_PATH = "/mcp"
 
 
 def _client_name(client: OAuthClientInformationFull) -> str:
@@ -65,7 +68,9 @@ class BackendOAuthProvider(OAuthProvider):
     def __init__(self, redis_of: Callable[[], object]):
         """`redis_of` returns the app's Redis client, which exists only once the app has started."""
         super().__init__(
-            base_url=settings.MCP_BASE_URL,
+            # The OAuth endpoints and the issuer are under MCP_PATH; the resource is `{MCP_BASE_URL}/mcp`.
+            base_url=settings.MCP_BASE_URL.rstrip("/") + MCP_PATH,
+            resource_base_url=settings.MCP_BASE_URL,
             client_registration_options=ClientRegistrationOptions(enabled=True),
             revocation_options=RevocationOptions(enabled=True),
         )

@@ -9,39 +9,45 @@ FastMCP imports.)
 
 ## Connecting a client
 
-Point the client at `{MCP_BASE_URL}/mcp` (locally `http://localhost:8000/mcp`), e.g.
+Point the client at `{MCP_BASE_URL}/mcp` (on staging `https://staging.wan-guard.com/mcp`, locally
+`http://localhost:8000/mcp`), e.g.
 
 ```
 claude mcp add --transport http wan-guard http://localhost:8000/mcp
 ```
 
-The client finds everything else itself:
+The client finds everything else itself. The issuer is `{MCP_BASE_URL}/mcp`, so every OAuth path is under
+`/mcp` and the discovery documents are where RFC 9728 and RFC 8414 put them for a path:
 
 ```
 client ──POST /mcp──▶ 401  WWW-Authenticate: resource_metadata=…/.well-known/oauth-protected-resource/mcp
-       ──GET  /.well-known/oauth-authorization-server──▶ endpoints
-       ──POST /register──▶ client_id                        (dynamic registration)
-       ──GET  /authorize?…code_challenge…──▶ 302 {SITE_APP_URL}/api/v1/mcp/consent?txn=…
+       ──GET  /.well-known/oauth-protected-resource/mcp──▶ authorization server {MCP_BASE_URL}/mcp
+       ──GET  /.well-known/oauth-authorization-server/mcp──▶ endpoints
+       ──POST /mcp/register──▶ client_id                    (dynamic registration)
+       ──GET  /mcp/authorize?…code_challenge…──▶ 302 {SITE_APP_URL}/api/v1/mcp/consent?txn=…
 browser ─ consent page on the site (through the site's /api/v1 proxy, so the sign-in cookie applies)
             not signed in → /login?callbackUrl=… (password, Google or LINE) → back to the consent page
             「允許」 → 303 redirect_uri?code=…
-client ──POST /token (code + PKCE verifier)──▶ backend access token + refresh token
+client ──POST /mcp/token (code + PKCE verifier)──▶ backend access token + refresh token
 ```
 
 The tokens are the backend's own: allowing the client opens an ordinary backend session marked with
 `mcp_client`, and refreshing goes through the backend's refresh rotation.
 
 Settings: `MCP_BASE_URL` is the public URL clients reach the backend at; the consent page lives on
-`SITE_APP_URL`.
+`SITE_APP_URL`. Nothing is served at the root (`/register`, `/authorize`, …), so `MCP_BASE_URL` can be the
+site's own URL, whose root paths are the site's pages. Clients written for the oldest MCP authorization
+spec, which looked for the metadata at the root whatever the path, are not supported.
 
 ## Deployment
 
-The backend today is reachable only through the site. To serve MCP clients, expose **only** these
-paths of it, through an edge (reverse proxy or tunnel):
+The backend is reachable only through the site. To serve MCP clients, the edge in front of the site's
+hostname (the Cloudflare tunnel on staging, `DEPLOY.md` "MCP clients") sends **only** these paths to the
+backend:
 
 ```
-/mcp   /authorize   /token   /register   /revoke
-/.well-known/oauth-protected-resource/mcp   /.well-known/oauth-authorization-server
+/mcp   /mcp/register   /mcp/authorize   /mcp/token   /mcp/revoke
+/.well-known/oauth-protected-resource/mcp   /.well-known/oauth-authorization-server/mcp
 ```
 
 Never the rest of the backend: `/api/v1` and `/graphql` stay behind the site. The consent page
@@ -87,7 +93,7 @@ Read only is enforced, not listed:
   bulk, map, rbac-test, invites, mcp).
 - Every backend call times out after 30 seconds. CodeMode's sandbox (FastMCP defaults) allows 30 s and
   100 MB per `execute`, and at most 50 tool calls in it.
-- `/register` allows 10 registrations per IP per hour and `/authorize` 30 per IP per 10 minutes; a
+- `/mcp/register` allows 10 registrations per IP per hour and `/mcp/authorize` 30 per IP per 10 minutes; a
   client that never finishes a sign-in is forgotten after an hour.
 
 `DENIED_ROOT_FIELDS` and `EXCLUDED_REST_PREFIXES` in `tools.py` are the only lists to maintain.
@@ -102,7 +108,7 @@ the same code). What an MCP token may still do outside the MCP:
 
 - read (GET, HEAD, OPTIONS, and GraphQL queries);
 - end its own session (`POST /api/v1/auth/logout`);
-- be refreshed, through the MCP's `/token` only: `/api/v1/auth/refresh` and the browser's refresh
+- be refreshed, through the MCP's `/mcp/token` only: `/api/v1/auth/refresh` and the browser's refresh
   refuse an MCP session's refresh token with 403 `mcp_read_only`, so nothing outside can mint a token
   that writes. The refreshed token is read-only too.
 
@@ -122,4 +128,4 @@ An MCP token works only while its backend session is live:
 - signing out of the website (`DELETE /api/v1/auth/session`) ends all of the account's MCP sessions;
 - `logout-all`, a password change and an administrator's revoke-sessions end every session, MCP
   sessions included;
-- a client's own `/revoke` ends its session.
+- a client's own `/mcp/revoke` ends its session.

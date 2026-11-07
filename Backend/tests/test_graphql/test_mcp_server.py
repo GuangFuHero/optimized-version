@@ -13,6 +13,7 @@ from fastmcp import Client, FastMCP
 from graphql import GraphQLField, GraphQLString
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
+from starlette.applications import Starlette
 
 from app.core.auth_cookies import access_cookie_name
 from app.core.identity import encode_act
@@ -23,7 +24,7 @@ from app.main import app
 from app.models.auth import User
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.repositories.session_repository import SessionRepository
-from mcp_server import build_server
+from mcp_server import build_server, public_routes
 from mcp_server.tools import register_tools
 from tests.conftest import token_for
 from tests.test_graphql import conftest as gql
@@ -37,11 +38,13 @@ BASE = "http://localhost:8000"
 
 @asynccontextmanager
 async def mcp_http():
-    """A fresh MCP app (its session manager runs once per instance) whose tools call the test app."""
+    """A fresh MCP app (its session manager runs once per instance) at its public paths; it calls `app`."""
     mcp_app = build_server(app).http_app(path="/mcp", stateless_http=True)
+    public = Starlette(routes=public_routes(mcp_app))
+    public.state.redis = app.state.redis
     async with (
         mcp_app.router.lifespan_context(mcp_app),
-        AsyncClient(transport=ASGITransport(app=mcp_app), base_url=BASE) as http,
+        AsyncClient(transport=ASGITransport(app=public), base_url=BASE) as http,
     ):
         yield http
 
@@ -282,15 +285,33 @@ async def test_switching_identity_changes_what_reads_return(client, redis, sampl
 
 
 async def test_oauth_metadata_and_unauthenticated_challenge(client):
-    """Discovery documents are served, and /mcp without a token answers 401 naming the metadata."""
-    resource = (await client.get("/.well-known/oauth-protected-resource/mcp")).json()
-    server = (await client.get("/.well-known/oauth-authorization-server")).json()
+    """/mcp without a token names the resource metadata, which leads to the issuer's, all under /mcp."""
     response = await client.post("/mcp", json={})
-    assert resource["resource"].endswith("/mcp") and resource["authorization_servers"]
-    assert {"authorization_endpoint", "token_endpoint", "registration_endpoint"} <= set(server)
-    assert "code_challenge_methods_supported" in server
     assert response.status_code == 401
-    assert "resource_metadata=" in response.headers["www-authenticate"]
+    challenge = response.headers["www-authenticate"]
+    assert f'resource_metadata="{BASE}/.well-known/oauth-protected-resource/mcp"' in challenge
+    resource = (await client.get("/.well-known/oauth-protected-resource/mcp")).json()
+    assert resource["resource"] == f"{BASE}/mcp"
+    assert [s.rstrip("/") for s in resource["authorization_servers"]] == [f"{BASE}/mcp"]
+    server = (await client.get("/.well-known/oauth-authorization-server/mcp")).json()
+    assert server["issuer"].rstrip("/") == f"{BASE}/mcp"
+    assert {k: server[k] for k in ("authorization_endpoint", "token_endpoint", "registration_endpoint")} == {
+        "authorization_endpoint": f"{BASE}/mcp/authorize",
+        "token_endpoint": f"{BASE}/mcp/token",
+        "registration_endpoint": f"{BASE}/mcp/register",
+    }
+    assert server["revocation_endpoint"] == f"{BASE}/mcp/revoke"
+    assert "code_challenge_methods_supported" in server
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["/register", "/authorize", "/token", "/revoke", "/.well-known/oauth-authorization-server"],
+)
+async def test_no_mcp_path_is_served_at_the_root(client, path):
+    """The root paths stay free for the site, which shares the hostname: `/register` is its sign-up page."""
+    assert (await client.get(path)).status_code == 404
+    assert (await client.post(path)).status_code == 404
 
 
 def _pkce() -> tuple[str, str]:
@@ -305,7 +326,7 @@ async def _authorize_through_consent(client, redis, user_uuid, role_uuid):
     async with mcp_http() as http:
         reg = (
             await http.post(
-                "/register",
+                "/mcp/register",
                 json={
                     "redirect_uris": [redirect],
                     "client_name": "pytest",
@@ -315,7 +336,7 @@ async def _authorize_through_consent(client, redis, user_uuid, role_uuid):
         ).json()
         verifier, challenge = _pkce()
         authorize = await http.get(
-            "/authorize",
+            "/mcp/authorize",
             params={
                 "response_type": "code",
                 "client_id": reg["client_id"],
@@ -358,7 +379,7 @@ async def test_oauth_code_pkce_token_and_refresh_open_a_backend_mcp_session(clie
     client_id, code, verifier, redirect, _ = await _authorize_through_consent(client, redis, user_uuid, role)
     async with mcp_http() as http:
         bad = await http.post(
-            "/token",
+            "/mcp/token",
             data={
                 "grant_type": "authorization_code",
                 "code": code,
@@ -369,7 +390,7 @@ async def test_oauth_code_pkce_token_and_refresh_open_a_backend_mcp_session(clie
         )
         tokens = (
             await http.post(
-                "/token",
+                "/mcp/token",
                 data={
                     "grant_type": "authorization_code",
                     "code": code,
@@ -380,7 +401,7 @@ async def test_oauth_code_pkce_token_and_refresh_open_a_backend_mcp_session(clie
             )
         ).json()
         reused = await http.post(
-            "/token",
+            "/mcp/token",
             data={
                 "grant_type": "authorization_code",
                 "code": code,
@@ -392,7 +413,7 @@ async def test_oauth_code_pkce_token_and_refresh_open_a_backend_mcp_session(clie
         me, _ = await call(http, tokens["access_token"], "rest_get", {"path": "/api/v1/users/me"})
         refreshed = (
             await http.post(
-                "/token",
+                "/mcp/token",
                 data={
                     "grant_type": "refresh_token",
                     "client_id": client_id,
@@ -401,7 +422,7 @@ async def test_oauth_code_pkce_token_and_refresh_open_a_backend_mcp_session(clie
             )
         ).json()
         replay = await http.post(
-            "/token",
+            "/mcp/token",
             data={
                 "grant_type": "refresh_token",
                 "client_id": client_id,
@@ -595,10 +616,10 @@ async def test_an_mcp_refresh_token_is_refused_outside_the_token_endpoint(client
             "client_id": client_id,
             "code_verifier": verifier,
         }
-        tokens = (await http.post("/token", data=grant)).json()
+        tokens = (await http.post("/mcp/token", data=grant)).json()
         refused = await client.post("/api/v1/auth/refresh", json={"refresh_token": tokens["refresh_token"]})
         refreshed = await http.post(
-            "/token",
+            "/mcp/token",
             data={
                 "grant_type": "refresh_token",
                 "client_id": client_id,
@@ -627,7 +648,7 @@ async def test_a_refresh_after_the_chosen_identity_is_removed_lands_on_the_defau
             "client_id": client_id,
             "code_verifier": verifier,
         }
-        tokens = (await http.post("/token", data=grant)).json()
+        tokens = (await http.post("/mcp/token", data=grant)).json()
         switched, _ = await call(http, tokens["access_token"], "switch_identity", {"role_uuid": history_role})
         async with gql.test_db() as db:
             assignment = await db.scalar(
@@ -638,7 +659,7 @@ async def test_a_refresh_after_the_chosen_identity_is_removed_lands_on_the_defau
             )
             await db.delete(assignment)
         refreshed = await http.post(
-            "/token",
+            "/mcp/token",
             data={
                 "grant_type": "refresh_token",
                 "client_id": client_id,
@@ -656,6 +677,6 @@ async def test_a_refresh_after_the_chosen_identity_is_removed_lands_on_the_defau
 async def test_register_is_rate_limited_and_unused_clients_expire_soon(client, redis):
     """Registration has a per-IP allowance, and a client that never signs in is kept an hour at most."""
     body = {"redirect_uris": ["http://127.0.0.1:9/cb"], "token_endpoint_auth_method": "none"}
-    answers = [await client.post("/register", json=body) for _ in range(11)]
+    answers = [await client.post("/mcp/register", json=body) for _ in range(11)]
     assert [r.status_code for r in answers] == [201] * 10 + [429]
     assert 0 < await redis.ttl(f"mcp_client:{answers[0].json()['client_id']}".encode()) <= 3600
