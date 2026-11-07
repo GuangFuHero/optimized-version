@@ -3,8 +3,8 @@
 import { Box, Stack, Typography } from '@mui/material';
 import Link from 'next/link';
 import type { MouseEvent, ReactNode } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { useQuery } from 'urql';
 
 import { MyStationSuggestionsDocument } from '@rescue-frontend/data-access';
 import {
@@ -16,6 +16,7 @@ import {
 } from '@rescue-frontend/ui';
 
 import { useSiteRouteState } from '../../route';
+import { siteGraphqlQuery } from '../../session/site-clients';
 import { SiteActionDrawer } from '../../shell/site/site-action-drawer';
 import {
   openReportedStation,
@@ -27,9 +28,6 @@ import {
 import { onOpenMyStationReports } from './open-my-station-reports';
 
 const { color, iconSize, radius, typography } = designTokens;
-
-// The list's own loading line inside the drawer rather than suspending the page behind it.
-const QUERY_CONTEXT = { suspense: false } as const;
 
 /**
  * One report (prototype `StationReportsDrawer`): when it was sent, the station, how it came out,
@@ -236,11 +234,11 @@ function Notice({ icon, children }: { icon?: ReactNode; children: ReactNode }) {
  */
 function MyStationReportsContent({ onClose }: { onClose: () => void }) {
   const route = useSiteRouteState();
-  const [{ data, fetching, error }] = useQuery({
-    query: MyStationSuggestionsDocument,
-    requestPolicy: 'network-only',
-    context: QUERY_CONTEXT,
-  });
+  const {
+    data,
+    isFetching: fetching,
+    error,
+  } = useQuery(siteGraphqlQuery(MyStationSuggestionsDocument, {}));
 
   const openStation = (event: MouseEvent<HTMLElement>, stationUuid: string) => {
     const opening = openReportedStation(route, stationUuid);

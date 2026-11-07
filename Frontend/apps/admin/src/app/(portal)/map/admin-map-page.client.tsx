@@ -97,8 +97,7 @@ export function AdminMapPageClient() {
   const mapBoxRef = useRef<HTMLDivElement>(null);
   const [viewportStore] = useState(() => createSiteMapViewportStore({}));
   const [routeState, setRouteState] = useState<RescueMapRouteState>({});
-  const liveMarkers = useAdminMapLiveMarkers(viewportStore);
-  const markers = liveMarkers.markers;
+  const markers = useAdminMapLiveMarkers(viewportStore);
   // What the map shows. A way of looking, not of choosing: the area list counts all `markers`.
   const [filters, setFilters] = useState<AdminMapFilters>(
     DEFAULT_ADMIN_MAP_FILTERS,

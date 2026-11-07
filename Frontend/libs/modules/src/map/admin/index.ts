@@ -35,5 +35,4 @@ export {
   ADMIN_MAP_LIVE_QUERY_LIMIT,
   toAdminMapPin,
   useAdminMapLiveMarkers,
-  type AdminMapLiveMarkers,
 } from './use-admin-map-live-markers';

@@ -2,13 +2,11 @@
 
 import { Box, Stack, Typography } from '@mui/material';
 import { useCallback, useState, type ReactNode } from 'react';
-import { useMutation, useQuery } from 'urql';
+import { useMutation } from '@tanstack/react-query';
 
 import {
-  GetTicketDocument,
   StopRecruitingDocument,
-  TicketFieldsFragmentDoc,
-  useFragment,
+  type GraphqlError,
 } from '@rescue-frontend/data-access';
 import {
   designTokens,
@@ -17,15 +15,13 @@ import {
   Icons,
 } from '@rescue-frontend/ui';
 
+import { siteGraphqlMutation } from '../../session/site-clients';
 import { stopRecruitingErrorMessage } from './claim-error';
 import { canStopRecruiting } from './need-actions';
 import { formatNeedHeadcount, resolveNeedClaim } from './need-claim';
 import type { NeedClaimTarget } from './need-claim-dialog';
 import { readNeedDialog } from './need-dialog';
-import {
-  readTicketNeeds,
-  TICKET_NEEDS_QUERY_CONTEXT,
-} from './use-ticket-needs';
+import { readTicketNeeds, useCachedTicket } from './use-ticket-needs';
 
 const { color, radius } = designTokens;
 
@@ -48,7 +44,9 @@ interface StopRecruitingDialogProps {
 export function useStopRecruiting(
   reloadTicket: (ticketUuid: string) => Promise<unknown>,
 ) {
-  const [, executeStopRecruiting] = useMutation(StopRecruitingDocument);
+  const { mutateAsync: executeStopRecruiting } = useMutation(
+    siteGraphqlMutation(StopRecruitingDocument),
+  );
   // Open is kept apart from the target, so the dialog keeps its content while it fades out.
   const [open, setOpen] = useState(false);
   const [target, setTarget] = useState<NeedClaimTarget | null>(null);
@@ -72,13 +70,18 @@ export function useStopRecruiting(
     setError(null);
 
     try {
-      const result = await executeStopRecruiting({ taskUuid: target.needUuid });
+      const refusal = await executeStopRecruiting({
+        taskUuid: target.needUuid,
+      }).then(
+        () => null,
+        (failure: GraphqlError) => failure,
+      );
       // Either way, as with a claim: a refusal usually means the need changed meanwhile — filled,
       // stopped from another tab, or left with nobody on it — and the dialog should now say so.
       await reloadTicket(target.ticketUuid);
 
-      if (result.error) {
-        setError(stopRecruitingErrorMessage(result.error));
+      if (refusal) {
+        setError(stopRecruitingErrorMessage(refusal));
         return;
       }
 
@@ -144,23 +147,16 @@ export function StopRecruitingDialog({
   onCancel,
   onConfirm,
 }: StopRecruitingDialogProps) {
-  const [{ data, fetching }] = useQuery({
-    query: GetTicketDocument,
-    variables: { uuid: target?.ticketUuid ?? '' },
-    pause: !target,
-    context: TICKET_NEEDS_QUERY_CONTEXT,
-  });
-  const ticket = data?.ticket ?? null;
-  const fields = ticket ? useFragment(TicketFieldsFragmentDoc, ticket) : null;
+  const { ticket, fetching } = useCachedTicket(target?.ticketUuid);
   const need =
     readTicketNeeds(ticket).find((item) => item.uuid === target?.needUuid) ??
     null;
   // After a refused stop the reload may show the need filled, stopped or with nobody left on it:
   // then there is nothing to confirm, and the way out is to close.
-  const settled = need !== null && !canStopRecruiting(need, fields?.status);
+  const settled = need !== null && !canStopRecruiting(need, ticket?.status);
   // Or gone, which the box says, and then nothing beneath it says again.
   const dialog = readNeedDialog({
-    found: Boolean(need && fields),
+    found: Boolean(need && ticket),
     fetching,
     refusal: error,
   });
@@ -168,7 +164,7 @@ export function StopRecruitingDialog({
     ? formatNeedHeadcount(
         need,
         resolveNeedClaim(need, {
-          ticketStatus: fields?.status,
+          ticketStatus: ticket?.status,
           isAuthenticated: true,
         }).kind,
       )
@@ -197,7 +193,7 @@ export function StopRecruitingDialog({
           border: `1px solid ${color.border.default}`,
         }}
       >
-        {need && fields ? (
+        {need && ticket ? (
           <>
             <Typography
               sx={{
@@ -214,7 +210,7 @@ export function StopRecruitingDialog({
               sx={{ mt: 0.75, color: color.fg.neutral.subtle }}
             >
               <DetailLine icon={<Icons.clipboardList />}>
-                {fields.title}
+                {ticket.title}
               </DetailLine>
               <DetailLine icon={<Icons.users />}>{headcount}</DetailLine>
             </Stack>

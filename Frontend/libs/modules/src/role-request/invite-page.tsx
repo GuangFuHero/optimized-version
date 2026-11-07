@@ -274,7 +274,7 @@ function InviteDetails({
                     variant="outline"
                     tone="danger"
                     disabled={withdraw.submitting}
-                    onClick={() => void withdraw.confirm(myRequest.uuid)}
+                    onClick={() => withdraw.confirm(myRequest.uuid)}
                   >
                     確定撤回
                   </Button>
@@ -353,7 +353,7 @@ function PendingElsewhere({
           <Button
             variant="primary"
             disabled={withdraw.submitting}
-            onClick={() => void withdraw.confirm(pending.uuid)}
+            onClick={() => withdraw.confirm(pending.uuid)}
           >
             撤回，改申請{teamName}
           </Button>

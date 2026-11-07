@@ -46,7 +46,7 @@ import { resolveTicketSearch } from '../ticket/ticket-search';
 import {
   floorHelpForOpenBuilding,
   readLinkedSelection,
-  useLinkedTicketLookup,
+  useLinkedTicket,
   usePaginatedRescueMapMarkers,
 } from '../map/site';
 import { SiteListRow } from './site-list-row';
@@ -94,7 +94,6 @@ export function SiteListView() {
     pageIds,
     replaceTicket,
   } = usePaginatedRescueMapMarkers(state);
-  const lookUpLinkedTicket = useLinkedTicketLookup();
 
   const controller = useRescueMapController({
     routeState: state,
@@ -182,6 +181,8 @@ export function SiteListView() {
   // The last selection seen in the list, or opened beside it. One that drops out of it afterwards was
   // filtered out or found deleted, and its drawer shuts, without asking again.
   const listedSelectionRef = useRef<string | undefined>(undefined);
+  // A selection none of the loaded pages holds, being asked about (ADR-444).
+  const [lookupId, setLookupId] = useState<string | null>(null);
 
   const selectedMarker = useMemo(
     () =>
@@ -309,37 +310,40 @@ export function SiteListView() {
       return;
     }
 
-    let cancelled = false;
-
-    void lookUpLinkedTicket(selectedId).then((linked) => {
-      if (cancelled) {
-        return;
-      }
-
-      if (linked.kind === 'ticket') {
-        setUnlistedItem(linked.marker);
-      } else if (linked.kind === 'replace') {
-        controller.setSelectedMarkerId(linked.uuid);
-      } else if (linked.kind === 'gone') {
-        setUnlistedItem(linked.ticket);
-      } else {
-        clearSelection();
-      }
-    });
-
-    return () => {
-      cancelled = true;
-    };
+    setLookupId(selectedId);
   }, [
     dataType,
     hasFetchedOnce,
     isFetching,
-    lookUpLinkedTicket,
     unlistedItem,
     controller.markers,
     controller.selectedMarkerId,
     controller.setSelectedMarkerId,
   ]);
+
+  // The backend's answer, for the selection it was asked about while that is still the one open.
+  const linked = useLinkedTicket(
+    lookupId === controller.selectedMarkerId ? lookupId : null,
+  );
+
+  useEffect(() => {
+    if (!linked) {
+      return;
+    }
+
+    setLookupId(null);
+
+    if (linked.kind === 'ticket') {
+      setUnlistedItem(linked.marker);
+    } else if (linked.kind === 'replace') {
+      controller.setSelectedMarkerId(linked.uuid);
+    } else if (linked.kind === 'gone') {
+      setUnlistedItem(linked.ticket);
+    } else {
+      setDetailOpen(false);
+      controller.setSelectedMarkerId(undefined);
+    }
+  }, [linked, controller.setSelectedMarkerId]);
 
   useEffect(() => {
     const target = loadMoreRef.current;

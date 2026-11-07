@@ -25,10 +25,9 @@ import {
   useAuthSession,
   useCellMembersLoader,
   useCreatedTicketMarker,
-  useLinkedTicketLookup,
+  useLinkedTicket,
   useSiteMapBuildings,
   useSiteMapLiveData,
-  useSiteMapLiveDataSnapshot,
   useSiteMapRouteState,
   useSiteMapViewportState,
   useSiteMapViewportStore,
@@ -95,8 +94,7 @@ function SiteMapViewportDataLayer({
   const { status: authStatus } = useAuthSession();
   const viewportState = useSiteMapViewportState();
   const viewportStore = useSiteMapViewportStore();
-  const liveDataStore = useSiteMapLiveData(baseRouteState);
-  const liveDataSnapshot = useSiteMapLiveDataSnapshot(liveDataStore);
+  const liveData = useSiteMapLiveData(baseRouteState);
   const isAuthenticated = authStatus === 'authenticated';
   const mergedRouteState = useMemo<SiteRouteState>(
     () => mergeRouteStateWithViewport(baseRouteState, viewportState),
@@ -173,7 +171,7 @@ function SiteMapViewportDataLayer({
 
   // A link to a ticket the view never fetched — past its 200, outside it, left out by a filter, or
   // not there at all — asks the backend (ADR-444): the ticket, or why there is none.
-  const lookUpLinkedTicket = useLinkedTicketLookup();
+  const [lookupId, setLookupId] = useState<string | null>(null);
   const [linkedTicketMarker, setLinkedTicketMarker] =
     useState<RescueMapMarkerItem | null>(null);
   const [goneTicket, setGoneTicket] = useState<RescueMapGoneTicket | null>(
@@ -206,7 +204,7 @@ function SiteMapViewportDataLayer({
     () => [
       ...pinnedBesideBuildings(
         dedupeMarkersById([
-          ...liveDataSnapshot.markers,
+          ...liveData.markers,
           ...[
             ...createdMarkers,
             ...(buildingTicketMarker ? [buildingTicketMarker] : []),
@@ -226,7 +224,7 @@ function SiteMapViewportDataLayer({
       createdMarkers,
       goneTicketIds,
       linkedTicketMarker,
-      liveDataSnapshot.markers,
+      liveData.markers,
       selectedMarkerId,
     ],
   );
@@ -314,15 +312,13 @@ function SiteMapViewportDataLayer({
       return;
     }
 
-    if (!liveDataSnapshot.hasFetchedOnce || liveDataSnapshot.isFetching) {
+    if (!liveData.hasFetchedOnce || liveData.isFetching) {
       return;
     }
 
     // A guest's location cell is selectable too, and is not a marker of its own; one the backend
     // counted may have none of its tickets in the page.
-    if (
-      hasRescueMapDetailItem(visibleMarkers, selectedId, liveDataSnapshot.cells)
-    ) {
+    if (hasRescueMapDetailItem(visibleMarkers, selectedId, liveData.cells)) {
       seenSelectionRef.current = selectedId;
       return;
     }
@@ -360,39 +356,42 @@ function SiteMapViewportDataLayer({
       return;
     }
 
-    let cancelled = false;
-
-    void lookUpLinkedTicket(selectedId).then((linked) => {
-      if (cancelled) {
-        return;
-      }
-
-      if (linked.kind === 'ticket') {
-        setLinkedTicketMarker(linked.marker);
-      } else if (linked.kind === 'replace') {
-        select(linked.uuid);
-      } else if (linked.kind === 'gone') {
-        setGoneTicket(linked.ticket);
-      } else {
-        letGo();
-      }
-    });
-
-    return () => {
-      cancelled = true;
-    };
+    setLookupId(selectedId);
   }, [
     baseRouteState.dataType,
     baseRouteState.selectedMarkerId,
     goneTicket,
-    liveDataSnapshot.cells,
-    liveDataSnapshot.hasFetchedOnce,
-    liveDataSnapshot.isFetching,
-    lookUpLinkedTicket,
+    liveData.cells,
+    liveData.hasFetchedOnce,
+    liveData.isFetching,
     mergedRouteState,
     onReplaceRouteState,
     visibleMarkers,
   ]);
+
+  // The backend's answer, for the selection it was asked about while that is still the one open.
+  const linked = useLinkedTicket(
+    lookupId === selectedMarkerId ? lookupId : null,
+  );
+
+  useEffect(() => {
+    if (!linked) {
+      return;
+    }
+
+    setLookupId(null);
+
+    if (linked.kind === 'ticket') {
+      setLinkedTicketMarker(linked.marker);
+    } else if (linked.kind === 'gone') {
+      setGoneTicket(linked.ticket);
+    } else {
+      onReplaceRouteState({
+        ...mergedRouteState,
+        selectedMarkerId: linked.kind === 'replace' ? linked.uuid : undefined,
+      });
+    }
+  }, [linked, mergedRouteState, onReplaceRouteState]);
 
   const createTicketDetailOverrides = useCallback(
     (marker: RescueMapMarkerItem) =>
@@ -423,7 +422,7 @@ function SiteMapViewportDataLayer({
         const dropGone = (current: RescueMapMarkerItem | null) =>
           current?.id === ticketUuid ? null : current;
 
-        liveDataStore.dismissMarker(ticketUuid);
+        liveData.dismissMarker(ticketUuid);
         setGoneTicketIds((current) =>
           current.includes(ticketUuid) ? current : [...current, ticketUuid],
         );
@@ -433,15 +432,15 @@ function SiteMapViewportDataLayer({
       }
 
       if (reloaded.ticketStatus) {
-        liveDataStore.replaceTicketStatus(ticketUuid, reloaded.ticketStatus);
+        liveData.replaceTicketStatus(ticketUuid, reloaded.ticketStatus);
       }
     },
-    [liveDataStore],
+    [liveData.dismissMarker, liveData.replaceTicketStatus],
   );
 
   // Drawn with the controls, inside the map's own column: centred on the map, and clear of a detail
   // panel open beside it, where the panel's list ends in 再顯示 200 筆 or 再試一次.
-  const cellsNotice = liveDataSnapshot.cellsNotice;
+  const cellsNotice = liveData.cellsNotice;
   const renderControls = useCallback(
     (controller: RescueMapControllerValue) => (
       <>
@@ -476,10 +475,10 @@ function SiteMapViewportDataLayer({
         <Box sx={{ minHeight: 0 }}>
           <Map
             markers={visibleMarkers}
-            locationCells={liveDataSnapshot.cells}
+            locationCells={liveData.cells}
             loadLocationCellMembers={loadCellMembers}
-            closureAreas={liveDataSnapshot.closureAreas}
-            publicZones={liveDataSnapshot.publicZones}
+            closureAreas={liveData.closureAreas}
+            publicZones={liveData.publicZones}
             routeState={baseRouteState}
             onRouteStateChange={onMapRouteStateChange}
             showScale

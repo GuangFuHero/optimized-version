@@ -9,12 +9,11 @@ import {
   useRef,
   useState,
 } from 'react';
-import { useMutation } from 'urql';
+import { useMutation } from '@tanstack/react-query';
 
 import {
   CreateHelpRequestDocument,
-  TicketFieldsFragmentDoc,
-  useFragment,
+  type GraphqlError,
 } from '@rescue-frontend/data-access';
 
 import { useOptionalSiteMapRouteState } from '../../map/site/use-site-map-route-state';
@@ -22,6 +21,7 @@ import { SiteMapViewportStoreContext } from '../../map/site/use-site-map-viewpor
 import { createSiteHref } from '../../route/serialize';
 import { useSiteRouteState } from '../../route/use-site-route-state';
 import { useAuthSession } from '../../session/auth-session';
+import { siteGraphqlMutation } from '../../session/site-clients';
 import { SiteToast } from '../../shell/site/site-toast';
 import { announceTicketCreated } from '../ticket-changes';
 import {
@@ -138,7 +138,9 @@ export function HelpRequestHost({ isAuthenticated }: HelpRequestHostProps) {
   const mapRoute = useOptionalSiteMapRouteState();
   // Only on the map, whose zoom the new ticket is shown at, unless that is too far out.
   const mapViewport = useContext(SiteMapViewportStoreContext);
-  const [, createHelpRequest] = useMutation(CreateHelpRequestDocument);
+  const { mutateAsync: createHelpRequest } = useMutation(
+    siteGraphqlMutation(CreateHelpRequestDocument),
+  );
   // The account's uuid, as `NeedClaimProvider` reads it.
   const userId = useAuthSession().user?.uuid ?? null;
   const [opening, setOpening] = useState<Opening | null>(null);
@@ -235,8 +237,10 @@ export function HelpRequestHost({ isAuthenticated }: HelpRequestHostProps) {
 
     try {
       const input = toHelpRequestInput(form, acknowledged);
-      const result = await createHelpRequest({ input });
-      const answer = result.data?.createHelpRequest;
+      const { answer, error } = await createHelpRequest({ input }).then(
+        (data) => ({ answer: data.createHelpRequest, error: undefined }),
+        (failure: GraphqlError) => ({ answer: undefined, error: failure }),
+      );
 
       // Held: nothing was written. What was typed stays in the drawer, under the dialog.
       if (answer?.__typename === 'DuplicatesSuspected') {
@@ -254,7 +258,7 @@ export function HelpRequestHost({ isAuthenticated }: HelpRequestHostProps) {
 
       // What was typed stays for another try.
       if (answer?.__typename !== 'TicketCreated') {
-        const message = submitErrorMessage(result.error);
+        const message = submitErrorMessage(error);
 
         if (acknowledged) {
           setHeldError(message);
@@ -266,7 +270,7 @@ export function HelpRequestHost({ isAuthenticated }: HelpRequestHostProps) {
       }
 
       const next: FiledTicket = {
-        uuid: useFragment(TicketFieldsFragmentDoc, answer.ticket).uuid,
+        uuid: answer.ticket.uuid,
         point: form.landmark,
         needCount: answer.tasks.length,
       };

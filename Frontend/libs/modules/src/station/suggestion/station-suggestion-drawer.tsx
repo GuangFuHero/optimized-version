@@ -10,12 +10,13 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
+import { useQuery } from '@tanstack/react-query';
 import { useId, useState } from 'react';
-import { useQuery } from 'urql';
 
 import { GetStationForSuggestionDocument } from '@rescue-frontend/data-access';
 import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
 
+import { siteGraphqlQuery } from '../../session/site-clients';
 import { SiteActionDrawer } from '../../shell/site/site-action-drawer';
 import {
   STATION_SUGGESTION_FIELDS,
@@ -115,13 +116,18 @@ function StationSuggestionFormDrawer({
   onSubmit,
 }: Omit<StationSuggestionDrawerProps, 'isAuthenticated' | 'onSignIn'>) {
   // Read again at each opening: 目前 is the station as it is now, not as the map last read it.
-  const [{ data, fetching, error }] = useQuery({
-    query: GetStationForSuggestionDocument,
-    variables: { uuid: stationUuid },
-    requestPolicy: 'network-only',
-    pause: !open,
+  const {
+    data,
+    isFetching: fetching,
+    isFetchedAfterMount,
+    isSuccess,
+    error,
+  } = useQuery({
+    ...siteGraphqlQuery(GetStationForSuggestionDocument, { uuid: stationUuid }),
+    enabled: open,
   });
-  const station = data?.station ?? null;
+  // Only this opening's answer: never the one kept from the last, nor kept over a failed read.
+  const station = (isFetchedAfterMount && isSuccess && data.station) || null;
   // Untouched, the form sits on the first field at its value now.
   const [edited, setEdited] = useState<StationSuggestionForm | null>(null);
   const form = station

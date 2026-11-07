@@ -1,6 +1,11 @@
 'use client';
 
+import { responseData } from '@rescue-frontend/data-access';
+import type { components } from '@rescue-frontend/data-access/openapi';
+import { skipToken, useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+
+import { siteRestClient } from '../../session/site-clients';
 
 import {
   BASE_LAYER_CONFIG,
@@ -25,11 +30,7 @@ import type {
 } from '../types';
 import { filterRescueMapMarkers } from '../utils/filter-markers';
 
-interface TileAttributionResponse {
-  attribution_text?: string;
-  requires_logo?: boolean;
-  logo_url?: string | null;
-}
+type TileAttributionResponse = components['schemas']['AttributionResponse'];
 
 function escapeHtml(value: string) {
   return value
@@ -211,9 +212,6 @@ export function useRescueMapController({
     useState<RescueMapRouteState>(EMPTY_ROUTE_STATE);
   const [layerPreferences, setLayerPreferences] =
     useState<RescueMapLayerPreferences>(FALLBACK_LAYER_PREFERENCES);
-  const [resolvedAttributions, setResolvedAttributions] = useState<
-    Partial<Record<RescueMapBaseLayer, string>>
-  >({});
   const state = isControlled
     ? (routeState ?? EMPTY_ROUTE_STATE)
     : internalState;
@@ -224,52 +222,24 @@ export function useRescueMapController({
     setLayerPreferences(readLayerPreferences());
   }, []);
 
-  useEffect(() => {
-    const layerConfig = BASE_LAYER_CONFIG[baseLayer];
-
-    if (!layerConfig?.attributionApiPath) {
-      return;
-    }
-
-    let cancelled = false;
-
-    void fetch(layerConfig.attributionApiPath, {
-      cache: 'force-cache',
-    })
-      .then(async (response) => {
-        if (!response.ok) {
-          return null;
-        }
-
-        return (await response.json()) as TileAttributionResponse;
-      })
-      .then((payload) => {
-        if (cancelled || !payload) {
-          return;
-        }
-
-        const nextAttribution = buildAttributionMarkup(
-          payload,
-          layerConfig.attribution,
-        );
-
-        setResolvedAttributions((current) =>
-          current[baseLayer] === nextAttribution
-            ? current
-            : {
-                ...current,
-                [baseLayer]: nextAttribution,
-              },
-        );
-      })
-      .catch(() => {
-        // Keep fallback attribution when attribution API is unavailable.
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [baseLayer]);
+  // Without an answer — the API unavailable — the layer keeps the attribution it is configured with.
+  const attributionSource = BASE_LAYER_CONFIG[baseLayer]?.attributionSource;
+  const { data: attributionPayload } = useQuery({
+    queryKey: ['map', 'attribution', attributionSource],
+    queryFn: attributionSource
+      ? ({ signal }) =>
+          siteRestClient
+            .GET('/api/v1/map/attribution/{type_}/{source}', {
+              params: { path: attributionSource },
+              cache: 'force-cache',
+              signal,
+            })
+            .then(responseData)
+      : skipToken,
+    staleTime: Infinity,
+    retry: false,
+    meta: { quietErrors: true },
+  });
 
   const updateLayerPreferences = useCallback(
     (
@@ -446,7 +416,9 @@ export function useRescueMapController({
 
   const tileLayer = useMemo(() => {
     const baseConfig = BASE_LAYER_CONFIG[baseLayer];
-    const resolvedAttribution = resolvedAttributions[baseLayer];
+    const resolvedAttribution =
+      attributionPayload &&
+      buildAttributionMarkup(attributionPayload, baseConfig.attribution);
 
     if (!resolvedAttribution || resolvedAttribution === baseConfig.attribution) {
       return baseConfig;
@@ -456,7 +428,7 @@ export function useRescueMapController({
       ...baseConfig,
       attribution: resolvedAttribution,
     };
-  }, [baseLayer, resolvedAttributions]);
+  }, [attributionPayload, baseLayer]);
   // 只取用過濾真正需要的欄位；視角（position／bbox）提交不應重建 markers 陣列，
   // 否則地圖每次移動都會觸發下游 marker 圖層重新同步。
   const filterBbox = filterMarkersByBbox ? state.bbox : undefined;

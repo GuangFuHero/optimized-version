@@ -33,7 +33,7 @@ const WORDS: Record<'create' | 'update' | 'delete', RefusalWords> = {
   },
 };
 
-/** `error` is what the write threw: urql's `CombinedError`, or anything else as a plain failure. */
+/** `error` is what the write threw: a `GraphqlError`, or anything else as a plain failure. */
 export function spaceErrorMessage(
   write: 'create' | 'update' | 'delete',
   error: unknown,

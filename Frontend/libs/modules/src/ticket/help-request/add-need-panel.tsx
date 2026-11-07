@@ -1,12 +1,16 @@
 'use client';
 
 import { Alert, Button, ButtonBase, Stack, Typography } from '@mui/material';
+import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
-import { useMutation } from 'urql';
 
-import { CreateTicketTaskDocument } from '@rescue-frontend/data-access';
+import {
+  CreateTicketTaskDocument,
+  type GraphqlError,
+} from '@rescue-frontend/data-access';
 import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
 
+import { siteGraphqlMutation } from '../../session/site-clients';
 import { addNeedErrorMessage } from '../needs/claim-error';
 import { useNeedClaim } from '../needs/need-claim-provider';
 import { announceTicketChanged } from '../ticket-changes';
@@ -66,7 +70,9 @@ export function AddNeedPanel({ ticketUuid, needCount }: AddNeedPanelProps) {
   const [heldOpen, setHeldOpen] = useState(false);
   const [held, setHeld] = useState<HeldNeed | null>(null);
   const [heldError, setHeldError] = useState<string | null>(null);
-  const [, createTicketTask] = useMutation(CreateTicketTaskDocument);
+  const { mutateAsync: createTicketTask } = useMutation(
+    siteGraphqlMutation(CreateTicketTaskDocument),
+  );
 
   const close = () => {
     setOpen(false);
@@ -91,38 +97,37 @@ export function AddNeedPanel({ ticketUuid, needCount }: AddNeedPanelProps) {
     setHeldError(null);
 
     try {
-      const result = await createTicketTask({ input, acknowledgedDuplicateOf });
-      const answer = result.data?.createTicketTask;
-      const outcome = answer
-        ? readAddNeedOutcome(answer, input.taskName)
-        : null;
+      const outcome = readAddNeedOutcome(
+        (await createTicketTask({ input, acknowledgedDuplicateOf }))
+          .createTicketTask,
+        input.taskName,
+      );
 
       // Held: nothing was added, so nothing on the ticket changed.
-      if (outcome?.kind === 'held') {
+      if (outcome.kind === 'held') {
         setHeld(outcome);
         setHeldOpen(true);
         return;
       }
 
-      // Answered either way: added, or the ticket changed under them — deleted, say — which every
-      // view of it should now show.
-      if (!result.error?.networkError) {
+      announceTicketChanged(ticketUuid);
+      close();
+    } catch (failure) {
+      const refusal = failure as GraphqlError;
+
+      // Refused, the ticket may have changed under them — deleted, say — which every view of it
+      // should now show; a dropped connection says nothing about it.
+      if (!refusal.networkError) {
         announceTicketChanged(ticketUuid);
       }
 
-      if (result.error) {
-        const message = addNeedErrorMessage(result.error);
+      const message = addNeedErrorMessage(refusal);
 
-        if (acknowledgedDuplicateOf) {
-          setHeldError(message);
-        } else {
-          setError(message);
-        }
-
-        return;
+      if (acknowledgedDuplicateOf) {
+        setHeldError(message);
+      } else {
+        setError(message);
       }
-
-      close();
     } finally {
       setSubmitting(false);
     }

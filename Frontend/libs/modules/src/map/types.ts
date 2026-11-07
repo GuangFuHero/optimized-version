@@ -1,3 +1,7 @@
+import type {
+  InfiniteData,
+  UseInfiniteQueryOptions,
+} from '@tanstack/react-query';
 import type { LucideIcon } from 'lucide-react';
 import type {
   StationType,
@@ -76,7 +80,8 @@ export interface RescueMapBaseLayerConfig {
   preview: string;
   attribution: string;
   url: string;
-  attributionApiPath?: string;
+  /** Where the backend says whose tiles they are (`/map/attribution/{type_}/{source}`). */
+  attributionSource?: { type_: string; source: string };
   tileSourceType: RescueMapTileSourceType;
   tileSource: RescueMapTileSource;
   icon: LucideIcon;
@@ -321,11 +326,16 @@ export interface LocationCellMembersPage {
   hasMore: boolean;
 }
 
-/** Reads a counted cell's tickets a page at a time, `skip` of them in. */
+/** The query that reads a counted cell's tickets a page at a time, each `skip` tickets in. */
 export type LocationCellMembersLoader = (
   cell: string,
-  skip: number,
-) => Promise<LocationCellMembersPage>;
+) => UseInfiniteQueryOptions<
+  LocationCellMembersPage,
+  Error,
+  InfiniteData<LocationCellMembersPage, number>,
+  string[],
+  number
+>;
 
 /**
  * A ticket a link names that is not there: deleted, or never was (ADR-444). It holds the link's uuid

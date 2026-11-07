@@ -11,11 +11,12 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { useClient, useMutation } from 'urql';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
-import { ClaimNeedDocument, GetTicketDocument } from '@rescue-frontend/data-access';
+import { ClaimNeedDocument, GetTicketDocument, type GraphqlError } from '@rescue-frontend/data-access';
 
 import { useAuthSession } from '../../session/auth-session';
+import { siteGraphqlMutation, siteGraphqlQuery } from '../../session/site-clients';
 import { announceTicketReread, onTicketChanged } from '../ticket-changes';
 import { claimErrorMessage } from './claim-error';
 import {
@@ -30,11 +31,7 @@ import { resolveNeedClaim } from './need-claim';
 import { NeedClaimDialog, type NeedClaimTarget } from './need-claim-dialog';
 import { NeedClaimToast } from './need-claim-toast';
 import { StopRecruitingDialog, useStopRecruiting } from './stop-recruiting-dialog';
-import {
-  readReloadedTicket,
-  TICKET_NEEDS_QUERY_CONTEXT,
-  type ReloadedTicket,
-} from './use-ticket-needs';
+import { readReloadedTicket, type ReloadedTicket } from './use-ticket-needs';
 
 interface NeedClaimContextValue {
   /** Ask the signed-in viewer to confirm claiming one of the ticket's needs. */
@@ -83,8 +80,8 @@ export function NeedClaimProvider({ children, onTicketReloaded }: NeedClaimProvi
   const { user, status: sessionStatus } = useAuthSession();
   // The account's uuid.
   const viewerId = user?.uuid ?? null;
-  const client = useClient();
-  const [, executeClaim] = useMutation(ClaimNeedDocument);
+  const queryClient = useQueryClient();
+  const { mutateAsync: executeClaim } = useMutation(siteGraphqlMutation(ClaimNeedDocument));
   // Open is kept apart from what is being confirmed, so the dialog keeps its content while it
   // fades out instead of flashing 載入中 on the way.
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -111,22 +108,20 @@ export function NeedClaimProvider({ children, onTicketReloaded }: NeedClaimProvi
 
   /**
    * Ask the server for the ticket again. The mutation returns the assignment, not the need, so
-   * nothing in its result tells the cache that `assignedCount` and `myAssignment` changed — nor
-   * the ticket's status, which follows its needs. The drawer and this dialog read the answer from
-   * the cache; the list and the map keep their own copies, so they are told — that it is gone too,
-   * when it is — and so is a building it was filed in, whose copy the page does not hold. A request
-   * that failed tells them nothing.
+   * nothing in its result says that `assignedCount` and `myAssignment` changed — nor the ticket's
+   * status, which follows its needs. The drawer and this dialog read the answer from the cache;
+   * the list and the map keep their own copies, so they are told — that it is gone too, when it
+   * is — and so is a building it was filed in, whose copy the page does not hold. A request that
+   * failed tells them nothing.
    */
   const reloadTicket = useCallback(
     async (ticketUuid: string): Promise<ReloadedTicket | null> => {
-      const result = await client
-        .query(
-          GetTicketDocument,
-          { uuid: ticketUuid },
-          { ...TICKET_NEEDS_QUERY_CONTEXT, requestPolicy: 'network-only' },
-        )
-        .toPromise();
-      const reload = readReloadedTicket(result);
+      const reload = await queryClient
+        .fetchQuery(siteGraphqlQuery(GetTicketDocument, { uuid: ticketUuid }))
+        .then(
+          (data) => readReloadedTicket({ data }),
+          (error: unknown) => readReloadedTicket({ error }),
+        );
 
       if (reload.kind === 'unanswered') {
         return null;
@@ -138,7 +133,7 @@ export function NeedClaimProvider({ children, onTicketReloaded }: NeedClaimProvi
 
       return reloaded;
     },
-    [client, onTicketReloaded],
+    [queryClient, onTicketReloaded],
   );
 
   // Changed from outside this page too — a place given back in 我的任務, which lives in the
@@ -163,13 +158,16 @@ export function NeedClaimProvider({ children, onTicketReloaded }: NeedClaimProvi
     setError(null);
 
     try {
-      const result = await executeClaim({ taskUuid: needUuid });
+      const refusal = await executeClaim({ taskUuid: needUuid }).then(
+        () => null,
+        (failure: GraphqlError) => failure,
+      );
       // Either way: a refusal usually means the need changed under the volunteer — filled up,
       // closed — and the dialog and every button should now say so.
       const reloaded = await reloadTicket(ticketUuid);
 
-      if (result.error) {
-        setError(claimErrorMessage(result.error));
+      if (refusal) {
+        setError(claimErrorMessage(refusal));
         return;
       }
 

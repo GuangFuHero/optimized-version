@@ -1,17 +1,6 @@
-import {
-  PageInfoFieldsFragmentDoc,
-  useFragment,
-  type GetMapAreasQuery,
-} from '@rescue-frontend/data-access';
-import type { CombinedError } from 'urql';
+import type { GetMapAreasQuery } from '@rescue-frontend/data-access';
 
 type MapArea = GetMapAreasQuery['areas']['items'][number];
-
-/** One page of `GetMapAreas` as urql gives it back. */
-export interface AreaPageResult {
-  data?: GetMapAreasQuery;
-  error?: CombinedError;
-}
 
 /** The areas a page asks for; the backend sets no upper limit of its own. */
 export const AREA_PAGE_SIZE = 100;
@@ -26,26 +15,29 @@ export const AREA_PAGE_LIMIT = 10;
  * comes back with the areas the other pages gave.
  */
 export async function fetchAllAreaPages(
-  fetchPage: (skip: number, limit: number) => Promise<AreaPageResult>,
+  fetchPage: (skip: number, limit: number) => Promise<GetMapAreasQuery>,
   {
     pageSize = AREA_PAGE_SIZE,
     maxPages = AREA_PAGE_LIMIT,
   }: { pageSize?: number; maxPages?: number } = {},
-): Promise<{ items: MapArea[]; error: CombinedError | null }> {
-  const first = await fetchPage(0, pageSize);
+): Promise<{ items: MapArea[]; error: unknown }> {
+  const read = (skip: number) =>
+    fetchPage(skip, pageSize).then(
+      (data) => ({ data, error: null }),
+      (error: unknown) => ({ data: undefined, error }),
+    );
+  const first = await read(0);
   const items = [...(first.data?.areas.items ?? [])];
-  const pageInfo = first.data
-    ? useFragment(PageInfoFieldsFragmentDoc, first.data.areas.pageInfo)
-    : null;
+  const pageInfo = first.data?.areas.pageInfo;
 
   if (first.error || !pageInfo?.hasNextPage) {
-    return { items, error: first.error ?? null };
+    return { items, error: first.error };
   }
 
   const pages = Math.min(Math.ceil(pageInfo.totalCount / pageSize), maxPages);
   const rest = await Promise.all(
     Array.from({ length: pages - 1 }, (_, index) =>
-      fetchPage((index + 1) * pageSize, pageSize),
+      read((index + 1) * pageSize),
     ),
   );
 

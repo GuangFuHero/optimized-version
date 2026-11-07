@@ -10,9 +10,8 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect, useId, useRef, useState } from 'react';
-import { useMutation } from 'urql';
 
 import {
   SubmitRoleRequestDocument,
@@ -22,6 +21,7 @@ import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
 import { getCurrentUserAsync } from '../auth/api/client';
 import { useAuthSession } from '../session/auth-session';
+import { siteGraphqlMutation } from '../session/site-clients';
 import { SiteActionDrawer } from '../shell/site/site-action-drawer';
 import { readApplicantAccount } from './applicant';
 import { ApplicantSection } from './applicant-section';
@@ -102,8 +102,8 @@ export function RoleRequestDrawer({
   const [nameEdited, setNameEdited] = useState(false);
   const [touched, setTouched] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [{ fetching: submitting }, submitRoleRequest] = useMutation(
-    SubmitRoleRequestDocument,
+  const submission = useMutation(
+    siteGraphqlMutation(SubmitRoleRequestDocument),
   );
   const withdraw = useWithdrawRoleRequest(onSubmitted);
   const resetWithdraw = withdraw.reset;
@@ -265,7 +265,7 @@ export function RoleRequestDrawer({
                 </Button>
                 <Button
                   variant="contained"
-                  onClick={() => void withdraw.confirm(pending.uuid)}
+                  onClick={() => withdraw.confirm(pending.uuid)}
                   disabled={withdraw.submitting}
                   sx={{ flex: 1 }}
                 >
@@ -336,7 +336,7 @@ export function RoleRequestDrawer({
         : { ...current, role, team: null, newTeamName: '' },
     );
 
-  const submit = async () => {
+  const submit = () => {
     setTouched(true);
 
     if (problems.length || !values.role) {
@@ -344,20 +344,20 @@ export function RoleRequestDrawer({
     }
 
     setSubmitError(null);
-    const result = await submitRoleRequest({
-      input: toSubmitRoleRequestInput({ ...values, role: values.role }),
-    });
+    submission.mutate(
+      { input: toSubmitRoleRequestInput({ ...values, role: values.role }) },
+      {
+        onError: (error) => {
+          setSubmitError(roleRequestErrorMessage(error));
 
-    if (result.error) {
-      setSubmitError(roleRequestErrorMessage(result.error));
-
-      if (isTeamListRefusal(result.error)) {
-        teamList.reload();
-      }
-    }
-
-    // Either way the list may have moved on (a pending one from another tab, say): read it again.
-    onSubmitted();
+          if (isTeamListRefusal(error)) {
+            void teamList.reload();
+          }
+        },
+        // Either way the list may have moved on (a pending one from another tab, say): read it again.
+        onSettled: () => onSubmitted(),
+      },
+    );
   };
 
   return (
@@ -373,8 +373,8 @@ export function RoleRequestDrawer({
           </Button>
           <Button
             variant="contained"
-            onClick={() => void submit()}
-            disabled={view.paused || submitting}
+            onClick={submit}
+            disabled={view.paused || submission.isPending}
             sx={{ flex: 2 }}
           >
             送出申請

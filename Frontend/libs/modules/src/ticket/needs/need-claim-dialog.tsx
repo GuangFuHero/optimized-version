@@ -2,13 +2,7 @@
 
 import { Box, Stack, Typography } from '@mui/material';
 import type { ReactNode } from 'react';
-import { useQuery } from 'urql';
 
-import {
-  GetTicketDocument,
-  TicketFieldsFragmentDoc,
-  useFragment,
-} from '@rescue-frontend/data-access';
 import {
   designTokens,
   Dialog,
@@ -19,7 +13,7 @@ import {
 import { formatTicketAddress } from '../address';
 import { formatNeedHeadcount, resolveNeedClaim } from './need-claim';
 import { readNeedDialog } from './need-dialog';
-import { readTicketNeeds, TICKET_NEEDS_QUERY_CONTEXT } from './use-ticket-needs';
+import { readTicketNeeds, useCachedTicket } from './use-ticket-needs';
 
 const { color, radius } = designTokens;
 
@@ -75,30 +69,23 @@ export function NeedClaimDialog({
   onCancel,
   onConfirm,
 }: NeedClaimDialogProps) {
-  const [{ data, fetching }] = useQuery({
-    query: GetTicketDocument,
-    variables: { uuid: target?.ticketUuid ?? '' },
-    pause: !target,
-    context: TICKET_NEEDS_QUERY_CONTEXT,
-  });
-  const ticket = data?.ticket ?? null;
-  const fields = ticket ? useFragment(TicketFieldsFragmentDoc, ticket) : null;
+  const { ticket, fetching } = useCachedTicket(target?.ticketUuid);
   const need = readTicketNeeds(ticket).find((item) => item.uuid === target?.needUuid) ?? null;
   // Only a signed-in volunteer can open this: a guest's button asks them to sign in instead.
   const claim = need
-    ? resolveNeedClaim(need, { ticketStatus: fields?.status, isAuthenticated: true })
+    ? resolveNeedClaim(need, { ticketStatus: ticket?.status, isAuthenticated: true })
     : null;
   // After a refused claim the reload may show the need full or closed: then there is nothing to
   // confirm, and the way out is to close.
   const settled = Boolean(claim) && claim?.action !== 'claim';
   // Or gone, which the box says, and then nothing beneath it says again.
   const dialog = readNeedDialog({
-    found: Boolean(need && fields && claim),
+    found: Boolean(need && ticket && claim),
     fetching,
     refusal: error,
   });
   const address = formatTicketAddress(ticket?.secondaryLocation);
-  const contact = [fields?.contactName?.trim(), fields?.contactPhone?.trim()]
+  const contact = [ticket?.contactName?.trim(), ticket?.contactPhone?.trim()]
     .filter(Boolean)
     .join(' · ');
 
@@ -123,7 +110,7 @@ export function NeedClaimDialog({
           border: `1px solid ${color.border.default}`,
         }}
       >
-        {need && fields && claim ? (
+        {need && ticket && claim ? (
           <>
             <Typography
               sx={{
@@ -136,7 +123,7 @@ export function NeedClaimDialog({
               {need.taskName}
             </Typography>
             <Stack spacing={0.5} sx={{ mt: 0.75, color: color.fg.neutral.subtle }}>
-              <DetailLine icon={<Icons.clipboardList />}>{fields.title}</DetailLine>
+              <DetailLine icon={<Icons.clipboardList />}>{ticket.title}</DetailLine>
               {/* An address, or plainly none: never the description passed off as one — the
                   prototype's own 2026-09-10 fix (site-detail.jsx:368-373). */}
               <DetailLine icon={<Icons.pin />}>{address ?? '未填地址'}</DetailLine>

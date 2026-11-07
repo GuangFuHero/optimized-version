@@ -1,21 +1,19 @@
 'use client';
 
 import { Tab, Tabs } from '@mui/material';
+import { useQuery } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
-import { useQuery } from 'urql';
 
 import {
   MyTaskAssignmentsDocument,
   MyTicketsDocument,
 } from '@rescue-frontend/data-access';
 
+import { siteGraphqlQuery } from '../../session/site-clients';
 import { SiteActionDrawer } from '../../shell/site/site-action-drawer';
 import { MyRequestsList } from '../help-request/my-requests-list';
 import { MyClaimsList } from './my-claims-list';
-
-// Each list's own loading line inside the drawer rather than suspending the page behind it.
-const MY_TASKS_QUERY_CONTEXT = { suspense: false } as const;
 
 interface MyTasksTab {
   value: string;
@@ -40,21 +38,13 @@ function tabLabel(label: string, count: number | undefined): string {
  * a request opens on an empty 我建立的, and 我承接的（2） says where to look.
  */
 function MyTasksContent({ onClose }: Pick<MyTasksDrawerProps, 'onClose'>) {
-  const [requests, reloadRequests] = useQuery({
-    query: MyTicketsDocument,
-    requestPolicy: 'network-only',
-    context: MY_TASKS_QUERY_CONTEXT,
-  });
-  const [claims, reloadClaims] = useQuery({
-    query: MyTaskAssignmentsDocument,
-    requestPolicy: 'network-only',
-    context: MY_TASKS_QUERY_CONTEXT,
-  });
+  const requests = useQuery(siteGraphqlQuery(MyTicketsDocument, {}));
+  const claims = useQuery(siteGraphqlQuery(MyTaskAssignmentsDocument, {}));
 
   // Both, once a place given back is answered: it may be on one of the viewer's own requests.
   const reload = () => {
-    reloadRequests({ requestPolicy: 'network-only' });
-    reloadClaims({ requestPolicy: 'network-only' });
+    void requests.refetch();
+    void claims.refetch();
   };
 
   const tabs: MyTasksTab[] = [

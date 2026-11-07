@@ -107,7 +107,6 @@ export {
   useAdminMapLiveMarkers,
   viewOfArea,
   type AdminMapAreas,
-  type AdminMapLiveMarkers,
   type AreaContents,
   type BoundaryChange,
 } from './map/admin';
@@ -124,9 +123,8 @@ export {
   SiteMapRouteProvider,
   useCellMembersLoader,
   useCreatedTicketMarker,
-  useLinkedTicketLookup,
+  useLinkedTicket,
   useSiteMapLiveData,
-  useSiteMapLiveDataSnapshot,
   usePaginatedRescueMapMarkers,
   useSiteMapBuildings,
   useSiteMapRouteState,

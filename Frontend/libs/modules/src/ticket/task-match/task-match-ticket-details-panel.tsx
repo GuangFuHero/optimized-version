@@ -3,19 +3,16 @@
 import { useMemo } from 'react';
 
 import { Alert, Box, Stack, Typography } from '@mui/material';
-import { useQuery } from 'urql';
+import { useQuery } from '@tanstack/react-query';
 
-import {
-  GetTicketDocument,
-  TicketFieldsFragmentDoc,
-  useFragment,
-} from '@rescue-frontend/data-access';
+import { GetTicketDocument } from '@rescue-frontend/data-access';
 
 import { BuildingTicketNavigation } from '../../building/building-navigation';
 import { responsibleTeamsText } from '../../map/areas';
 import { LocationPrivacyNotice } from '../../map/components/location-privacy-notice';
 import { describeLocationCellSpan } from '../../map/location-cells';
 import type { RescueMapMarkerItem } from '../../map/types';
+import { siteGraphqlQuery } from '../../session/site-clients';
 import { SiteDetailLabel, SiteDetailRow } from '../../shell/site/detail-info';
 import { formatTicketStreet, formatTicketUnit } from '../address';
 import { requesterAuditNotice } from '../audit-issue';
@@ -37,9 +34,6 @@ const { color, iconSize, spacing } = designTokens;
 
 /** The rows' icons: the prototype's 16 isn't on the scale, so md, as 分享 is. */
 const ROW_ICON = { fontSize: iconSize.md } as const;
-
-// 詳情面板自行顯示載入狀態，停用 suspense 避免整頁因抓取任務資料而閃爍重渲染。
-const DETAIL_QUERY_CONTEXT = { suspense: false } as const;
 
 interface TicketPhotoItem {
   uuid: string;
@@ -73,27 +67,17 @@ export function TaskMatchTicketDetailsPanel({
   // free text, notes and photos came back empty. Rows for them are left out rather than shown as
   // 「未提供」— that would claim the reporter wrote nothing, which is not what happened.
   const coarse = Boolean(marker.locationCell);
-  const [{ data: ticketData, fetching: isTicketFetching, error: ticketError }] =
-    useQuery({
-      query: GetTicketDocument,
-      variables: { uuid: marker.id },
-      pause: !marker.id,
-      // Shown from the cache, then re-read (WG-028): a ticket opened again in the same visit
-      // otherwise showed claims and releases made since by other people as they were.
-      requestPolicy: 'cache-and-network',
-      context: DETAIL_QUERY_CONTEXT,
-    });
-
-  const ticket = useMemo(() => {
-    if (!ticketData?.ticket) {
-      return null;
-    }
-
-    return {
-      ...ticketData.ticket,
-      ...useFragment(TicketFieldsFragmentDoc, ticketData.ticket),
-    };
-  }, [ticketData?.ticket]);
+  // Shown from the cache, then re-read: a ticket opened again in the same visit otherwise showed
+  // claims and releases made since by other people as they were.
+  const {
+    data: ticketData,
+    isFetching: isTicketFetching,
+    error: ticketError,
+  } = useQuery({
+    ...siteGraphqlQuery(GetTicketDocument, { uuid: marker.id }),
+    enabled: Boolean(marker.id),
+  });
+  const ticket = ticketData?.ticket ?? null;
 
   const photos = useMemo<TicketPhotoItem[]>(
     () =>
@@ -106,10 +90,7 @@ export function TaskMatchTicketDetailsPanel({
 
   // The ticket's tasks, as needs a volunteer can claim. Who claimed them is not shown: without
   // ticket.view_history `assignments` comes back empty, and `assignedCount` is what everyone gets.
-  const needs = useMemo(
-    () => readTicketNeeds(ticketData?.ticket ?? null),
-    [ticketData?.ticket],
-  );
+  const needs = readTicketNeeds(ticket);
   const ticketStatus = ticket?.status ?? marker.ticketMeta?.status;
   const ticketCreatedBy = ticket?.createdBy ?? marker.ticketMeta?.createdBy;
   // Its requester can add one more need, even to a ticket left with none.

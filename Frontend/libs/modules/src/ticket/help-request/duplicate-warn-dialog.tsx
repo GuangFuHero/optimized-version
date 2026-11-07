@@ -3,14 +3,7 @@
 import { Box, Stack, Typography } from '@mui/material';
 import Link from 'next/link';
 import { useContext, type MouseEvent } from 'react';
-import { useQuery } from 'urql';
 
-import {
-  GetTicketDocument,
-  TicketFieldsFragmentDoc,
-  useFragment,
-  type GetTicketQuery,
-} from '@rescue-frontend/data-access';
 import {
   Badge,
   Button,
@@ -30,7 +23,7 @@ import { formatTaiwanTime } from '../../time';
 import type { LatLng } from '../address-lookup';
 import { myClaimTicketHref } from '../my-claims/my-claims';
 import { isTicketRequester } from '../needs/need-actions';
-import { TICKET_NEEDS_QUERY_CONTEXT } from '../needs/use-ticket-needs';
+import { useCachedTicket } from '../needs/use-ticket-needs';
 import {
   distanceToTicketM,
   openSuspectTicket,
@@ -54,10 +47,6 @@ const ACTS = {
   },
 } as const;
 
-function readTicketFields(ticket: GetTicketQuery['ticket']) {
-  return ticket ? useFragment(TicketFieldsFragmentDoc, ticket) : null;
-}
-
 /**
  * One ticket it looks like, read for what tells the requester whether it is theirs: its title,
  * when it was filed, and the reason it was shown — only how far it is and which of theirs it is
@@ -75,12 +64,7 @@ function SuspectTicketCard({
   viewerId: string | null;
   onOpen: (event: MouseEvent<HTMLElement>, point: LatLng | null) => void;
 }) {
-  const [{ data, fetching }] = useQuery({
-    query: GetTicketDocument,
-    variables: { uuid: suspect.ticketUuid },
-    context: TICKET_NEEDS_QUERY_CONTEXT,
-  });
-  const fields = readTicketFields(data?.ticket ?? null);
+  const { ticket: fields, fetching } = useCachedTicket(suspect.ticketUuid);
   const meters = distanceToTicketM(from, fields);
   // No ticket number: the site shows none to the public.
   const filedAt = formatTaiwanTime(fields?.createdAt);

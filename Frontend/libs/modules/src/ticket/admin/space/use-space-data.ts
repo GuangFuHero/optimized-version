@@ -220,7 +220,6 @@ export function useSpacePinLookup(pin: LatLng | null): AddressLookup | null {
     () =>
       point
         ? readAddressLookup({
-            current: true,
             fetching: query.isFetching,
             error: query.error,
             answer: query.data?.reverseGeocode,
@@ -246,7 +245,6 @@ export function useSpaceTypedLookup(
     () =>
       check
         ? readAddressLookup({
-            current: true,
             fetching: query.isFetching,
             error: query.error,
             answer: query.data?.normalizeAddress,

@@ -1,23 +1,19 @@
 'use client';
 
+import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo } from 'react';
-import { useQuery } from 'urql';
 
 import {
   GetBuildingMapWithTicketsDocument,
-  TicketNeedFieldsFragmentDoc,
-  useFragment,
   type GetBuildingMapWithTicketsQuery,
 } from '@rescue-frontend/data-access';
 
 import { mapTicketToMarker } from '../map/site/markers';
+import { siteGraphqlQuery } from '../session/site-clients';
 import { formatTicketStreet } from '../ticket/address';
 import { onTicketReread } from '../ticket/ticket-changes';
 import type { BuildingFloor } from './floors';
 import type { BuildingTicket } from './summary';
-
-// The drawer and a ticket's detail show their own loading line instead of suspending the page.
-const BUILDING_QUERY_CONTEXT = { suspense: false } as const;
 
 /** The most tickets a building's drawer lists: the newest, in one request, with no pages. */
 export const BUILDING_TICKET_LIMIT = 200;
@@ -45,26 +41,24 @@ function readBuildingTicket(ref: BuildingTicketRef): BuildingTicket | null {
     marker,
     floor: ref.secondaryLocation?.floor ?? null,
     room: ref.secondaryLocation?.room ?? null,
-    needs: ref.tasks.map((task) =>
-      useFragment(TicketNeedFieldsFragmentDoc, task),
-    ),
+    needs: ref.tasks,
   };
 }
 
 /**
  * A building map and every ticket filed inside it (`GetBuildingMapWithTickets`), for its drawer and for
- * 上一張／下一張 in a ticket's detail — one request between them, as urql shares it. Read again when a
+ * 上一張／下一張 in a ticket's detail — one request between them. Read again when a
  * ticket of it is (`onTicketReread`): after a claim, say, its shortfall and its place in the order move.
  * A guest gets the building and no tickets; `building` is null for one deleted since. `mayHoldMore`
  * when it came back with as many as were asked for: older ones may be left out.
  */
 export function useBuilding(uuid: string | null | undefined) {
-  const [{ data, fetching, error }, reexecute] = useQuery({
-    query: GetBuildingMapWithTicketsDocument,
-    variables: { uuid: uuid ?? '', limit: BUILDING_TICKET_LIMIT },
-    pause: !uuid,
-    requestPolicy: 'cache-and-network',
-    context: BUILDING_QUERY_CONTEXT,
+  const { data, isFetching, error, refetch } = useQuery({
+    ...siteGraphqlQuery(GetBuildingMapWithTicketsDocument, {
+      uuid: uuid ?? '',
+      limit: BUILDING_TICKET_LIMIT,
+    }),
+    enabled: Boolean(uuid),
   });
 
   const building = useMemo<BuildingMap | null>(() => {
@@ -92,10 +86,10 @@ export function useBuilding(uuid: string | null | undefined) {
     () =>
       onTicketReread((ticketUuid) => {
         if (tickets.some((ticket) => ticket.marker.id === ticketUuid)) {
-          reexecute({ requestPolicy: 'network-only' });
+          void refetch();
         }
       }),
-    [reexecute, tickets],
+    [refetch, tickets],
   );
 
   const mayHoldMore =
@@ -105,7 +99,7 @@ export function useBuilding(uuid: string | null | undefined) {
     building,
     tickets,
     mayHoldMore,
-    fetching,
+    fetching: isFetching,
     error,
     hasData: Boolean(data),
   };

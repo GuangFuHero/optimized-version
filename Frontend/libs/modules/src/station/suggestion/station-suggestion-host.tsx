@@ -1,12 +1,16 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useMutation } from '@tanstack/react-query';
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
-import { useMutation } from 'urql';
 
-import { CreateStationSuggestionDocument } from '@rescue-frontend/data-access';
+import {
+  CreateStationSuggestionDocument,
+  type GraphqlError,
+} from '@rescue-frontend/data-access';
 
 import { useAuthSession } from '../../session/auth-session';
+import { siteGraphqlMutation } from '../../session/site-clients';
 import { SiteToast } from '../../shell/site/site-toast';
 import { stationSuggestionErrorMessage } from './error';
 import {
@@ -79,8 +83,8 @@ export function StationSuggestionHost({
   isAuthenticated,
 }: StationSuggestionHostProps) {
   const router = useRouter();
-  const [, createStationSuggestion] = useMutation(
-    CreateStationSuggestionDocument,
+  const { mutateAsync: createStationSuggestion } = useMutation(
+    siteGraphqlMutation(CreateStationSuggestionDocument),
   );
   const [opening, setOpening] = useState<Opening | null>(null);
   const [open, setOpen] = useState(false);
@@ -125,14 +129,17 @@ export function StationSuggestionHost({
     setSubmitError(null);
 
     try {
-      const result = await createStationSuggestion({
+      const refusal = await createStationSuggestion({
         input: toCreateStationSuggestionInput(opening.stationUuid, form),
-      });
+      }).then(
+        () => null,
+        (failure: GraphqlError) => failure,
+      );
 
       // What was typed stays for another try.
-      if (!result.data?.createStationSuggestion) {
+      if (refusal) {
         if (stillOpen()) {
-          setSubmitError(stationSuggestionErrorMessage(result.error ?? {}));
+          setSubmitError(stationSuggestionErrorMessage(refusal));
         }
         return;
       }
