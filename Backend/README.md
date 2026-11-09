@@ -53,14 +53,15 @@ docker compose exec -T db psql -U postgres -d postgres -v ON_ERROR_STOP=1 < scri
 
 ---
 
-## 兩種執行方式
+## 執行方式
 
 | 方式 | 適合情境 | 指令 |
 | :--- | :--- | :--- |
-| **A. 全部跑在 Docker（預設推薦）** | 日常前後端開發。`docker-compose.yml` 已掛載 `.:/app` 並開啟 `uvicorn --reload`，本機改 `.py` 檔容器內會自動熱重載 | `docker compose up -d` |
-| **B. 只把 DB/Redis 放 Docker，後端跑在本機 `.venv`** | 需要在本機 IDE 掛載 Python debugger 逐步除錯時 | 見下方 |
+| **A. 後端跑在 Docker（預設推薦）** | 日常開發。啟動 `db`、`redis`、`backend`（已掛載 `.:/app` 並開啟 `uvicorn --reload`，本機改 `.py` 檔會自動熱重載）。若要連前台 `:3000` 與後台 `:3001` 一起開，直接在專案根目錄執行 `pnpm dev` | `docker compose up -d` |
+| **B. 連容器版前台預覽一起啟動** | 不想跑本機 Node.js，只想用純 Docker 快速預覽民眾前台（`:3000` production build）與後端 API | `docker compose --profile preview up -d` |
+| **C. 只把 DB/Redis 放 Docker，後端跑在本機 `.venv`** | 需要在本機 IDE 掛載 Python debugger 逐步除錯時 | 見下方 |
 
-**方式 B（本機直接跑 Uvicorn）：**
+**方式 C（本機直接跑 Uvicorn）：**
 
 ```bash
 docker compose stop backend          # 先停掉容器版後端，避免搶 port 8000

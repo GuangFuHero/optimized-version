@@ -73,9 +73,9 @@ services:
       - app-network
 
   frontend:
-    # Opt-in (`docker compose --profile frontend up -d`); local dev runs Next.js on the host via `pnpm dev`
+    # Opt-in (`docker compose --profile preview up -d`); local dev runs Next.js on the host via `pnpm dev`
     # so port 3000 stays free and both `demo` (:3000) and `admin` (:3001) get hot-reload.
-    profiles: ["frontend"]
+    profiles: ["preview"]
     build:
       context: ../Frontend
     # The site holds no sign-in secret: the backend signs browsers in (Frontend/docs/authentication.md).
