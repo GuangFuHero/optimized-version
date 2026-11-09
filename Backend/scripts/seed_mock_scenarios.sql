@@ -20,7 +20,7 @@
 --   asuper01@mock.test  平台的超級管理員(super_admin),不屬於哪個情境:測管理平台用
 --   aaudit01@mock.test  平台的資料稽核員(data_auditor),不屬於哪個情境:測去重審核用
 --                     這兩個沒有公開密碼:管理平台在公開網址上,它們的權限又最大。在 VM 上跑一次
---                     scripts/set_password.py 設(Backend/DEPLOY.md),密碼跟管 staging 的人拿;
+--                     scripts/set_password.py 設(DEPLOY.md),密碼跟管 staging 的人拿;
 --                     重跑這支 seed 不會刪掉這兩個帳號和它們的密碼
 --   (不用登入)        行前資訊 /briefing:一份已發布的,裝備可以勾;另有一個土石流範本給後台用
 --   (登入任一帳號)    現場分區:光復一帶點開中正路二段61號的任一張單 › 看各樓層,一層一框;

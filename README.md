@@ -180,7 +180,7 @@ pnpm test
 3. **文件索引**
    - 前端詳細文件與閱讀順序：[`Frontend/docs/README.md`](Frontend/docs/README.md)
    - 後端開發、測試與疑難排解：[`Backend/README.md`](Backend/README.md)
-   - Staging 部署與雲端環境設定：[`Backend/DEPLOY.md`](Backend/DEPLOY.md)
+   - 雲端部署與維運指南：[`DEPLOY.md`](DEPLOY.md)
    - Discord 通知設定：[`DISCORD_WEBHOOK_SETUP.md`](DISCORD_WEBHOOK_SETUP.md)
 
 ---

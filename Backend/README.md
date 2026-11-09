@@ -82,7 +82,7 @@ uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 | `SQLALCHEMY_DATABASE_URL` | PostgreSQL 連線字串（Docker 容器內由 `docker-compose.yml` 自動覆寫為 `@db:5432`） | `postgresql+asyncpg://postgres:postgres@localhost:5432/postgres` |
 | `REDIS_URL` | Redis 連線字串（Docker 容器內自動覆寫為 `redis://redis:6379`） | `redis://localhost:6379` |
 | `SECRET_KEY` | JWT 簽章密鑰（本機任意字串皆可，勿使用雲端正式密鑰） | `your-secret-key-for-local-dev` |
-| `AUTH_COOKIE_PREFIX` | 登入 Cookie 名稱前綴（產生 `wgdev_at`、`wgdev_rt`），**必須與前端 `.env.local` 一致** | `wgdev` |
+| `AUTH_COOKIE_PREFIX` | 登入 Cookie 名稱前綴（產生 `wgdev_at`、`wgdev_rt`），**必須與 `Frontend/.env` 一致** | `wgdev` |
 | `AUTH_COOKIE_SECURE` | 是否限定 HTTPS 傳送 Cookie。程式碼預設為 `True`，**本機 HTTP 開發必須在 `.env` 設為 `false`** | `false` |
 | `AUTH_ALLOWED_ORIGINS` | 允許帶 Cookie 寫入請求的前端來源清單（逗號分隔） | `http://localhost:3000,http://localhost:3001` |
 | `EMAIL_PROVIDER` / `SMS_PROVIDER` | 信件與簡訊驗證碼發送方式。`console` 會直接把 6 位數驗證碼印在後端 log | `console` |
