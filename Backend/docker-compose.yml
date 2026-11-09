@@ -16,6 +16,11 @@ services:
       POSTGRES_DB: postgres
     volumes:
       - ./.db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
     networks:
       - app-network
 
@@ -34,6 +39,11 @@ services:
       - ./.redis:/data
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 10
     networks:
       - app-network
 
@@ -55,12 +65,17 @@ services:
       # default to this machine's values (ADR-326).
       - AUTH_COOKIE_SECURE=false
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - app-network
 
   frontend:
+    # Opt-in (`docker compose --profile frontend up -d`); local dev runs Next.js on the host via `pnpm dev`
+    # so port 3000 stays free and both `demo` (:3000) and `admin` (:3001) get hot-reload.
+    profiles: ["frontend"]
     build:
       context: ../Frontend
     # The site holds no sign-in secret: the backend signs browsers in (Frontend/docs/authentication.md).
