@@ -1,7 +1,6 @@
 'use client';
 
 import { Box, Stack } from '@mui/material';
-import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useEventCallback, useEventListener } from 'usehooks-ts';
@@ -318,18 +317,20 @@ export function AdminMapPageClient() {
       });
     }
   });
-  // `?zone=<uuid>` (the bell's 責任區 notices) opens on that area once the areas are in, as a click
-  // in the list does. Read from the router, so a notice opened while already on this page selects
-  // too. The param is taken off once used, so the same notice opened again changes the URL again.
+  // `?zone=<uuid>` (the bell's 責任區 notices) opens on that area after the list finishes refreshing.
+  // Consume only this parameter, so opening the same notice again selects it again.
   // An area the viewer may not see, or one since deleted, leaves the map as it is.
-  const router = useRouter();
-  const pathname = usePathname();
-  const [zoneParam] = useQueryState('zone', parseAsString);
+  const [zoneParam, setZoneParam] = useQueryState('zone', parseAsString);
   const linkedAreaExists = [...visibleClosureAreas, ...visiblePublicZones].some(
     (area) => area.id === zoneParam,
   );
   useEffect(() => {
-    if (!zonesAccessReady || !zoneParam || !areas.hasFetchedOnce) {
+    if (
+      !zonesAccessReady ||
+      !zoneParam ||
+      !areas.hasFetchedOnce ||
+      areas.isFetching
+    ) {
       return;
     }
 
@@ -337,14 +338,14 @@ export function AdminMapPageClient() {
       handleSelectArea(zoneParam);
     }
 
-    router.replace(pathname, { scroll: false });
+    void setZoneParam(null);
   }, [
     zonesAccessReady,
     zoneParam,
     areas.hasFetchedOnce,
+    areas.isFetching,
     handleSelectArea,
-    pathname,
-    router,
+    setZoneParam,
     linkedAreaExists,
   ]);
   // Drawing a new area: first its corners, then what it is.

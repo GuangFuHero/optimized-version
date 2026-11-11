@@ -71,7 +71,7 @@ export function useAdminMapLiveMarkers(
   const zoom = viewport.position?.zoom;
   const { data } = useQuery({
     ...SITE_READ_OPTIONS,
-    queryKey: ['admin-map', 'markers', { bounds, zoom }],
+    queryKey: ['admin', 'map', 'markers', { bounds, zoom }],
     queryFn: async ({ signal }) => {
       const [tickets, stations] = await Promise.all([
         siteGraphql(

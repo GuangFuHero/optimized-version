@@ -36,7 +36,7 @@ export function useAdminMapAreas({
 }): AdminMapAreas {
   const { data, isFetching, refetch } = useQuery({
     ...SITE_READ_OPTIONS,
-    queryKey: ['admin-map', 'areas', { includePrivate }],
+    queryKey: ['admin', 'map', 'areas', { includePrivate }],
     queryFn: async ({ signal }) => {
       const { items, error } = await fetchAllAreaPages((skip, limit) =>
         siteGraphql(
