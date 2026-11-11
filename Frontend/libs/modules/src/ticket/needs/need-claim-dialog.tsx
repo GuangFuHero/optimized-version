@@ -69,7 +69,10 @@ export function NeedClaimDialog({
   onCancel,
   onConfirm,
 }: NeedClaimDialogProps) {
-  const { ticket, fetching } = useCachedTicket(target?.ticketUuid);
+  const { ticket, fetching } = useCachedTicket({
+    ticketUuid: target?.ticketUuid,
+    open,
+  });
   const need = readTicketNeeds(ticket).find((item) => item.uuid === target?.needUuid) ?? null;
   // Only a signed-in volunteer can open this: a guest's button asks them to sign in instead.
   const claim = need

@@ -89,14 +89,19 @@ export function useTicketNeeds(ticketUuid: string) {
 }
 
 /**
- * `GetTicket` for a dialog about a ticket the page already shows: from the cache when it is there,
- * and updated there by the reload after a change (`NeedClaimProvider`).
+ * `GetTicket` for a dialog about a ticket the page already shows: use cached data immediately
+ * while checking for changes made since the detail panel last read it.
  */
-export function useCachedTicket(ticketUuid: string | null | undefined) {
+export function useCachedTicket({
+  ticketUuid,
+  open,
+}: {
+  ticketUuid: string | null | undefined;
+  open: boolean;
+}) {
   const { data, isFetching } = useQuery({
     ...siteGraphqlQuery(GetTicketDocument, { uuid: ticketUuid ?? '' }),
-    enabled: Boolean(ticketUuid),
-    staleTime: Infinity,
+    enabled: open && Boolean(ticketUuid),
   });
 
   return { ticket: data?.ticket ?? null, fetching: isFetching };

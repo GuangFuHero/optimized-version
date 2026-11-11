@@ -147,7 +147,10 @@ export function StopRecruitingDialog({
   onCancel,
   onConfirm,
 }: StopRecruitingDialogProps) {
-  const { ticket, fetching } = useCachedTicket(target?.ticketUuid);
+  const { ticket, fetching } = useCachedTicket({
+    ticketUuid: target?.ticketUuid,
+    open,
+  });
   const need =
     readTicketNeeds(ticket).find((item) => item.uuid === target?.needUuid) ??
     null;

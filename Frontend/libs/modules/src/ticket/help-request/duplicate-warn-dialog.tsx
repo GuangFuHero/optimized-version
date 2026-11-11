@@ -54,17 +54,22 @@ const ACTS = {
  * which a signed-in person is shown. 看這張 opens that ticket, handing on where it is.
  */
 function SuspectTicketCard({
+  open,
   suspect,
   from,
   viewerId,
   onOpen,
 }: {
+  open: boolean;
   suspect: SuspectTicket;
   from: LatLng | null;
   viewerId: string | null;
   onOpen: (event: MouseEvent<HTMLElement>, point: LatLng | null) => void;
 }) {
-  const { ticket: fields, fetching } = useCachedTicket(suspect.ticketUuid);
+  const { ticket: fields, fetching } = useCachedTicket({
+    ticketUuid: suspect.ticketUuid,
+    open,
+  });
   const meters = distanceToTicketM(from, fields);
   // No ticket number: the site shows none to the public.
   const filedAt = formatTaiwanTime(fields?.createdAt);
@@ -282,6 +287,7 @@ export function DuplicateWarnDialog({
       <Stack spacing={1}>
         {tickets.map((suspect) => (
           <SuspectTicketCard
+            open={open}
             key={suspect.ticketUuid}
             suspect={suspect}
             from={from}

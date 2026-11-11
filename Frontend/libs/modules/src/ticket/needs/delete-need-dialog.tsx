@@ -160,7 +160,10 @@ export function DeleteNeedDialog({
   onConfirm,
   onExited,
 }: DeleteNeedDialogProps) {
-  const { ticket, fetching } = useCachedTicket(target?.ticketUuid);
+  const { ticket, fetching } = useCachedTicket({
+    ticketUuid: target?.ticketUuid,
+    open,
+  });
   const needs = readTicketNeeds(ticket);
   const need = needs.find((item) => item.uuid === target?.needUuid) ?? null;
   // Deleted between the tap and the load: nothing to confirm, and the way out is to close.

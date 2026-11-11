@@ -149,7 +149,7 @@ export function DeleteTicketDialog({
   toastOpen,
   onCloseToast,
 }: DeleteTicketDialogProps) {
-  const { ticket, fetching } = useCachedTicket(ticketUuid);
+  const { ticket, fetching } = useCachedTicket({ ticketUuid, open });
   const needs = readTicketNeeds(ticket);
   // Deleted between the tap and the load: nothing to confirm, and the way out is to close.
   const gone = !ticket && !fetching;
