@@ -151,7 +151,7 @@ plan.
 | `AUTH_COOKIE_DOMAIN` | `.wan-guard.com` | `.wan-guard.com` | empty (default): the cookie stays on `localhost` |
 | `AUTH_COOKIE_SECURE` | `true` | `true` | `false`, set in `docker-compose.yml`; a browser drops a `Secure` cookie over http |
 | `AUTH_ALLOWED_ORIGINS` | `https://wan-guard.com,https://admin.wan-guard.com` | `https://staging.wan-guard.com,https://admin-staging.wan-guard.com` | `http://localhost:3000,http://localhost:3001` (default) |
-| `SITE_APP_URL` | `https://wan-guard.com` | `https://staging.wan-guard.com` | `http://localhost:3000`, the backend's default; the back office has none, so its links to the site show only once `apps/admin/.env.local` sets it, as `.env.example` does |
+| `SITE_APP_URL` | `https://wan-guard.com` | `https://staging.wan-guard.com` | `http://localhost:3000`, the backend's default; the back office has none, so its links to the site show only once `Frontend/.env` sets it, as `.env.example` does |
 | `ADMIN_APP_URL` | `https://admin.wan-guard.com` | `https://admin-staging.wan-guard.com` | `http://localhost:3001` (default) |
 | `OAUTH_REDIRECT_BASE_URL` | `https://wan-guard.com` | `https://staging.wan-guard.com` | `http://localhost:3000` (default) |
 | `GOOGLE_CLIENT_SECRET`, `LINE_CHANNEL_SECRET` | Secret Manager | `staging-backend-google-client-secret`, `staging-backend-line-channel-secret`, written by `gen_env` | `Backend/.env` |
