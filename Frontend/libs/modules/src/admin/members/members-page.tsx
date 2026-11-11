@@ -4,7 +4,7 @@ import { SearchX, ShieldAlert, UserPlus } from 'lucide-react';
 
 import { Box, Chip, Stack, Tab, Tabs, Typography } from '@mui/material';
 import { createColumnHelper } from '@tanstack/react-table';
-import { useMemo, useState, type ReactElement } from 'react';
+import { useState, type ReactElement } from 'react';
 import { toast } from 'sonner';
 
 import {
@@ -304,7 +304,7 @@ function PlatformStaff({
 }) {
   const [assigning, setAssigning] = useState(false);
   const { actionsFor, dialogs } = usePersonActions(users, true);
-  const rows = useMemo(() => platformStaff(users), [users]);
+  const rows = platformStaff(users);
 
   const columns = staffColumn.columns([
     staffColumn.accessor('name', {
@@ -476,7 +476,7 @@ function PeopleDirectory({
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<PlatformKey | 'all'>('all');
   const { actionsFor, dialogs } = usePersonActions(users, false);
-  const people = useMemo(() => directory(users, teamTypes), [users, teamTypes]);
+  const people = directory(users, teamTypes);
   const rows = people.filter(
     (person) =>
       (filter === 'all' || person.platform === filter) &&
@@ -622,15 +622,9 @@ function MembersPermissionsView() {
     enabled: allowed && can('rbac.view'),
   });
   const [tab, setTab] = useState('platform');
-  const users = useMemo(() => usersQuery.data ?? [], [usersQuery.data]);
-  const teamTypes = useMemo(
-    () => teamTypesOf(teamsQuery.data ?? []),
-    [teamsQuery.data],
-  );
-  const roles = useMemo(
-    () => matrixQuery.data?.roles ?? [],
-    [matrixQuery.data],
-  );
+  const users = usersQuery.data ?? [];
+  const teamTypes = teamTypesOf(teamsQuery.data ?? []);
+  const roles = matrixQuery.data?.roles ?? [];
   const queueCount = pendingRequests.data?.length ?? 0;
 
   if (userPending) return <Typography sx={captionSx}>載入中…</Typography>;

@@ -91,16 +91,14 @@ describe('readAddressLookup', () => {
   };
 
   it('reads a found 門牌 with its token and point', () => {
-    expect(
-      readAddressLookup({ current: true, fetching: false, answer }),
-    ).toEqual({ status: 'found', door: door({ floor: '3樓' }) });
+    expect(readAddressLookup({ fetching: false, answer })).toEqual({
+      status: 'found',
+      door: door({ floor: '3樓' }),
+    });
   });
 
-  it('is still looking while the answer on hand is for another pin, or none came yet', () => {
-    expect(
-      readAddressLookup({ current: false, fetching: false, answer }),
-    ).toEqual({ status: 'looking' });
-    expect(readAddressLookup({ current: true, fetching: true })).toEqual({
+  it('is still looking while none came yet', () => {
+    expect(readAddressLookup({ fetching: true })).toEqual({
       status: 'looking',
     });
   });
@@ -108,7 +106,6 @@ describe('readAddressLookup', () => {
   it('takes any error as no answer: too many lookups, a sign-in run out, no network', () => {
     expect(
       readAddressLookup({
-        current: true,
         fetching: false,
         error: new Error('Too many address lookups; try again in a minute'),
       }),
@@ -118,7 +115,6 @@ describe('readAddressLookup', () => {
   it('passes not_found, ambiguous and unavailable on, and anything else as unavailable', () => {
     const status = (value: string) =>
       readAddressLookup({
-        current: true,
         fetching: false,
         answer: { status: value },
       }).status;
@@ -132,7 +128,6 @@ describe('readAddressLookup', () => {
   it('does not take a found with no token for a 門牌 to fill in', () => {
     expect(
       readAddressLookup({
-        current: true,
         fetching: false,
         answer: { ...answer, addressToken: null },
       }),

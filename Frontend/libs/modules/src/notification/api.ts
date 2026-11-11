@@ -2,13 +2,10 @@
 
 import { queryOptions } from '@tanstack/react-query';
 
-import { createRestClient, responseData } from '@rescue-frontend/data-access';
+import { responseData } from '@rescue-frontend/data-access';
 import type { components } from '@rescue-frontend/data-access/openapi';
 
-import { sessionExpiryFetch } from '../session/end-expired-session';
-
-// Through the proxy, which refreshes a spent access token on the way, as `auth/api/client.ts` does.
-const notificationApiClient = createRestClient(sessionExpiryFetch);
+import { siteRestClient } from '../session/site-clients';
 
 /** One page of `GET /notifications`. */
 export type NotificationPage =
@@ -42,7 +39,7 @@ export function listNotificationsAsync({
   page = 1,
   unreadOnly = false,
 }: { page?: number; unreadOnly?: boolean } = {}) {
-  return notificationApiClient
+  return siteRestClient
     .GET('/api/v1/notifications', {
       params: {
         query: {
@@ -83,7 +80,7 @@ export function unreadNotificationsQuery(
 
 /** One notification read. `read-all` would mark the back office's too, which the site does not show. */
 export function markNotificationReadAsync(uuid: string) {
-  return notificationApiClient
+  return siteRestClient
     .PATCH('/api/v1/notifications/{uuid}/read', {
       params: { path: { uuid } },
     })

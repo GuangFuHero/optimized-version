@@ -18,6 +18,7 @@ const securityHeaders = [
 const nextConfig = {
   nx: {},
   poweredByHeader: false,
+  reactCompiler: true,
   async headers() {
     return [{ source: '/:path*', headers: securityHeaders }];
   },

@@ -7,7 +7,7 @@
 
 import { isUnauthorizedError } from '../session/expiry';
 
-/** The parts of urql's `CombinedError` this reads. */
+/** The parts of `GraphqlError` this reads. */
 export interface RoleRequestError {
   networkError?: unknown;
   response?: { status?: number };

@@ -15,7 +15,7 @@ import {
   unassignErrorMessage,
 } from './claim-error';
 
-/** A refused `assignTaskActor`, as urql hands it over: the backend's message is the contract. */
+/** A refused `assignTaskActor`, as the GraphQL client hands it over: the backend's message is the contract. */
 function refused(message: string) {
   return { graphQLErrors: [{ message }] };
 }
@@ -60,7 +60,7 @@ describe('claimErrorMessage', () => {
     ).toBe('連線失敗，請確認網路後再試一次。');
   });
 
-  it('reads an HTTP 401, which urql hands over as a network error, as a lapsed session', () => {
+  it('reads an HTTP 401, which comes as a network error, as a lapsed session', () => {
     expect(
       claimErrorMessage({
         networkError: new Error('Unauthorized'),

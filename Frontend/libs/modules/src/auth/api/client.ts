@@ -1,14 +1,12 @@
 'use client';
 
-import { createRestClient, responseData } from '@rescue-frontend/data-access';
+import { responseData } from '@rescue-frontend/data-access';
 import type { components } from '@rescue-frontend/data-access/openapi';
 
-import { sessionExpiryFetch } from '../../session/end-expired-session';
-
-const authApiClient = createRestClient(sessionExpiryFetch);
+import { siteRestClient } from '../../session/site-clients';
 
 export async function getUserSaltAsync(value: string) {
-  const data = await authApiClient
+  const data = await siteRestClient
     .GET('/api/v1/auth/salt/{value}', { params: { path: { value } } })
     .then(responseData);
   return data.salt_frontend;
@@ -17,7 +15,7 @@ export async function getUserSaltAsync(value: string) {
 export function registerAsync(
   payload: components['schemas']['RegisterRequest'],
 ) {
-  return authApiClient
+  return siteRestClient
     .POST('/api/v1/auth/register', { body: payload })
     .then(() => undefined);
 }
@@ -26,7 +24,7 @@ export function registerAsync(
 export function signInAsync(
   payload: components['schemas']['SessionSignInRequest'],
 ) {
-  return authApiClient
+  return siteRestClient
     .POST('/api/v1/auth/session', { body: payload })
     .then(responseData);
 }
@@ -35,25 +33,25 @@ export function signInAsync(
 export function verifyAndSignInAsync(
   payload: components['schemas']['VerifyRequest'],
 ) {
-  return authApiClient
+  return siteRestClient
     .POST('/api/v1/auth/session/verify', { body: payload })
     .then(responseData);
 }
 
 /** The signed-in account, through the proxy, which refreshes a spent access token on the way. */
 export function getCurrentUserAsync() {
-  return authApiClient.GET('/api/v1/users/me').then(responseData);
+  return siteRestClient.GET('/api/v1/users/me').then(responseData);
 }
 
 /** Signs this browser out: the backend ends its session and clears both cookies. */
 export function signOutAsync() {
-  return authApiClient.DELETE('/api/v1/auth/session').then(() => undefined);
+  return siteRestClient.DELETE('/api/v1/auth/session').then(() => undefined);
 }
 
 export function resendVerificationAsync(
   payload: components['schemas']['ResendVerificationRequest'],
 ) {
-  return authApiClient
+  return siteRestClient
     .POST('/api/v1/auth/resend-verification', { body: payload })
     .then(() => undefined);
 }
@@ -61,7 +59,7 @@ export function resendVerificationAsync(
 export function forgotPasswordAsync(
   payload: components['schemas']['ForgotPasswordRequest'],
 ) {
-  return authApiClient
+  return siteRestClient
     .POST('/api/v1/auth/forgot-password', { body: payload })
     .then(() => undefined);
 }
@@ -69,19 +67,19 @@ export function forgotPasswordAsync(
 export function resetPasswordAsync(
   payload: components['schemas']['ResetPasswordRequest'],
 ) {
-  return authApiClient
+  return siteRestClient
     .POST('/api/v1/auth/reset-password', { body: payload })
     .then(() => undefined);
 }
 
 export function logoutAllAsync() {
-  return authApiClient.POST('/api/v1/auth/logout-all').then(() => undefined);
+  return siteRestClient.POST('/api/v1/auth/logout-all').then(() => undefined);
 }
 
 export function changePasswordAsync(
   payload: components['schemas']['ChangePasswordRequest'],
 ) {
-  return authApiClient
+  return siteRestClient
     .POST('/api/v1/auth/change-password', { body: payload })
     .then(() => undefined);
 }
@@ -89,7 +87,7 @@ export function changePasswordAsync(
 export function setPasswordAsync(
   payload: components['schemas']['SetPasswordRequest'],
 ) {
-  return authApiClient
+  return siteRestClient
     .POST('/api/v1/auth/set-password', { body: payload })
     .then(() => undefined);
 }
@@ -97,7 +95,7 @@ export function setPasswordAsync(
 export function addContactAsync(
   payload: components['schemas']['AddContactRequest'],
 ) {
-  return authApiClient
+  return siteRestClient
     .POST('/api/v1/auth/contacts', { body: payload })
     .then(() => undefined);
 }
@@ -105,7 +103,7 @@ export function addContactAsync(
 export function verifyContactAsync(
   payload: components['schemas']['VerifyContactRequest'],
 ) {
-  return authApiClient
+  return siteRestClient
     .POST('/api/v1/auth/contacts/verify', { body: payload })
     .then(() => undefined);
 }
@@ -113,7 +111,7 @@ export function verifyContactAsync(
 export function resendContactAsync(
   payload: components['schemas']['AddContactRequest'],
 ) {
-  return authApiClient
+  return siteRestClient
     .POST('/api/v1/auth/contacts/resend', { body: payload })
     .then(() => undefined);
 }

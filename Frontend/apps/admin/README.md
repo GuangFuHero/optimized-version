@@ -10,8 +10,8 @@ Import hooks from `@rescue-frontend/data-access/admin`. For example, `useTickets
 
 The existing admin placeholder pages and sample map data remain in place. The hooks are ready for screen integration, and the map creation drawers use them.
 
-GraphQL uses the existing urql client factory and The Guild's client preset to generate typed documents. The admin uses urql's fetch exchange without its cache because TanStack Query owns caching. The site's urql provider and normalized cache remain unchanged.
+GraphQL uses The Guild's client preset to generate typed documents, sent by `createGraphqlRequest`. TanStack Query owns caching, in the admin and on the site.
 
 Run `pnpm schemas:generate` to export schemas from the checked-out backend and regenerate clients. It imports the FastAPI app and Strawberry schema without starting a server or connecting to the database. It requires the backend's `uv` environment. `pnpm typecheck` checks every frontend workspace package without regenerating. CI fails if regeneration changes committed files. `pnpm lint` checks all frontend projects.
 
-The admin schema is `libs/data-access/src/admin/graphql/schema.graphql`. The site's existing `libs/data-access/src/graphql/schema.graphql` is a separate snapshot because the checked-out backend does not implement some site operations. Export updates the admin contract and the shared REST OpenAPI contract, and leaves the site snapshot intact.
+The site and the admin share one GraphQL schema, `libs/data-access/src/graphql/schema.graphql`. Export updates it and the REST OpenAPI contract.

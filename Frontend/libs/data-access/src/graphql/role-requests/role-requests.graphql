@@ -33,7 +33,7 @@ query RoleRequestTeams($type: RoleRequestTeamType!) {
   }
 }
 
-# The drawer refetches MyRoleRequests afterwards: graphcache cannot key a type by `uuid` alone.
+# The drawer reads MyRoleRequests again afterwards.
 mutation SubmitRoleRequest($input: SubmitRoleRequestInput!) {
   submitRoleRequest(input: $input) {
     uuid

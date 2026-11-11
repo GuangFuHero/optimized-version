@@ -3,7 +3,8 @@
 import { Box, Stack, type BoxProps } from '@mui/material';
 import { EditorContent, useEditor } from '@tiptap/react';
 import GithubSlugger from 'github-slugger';
-import { useEffect, useLayoutEffect, useRef } from 'react';
+import { useLayoutEffect } from 'react';
+import { useEventCallback } from 'usehooks-ts';
 import { designTokens } from '../../theme';
 import { Button } from '../Button';
 
@@ -36,17 +37,14 @@ export function Markdown({
   sx = [],
 }: MarkdownProps) {
   const controlled = checklist !== undefined;
-  const toggle = useRef(checklist?.onToggle);
-  useEffect(() => {
-    toggle.current = checklist?.onToggle;
-  }, [checklist?.onToggle]);
+  const toggle = useEventCallback(checklist?.onToggle);
   const editor = useEditor(
     {
       extensions: markdownExtensions(
         controlled
           ? (node) => {
               const task = markdownTask(node);
-              toggle.current?.(task.label);
+              toggle?.(task.label);
               return true;
             }
           : undefined,

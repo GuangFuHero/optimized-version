@@ -1,5 +1,7 @@
 'use client';
 
+import { useForm, useStore } from '@tanstack/react-form';
+
 import {
   Box,
   Dialog as MuiDialog,
@@ -10,6 +12,7 @@ import {
 import {
   useCommitStationImport,
   usePreviewStationImport,
+  type PreviewStationImportInput,
 } from '@rescue-frontend/data-access/admin';
 import type { components } from '@rescue-frontend/data-access/openapi';
 import { Button, Callout, designTokens, Tag } from '@rescue-frontend/ui';
@@ -24,7 +27,7 @@ import {
   TypeChip,
 } from '../../../admin/shared/import-dialog-parts';
 import { Muted } from '../../../admin/shared/muted';
-import { getStationTypeIcon } from '../../station-type-icon';
+import { StationTypeIcon } from '../../station-type-icon';
 import { getStationTypeLabel, STATION_TYPE_OPTIONS } from '../../type-options';
 import {
   downloadBlob,
@@ -52,6 +55,15 @@ import {
 const { color, focusRing, radius, typography } = designTokens;
 
 type Preview = components['schemas']['BulkPreviewResponse'];
+type ImportDraft = {
+  stationType:
+    | PreviewStationImportInput['params']['query']['station_type']
+    | null;
+  file: File | null;
+  pasted: string;
+  overrides: Record<string, string | null>;
+};
+
 type Result = components['schemas']['BulkImportResponse'];
 type Suspect = components['schemas']['SuspectedRowResponse'];
 
@@ -71,17 +83,28 @@ function downloadTemplate(stationType: string) {
 }
 
 export function StationImportDialog({ onClose }: { onClose: () => void }) {
-  const [stationType, setStationType] = useState<string | null>(null);
-  const [file, setFile] = useState<File | null>(null);
-  const [pasted, setPasted] = useState('');
   const [preview, setPreview] = useState<Preview | null>(null);
-  const [overrides, setOverrides] = useState<Record<string, string | null>>({});
+
   const [filed, setFiled] = useState<FiledRows>({});
   const [result, setResult] = useState<Result | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const pasteTimer = useRef<number | undefined>(undefined);
   const previewImport = usePreviewStationImport();
   const commitImport = useCommitStationImport();
+  const initialValues: ImportDraft = {
+    stationType: null,
+    file: null,
+    pasted: '',
+    overrides: {},
+  };
+  const form = useForm({
+    defaultValues: initialValues,
+    onSubmit: (): void => commit(),
+  });
+  const { stationType, file, pasted, overrides } = useStore(
+    form.store,
+    (state) => state.values,
+  );
   const busy = previewImport.isPending || commitImport.isPending;
   // Closing mid-import would unmount the dialog: the import still happens, but its report is lost.
   const committing = commitImport.isPending;
@@ -108,8 +131,8 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
     );
 
   const startPreview = (nextFile: File, type: string) => {
-    setFile(nextFile);
-    setOverrides({});
+    form.setFieldValue('file', nextFile);
+    form.setFieldValue('overrides', {});
     setFiled({});
     setPreview(null);
     runPreview(nextFile, type);
@@ -118,7 +141,7 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
   const chooseFile = (nextFile: File | undefined) => {
     if (!nextFile || !stationType) return;
     window.clearTimeout(pasteTimer.current);
-    setPasted('');
+    form.setFieldValue('pasted', '');
     startPreview(nextFile, stationType);
   };
 
@@ -136,10 +159,10 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
   const changePasted = (text: string) => {
     // Drop a preview still in flight, so the result for text that is gone never lands.
     previewImport.reset();
-    setPasted(text);
-    setFile(null);
+    form.setFieldValue('pasted', text);
+    form.setFieldValue('file', null);
     setPreview(null);
-    setOverrides({});
+    form.setFieldValue('overrides', {});
     setFiled({});
     window.clearTimeout(pasteTimer.current);
     pasteTimer.current = window.setTimeout(() => previewPasted(text), 800);
@@ -147,18 +170,18 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
 
   const chooseType = (type: string) => {
     window.clearTimeout(pasteTimer.current);
-    setStationType(type);
-    setFile(null);
-    setPasted('');
+    form.setFieldValue('stationType', type);
+    form.setFieldValue('file', null);
+    form.setFieldValue('pasted', '');
     setPreview(null);
-    setOverrides({});
+    form.setFieldValue('overrides', {});
     setFiled({});
   };
 
   const changeMapping = (header: string, field: string) => {
     if (!file || !stationType || !preview) return;
     const next = { ...overrides, [header]: field === SKIP ? null : field };
-    setOverrides(next);
+    form.setFieldValue('overrides', next);
     runPreview(
       file,
       stationType,
@@ -282,11 +305,16 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
                 sx={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}
               >
                 {STATION_TYPE_OPTIONS.map((option) => {
-                  const Icon = getStationTypeIcon(option.value);
                   return (
                     <TypeChip
                       key={option.value}
-                      icon={<Icon sx={{ fontSize: 16 }} aria-hidden />}
+                      icon={
+                        <StationTypeIcon
+                          type={option.value}
+                          sx={{ fontSize: 16 }}
+                          aria-hidden
+                        />
+                      }
                       label={option.label}
                       active={stationType === option.value}
                       // A preview still running would land after the switch cleared its file.
@@ -536,7 +564,7 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
               取消
             </Button>
             <Button
-              onClick={commit}
+              onClick={() => void form.handleSubmit()}
               startIcon={<Upload size={17} />}
               disabled={!summary?.canCommit || busy}
             >

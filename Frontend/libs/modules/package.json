@@ -21,9 +21,9 @@
     "@mui/material-nextjs": "^9.0.1",
     "@rescue-frontend/data-access": "workspace:*",
     "@rescue-frontend/ui": "workspace:*",
+    "@tanstack/react-form": "^1.33.5",
     "@tanstack/react-query": "^5.90.0",
     "@tanstack/react-table": "^9.2.4",
-    "@urql/next": "^2.0.0",
     "date-fns": "^4.4.0",
     "google-libphonenumber": "^3.2.44",
     "graphql": "^16.13.2",
@@ -33,15 +33,15 @@
     "leaflet.markercluster": "^1.5.3",
     "lucide-react": "^0.577.0",
     "next": "~16.4.2",
+    "nuqs": "^2.10.2",
     "plotly.js-dist-min": "4.1.1",
     "qrcode-generator": "2.0.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "react-hook-form": "^7.76.0",
     "sonner": "^2.0.7",
-    "urql": "^5.0.1",
     "usehooks-ts": "^3.1.1",
-    "zod": "^4.6.6"
+    "zod": "^4.6.6",
+    "zustand": "^5.0.16"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.lib.json"

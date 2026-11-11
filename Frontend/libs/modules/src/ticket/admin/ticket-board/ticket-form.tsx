@@ -1,5 +1,7 @@
 'use client';
 
+import { useForm, useStore, type Updater } from '@tanstack/react-form';
+
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 
 import {
@@ -40,6 +42,7 @@ import {
   type SpaceHouseholdTarget,
 } from '../space/household-input';
 import { useHouseholdSpace } from '../space/use-space-data';
+import { useReportBusy } from './hooks/use-busy-keys';
 import { DuplicateNotice } from './duplicate-notice';
 import {
   isForbidden,
@@ -127,18 +130,35 @@ export function TicketForm(props: TicketFormProps) {
   const household = space ?? editSpace.target ?? undefined;
   const coarse = ticket ? isCoarseTicket(ticket) : false;
   const formId = useId();
-  const [values, setValues] = useState<TicketFormValues>(() =>
+  const [loaded] = useState<TicketFormValues>(() =>
     props.mode === 'edit'
       ? ticketFormFromTicket(props.ticket)
       : emptyTicketForm(props.initialPoint),
   );
   // The form as the ticket filled it: an address it had stays required on edit.
-  const [loaded] = useState(values);
-  const [errors, setErrors] = useState<TicketFormErrors>({});
+  const formApi = useForm({
+    defaultValues: { draft: loaded },
+    onSubmitMeta: new Map<number, string>(),
+    validators: {
+      onSubmit: ({ value }): TicketFormErrors | undefined => {
+        const errors = validateTicketForm(value.draft, mode, space, loaded);
+        return Object.keys(errors).length ? errors : undefined;
+      },
+    },
+    onSubmit: ({ meta }): Promise<void> =>
+      ticket ? run(() => save(ticket)) : run(() => create(meta)),
+  });
+  const values = useStore(formApi.store, (state) => state.values.draft);
+  const errors = useStore(
+    formApi.store,
+    (state) => state.errorMap.onSubmit ?? {},
+  );
+  const submitting = useStore(formApi.store, (state) => state.isSubmitting);
+  const setValues = (next: Updater<TicketFormValues>) =>
+    formApi.setFieldValue('draft', next, { dontValidate: true });
   const [error, setError] = useState<string | null>(null);
   const [suspects, setSuspects] = useState<DuplicateSuspect[] | null>(null);
   const [acked, setAcked] = useState<Map<number, string>>(() => new Map());
-  const [submitting, setSubmitting] = useState(false);
   // What the ticket holds now, as far as this form has saved it: a retry after a photo failed
   // resends neither the saved fields nor the photos that did go through.
   const saved = useRef({
@@ -177,17 +197,17 @@ export function TicketForm(props: TicketFormProps) {
     }
   }, [lookupResult]);
 
-  useEffect(() => {
-    onBusyChange?.(submitting);
-  }, [submitting, onBusyChange]);
-  useEffect(() => () => onBusyChange?.(false), [onBusyChange]);
+  useReportBusy(submitting, onBusyChange);
 
   const change = (patch: Partial<TicketFormValues>, cleared: string[]) => {
     setValues((current) => updateTicketForm(current, patch));
-    setErrors((current) => {
-      const next = { ...current };
-      for (const key of cleared) delete next[key as keyof TicketFormErrors];
-      return next;
+    const next = { ...formApi.state.errorMap.onSubmit };
+    for (const key of cleared) {
+      // SAFETY: callers supply form field names or paths produced by validateTicketForm.
+      delete next[key as keyof TicketFormErrors];
+    }
+    formApi.setErrorMap({
+      onSubmit: Object.values(next).some(Boolean) ? next : undefined,
     });
     // The notice was about the ticket as sent; an edit makes it a new one to check.
     setSuspects(null);
@@ -218,15 +238,11 @@ export function TicketForm(props: TicketFormProps) {
   };
 
   async function run(task: () => Promise<void>) {
-    if (submitting) return;
-    setSubmitting(true);
     setError(null);
     try {
       await task();
     } catch (caught) {
       setError(saveError(caught, mode));
-    } finally {
-      setSubmitting(false);
     }
   }
 
@@ -286,14 +302,6 @@ export function TicketForm(props: TicketFormProps) {
 
   const missing = ticketFormErrorSummary(errors);
 
-  const submit = () => {
-    const next = validateTicketForm(values, mode, space, loaded);
-    setErrors(next);
-    if (Object.keys(next).length > 0) return;
-    if (ticket) void run(() => save(ticket));
-    else void run(() => create(acked));
-  };
-
   const body = (
     <Box
       component="form"
@@ -301,7 +309,7 @@ export function TicketForm(props: TicketFormProps) {
       noValidate
       onSubmit={(event) => {
         event.preventDefault();
-        submit();
+        void formApi.handleSubmit(acked);
       }}
     >
       {/* Disables every native control underneath while a save is on its way. */}
@@ -613,7 +621,7 @@ export function TicketForm(props: TicketFormProps) {
             submitting={submitting}
             onBack={() => setSuspects(null)}
             onConfirm={() =>
-              void run(() => create(acknowledgeSuspects(acked, suspects)))
+              void formApi.handleSubmit(acknowledgeSuspects(acked, suspects))
             }
           />
         ) : null}

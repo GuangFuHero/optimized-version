@@ -1,7 +1,7 @@
 'use client';
 
 import { Box, ButtonBase, Stack, Typography } from '@mui/material';
-import { useId, useMemo } from 'react';
+import { useId } from 'react';
 
 import {
   Button,
@@ -14,7 +14,7 @@ import type { RescueMapMarkerItem } from '../map/types';
 import { resolveNeedClaim } from '../ticket/needs/need-claim';
 import { NeedClaimButton } from '../ticket/needs/need-claim-button';
 import { useNeedClaim } from '../ticket/needs/need-claim-provider';
-import { needTypeIcon } from '../ticket/needs/need-parts';
+import { NeedTypeIcon } from '../ticket/needs/need-parts';
 import { formatTicketStatusLabel } from '../ticket/status';
 import {
   formatTicketRowTime,
@@ -84,7 +84,7 @@ function TicketRow({
     .filter(Boolean)
     .join('　·　');
   const quick = quickClaimNeed(ticket, isAuthenticated);
-  const KindIcon = needTypeIcon(marker.ticketMeta?.taskType ?? '');
+
   const textColor = summary.closed
     ? color.fg.neutral.subtle
     : color.fg.neutral.default;
@@ -131,7 +131,8 @@ function TicketRow({
           }}
         />
         {showKind ? (
-          <KindIcon
+          <NeedTypeIcon
+            taskType={marker.ticketMeta?.taskType ?? ''}
             sx={{
               flexShrink: 0,
               mt: '2px',
@@ -327,13 +328,13 @@ export function FloorSection({
   const hot = summary.rescueOpen > 0;
   // Decided floor by floor: one floor of rented rooms has them, the rest may not.
   const showUnit = tickets.some((ticket) => ticketUnitLabel(ticket) !== null);
-  const shown = useMemo(() => {
+  const shown = (() => {
     const sorted = sortTickets(tickets);
 
     return showClosed
       ? sorted
       : sorted.filter((ticket) => !isClosedTicket(ticket));
-  }, [showClosed, tickets]);
+  })();
   const ChevronIcon = open ? Icons.chevronDown : Icons.chevronRight;
   const bodyText = {
     fontSize: displayTextSize[13],

@@ -1,9 +1,10 @@
 'use client';
 
 import { Box, Stack } from '@mui/material';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { useEventCallback, useEventListener } from 'usehooks-ts';
+import { parseAsString, useQueryState } from 'nuqs';
 
 import {
   useAssignZoneToTeam,
@@ -91,31 +92,24 @@ function haveSameNonViewportState(
 
 export function AdminMapPageClient() {
   // The area layer and its list are for those who may see work zones; the rest see the map alone.
-  const canViewZones = useCapability('work_zone.view').data ?? false;
+  const { data: canViewZones = false, isSuccess: zonesAccessReady } =
+    useCapability('work_zone.view');
   // Without this the backend gives no 責任區 teams, and every ticket would read as 未指派.
   const canViewTicketDetail = useCapability('ticket.view_detail').data ?? false;
   const mapBoxRef = useRef<HTMLDivElement>(null);
   const [viewportStore] = useState(() => createSiteMapViewportStore({}));
   const [routeState, setRouteState] = useState<RescueMapRouteState>({});
-  const liveMarkers = useAdminMapLiveMarkers(viewportStore);
-  const markers = liveMarkers.markers;
+  const markers = useAdminMapLiveMarkers(viewportStore);
   // What the map shows. A way of looking, not of choosing: the area list counts all `markers`.
   const [filters, setFilters] = useState<AdminMapFilters>(
     DEFAULT_ADMIN_MAP_FILTERS,
   );
-  const shownMarkers = useMemo(
-    () => filterMarkers(markers, filters),
-    [filters, markers],
-  );
+  const shownMarkers = filterMarkers(markers, filters);
   // The pin picked is ringed: the pins carry their own selection (`pin.selected`).
-  const drawnMarkers = useMemo(
-    () =>
-      shownMarkers.map((marker) =>
-        marker.pin && marker.id === routeState.selectedMarkerId
-          ? { ...marker, pin: { ...marker.pin, selected: true } }
-          : marker,
-      ),
-    [routeState.selectedMarkerId, shownMarkers],
+  const drawnMarkers = shownMarkers.map((marker) =>
+    marker.pin && marker.id === routeState.selectedMarkerId
+      ? { ...marker, pin: { ...marker.pin, selected: true } }
+      : marker,
   );
   const shownTickets = shownMarkers.filter(
     (marker) => marker.detailType === 'ticket',
@@ -126,19 +120,15 @@ export function AdminMapPageClient() {
     markers.filter((marker) => marker.detailType === 'ticket').length >=
     ADMIN_MAP_LIVE_QUERY_LIMIT;
   // Those who may not see work zones still get the 危險區 the public map shows.
-  const unassignedTickets = useMemo(
-    () =>
-      canViewTicketDetail
-        ? markers.filter(
-            (marker) =>
-              marker.detailType === 'ticket' &&
-              (marker.ticketMeta?.responsibleTeams?.length ?? 0) === 0,
-          ).length
-        : null,
-    [canViewTicketDetail, markers],
-  );
+  const unassignedTickets = canViewTicketDetail
+    ? markers.filter(
+        (marker) =>
+          marker.detailType === 'ticket' &&
+          (marker.ticketMeta?.responsibleTeams?.length ?? 0) === 0,
+      ).length
+    : null;
   const areas = useAdminMapAreas({
-    enabled: true,
+    enabled: zonesAccessReady,
     includePrivate: canViewZones,
   });
   const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
@@ -162,108 +152,87 @@ export function AdminMapPageClient() {
     original: [number, number][];
     points: [number, number][];
   } | null>(null);
-  const visibleClosureAreas = useMemo(
-    () =>
-      areas.closureAreas
-        .filter((area) => !hiddenAreaIds.has(area.id))
-        .map((area) => {
-          const shape = geometryOverrides[area.id]?.at(-1);
+  const visibleClosureAreas = areas.closureAreas
+    .filter((area) => !hiddenAreaIds.has(area.id))
+    .map((area) => {
+      const shape = geometryOverrides[area.id]?.at(-1);
 
-          return shape ? { ...area, polygons: shape } : area;
-        }),
-    [areas.closureAreas, geometryOverrides, hiddenAreaIds],
-  );
-  const visiblePublicZones = useMemo(
-    () =>
-      areas.publicZones
-        .filter((zone) => !hiddenAreaIds.has(zone.id))
-        .map((zone) => {
-          const override = teamOverrides[zone.id]?.at(-1);
-          const shape = geometryOverrides[zone.id]?.at(-1);
-          const shaped = shape ? { ...zone, polygons: shape } : zone;
+      return shape ? { ...area, polygons: shape } : area;
+    });
+  const visiblePublicZones = areas.publicZones
+    .filter((zone) => !hiddenAreaIds.has(zone.id))
+    .map((zone) => {
+      const override = teamOverrides[zone.id]?.at(-1);
+      const shape = geometryOverrides[zone.id]?.at(-1);
+      const shaped = shape ? { ...zone, polygons: shape } : zone;
 
-          return override
-            ? { ...shaped, teams: override.names, teamUuids: override.uuids }
-            : shaped;
-        }),
-    [areas.publicZones, geometryOverrides, hiddenAreaIds, teamOverrides],
-  );
+      return override
+        ? { ...shaped, teams: override.names, teamUuids: override.uuids }
+        : shaped;
+    });
   // What was shown ahead is let go once its own request is answered and the areas are asked for
   // again, not whenever any answer arrives: another change may still be waiting its 5 seconds.
-  const settleHidden = useCallback((areaId: string) => {
+  const settleHidden = (areaId: string) => {
     setHiddenAreaIds((current) => {
       const next = new Set(current);
       next.delete(areaId);
 
       return next;
     });
-  }, []);
-  const settleTeams = useCallback(
-    (areaId: string, shown: { names: string[]; uuids: string[] }) =>
-      setTeamOverrides((current) => {
-        const left = (current[areaId] ?? []).filter((entry) => entry !== shown);
-        const { [areaId]: _settled, ...rest } = current;
+  };
+  const settleTeams = (
+    areaId: string,
+    shown: { names: string[]; uuids: string[] },
+  ) =>
+    setTeamOverrides((current) => {
+      const left = (current[areaId] ?? []).filter((entry) => entry !== shown);
+      const rest = { ...current };
+      delete rest[areaId];
 
-        return left.length > 0 ? { ...rest, [areaId]: left } : rest;
-      }),
-    [],
-  );
-  const settleGeometry = useCallback(
-    (areaId: string, shown: [number, number][][][]) =>
-      setGeometryOverrides((current) => {
-        const left = (current[areaId] ?? []).filter((entry) => entry !== shown);
-        const { [areaId]: _settled, ...rest } = current;
+      return left.length > 0 ? { ...rest, [areaId]: left } : rest;
+    });
+  const settleGeometry = (areaId: string, shown: [number, number][][][]) =>
+    setGeometryOverrides((current) => {
+      const left = (current[areaId] ?? []).filter((entry) => entry !== shown);
+      const rest = { ...current };
+      delete rest[areaId];
 
-        return left.length > 0 ? { ...rest, [areaId]: left } : rest;
-      }),
-    [],
-  );
-  const closureAreas = useMemo(
-    () =>
-      visibleClosureAreas
-        .filter((area) => area.id !== editing?.areaId)
-        .map((area) => ({
-          ...area,
-          highlighted: area.id === selectedAreaId,
-        })),
-    [editing?.areaId, visibleClosureAreas, selectedAreaId],
-  );
-  const publicZones = useMemo(
-    () =>
-      visiblePublicZones
-        .filter((zone) => zone.id !== editing?.areaId)
-        .map((zone) => ({
-          ...zone,
-          highlighted: zone.id === selectedAreaId,
-          dimmed: selectedAreaId !== null && zone.id !== selectedAreaId,
-        })),
-    [editing?.areaId, visiblePublicZones, selectedAreaId],
-  );
+      return left.length > 0 ? { ...rest, [areaId]: left } : rest;
+    });
+  const closureAreas = visibleClosureAreas
+    .filter((area) => area.id !== editing?.areaId)
+    .map((area) => ({
+      ...area,
+      highlighted: area.id === selectedAreaId,
+    }));
+  const publicZones = visiblePublicZones
+    .filter((zone) => zone.id !== editing?.areaId)
+    .map((zone) => ({
+      ...zone,
+      highlighted: zone.id === selectedAreaId,
+      dimmed: selectedAreaId !== null && zone.id !== selectedAreaId,
+    }));
   // No API counts what lies in an area, so the list counts the markers the map has loaded.
-  const areaListItems = useMemo(
-    () =>
-      toAdminAreaListItems({
-        closureAreas: visibleClosureAreas,
-        publicZones: visiblePublicZones,
-        countContents: (area) => countInsideArea(area, markers),
-        // Told only where the teams are: without them every ticket would read as not yet theirs.
-        countAttributed: (area, teams) =>
-          canViewTicketDetail
-            ? markers.filter(
-                (marker) =>
-                  marker.detailType === 'ticket' &&
-                  isInArea(marker.position, area) &&
-                  marker.ticketMeta?.responsibleTeams?.some((team) =>
-                    teams.includes(team.name),
-                  ),
-              ).length
-            : null,
-      }),
-    [visibleClosureAreas, visiblePublicZones, markers, canViewTicketDetail],
-  );
+  const areaListItems = toAdminAreaListItems({
+    closureAreas: visibleClosureAreas,
+    publicZones: visiblePublicZones,
+    countContents: (area) => countInsideArea(area, markers),
+    // Told only where the teams are: without them every ticket would read as not yet theirs.
+    countAttributed: (area, teams) =>
+      canViewTicketDetail
+        ? markers.filter(
+            (marker) =>
+              marker.detailType === 'ticket' &&
+              isInArea(marker.position, area) &&
+              marker.ticketMeta?.responsibleTeams?.some((team) =>
+                teams.includes(team.name),
+              ),
+          ).length
+        : null,
+  });
   const selectedAreaItem =
     areaListItems.find((item) => item.id === selectedAreaId) ?? null;
-  const selectedAreaTickets = useMemo(() => {
+  const selectedAreaTickets = (() => {
     const area = [...visibleClosureAreas, ...visiblePublicZones].find(
       (candidate) => candidate.id === selectedAreaId,
     );
@@ -274,133 +243,110 @@ export function AdminMapPageClient() {
             marker.detailType === 'ticket' && isInArea(marker.position, area),
         )
       : [];
-  }, [visibleClosureAreas, visiblePublicZones, markers, selectedAreaId]);
+  })();
   // Kept while the map moves on: a pin that leaves the view must not take its panel with it.
   const [pin, setPin] = useState<RescueMapMarkerItem | null>(null);
   const selectedMarkerId = routeState.selectedMarkerId;
-  useEffect(() => {
-    if (!selectedMarkerId) {
-      setPin(null);
-      return;
-    }
-    const found = markers.find((marker) => marker.id === selectedMarkerId);
-    if (found) {
-      setPin(found);
-    }
-  }, [markers, selectedMarkerId]);
+  const selectedPin = markers.find((marker) => marker.id === selectedMarkerId);
+  if (!selectedMarkerId && pin) setPin(null);
+  else if (selectedPin && selectedPin !== pin) setPin(selectedPin);
   const pickedPin =
     pin?.id === selectedMarkerId &&
     (pin?.detailType === 'ticket' || pin?.detailType === 'station')
       ? pin
       : null;
-  const closePin = useCallback(
-    () =>
-      setRouteState((current) => ({ ...current, selectedMarkerId: undefined })),
-    [],
-  );
-  const handleBackToAreaList = useCallback(() => {
+  const closePin = () =>
+    setRouteState((current) => ({ ...current, selectedMarkerId: undefined }));
+  const handleBackToAreaList = () => {
     setSelectedAreaId(null);
     setRouteState((current) => ({ ...current, selectedMarkerId: undefined }));
-  }, []);
+  };
   // Opens the ticket's detail the way a pin does. The map moves only if the ticket is out of view:
   // an area is being read, and the whole of it should stay on screen.
-  const handleSelectAreaTicket = useCallback(
-    (ticket: RescueMapMarkerItem) => {
-      setRouteState((current) => ({
-        ...current,
-        selectedMarkerId: ticket.id,
-      }));
-      const view = viewportStore.getSnapshot();
+  const handleSelectAreaTicket = (ticket: RescueMapMarkerItem) => {
+    setRouteState((current) => ({
+      ...current,
+      selectedMarkerId: ticket.id,
+    }));
+    const view = viewportStore.getState();
 
-      if (!isInView(ticket.position, view.bbox)) {
-        viewportStore.setState({
-          ...view,
-          position: {
-            center: ticket.position,
-            zoom: view.position?.zoom ?? 16,
-          },
-        });
-      }
-    },
-    [viewportStore],
-  );
-  useEffect(() => {
+    if (!isInView(ticket.position, view.bbox)) {
+      viewportStore.setState({
+        ...view,
+        position: {
+          center: ticket.position,
+          zoom: view.position?.zoom ?? 16,
+        },
+      });
+    }
+  };
+  useEventListener('keydown', (event) => {
     // While its boundary is changed, Esc is for that: back to the area, not out of it.
     if ((!selectedAreaId && !pickedPin) || editing) {
       return;
     }
 
-    const closeOnEscape = (event: KeyboardEvent) => {
-      // Esc in a field is for the field: it must not close the form and drop what was typed.
-      const typing =
-        event.target instanceof HTMLInputElement ||
-        event.target instanceof HTMLTextAreaElement;
+    // Esc in a field is for the field: it must not close the form and drop what was typed.
+    const typing =
+      event.target instanceof HTMLInputElement ||
+      event.target instanceof HTMLTextAreaElement;
 
-      if (event.key === 'Escape' && !typing) {
-        // One step back at a time: the pin's panel first, then the area under it.
-        if (pickedPin) {
-          closePin();
-        } else {
-          handleBackToAreaList();
-        }
+    if (event.key === 'Escape' && !typing) {
+      // One step back at a time: the pin's panel first, then the area under it.
+      if (pickedPin) {
+        closePin();
+      } else {
+        handleBackToAreaList();
       }
-    };
+    }
+  });
+  const handleSelectArea = useEventCallback((areaId: string) => {
+    const area = [...visibleClosureAreas, ...visiblePublicZones].find(
+      (candidate) => candidate.id === areaId,
+    );
+    const view = area ? viewOfArea(area, mapBoxRef.current?.clientWidth) : null;
 
-    window.addEventListener('keydown', closeOnEscape);
+    setSelectedAreaId(areaId);
+    // Opened from the bell with a pin's panel open: the panel gives way to the area.
+    setRouteState((current) => ({ ...current, selectedMarkerId: undefined }));
 
-    return () => window.removeEventListener('keydown', closeOnEscape);
-  }, [closePin, editing, handleBackToAreaList, pickedPin, selectedAreaId]);
-  const handleSelectArea = useCallback(
-    (areaId: string) => {
-      const area = [...visibleClosureAreas, ...visiblePublicZones].find(
-        (candidate) => candidate.id === areaId,
-      );
-      const view = area
-        ? viewOfArea(area, mapBoxRef.current?.clientWidth)
-        : null;
-
-      setSelectedAreaId(areaId);
-      // Opened from the bell with a pin's panel open: the panel gives way to the area.
-      setRouteState((current) => ({ ...current, selectedMarkerId: undefined }));
-
-      if (view) {
-        viewportStore.setState({
-          position: { center: view.center, zoom: view.zoom },
-          bbox: view.bbox,
-        });
-      }
-    },
-    [visibleClosureAreas, visiblePublicZones, viewportStore],
-  );
-  // `?zone=<uuid>` (the bell's 責任區 notices) opens on that area once the areas are in, as a click
-  // in the list does. Read from the router, so a notice opened while already on this page selects
-  // too. The param is taken off once used, so the same notice opened again changes the URL again.
+    if (view) {
+      viewportStore.setState({
+        position: { center: view.center, zoom: view.zoom },
+        bbox: view.bbox,
+      });
+    }
+  });
+  // `?zone=<uuid>` (the bell's 責任區 notices) opens on that area after the list finishes refreshing.
+  // Consume only this parameter, so opening the same notice again selects it again.
   // An area the viewer may not see, or one since deleted, leaves the map as it is.
-  const router = useRouter();
-  const pathname = usePathname();
-  const zoneParam = useSearchParams().get('zone');
+  const [zoneParam, setZoneParam] = useQueryState('zone', parseAsString);
+  const linkedAreaExists = [...visibleClosureAreas, ...visiblePublicZones].some(
+    (area) => area.id === zoneParam,
+  );
   useEffect(() => {
-    if (!zoneParam || !areas.hasFetchedOnce) {
+    if (
+      !zonesAccessReady ||
+      !zoneParam ||
+      !areas.hasFetchedOnce ||
+      areas.isFetching
+    ) {
       return;
     }
 
-    if (
-      [...visibleClosureAreas, ...visiblePublicZones].some(
-        (area) => area.id === zoneParam,
-      )
-    ) {
+    if (linkedAreaExists) {
       handleSelectArea(zoneParam);
     }
 
-    router.replace(pathname, { scroll: false });
+    void setZoneParam(null);
   }, [
+    zonesAccessReady,
     zoneParam,
     areas.hasFetchedOnce,
+    areas.isFetching,
     handleSelectArea,
-    pathname,
-    router,
-    visibleClosureAreas,
-    visiblePublicZones,
+    setZoneParam,
+    linkedAreaExists,
   ]);
   // Drawing a new area: first its corners, then what it is.
   const canDraw = useCapability('work_zone.add').data ?? false;
@@ -419,152 +365,124 @@ export function AdminMapPageClient() {
   // The outline of an area sent for creation, kept on the map through the 5 seconds it can be undone.
   const [heldPoints, setHeldPoints] = useState<[number, number][] | null>(null);
   const lastCornerAtRef = useRef(0);
-  const drawStepRef = useRef(drawStep);
-  drawStepRef.current = drawStep;
+  const readDrawStep = useEventCallback(() => drawStep);
   const isDrawing = drawStep !== 'idle';
   // While a boundary is drawn or changed, nothing else on the page is to be started or opened.
   const isBusy = isDrawing || editing !== null;
   const outline = isDrawing ? drawPoints : (heldPoints ?? []);
-  const crosses = useMemo(() => polygonSelfIntersects(outline), [outline]);
-  const draftArea = useMemo<RescueMapDraftArea | null>(
-    () => (outline.length > 0 ? { points: outline, invalid: crosses } : null),
-    [crosses, outline],
-  );
-  const draftContents = useMemo(
-    () =>
-      drawPoints.length >= 3
-        ? countInsideArea({ polygons: [[drawPoints]] }, markers)
-        : { tickets: 0, stations: 0 },
-    [drawPoints, markers],
-  );
-  const startDrawing = useCallback(() => {
+  const crosses = polygonSelfIntersects(outline);
+  const draftArea = (
+    outline.length > 0 ? { points: outline, invalid: crosses } : null
+  ) satisfies RescueMapDraftArea | null;
+  const draftContents =
+    drawPoints.length >= 3
+      ? countInsideArea({ polygons: [[drawPoints]] }, markers)
+      : { tickets: 0, stations: 0 };
+  const startDrawing = () => {
     setSelectedAreaId(null);
     setRouteState((current) => ({ ...current, selectedMarkerId: undefined }));
     setDrawPoints([]);
     setFormValues(EMPTY_AREA_FORM);
     setDrawStep('drawing');
-  }, []);
-  const cancelDrawing = useCallback(() => {
+  };
+  const cancelDrawing = () => {
     setDrawStep('idle');
     setDrawPoints([]);
     setFormValues(EMPTY_AREA_FORM);
-  }, []);
-  const undoCorner = useCallback(
-    () => setDrawPoints((current) => current.slice(0, -1)),
-    [],
-  );
+  };
+  const undoCorner = () => setDrawPoints((current) => current.slice(0, -1));
   const canFinishOutline = drawPoints.length >= 3 && !crosses;
-  useEffect(() => {
+  useEventListener('keydown', (event) => {
     if (drawStep !== 'drawing') {
       return;
     }
 
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Backspace') {
-        event.preventDefault();
-        undoCorner();
-      } else if (event.key === 'Enter' && canFinishOutline) {
-        setDrawStep('form');
-      } else if (event.key === 'Escape') {
-        cancelDrawing();
-      }
-    };
-
-    window.addEventListener('keydown', onKey);
-
-    return () => window.removeEventListener('keydown', onKey);
-  }, [cancelDrawing, canFinishOutline, drawStep, undoCorner]);
+    if (event.key === 'Backspace') {
+      event.preventDefault();
+      undoCorner();
+    } else if (event.key === 'Enter' && canFinishOutline) {
+      setDrawStep('form');
+    } else if (event.key === 'Escape') {
+      cancelDrawing();
+    }
+  });
   // The request waits 5 seconds, since there is no way to take a created area back: pressing
   // 復原 within them sends nothing, and puts the form back as it was.
-  const submitArea = useCallback(
-    (values: AreaFormValues) => {
-      if (!values.kind) {
-        return;
-      }
+  const submitArea = (values: AreaFormValues) => {
+    if (!values.kind) {
+      return;
+    }
 
-      const kind = values.kind;
-      const points = drawPoints;
-      const name = values.name.trim();
-      const label = `${AREA_KIND_LABELS[kind]}「${name}」`;
-      const input = {
-        type: kind,
-        geometry: toGeoJsonPolygon(points),
-        name,
-        note: values.note.trim() || null,
-        ...(kind === 'team_zone' ? { teamUuid: values.teamUuid } : {}),
-        ...(kind === 'mark_zone' ? { isPublic: values.isPublic } : {}),
-        ...(kind === 'hazardous_zone'
-          ? {
-              status: DEFAULT_HAZARD_STATUS,
-              informationSource: values.informationSource.trim() || null,
-            }
-          : {}),
-      };
-      const backToForm = () => {
-        setHeldPoints(null);
-        setDrawPoints(points);
-        setFormValues(values);
-        setDrawStep('form');
-      };
-
-      setHeldPoints(points);
-      setDrawStep('idle');
-      setDrawPoints([]);
-      setFormValues(EMPTY_AREA_FORM);
-
-      holdRequest({
-        message: `已建立${label}`,
-        onUndo: backToForm,
-        send: async () => {
-          try {
-            const created = await createArea.mutateAsync({ input });
-
-            setHeldPoints(null);
-            void areas.reload();
-            // Only if the person is still where they were: not in another area, nor drawing one.
-            setSelectedAreaId((current) =>
-              current === null && drawStepRef.current === 'idle'
-                ? created.createArea.uuid
-                : current,
-            );
-            toast.success(`已建立${label}`);
-          } catch (error) {
-            backToForm();
-            toast.error(areaErrorMessage(error));
+    const kind = values.kind;
+    const points = drawPoints;
+    const name = values.name.trim();
+    const label = `${AREA_KIND_LABELS[kind]}「${name}」`;
+    const input = {
+      type: kind,
+      geometry: toGeoJsonPolygon(points),
+      name,
+      note: values.note.trim() || null,
+      ...(kind === 'team_zone' ? { teamUuid: values.teamUuid } : {}),
+      ...(kind === 'mark_zone' ? { isPublic: values.isPublic } : {}),
+      ...(kind === 'hazardous_zone'
+        ? {
+            status: DEFAULT_HAZARD_STATUS,
+            informationSource: values.informationSource.trim() || null,
           }
-        },
-      });
-    },
-    [areas, createArea, drawPoints],
-  );
+        : {}),
+    };
+    const backToForm = () => {
+      setHeldPoints(null);
+      setDrawPoints(points);
+      setFormValues(values);
+      setDrawStep('form');
+    };
+
+    setHeldPoints(points);
+    setDrawStep('idle');
+    setDrawPoints([]);
+    setFormValues(EMPTY_AREA_FORM);
+
+    holdRequest({
+      message: `已建立${label}`,
+      onUndo: backToForm,
+      send: async () => {
+        try {
+          const created = await createArea.mutateAsync({ input });
+
+          setHeldPoints(null);
+          void areas.reload();
+          // Only if the person is still where they were: not in another area, nor drawing one.
+          setSelectedAreaId((current) =>
+            current === null && readDrawStep() === 'idle'
+              ? created.createArea.uuid
+              : current,
+          );
+          toast.success(`已建立${label}`);
+        } catch (error) {
+          backToForm();
+          toast.error(areaErrorMessage(error));
+        }
+      },
+    });
+  };
   // Changing the boundary of the area on show (FE-021 item 5, MAP-ZD-191 to 199).
-  const editedArea = useMemo(
-    () =>
-      editing
-        ? ([...visibleClosureAreas, ...visiblePublicZones].find(
-            (area) => area.id === editing.areaId,
-          ) ?? null)
-        : null,
-    [editing, visibleClosureAreas, visiblePublicZones],
-  );
+  const editedArea = editing
+    ? ([...visibleClosureAreas, ...visiblePublicZones].find(
+        (area) => area.id === editing.areaId,
+      ) ?? null)
+    : null;
   const editedItem = editing
     ? areaListItems.find((item) => item.id === editing.areaId)
     : undefined;
-  const editCrosses = useMemo(
-    () => (editing ? polygonSelfIntersects(editing.points) : false),
-    [editing],
-  );
-  const editChange = useMemo(
-    () =>
-      editing
-        ? boundaryChange(
-            { polygons: [[editing.original]] },
-            { polygons: [[editing.points]] },
-            markers,
-          )
-        : { inside: 0, added: 0, removed: 0 },
-    [editing, markers],
-  );
+  const editCrosses = editing ? polygonSelfIntersects(editing.points) : false;
+  const editChange = editing
+    ? boundaryChange(
+        { polygons: [[editing.original]] },
+        { polygons: [[editing.points]] },
+        markers,
+      )
+    : { inside: 0, added: 0, removed: 0 };
   const editChanged =
     editing !== null &&
     (editing.points.length !== editing.original.length ||
@@ -573,21 +491,17 @@ export function AdminMapPageClient() {
           point[0] !== editing.original[index][0] ||
           point[1] !== editing.original[index][1],
       ));
-  const editArea = useMemo<RescueMapEditArea | null>(
-    () =>
-      editing
-        ? {
-            points: editing.points,
-            invalid: editCrosses,
-            onChange: (points) =>
-              setEditing((current) =>
-                current ? { ...current, points } : null,
-              ),
-          }
-        : null,
-    [editCrosses, editing],
-  );
-  const cancelEditing = useCallback(() => setEditing(null), []);
+  const editArea = (
+    editing
+      ? {
+          points: editing.points,
+          invalid: editCrosses,
+          onChange: (points) =>
+            setEditing((current) => (current ? { ...current, points } : null)),
+        }
+      : null
+  ) satisfies RescueMapEditArea | null;
+  const cancelEditing = () => setEditing(null);
   useEffect(() => {
     if (!editing) {
       return;
@@ -610,7 +524,7 @@ export function AdminMapPageClient() {
   const deleteArea = useDeleteArea();
   const assignZoneToTeam = useAssignZoneToTeam();
   const removeZoneFromTeam = useRemoveZoneFromTeam();
-  const areaActions = useMemo<AreaActions | undefined>(() => {
+  const areaActions = ((): AreaActions | undefined => {
     const area = areaListItems.find((item) => item.id === selectedAreaId);
 
     if (!area || !(canEditZone || canDeleteZone || canAssignZone)) {
@@ -732,25 +646,9 @@ export function AdminMapPageClient() {
         );
       },
     };
-  }, [
-    activeTeams,
-    areaListItems,
-    areas,
-    assignZoneToTeam,
-    canAssignZone,
-    canDeleteZone,
-    canEditZone,
-    deleteArea,
-    removeZoneFromTeam,
-    selectedAreaId,
-    settleHidden,
-    settleTeams,
-    updateArea,
-    visibleClosureAreas,
-    visiblePublicZones,
-  ]);
+  })();
   // Saving the new boundary: shown at once, sent after the 5 seconds in which it can be taken back.
-  const saveBoundary = useCallback(() => {
+  const saveBoundary = () => {
     if (!editing || !editedArea) {
       return;
     }
@@ -784,29 +682,26 @@ export function AdminMapPageClient() {
           )
           .then(() => settleGeometry(areaId, shown)),
     });
-  }, [areas, editedArea, editing, settleGeometry, updateArea]);
-  const handleRouteStateChange = useCallback(
-    (next: RescueMapRouteState) => {
-      const { position, bbox, ...picked } = next;
-      // A pin tapped while drawing is a corner missed, not a ticket to open.
-      const rest = isBusy ? { ...picked, selectedMarkerId: undefined } : picked;
+  };
+  const handleRouteStateChange = (next: RescueMapRouteState) => {
+    const { position, bbox, ...picked } = next;
+    // A pin tapped while drawing is a corner missed, not a ticket to open.
+    const rest = isBusy ? { ...picked, selectedMarkerId: undefined } : picked;
 
-      // A change that is not of the view (a pin picked) carries none: the map stays where it is,
-      // not sent back to the default view.
-      if (position || bbox) {
-        const view = viewportStore.getSnapshot();
+    // A change that is not of the view (a pin picked) carries none: the map stays where it is,
+    // not sent back to the default view.
+    if (position || bbox) {
+      const view = viewportStore.getState();
 
-        viewportStore.setState({
-          position: position ?? view.position,
-          bbox: bbox ?? view.bbox,
-        });
-      }
-      setRouteState((current) =>
-        haveSameNonViewportState(current, rest) ? current : rest,
-      );
-    },
-    [isBusy, viewportStore],
-  );
+      viewportStore.setState({
+        position: position ?? view.position,
+        bbox: bbox ?? view.bbox,
+      });
+    }
+    setRouteState((current) =>
+      haveSameNonViewportState(current, rest) ? current : rest,
+    );
+  };
 
   const handleMapClick = (position: [number, number]) => {
     if (drawStep === 'drawing') {

@@ -1,6 +1,6 @@
 # data-access
 
-The site keeps its existing urql client and GraphQL schema snapshot. The checked-out backend does not yet implement every site operation, including role requests, help requests, and my tickets. Admin operations use the schema exported from that backend and The Guild's client preset for typed documents and results. TanStack Query owns the admin cache; urql supplies the GraphQL transport.
+Both clients come from the backend's contracts: `src/graphql/schema.graphql` and `src/rest/openapi.json`. The site's and the admin's GraphQL operations live in `src/graphql/**/*.graphql`, and The Guild's client preset generates one set of typed documents from them in `src/graphql/__generated__/`. `createGraphqlRequest` sends a generated document and throws `GraphqlError`; `createRestClient` wraps openapi-fetch and throws `ApiError`. TanStack Query owns every cache.
 
 From `Frontend/`, run `pnpm schemas:generate` to export the backend OpenAPI and GraphQL schemas and regenerate both clients. CI runs it and fails if the generated files differ from the committed ones. The export requires `uv` and Python 3.13, but does not need a running backend or database. Run `pnpm codegen` to regenerate from the checked-in schemas without exporting.
 

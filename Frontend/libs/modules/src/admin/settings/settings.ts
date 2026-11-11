@@ -1,3 +1,5 @@
+import type { components } from '@rescue-frontend/data-access/openapi';
+
 import {
   formatTaiwanDateTime,
   fromTaiwanDateTimeLocal,
@@ -9,8 +11,10 @@ export const NAME_MAX_LENGTH = 100;
 export const SHORT_NAME_MAX_LENGTH = 30;
 
 export interface EventBasicsDraft {
-  name: string;
-  shortName: string;
+  name: NonNullable<components['schemas']['ProjectSettingsUpdate']['name']>;
+  shortName: NonNullable<
+    components['schemas']['ProjectSettingsUpdate']['short_name']
+  >;
 }
 
 export function nameProblem(name: string): string | null {

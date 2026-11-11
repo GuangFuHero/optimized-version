@@ -1,5 +1,7 @@
 'use client';
 
+import { useForm, useStore } from '@tanstack/react-form';
+
 import {
   Box,
   ButtonBase,
@@ -38,7 +40,7 @@ import {
   X,
   Zap,
 } from 'lucide-react';
-import { useMemo, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
 
 import { useStationRows } from './hooks/use-station-rows';
@@ -266,17 +268,11 @@ function useQueuedStation(row: QueueRow | null) {
     { path: { uuid }, query: { limit: HISTORY_PAGE } },
     { enabled: canViewHistory && Boolean(uuid) },
   );
-  const historyPage = useMemo(
-    () =>
-      history.isSuccess && history.data
-        ? { events: history.data.data, total: history.data.meta.total }
-        : null,
-    [history.isSuccess, history.data],
-  );
-  const fields = useMemo(
-    () => (review.data ? buildReviewFields(review.data, historyPage) : []),
-    [review.data, historyPage],
-  );
+  const historyPage =
+    history.isSuccess && history.data
+      ? { events: history.data.data, total: history.data.meta.total }
+      : null;
+  const fields = review.data ? buildReviewFields(review.data, historyPage) : [];
   return { review, history, historyPage, fields, canViewHistory };
 }
 
@@ -380,20 +376,23 @@ function StationReview({
   onEditStation: (uuid: string) => void;
 }) {
   const merge = useMergeStationSuggestions();
-  const [decisions, setDecisions] = useState<Record<string, FieldDecision>>({});
-  const [note, setNote] = useState('');
+  const initialValues: {
+    decisions: Record<string, FieldDecision>;
+    note: string;
+  } = { decisions: {}, note: '' };
+  const form = useForm({
+    defaultValues: initialValues,
+    onSubmit: (): void => submit(),
+  });
+  const { decisions, note } = useStore(form.store, (state) => state.values);
   // The history's size when the reviewer last re-compared; a later edit grows it and locks again.
   const [resyncedAt, setResyncedAt] = useState<number | null>(null);
   const [resyncing, setResyncing] = useState(false);
 
-  const enumOptions = useMemo(
-    () =>
-      Object.fromEntries(
-        (enumFields ?? [])
-          .filter((f) => f.dataType === 'enum' && f.enumOptions)
-          .map((f) => [f.fieldName, f.enumOptions ?? []]),
-      ),
-    [enumFields],
+  const enumOptions = Object.fromEntries(
+    (enumFields ?? [])
+      .filter((f) => f.dataType === 'enum' && f.enumOptions)
+      .map((f) => [f.fieldName, f.enumOptions ?? []]),
   );
 
   const payload = buildDecisions(fields, decisions);
@@ -428,8 +427,7 @@ function StationReview({
           toast.success(
             `已送出審核：採用 ${approved} 欄、不採用 ${rejected} 欄`,
           );
-          setDecisions({});
-          setNote('');
+          form.reset();
         },
       },
     );
@@ -516,7 +514,10 @@ function StationReview({
                 options={enumOptions[field.fieldName]}
                 decision={decisions[field.key]}
                 onChange={(next) =>
-                  setDecisions((current) => ({ ...current, [field.key]: next }))
+                  form.setFieldValue('decisions', (current) => ({
+                    ...current,
+                    [field.key]: next,
+                  }))
                 }
               />
             ))}
@@ -549,7 +550,7 @@ function StationReview({
         <Box sx={{ flex: 1, minWidth: 240 }}>
           <TextInput
             value={note}
-            onChange={(e) => setNote(e.target.value)}
+            onChange={(e) => form.setFieldValue('note', e.target.value)}
             placeholder="審核備註（會記在這次審核紀錄）"
             inputProps={{ 'aria-label': '審核備註' }}
           />
@@ -566,7 +567,7 @@ function StationReview({
         <Button
           startIcon={<Check size={18} />}
           disabled={payload.length === 0 || blocked || merge.isPending}
-          onClick={submit}
+          onClick={() => void form.handleSubmit()}
         >
           送出審核（{payload.length} 欄）
         </Button>
@@ -586,7 +587,11 @@ function ReviewFieldCard({
   decision: FieldDecision;
   onChange: (next: FieldDecision) => void;
 }) {
-  const [value, setValue] = useState(field.proposedValues[0] ?? '');
+  const [openedValues] = useState(() => ({
+    value: field.proposedValues[0] ?? '',
+  }));
+  const form = useForm({ defaultValues: openedValues });
+  const value = useStore(form.store, (state) => state.values.value);
   const label = (raw: string) => reviewValueLabel(field.fieldName, raw);
   const choice = decision ? (decision.approve ? 'approve' : 'reject') : 'later';
 
@@ -597,7 +602,7 @@ function ReviewFieldCard({
         : { approve: next === 'approve', value: nextValue },
     );
   const setFinal = (next: string) => {
-    setValue(next);
+    form.setFieldValue('value', next);
     if (choice === 'approve') setChoice('approve', next);
   };
 

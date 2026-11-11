@@ -74,7 +74,7 @@ describe('createPointShareTarget', () => {
 const MERGED_UUID = 'd0000000-0000-4000-8000-000000000051';
 const KEPT_UUID = 'd0000000-0000-4000-8000-000000000052';
 
-/** A ticket as `GetTicket` returns it. The fragments' masking is only in the types. */
+/** A ticket as `GetTicket` returns it. */
 function ticket(uuid: string, title: string) {
   return {
     uuid,
@@ -86,10 +86,10 @@ function ticket(uuid: string, title: string) {
 }
 
 /**
- * A client that answers `GetTicket` from `tickets` (null for any other uuid) and `GetLinkedTicket`
+ * A request that answers `GetTicket` from `tickets` (null for any other uuid) and `GetLinkedTicket`
  * from `availability`, recording what it was asked.
  */
-function fakeClient({
+function fakeRequest({
   tickets = {},
   availability = {},
 }: {
@@ -100,41 +100,38 @@ function fakeClient({
   >;
 }) {
   const asked: string[] = [];
-  const client = {
-    query: (document: unknown, variables: { uuid: string }) => {
-      const { uuid } = variables;
-      const data =
-        document === GetTicketDocument
-          ? { ticket: tickets[uuid] ?? null }
-          : document === GetLinkedTicketDocument
-            ? {
-                ticket: null,
-                ticketAvailability: availability[uuid] ?? {
-                  status: 'not_found',
-                  replacedByUuid: null,
-                },
-              }
-            : undefined;
+  const request = (document: unknown, { uuid }: { uuid: string }) => {
+    const data =
+      document === GetTicketDocument
+        ? { ticket: tickets[uuid] ?? null }
+        : document === GetLinkedTicketDocument
+          ? {
+              ticket: null,
+              ticketAvailability: availability[uuid] ?? {
+                status: 'not_found',
+                replacedByUuid: null,
+              },
+            }
+          : undefined;
 
-      asked.push(
-        `${document === GetTicketDocument ? 'GetTicket' : 'GetLinkedTicket'} ${uuid}`,
-      );
+    asked.push(
+      `${document === GetTicketDocument ? 'GetTicket' : 'GetLinkedTicket'} ${uuid}`,
+    );
 
-      return { toPromise: () => Promise.resolve({ data }) };
-    },
+    return Promise.resolve(data);
   };
 
-  return { client: client as never, asked };
+  return { request: request as never, asked };
 }
 
 describe('fetchTicketShareMarker', () => {
   it('names a ticket that is there, asking once', async () => {
-    const { client, asked } = fakeClient({
+    const { request, asked } = fakeRequest({
       tickets: { [KEPT_UUID]: ticket(KEPT_UUID, '大進國小禮堂缺飲水') },
     });
 
     await expect(
-      fetchTicketShareMarker(client, KEPT_UUID),
+      fetchTicketShareMarker(request, KEPT_UUID),
     ).resolves.toMatchObject({
       id: KEPT_UUID,
       title: '大進國小禮堂缺飲水',
@@ -144,7 +141,7 @@ describe('fetchTicketShareMarker', () => {
   });
 
   it('names a ticket merged into another by the one it now lives in, as the page opens it', async () => {
-    const { client, asked } = fakeClient({
+    const { request, asked } = fakeRequest({
       tickets: { [KEPT_UUID]: ticket(KEPT_UUID, '大進國小禮堂缺飲水') },
       availability: {
         [MERGED_UUID]: { status: 'merged', replacedByUuid: KEPT_UUID },
@@ -152,7 +149,7 @@ describe('fetchTicketShareMarker', () => {
     });
 
     await expect(
-      fetchTicketShareMarker(client, MERGED_UUID),
+      fetchTicketShareMarker(request, MERGED_UUID),
     ).resolves.toMatchObject({ id: KEPT_UUID, title: '大進國小禮堂缺飲水' });
     expect(asked).toEqual([
       `GetTicket ${MERGED_UUID}`,
@@ -162,15 +159,17 @@ describe('fetchTicketShareMarker', () => {
   });
 
   it('names nothing for a ticket deleted or never there, as the page names the list then', async () => {
-    const { client } = fakeClient({
+    const { request } = fakeRequest({
       availability: {
         [MERGED_UUID]: { status: 'deleted', replacedByUuid: null },
       },
     });
 
     await expect(
-      fetchTicketShareMarker(client, MERGED_UUID),
+      fetchTicketShareMarker(request, MERGED_UUID),
     ).resolves.toBeNull();
-    await expect(fetchTicketShareMarker(client, KEPT_UUID)).resolves.toBeNull();
+    await expect(
+      fetchTicketShareMarker(request, KEPT_UUID),
+    ).resolves.toBeNull();
   });
 });

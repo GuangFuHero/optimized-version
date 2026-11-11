@@ -1,3 +1,5 @@
+import { createStore } from 'zustand';
+
 /**
  * Opens 請求協助 from anywhere: the top bar's button, and later the sidebar, the phone's buttons and
  * the map's crosshair. The drawer is kept once, in the site shell (`HelpRequestHost`), so
@@ -21,21 +23,19 @@ export interface HelpRequestSeed {
   place?: HelpRequestPlace;
 }
 
-const channel = new EventTarget();
-const OPEN_HELP_REQUEST = 'open-help-request';
+const openings = createStore<{ seed: HelpRequestSeed | null } | null>(
+  () => null,
+);
 
 export function openHelpRequest(seed: HelpRequestSeed | null = null): void {
-  channel.dispatchEvent(new CustomEvent(OPEN_HELP_REQUEST, { detail: seed }));
+  openings.setState({ seed }, true);
 }
 
-/** For the host; returns what stops listening, for an effect's cleanup. */
+/** Subscribes to new openings without replaying a previous request. */
 export function onOpenHelpRequest(
   listener: (seed: HelpRequestSeed | null) => void,
 ): () => void {
-  const handle = (event: Event) =>
-    listener((event as CustomEvent<HelpRequestSeed | null>).detail);
-
-  channel.addEventListener(OPEN_HELP_REQUEST, handle);
-
-  return () => channel.removeEventListener(OPEN_HELP_REQUEST, handle);
+  return openings.subscribe((opening) => {
+    if (opening) listener(opening.seed);
+  });
 }

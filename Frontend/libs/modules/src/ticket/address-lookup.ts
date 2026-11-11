@@ -86,19 +86,17 @@ export function lookupPoint(point: LatLng | null): LatLng | null {
 }
 
 /**
- * A lookup as urql answers it. Any error is taken as no answer — too many lookups, a sign-in run
+ * A lookup as its query answers it. Any error is taken as no answer — too many lookups, a sign-in run
  * out, no network — since none of them stops the form from sending.
  */
 export function readAddressLookup(result: {
-  /** The answer on hand is for the pin or line asked about now, not the one before. */
-  current: boolean;
   fetching: boolean;
   error?: unknown;
   answer?: AddressLookupAnswer | null;
 }): AddressLookup {
-  const { current, fetching, error, answer } = result;
+  const { fetching, error, answer } = result;
 
-  if (!current || fetching) {
+  if (fetching) {
     return { status: 'looking' };
   }
   if (error) {

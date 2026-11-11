@@ -19,7 +19,7 @@ import {
 import type { ReactNode } from 'react';
 
 import { Muted } from '../../../admin/shared/muted';
-import { getStationTypeIcon } from '../../station-type-icon';
+import { StationTypeIcon } from '../../station-type-icon';
 import { type StationTypeValue } from '../../type-options';
 import { FreshnessCell } from '../../../admin/shared/freshness-cell';
 import { StatusBadge, TypeChip } from './station-cells';
@@ -259,7 +259,6 @@ function StationEmptyLook({
 }
 
 function StationNameCell({ row }: { row: StationRow }) {
-  const TypeIcon = getStationTypeIcon(row.type);
   const tile = typeTileColors(row.type);
   return (
     <Box
@@ -278,7 +277,7 @@ function StationNameCell({ row }: { row: StationRow }) {
           color: tile.fg,
         }}
       >
-        <TypeIcon sx={{ fontSize: 18 }} />
+        <StationTypeIcon type={row.type} sx={{ fontSize: 18 }} />
       </Box>
       <Box sx={{ minWidth: 0 }}>
         <Typography

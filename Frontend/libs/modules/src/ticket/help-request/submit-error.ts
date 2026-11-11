@@ -9,7 +9,7 @@
 import { isUnauthorizedError } from '../../session/expiry';
 import { QUANTITY_REFUSALS } from '../needs/claim-error';
 
-/** The parts of urql's `CombinedError` this reads. */
+/** The parts of `GraphqlError` this reads. */
 export interface SubmitError {
   networkError?: unknown;
   response?: { status?: number };
@@ -42,7 +42,7 @@ const BUILDING_REFUSALS: ReadonlyArray<[RegExp, string]> = [
 export function submitErrorMessage(error: SubmitError | undefined): string {
   // A sign-in that ran out comes two ways, and the first looks like a dropped connection, so it is
   // asked first: a token the backend cannot validate is turned down by its GraphQL context with an
-  // HTTP 401, which urql hands over as a `networkError` beside a `response` of 401; a session the
+  // HTTP 401, which comes as a `networkError` beside a `response` of 401; a session the
   // proxy could not refresh is sent on as a guest, whom `require_authenticated` refuses with
   // "401: <detail>" in the GraphQL errors (`isUnauthorizedError`).
   if (error && isUnauthorizedError(error)) {

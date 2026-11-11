@@ -2,7 +2,7 @@
 
 import { Stack, Typography } from '@mui/material';
 import { Check, FileText } from 'lucide-react';
-import { useState } from 'react';
+import { useForm, useStore } from '@tanstack/react-form';
 
 import {
   Button,
@@ -16,6 +16,8 @@ import {
 import { briefingTitle, type BriefingTemplate } from './briefing-content';
 
 const { color, typography } = designTokens;
+type TemplateDraft = { selectedId: BriefingTemplate['uuid'] | null };
+const EMPTY_SELECTION: TemplateDraft = { selectedId: null };
 
 export interface TemplatePickerProps {
   templates: BriefingTemplate[];
@@ -38,7 +40,11 @@ export function TemplatePicker({
   onClose,
   onPick,
 }: TemplatePickerProps) {
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const form = useForm({
+    defaultValues: EMPTY_SELECTION,
+    onSubmit: (): void => onPick(selected),
+  });
+  const selectedId = useStore(form.store, (state) => state.values.selectedId);
   const selectedValue = selectedId ?? templates[0]?.uuid ?? '';
   const selected = templates.find(
     (template) => template.uuid === selectedValue,
@@ -68,7 +74,7 @@ export function TemplatePicker({
           <Button
             startIcon={<Check size={16} />}
             disabled={submitting || (pending && selectedValue !== '')}
-            onClick={() => onPick(selected)}
+            onClick={() => void form.handleSubmit()}
           >
             {submitting
               ? '建立草稿中…'
@@ -142,7 +148,7 @@ export function TemplatePicker({
             icon={<FileText size={18} />}
             selected={template.uuid === selected?.uuid}
             disabled={submitting}
-            onClick={() => setSelectedId(template.uuid)}
+            onClick={() => form.setFieldValue('selectedId', template.uuid)}
           />
         ))}
         <SelectionCard
@@ -151,7 +157,7 @@ export function TemplatePicker({
           icon={<FileText size={18} />}
           selected={!selected}
           disabled={submitting}
-          onClick={() => setSelectedId('')}
+          onClick={() => form.setFieldValue('selectedId', '')}
         />
       </Stack>
       <Stack

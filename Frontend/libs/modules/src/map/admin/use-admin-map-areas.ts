@@ -1,34 +1,25 @@
 'use client';
 
-import {
-  GetMapAreasDocument,
-  createUrqlClient,
-} from '@rescue-frontend/data-access';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { fetchExchange, type CombinedError } from 'urql';
+import { GetMapAreasDocument } from '@rescue-frontend/data-access';
+import { useQuery } from '@tanstack/react-query';
+import { useCallback } from 'react';
 
-import { sessionExpiryFetch } from '../../session/end-expired-session';
+import { siteGraphql, SITE_READ_OPTIONS } from '../../session/site-clients';
 import type { RescueMapClosureArea, RescueMapPublicZone } from '../types';
 import { fetchAllAreaPages } from '../site/area-pages';
 import { mapAreasToOverlays } from '../site/markers';
+
+const NO_AREAS = { closureAreas: [], publicZones: [], error: null };
 
 export interface AdminMapAreas {
   closureAreas: readonly RescueMapClosureArea[];
   publicZones: readonly RescueMapPublicZone[];
   isFetching: boolean;
-  error: CombinedError | null;
+  error: unknown;
   hasFetchedOnce: boolean;
   /** Asks again, for after a change to an area; settles once the fresh answer is in. */
   reload: () => Promise<void>;
 }
-
-const EMPTY_AREAS = {
-  closureAreas: [] as readonly RescueMapClosureArea[],
-  publicZones: [] as readonly RescueMapPublicZone[],
-  isFetching: false,
-  error: null as CombinedError | null,
-  hasFetchedOnce: false,
-};
 
 /**
  * Every area, the 標示區 not shown to the public among them (`includePrivate`, which the backend
@@ -43,69 +34,30 @@ export function useAdminMapAreas({
   /** Without it, only what the public map shows: for those who may not see work zones. */
   includePrivate?: boolean;
 }): AdminMapAreas {
-  const client = useMemo(
-    () =>
-      createUrqlClient({
-        runtime: 'client',
-        url: '/api/graphql',
-        exchanges: [fetchExchange],
-        fetch: sessionExpiryFetch,
-        requestPolicy: 'network-only',
-        suspense: false,
-      }),
-    [],
-  );
-  const [areas, setAreas] = useState(EMPTY_AREAS);
-  const [reloads, setReloads] = useState(0);
-  const waiting = useRef<(() => void)[]>([]);
-  const reload = useCallback(
-    () =>
-      new Promise<void>((resolve) => {
-        waiting.current.push(resolve);
-        setReloads((count) => count + 1);
-      }),
-    [],
-  );
-
-  useEffect(() => {
-    if (!enabled) {
-      return;
-    }
-
-    let cancelled = false;
-
-    setAreas((current) => ({ ...current, isFetching: true }));
-
-    void fetchAllAreaPages((skip, limit) =>
-      client
-        .query(
+  const { data, isFetching, refetch } = useQuery({
+    ...SITE_READ_OPTIONS,
+    queryKey: ['admin', 'map', 'areas', { includePrivate }],
+    queryFn: async ({ signal }) => {
+      const { items, error } = await fetchAllAreaPages((skip, limit) =>
+        siteGraphql(
           GetMapAreasDocument,
           { includePrivate, skip, limit },
-          { requestPolicy: 'network-only', suspense: false },
-        )
-        .toPromise(),
-    ).then((result) => {
-      if (cancelled) {
-        return;
-      }
+          signal,
+        ),
+      );
 
-      const { closureAreas, publicZones } = mapAreasToOverlays(result.items);
-      const answered = waiting.current.splice(0);
+      return { ...mapAreasToOverlays(items), error };
+    },
+    enabled,
+  });
+  const reload = useCallback(async () => {
+    await refetch();
+  }, [refetch]);
 
-      setAreas({
-        closureAreas,
-        publicZones,
-        isFetching: false,
-        error: result.error,
-        hasFetchedOnce: true,
-      });
-      answered.forEach((resolve) => resolve());
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [client, enabled, includePrivate, reloads]);
-
-  return { ...areas, reload };
+  return {
+    ...(data ?? NO_AREAS),
+    isFetching,
+    hasFetchedOnce: data !== undefined,
+    reload,
+  };
 }

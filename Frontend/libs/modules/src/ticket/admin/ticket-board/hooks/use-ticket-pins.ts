@@ -4,7 +4,6 @@ import {
   useTicketMapPins,
   type AdminTicketMapPinsQueryVariables,
 } from '@rescue-frontend/data-access/admin';
-import { useMemo } from 'react';
 
 import { differsOnlyIn, TICKET_MAP_AREA_KEYS } from '../model/ticket-filters';
 import { toTicketPin, type TicketPin } from '../model/ticket-row';
@@ -24,10 +23,7 @@ export function useTicketPins(
     keepPrevious: (previous) =>
       differsOnlyIn(previous, variables, TICKET_MAP_AREA_KEYS),
   });
-  const pins = useMemo(
-    () => query.data?.tickets.items.map(toTicketPin),
-    [query.data],
-  );
+  const pins = query.data?.tickets.items.map(toTicketPin);
   return {
     pins: pins ?? NO_PINS,
     /** Every matching ticket in view, not just the ones loaded; null until known. */

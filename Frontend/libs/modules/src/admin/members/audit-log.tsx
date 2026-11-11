@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 
 import { Box, Chip, Stack, Typography } from '@mui/material';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { useAuditLogs } from '@rescue-frontend/data-access/admin';
 import {
@@ -84,7 +84,7 @@ export function AuditLog({
     category === 'all' ? {} : { table: AUDIT_CATEGORY_TABLE[category] },
   );
 
-  const lookups = useMemo<AuditLookups>(() => {
+  const lookups = ((): AuditLookups => {
     const index = (rows: readonly Named[]) =>
       new Map(rows.map((row) => [row.uuid, row.name]));
     const userNames = index(users);
@@ -95,20 +95,16 @@ export function AuditLog({
       teamName: (uuid) => teamNames.get(uuid),
       roleName: (uuid) => roleNames.get(uuid),
     };
-  }, [users, teams, roles]);
+  })();
 
-  const entries = useMemo(
-    () =>
-      (logs.data?.pages.flat() ?? [])
-        // 全部 is still about people and teams; tickets and stations have their own history.
-        .filter(
-          (item) =>
-            MEMBER_AUDIT_TABLES.has(item.table_name) &&
-            !isDefaultRoleGrant(item, lookups),
-        )
-        .map((item) => describeAuditEntry(item, lookups)),
-    [logs.data, lookups],
-  );
+  const entries = (logs.data?.pages.flat() ?? [])
+    // 全部 is still about people and teams; tickets and stations have their own history.
+    .filter(
+      (item) =>
+        MEMBER_AUDIT_TABLES.has(item.table_name) &&
+        !isDefaultRoleGrant(item, lookups),
+    )
+    .map((item) => describeAuditEntry(item, lookups));
 
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = logs;
   const pagesRead = logs.data?.pages.length ?? 0;

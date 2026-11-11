@@ -166,20 +166,20 @@ export function SiteHeaderSearchInput({
   const activeRoute =
     pathname.startsWith('/map') && mapRoute ? mapRoute : siteRoute;
   const { state, replace } = activeRoute;
-  const [draft, setDraft] = useState(state.search ?? '');
-
-  useEffect(() => {
-    const nextValue = state.search ?? '';
-
-    setDraft((current) => (current === nextValue ? current : nextValue));
-  }, [state.search]);
+  const [input, setInput] = useState({
+    search: state.search,
+    value: state.search ?? '',
+  });
+  if (input.search !== state.search)
+    setInput({ search: state.search, value: state.search ?? '' });
+  const draft = input.value;
 
   const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
     const nextDraft = event.target.value;
     const nextSearch = normalizeSearchValue(nextDraft);
     const currentSearch = normalizeSearchValue(state.search);
 
-    setDraft(nextDraft);
+    setInput({ search: state.search, value: nextDraft });
 
     if (nextSearch === currentSearch && state.selectedMarkerId === undefined) {
       return;

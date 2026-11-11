@@ -33,6 +33,10 @@
 - `search`
 - module 類型（`map` / `list`）
 
+側欄與手機的地圖／列表切換連結帶上目前的篩選與選取，從任一方向切換都保留同一個項目。
+
+Path segments 仍由 route parser 處理；`id`、`search`、`bbox`、`pos` 的 query state 由 nuqs 管理。返回瀏覽器歷史時，viewport store 讀取該筆 URL 的視角。
+
 ### 2. Viewport state
 
 由 `libs/modules/src/map/site/use-site-map-viewport-state.ts` 處理。
@@ -42,7 +46,9 @@
 - `position`
 - `bbox`
 
-實作刻意使用 external store，避免每次 drag / zoom 都把整棵 React tree 捲進 rerender。
+使用畫面範圍內的 Zustand store；需要 viewport 的 consumer 直接訂閱，避免每次 drag / zoom 都讓整棵 React tree rerender。
+
+Map 與 list 共用 `useLinkedSelection`，處理未載入的 ticket link、合併後的新 UUID 與刪除狀態。`useMarkerDetail` 保留 drawer 關閉動畫期間的內容。
 
 ### 3. Live data state
 
@@ -51,7 +57,7 @@
 這一層負責：
 
 - 依 viewport 查詢 markers / closure areas
-- 保存 loading / error
+- 透過 TanStack Query 取得 loading / error
 - 保存本地 dismiss 狀態
 
 ### 4. Leaflet render state

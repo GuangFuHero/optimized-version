@@ -4,8 +4,7 @@ import {
   QueryClient,
   type Query,
 } from '@tanstack/react-query';
-import { CombinedError } from 'urql';
-
+import { GraphqlError } from '../graphql/request';
 import ApiError from '../rest/api-error';
 
 export function isAdminPermissionError(error: Error | null) {
@@ -18,7 +17,7 @@ export function isAdminPermissionError(error: Error | null) {
     );
   }
   return (
-    error instanceof CombinedError &&
+    error instanceof GraphqlError &&
     // Resolver HTTPExceptions carry permission failures; transport 403s may have other causes.
     error.graphQLErrors.some((item) => item.message.startsWith('403:'))
   );
@@ -45,9 +44,7 @@ export function forbidsPage(query: Query) {
 /** The HTTP status behind a REST or GraphQL failure; undefined when there was no response. */
 function statusOf(error: Error): number | undefined {
   if (error instanceof ApiError) return error.status;
-  if (error instanceof CombinedError && error.response instanceof Response) {
-    return error.response.status;
-  }
+  if (error instanceof GraphqlError) return error.response?.status;
   return undefined;
 }
 
@@ -55,13 +52,8 @@ export function createAdminQueryClient(onError: (error: Error) => void) {
   const reportError = (error: Error) => {
     if (error instanceof ApiError && error.code === 'step_up_required') return;
     onError(
-      error instanceof CombinedError
-        ? new ApiError(
-            error.response instanceof Response ? error.response.status : 0,
-            error.graphQLErrors[0]?.message ??
-              error.networkError?.message ??
-              'GraphQL request failed.',
-          )
+      error instanceof GraphqlError
+        ? new ApiError(error.response?.status ?? 0, error.message)
         : error,
     );
   };
@@ -79,8 +71,10 @@ export function createAdminQueryClient(onError: (error: Error) => void) {
     }),
     mutationCache: new MutationCache({
       // A mutation can name the statuses it explains to the user itself, e.g. a review answering
-      // 409 because someone else decided first; those are not reported a second time.
+      // 409 because someone else decided first, or set `meta.quietErrors` when it explains every
+      // failure; those are not reported a second time.
       onError: (error, _variables, _context, mutation) => {
+        if (mutation.meta?.quietErrors) return;
         const handled = mutation.meta?.['handledStatuses'];
         if (
           error instanceof ApiError &&
@@ -99,7 +93,7 @@ export function createAdminQueryClient(onError: (error: Error) => void) {
           if (
             status === 401 ||
             status === 403 ||
-            (error instanceof CombinedError && error.graphQLErrors.length > 0)
+            (error instanceof GraphqlError && error.graphQLErrors.length > 0)
           )
             return false;
           return count < 1;

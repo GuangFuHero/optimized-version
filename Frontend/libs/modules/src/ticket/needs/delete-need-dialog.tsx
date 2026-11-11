@@ -2,13 +2,11 @@
 
 import { Box, Stack, Typography } from '@mui/material';
 import { useCallback, useState, type ReactNode } from 'react';
-import { useMutation, useQuery } from 'urql';
+import { useMutation } from '@tanstack/react-query';
 
 import {
   DeleteTicketTaskDocument,
-  GetTicketDocument,
-  TicketFieldsFragmentDoc,
-  useFragment,
+  type GraphqlError,
 } from '@rescue-frontend/data-access';
 import {
   designTokens,
@@ -17,14 +15,12 @@ import {
   Icons,
 } from '@rescue-frontend/ui';
 
+import { siteGraphqlMutation } from '../../session/site-clients';
 import { deleteNeedErrorMessage, isNeedAlreadyGone } from './claim-error';
 import { describeNeedDeletion } from './delete-need';
 import { formatNeedHeadcount, resolveNeedClaim } from './need-claim';
 import type { NeedClaimTarget } from './need-claim-dialog';
-import {
-  readTicketNeeds,
-  TICKET_NEEDS_QUERY_CONTEXT,
-} from './use-ticket-needs';
+import { readTicketNeeds, useCachedTicket } from './use-ticket-needs';
 
 const { color, radius } = designTokens;
 
@@ -49,7 +45,9 @@ interface DeleteNeedDialogProps {
 export function useDeleteNeed(
   reloadTicket: (ticketUuid: string) => Promise<unknown>,
 ) {
-  const [, executeDeleteNeed] = useMutation(DeleteTicketTaskDocument);
+  const { mutateAsync: executeDeleteNeed } = useMutation(
+    siteGraphqlMutation(DeleteTicketTaskDocument),
+  );
   // Open is kept apart from the target, so the dialog keeps its content while it fades out.
   const [open, setOpen] = useState(false);
   const [target, setTarget] = useState<NeedClaimTarget | null>(null);
@@ -75,10 +73,13 @@ export function useDeleteNeed(
     setError(null);
 
     try {
-      const result = await executeDeleteNeed({ uuid: target.needUuid });
+      const refusal = await executeDeleteNeed({ uuid: target.needUuid }).then(
+        () => null,
+        (failure: GraphqlError) => failure,
+      );
 
       // Gone already — from another tab, or with its ticket — is what the requester asked for.
-      if (!result.error || isNeedAlreadyGone(result.error)) {
+      if (!refusal || isNeedAlreadyGone(refusal)) {
         setDeleted(true);
         setOpen(false);
         return;
@@ -87,7 +88,7 @@ export function useDeleteNeed(
       // As with stopping recruitment: read the ticket again, so the dialog shows the need as it
       // now stands under the refusal.
       await reloadTicket(target.ticketUuid);
-      setError(deleteNeedErrorMessage(result.error));
+      setError(deleteNeedErrorMessage(refusal));
     } finally {
       setSubmitting(false);
     }
@@ -159,14 +160,10 @@ export function DeleteNeedDialog({
   onConfirm,
   onExited,
 }: DeleteNeedDialogProps) {
-  const [{ data, fetching }] = useQuery({
-    query: GetTicketDocument,
-    variables: { uuid: target?.ticketUuid ?? '' },
-    pause: !target,
-    context: TICKET_NEEDS_QUERY_CONTEXT,
+  const { ticket, fetching } = useCachedTicket({
+    ticketUuid: target?.ticketUuid,
+    open,
   });
-  const ticket = data?.ticket ?? null;
-  const fields = ticket ? useFragment(TicketFieldsFragmentDoc, ticket) : null;
   const needs = readTicketNeeds(ticket);
   const need = needs.find((item) => item.uuid === target?.needUuid) ?? null;
   // Deleted between the tap and the load: nothing to confirm, and the way out is to close.
@@ -175,7 +172,7 @@ export function DeleteNeedDialog({
     ? formatNeedHeadcount(
         need,
         resolveNeedClaim(need, {
-          ticketStatus: fields?.status,
+          ticketStatus: ticket?.status,
           isAuthenticated: true,
         }).kind,
       )
@@ -204,7 +201,7 @@ export function DeleteNeedDialog({
           border: `1px solid ${color.border.default}`,
         }}
       >
-        {need && fields ? (
+        {need && ticket ? (
           <>
             <Typography
               sx={{
@@ -221,7 +218,7 @@ export function DeleteNeedDialog({
               sx={{ mt: 0.75, color: color.fg.neutral.subtle }}
             >
               <DetailLine icon={<Icons.clipboardList />}>
-                {fields.title}
+                {ticket.title}
               </DetailLine>
               <DetailLine icon={<Icons.users />}>{headcount}</DetailLine>
             </Stack>

@@ -1,5 +1,7 @@
 'use client';
 
+import { useEventCallback } from 'usehooks-ts';
+
 import 'leaflet/dist/leaflet.css';
 
 import L from 'leaflet';
@@ -38,10 +40,8 @@ export function MapViewPickerCanvas({
   const hostRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const zoomControlRef = useRef<L.Control.Zoom | null>(null);
-  const onMoveRef = useRef(onMove);
+  const moveView = useEventCallback(onMove);
   const initialRef = useRef(initial);
-
-  onMoveRef.current = onMove;
 
   useEffect(() => {
     const host = hostRef.current;
@@ -71,7 +71,7 @@ export function MapViewPickerCanvas({
     // backend holds a longitude to -180 to 180.
     const report = () => {
       const center = map.getCenter().wrap();
-      onMoveRef.current({
+      moveView({
         lat: center.lat,
         lng: center.lng,
         zoom: map.getZoom(),

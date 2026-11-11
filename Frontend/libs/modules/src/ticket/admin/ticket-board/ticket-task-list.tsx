@@ -1,6 +1,7 @@
 'use client';
 
 import { Box, ButtonBase, Menu, MenuItem, Typography } from '@mui/material';
+import { useForm, useStore } from '@tanstack/react-form';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   invalidateTicketWrite,
@@ -19,7 +20,7 @@ import {
   Tag,
 } from '@rescue-frontend/ui';
 import { ChevronDown, Circle, User, UserPlus, X } from 'lucide-react';
-import { useId, useMemo, useState, type ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 
 import { Muted } from '../../../admin/shared/muted';
 import { useBusyKeys, useReportBusy } from './hooks/use-busy-keys';
@@ -99,7 +100,7 @@ type PendingAction =
 export function TicketTaskList({ ticket, onBusyChange }: TicketTaskListProps) {
   const busyFor = useBusyKeys(onBusyChange);
   // One task model for the board, read off the drawer's ticket as off a list row.
-  const rows = useMemo(() => toTaskRows(ticket.tasks), [ticket.tasks]);
+  const rows = toTaskRows(ticket.tasks);
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const user = useCurrentUser().data;
@@ -707,11 +708,12 @@ function AssignPicker({
   const assign = useAssignTaskActor();
   useReportBusy(assign.isPending, onBusyChange);
   const queryClient = useQueryClient();
-  const options = useMemo(
-    () => assignPickerOptions(members.data ?? [], task.assignments),
-    [members.data, task.assignments],
-  );
-  const [picked, setPicked] = useState('');
+  const options = assignPickerOptions(members.data ?? [], task.assignments);
+  const form = useForm({
+    defaultValues: { picked: '' },
+    onSubmit: (): Promise<void> => confirm(),
+  });
+  const picked = useStore(form.store, (state) => state.values.picked);
   const [error, setError] = useState<string | null>(null);
   const pick = options.some((o) => o.value === picked)
     ? picked
@@ -797,7 +799,7 @@ function AssignPicker({
           value={pick}
           disabled={assign.isPending}
           onChange={(event: React.ChangeEvent<HTMLSelectElement>) =>
-            setPicked(event.target.value)
+            form.setFieldValue('picked', event.target.value)
           }
           sx={{
             height: 32,
@@ -825,7 +827,7 @@ function AssignPicker({
         </Box>
         <Button
           size="sm"
-          onClick={() => void confirm()}
+          onClick={() => void form.handleSubmit()}
           disabled={!pick || assign.isPending}
         >
           {assign.isPending ? '加入中…' : '加入'}

@@ -8,8 +8,9 @@ import {
 import { Button, Callout, designTokens, Tag } from '@rescue-frontend/ui';
 import { Building2, ChevronRight, MapPinOff, X } from 'lucide-react';
 import type { Map as LeafletMap } from 'leaflet';
-import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
-import { useDebounceCallback } from 'usehooks-ts';
+import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useDebounceCallback, useEventCallback } from 'usehooks-ts';
+import { createStore, useStore } from 'zustand';
 
 import { Muted } from '../../../admin/shared/muted';
 import {
@@ -131,19 +132,13 @@ export function TicketMapView({
   });
   // The first load waits for the first framing, so it is of the framed view and not the default.
   const viewport = useMapViewport(framing.ready ? leafletMap : null);
-  const variables = useMemo(
-    () => (viewport ? toMapVariables(filters, viewport, cutAt) : {}),
-    [filters, viewport, cutAt],
-  );
+  const variables = viewport ? toMapVariables(filters, viewport, cutAt) : {};
   const tickets = useTicketPins(variables, { enabled: viewport !== null });
   const rows = tickets.pins;
-  const listSpaces = useMemo(
-    () => spacesInView(spaces, viewport),
-    [spaces, viewport],
-  );
+  const listSpaces = spacesInView(spaces, viewport);
   // Built once per load; a selection change swaps only the marker whose look changes. A ticket in
   // a space draws no pin of its own: it shares the space's square one.
-  const rowMarkers = useMemo(() => {
+  const rowMarkers = (() => {
     const spaceMarkers = spaces
       .map((space) => toSpaceMarker(space))
       .filter((m): m is RescueMapMarkerItem => m !== null);
@@ -156,10 +151,9 @@ export function TicketMapView({
         .filter((m): m is RescueMapMarkerItem => m !== null),
       ...spaceMarkers,
     ];
-  }, [rows, spaces]);
-  const markers = useMemo(
-    () => rowMarkers.map((m) => withMarkerSelected(m, m.id === selectedUuid)),
-    [rowMarkers, selectedUuid],
+  })();
+  const markers = rowMarkers.map((m) =>
+    withMarkerSelected(m, m.id === selectedUuid),
   );
   useFocusSelected(leafletMap, rowMarkers, selectedUuid);
   const inViewTotal = tickets.isPlaceholderData ? null : tickets.totalCount;
@@ -303,38 +297,38 @@ function useFrameMatching(
     arrivedWithNewFilters,
   }: { restoredRef: RefObject<boolean>; arrivedWithNewFilters: boolean },
 ) {
-  const variables = useMemo(
-    () => toExtentVariables(filters, cutAt),
-    [filters, cutAt],
-  );
+  const variables = toExtentVariables(filters, cutAt);
   const extent = useTicketsExtent(variables);
-  const [ready, setReady] = useState(false);
-  const [wentHome, setWentHome] = useState(false);
-  const [framed, setFramed] = useState(0);
-  const [attempt, setAttempt] = useState(0);
+  const [frame] = useState(() =>
+    createStore(() => ({
+      ready: false,
+      wentHome: false,
+      framed: 0,
+      attempt: 0,
+    })),
+  );
+  const { ready, wentHome, framed, attempt } = useStore(frame);
   const filtersKey = ticketFiltersKey(filters);
   const request = `${filtersKey}#${attempt}`;
   const framedRef = useRef<string | null>(null);
-  const selectedRef = useRef(selectedUuid);
-  selectedRef.current = selectedUuid;
+  const getSelected = useEventCallback(() => selectedUuid);
   const askedRef = useRef(false);
   // The event's view, not where this map opened: that may be where it was left.
   const event = useEventMapView();
-  const homeRef = useRef(event.view);
-  homeRef.current = event.view;
+  const getHome = useEventCallback(() => event.view);
 
   const box = extent.data?.ticketsExtent;
   const failed = extent.error != null;
   useEffect(() => {
-    if (map && failed) setReady(true);
-  }, [map, failed]);
+    if (map && failed) frame.setState({ ready: true });
+  }, [map, failed, frame]);
   useEffect(() => {
     // Not before the event's view is read: a box too wide would go to all of Taiwan instead.
     if (!map || !box || !event.ready) return;
     const step = framingStep(
       framedRef.current,
       request,
-      selectedRef.current !== null && !askedRef.current,
+      getSelected() !== null && !askedRef.current,
       restoredRef.current && !arrivedWithNewFilters,
     );
     if (step === 'done') return;
@@ -344,17 +338,19 @@ function useFrameMatching(
     const move = framingMove(step, box, (bounds) =>
       boxFitsWhole(bounds, map.getSize(), map.getMinZoom()),
     );
-    setWentHome(move.kind === 'home');
-    setFramed((n) => n + 1);
+    frame.setState((current) => ({
+      wentHome: move.kind === 'home',
+      framed: current.framed + 1,
+    }));
     // Kept, the view is final: the pins load the current view now, not on a moveend.
     if (move.kind === 'stay') {
-      setReady(true);
+      frame.setState({ ready: true });
       return;
     }
     // Leaflet ends every setView and fitBounds, even one that does not move, with moveend.
-    map.once('moveend', () => setReady(true));
+    map.once('moveend', () => frame.setState({ ready: true }));
     if (move.kind === 'home') {
-      map.setView(homeRef.current.center, homeRef.current.zoom);
+      map.setView(getHome().center, getHome().zoom);
       return;
     }
     const { framing } = move;
@@ -388,7 +384,7 @@ function useFrameMatching(
     retry: () => void extent.refetch(),
     frameAgain: () => {
       askedRef.current = true;
-      setAttempt((n) => n + 1);
+      frame.setState((current) => ({ attempt: current.attempt + 1 }));
     },
   };
 }
@@ -406,8 +402,7 @@ function useFocusSelected(
   const detail = useTicket({ uuid: selectedUuid ?? '' });
   const ticket = detail.data?.ticket ?? null;
   const detailLoaded = detail.data !== undefined;
-  const markersRef = useRef(markers);
-  markersRef.current = markers;
+  const getMarkers = useEventCallback(() => markers);
   const focusedRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -415,7 +410,7 @@ function useFocusSelected(
     const step = selectedFocusStep({
       selectedUuid,
       focusedUuid: focusedRef.current,
-      loadedIds: new Set(markersRef.current.map((m) => m.id)),
+      loadedIds: new Set(getMarkers().map((m) => m.id)),
       detailLoaded,
       point: ticket ? stationPoint(ticket.geometry) : null,
     });
@@ -445,8 +440,12 @@ function useSettledSince(
 
 /** The area the map shows, settled after each move; null until the map is built. */
 function useMapViewport(map: LeafletMap | null): MapViewport | null {
-  const [viewport, setViewport] = useState<MapViewport | null>(null);
-  const settle = useDebounceCallback(setViewport, VIEWPORT_DEBOUNCE_MS);
+  const [store] = useState(() => createStore<MapViewport | null>(() => null));
+  const viewport = useStore(store);
+  const settle = useDebounceCallback(
+    (next: MapViewport) => store.setState(next, true),
+    VIEWPORT_DEBOUNCE_MS,
+  );
   useEffect(() => {
     if (!map) return undefined;
     const read = (): MapViewport => {
@@ -460,13 +459,13 @@ function useMapViewport(map: LeafletMap | null): MapViewport | null {
       };
     };
     const onMoveEnd = () => settle(read());
-    setViewport(read());
+    store.setState(read(), true);
     map.on('moveend', onMoveEnd);
     return () => {
       settle.cancel();
       map.off('moveend', onMoveEnd);
     };
-  }, [map, settle]);
+  }, [map, settle, store]);
   return viewport;
 }
 
@@ -489,53 +488,55 @@ function SelectionSync({
   onOpenSpace?: (uuid: string) => void;
 }) {
   const { selectedMarkerId, setSelectedMarkerId } = controller;
-  const [cellUuids, setCellUuids] = useState<string[] | null>(null);
-  const [spaceId, setSpaceId] = useState<string | null>(null);
+  const [store] = useState(() =>
+    createStore<
+      | { kind: 'none' }
+      | { kind: 'cell'; uuids: string[] }
+      | { kind: 'space'; id: string }
+    >(() => ({ kind: 'none' })),
+  );
+  const picked = useStore(store);
+  const clear = () => store.setState({ kind: 'none' }, true);
   useEffect(() => {
     if (!selectedMarkerId) return;
     const pickedSpace = spaceIdOfMarker(selectedMarkerId);
     if (pickedSpace) {
-      setSpaceId(pickedSpace);
-      setCellUuids(null);
+      store.setState({ kind: 'space', id: pickedSpace }, true);
       setSelectedMarkerId(undefined);
       return;
     }
     const selection = resolveMapSelection(selectedMarkerId, rows);
     if (selection?.kind === 'ticket') {
       onOpen(selection.uuid);
-      setCellUuids(null);
-      setSpaceId(null);
+      clear();
     } else if (selection?.kind === 'cell') {
-      setCellUuids(selection.uuids);
-      setSpaceId(null);
+      store.setState({ kind: 'cell', uuids: selection.uuids }, true);
     }
     setSelectedMarkerId(undefined);
   }, [selectedMarkerId, rows, onOpen, setSelectedMarkerId]);
 
-  const space = spaceId ? spaces.find((row) => row.id === spaceId) : undefined;
+  const space =
+    picked.kind === 'space'
+      ? spaces.find((row) => row.id === picked.id)
+      : undefined;
   if (space) {
     return (
       <SpaceMapCard
         row={space}
         onOpenFloors={(id) => {
-          setSpaceId(null);
+          clear();
           onOpenSpace?.(id);
         }}
-        onClose={() => setSpaceId(null)}
+        onClose={clear}
       />
     );
   }
-  const listed = cellUuids
-    ? rows.filter((row) => cellUuids.includes(row.uuid))
-    : [];
+  const listed =
+    picked.kind === 'cell'
+      ? rows.filter((row) => picked.uuids.includes(row.uuid))
+      : [];
   if (listed.length === 0) return null;
-  return (
-    <CellTicketList
-      rows={listed}
-      onPick={onOpen}
-      onClose={() => setCellUuids(null)}
-    />
-  );
+  return <CellTicketList rows={listed} onPick={onOpen} onClose={clear} />;
 }
 
 /**

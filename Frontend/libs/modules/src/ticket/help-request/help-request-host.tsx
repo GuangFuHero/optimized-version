@@ -1,5 +1,7 @@
 'use client';
 
+import { useReturnQuery } from '../../route/use-return-query';
+
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   Suspense,
@@ -9,12 +11,11 @@ import {
   useRef,
   useState,
 } from 'react';
-import { useMutation } from 'urql';
+import { useMutation } from '@tanstack/react-query';
 
 import {
   CreateHelpRequestDocument,
-  TicketFieldsFragmentDoc,
-  useFragment,
+  type GraphqlError,
 } from '@rescue-frontend/data-access';
 
 import { useOptionalSiteMapRouteState } from '../../map/site/use-site-map-route-state';
@@ -22,6 +23,7 @@ import { SiteMapViewportStoreContext } from '../../map/site/use-site-map-viewpor
 import { createSiteHref } from '../../route/serialize';
 import { useSiteRouteState } from '../../route/use-site-route-state';
 import { useAuthSession } from '../../session/auth-session';
+import { siteGraphqlMutation } from '../../session/site-clients';
 import { SiteToast } from '../../shell/site/site-toast';
 import { announceTicketCreated } from '../ticket-changes';
 import {
@@ -39,11 +41,7 @@ import {
   type HelpRequestForm,
   type PickedPoint,
 } from './help-request-form';
-import {
-  buildHelpSignInHref,
-  readHelpReturn,
-  stripHelpReturn,
-} from './help-return';
+import { buildHelpSignInHref, readHelpReturn } from './help-return';
 import {
   onOpenHelpRequest,
   type HelpRequestPlace,
@@ -94,6 +92,7 @@ function HelpRequestReturn({
 }: {
   onReturn: (seed: Seed, bringsBackDraft: boolean) => void;
 }) {
+  const consumeReturn = useReturnQuery();
   const searchParams = useSearchParams();
   const { status } = useAuthSession();
   const [helpReturn] = useState(() => readHelpReturn(searchParams));
@@ -108,18 +107,13 @@ function HelpRequestReturn({
 
     // Off the address either way, so a reload or a copied link does not open it again. A guest
     // here did not sign in — the link came some other way — and has nothing to reopen.
-    const address = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-    const withoutHelp = stripHelpReturn(address);
-
-    if (withoutHelp !== address) {
-      window.history.replaceState(window.history.state, '', withoutHelp);
-    }
+    consumeReturn(['help', 'helpBuilding', 'helpFloor']);
 
     // What was typed before the sign-in comes back, at whatever point it was opened.
     if (status === 'authenticated') {
       onReturn(helpReturn.seed, true);
     }
-  }, [helpReturn, onReturn, status]);
+  }, [consumeReturn, helpReturn, onReturn, status]);
 
   return null;
 }
@@ -138,7 +132,9 @@ export function HelpRequestHost({ isAuthenticated }: HelpRequestHostProps) {
   const mapRoute = useOptionalSiteMapRouteState();
   // Only on the map, whose zoom the new ticket is shown at, unless that is too far out.
   const mapViewport = useContext(SiteMapViewportStoreContext);
-  const [, createHelpRequest] = useMutation(CreateHelpRequestDocument);
+  const { mutateAsync: createHelpRequest } = useMutation(
+    siteGraphqlMutation(CreateHelpRequestDocument),
+  );
   // The account's uuid, as `NeedClaimProvider` reads it.
   const userId = useAuthSession().user?.uuid ?? null;
   const [opening, setOpening] = useState<Opening | null>(null);
@@ -197,7 +193,7 @@ export function HelpRequestHost({ isAuthenticated }: HelpRequestHostProps) {
       };
 
       if (mapRoute) {
-        const zoom = mapViewport?.getSnapshot().position?.zoom ?? 0;
+        const zoom = mapViewport?.getState().position?.zoom ?? 0;
 
         mapRoute.replace({
           ...mapRoute.state,
@@ -235,8 +231,10 @@ export function HelpRequestHost({ isAuthenticated }: HelpRequestHostProps) {
 
     try {
       const input = toHelpRequestInput(form, acknowledged);
-      const result = await createHelpRequest({ input });
-      const answer = result.data?.createHelpRequest;
+      const { answer, error } = await createHelpRequest({ input }).then(
+        (data) => ({ answer: data.createHelpRequest, error: undefined }),
+        (failure: GraphqlError) => ({ answer: undefined, error: failure }),
+      );
 
       // Held: nothing was written. What was typed stays in the drawer, under the dialog.
       if (answer?.__typename === 'DuplicatesSuspected') {
@@ -254,7 +252,7 @@ export function HelpRequestHost({ isAuthenticated }: HelpRequestHostProps) {
 
       // What was typed stays for another try.
       if (answer?.__typename !== 'TicketCreated') {
-        const message = submitErrorMessage(result.error);
+        const message = submitErrorMessage(error);
 
         if (acknowledged) {
           setHeldError(message);
@@ -266,7 +264,7 @@ export function HelpRequestHost({ isAuthenticated }: HelpRequestHostProps) {
       }
 
       const next: FiledTicket = {
-        uuid: useFragment(TicketFieldsFragmentDoc, answer.ticket).uuid,
+        uuid: answer.ticket.uuid,
         point: form.landmark,
         needCount: answer.tasks.length,
       };
@@ -316,11 +314,7 @@ export function HelpRequestHost({ isAuthenticated }: HelpRequestHostProps) {
   };
 
   // A sign-out takes the draft with it, so nothing is left to go back to.
-  useEffect(() => {
-    if (!userId) {
-      setUnsentOpen(false);
-    }
-  }, [userId]);
+  if (!userId && unsentOpen) setUnsentOpen(false);
 
   return (
     <>

@@ -1,14 +1,12 @@
 'use client';
 
+import { useReturnQuery } from '../route/use-return-query';
+
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 
 import { useAuthSession } from '../session/auth-session';
-import {
-  readApplyReturn,
-  stripApplyReturn,
-  type ApplyReturn,
-} from './apply-return';
+import { readApplyReturn, type ApplyReturn } from './apply-return';
 
 /**
  * Opens 申請管理權限 again for someone back from proving themselves at LINE (`apply=`). Read once,
@@ -21,6 +19,7 @@ export function RoleRequestReturn({
 }: {
   onReturn: (applyReturn: ApplyReturn) => void;
 }) {
+  const consumeReturn = useReturnQuery();
   const searchParams = useSearchParams();
   const { status } = useAuthSession();
   const [applyReturn] = useState(() => readApplyReturn(searchParams));
@@ -35,17 +34,12 @@ export function RoleRequestReturn({
 
     // Off the address either way, so a reload or a copied link does not open it again. Signed out
     // meanwhile, there is no form to bring back.
-    const address = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-    const without = stripApplyReturn(address);
-
-    if (without !== address) {
-      window.history.replaceState(window.history.state, '', without);
-    }
+    consumeReturn(['apply', 'step_up', 'step_up_error']);
 
     if (status === 'authenticated') {
       onReturn(applyReturn);
     }
-  }, [applyReturn, onReturn, status]);
+  }, [applyReturn, consumeReturn, onReturn, status]);
 
   return null;
 }

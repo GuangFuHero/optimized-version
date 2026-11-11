@@ -2,8 +2,8 @@
 
 import { Box, Button, Stack, Typography } from '@mui/material';
 import Link from 'next/link';
+import type { UseQueryResult } from '@tanstack/react-query';
 import type { MouseEvent, ReactNode } from 'react';
-import type { UseQueryState } from 'urql';
 
 import type { MyTicketsQuery } from '@rescue-frontend/data-access';
 import {
@@ -27,7 +27,7 @@ interface MyRequestsListProps {
    * `myTickets`, read by the drawer at each opening — its tab counts them — so a request filed
    * since shows up, and a need added, deleted or claimed since is counted.
    */
-  result: UseQueryState<MyTicketsQuery>;
+  result: UseQueryResult<MyTicketsQuery>;
   /** Leaving for another page: the drawer lives in the account menu, which stays across pages. */
   onLeave: () => void;
 }
@@ -145,7 +145,7 @@ function NoticeText({ children }: { children: ReactNode }) {
 
 /** 我建立的: the requests the viewer filed, newest first, every status. */
 export function MyRequestsList({
-  result: { data, fetching, error },
+  result: { data, isFetching: fetching, error },
   onLeave,
 }: MyRequestsListProps) {
   const route = useSiteRouteState();

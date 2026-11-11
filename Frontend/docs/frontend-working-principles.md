@@ -70,7 +70,7 @@ ui -> data-access (generated types only)
 - `shell`
 - `station`
 - `ticket`
-- `admin/user`
+- `admin/members`
 
 判斷標準：
 
@@ -84,8 +84,7 @@ ui -> data-access (generated types only)
 
 - GraphQL documents
 - codegen 產物
-- urql client
-- REST endpoint 封裝
+- GraphQL / REST client
 
 不適合放：
 
@@ -131,3 +130,13 @@ ui -> data-access (generated types only)
 3. 同一 capability 內多處重用：提升到該 capability 內具名位置
 4. 跨 capability 但仍有產品語意：建立新的具名 family
 5. 已無業務語意且可廣泛重用：提升到 `libs/ui`
+
+## State、表單與 render
+
+- Server state 由 TanStack Query 持有，讀取與失效規則見 [data-access](data-access.md)。不要把 query data 複製到 Zustand。
+- 跨元件的 client state 使用 Zustand。地圖 viewport、選取與 framing store 依畫面建立；共用 drawer 入口與偏好設定使用共用 store。只在單一元件使用的開關可保留 React state。
+- 表單與 inline editor 的 draft values 使用 TanStack Form；API 欄位從 generated GraphQL / OpenAPI contracts 推導。地圖幾何、流程 stage、非同步請求與取消後的回應判斷仍由原本的 workflow 負責。
+- 表單開啟時的初值需固定，避免 refetch 覆寫尚未編輯的欄位。驗證時機、錯誤消失時機與取消後重開的內容都屬於行為契約。根層 submit errors 若需在編輯時保留，使用 `dontValidate: true`，再清除實際修改欄位的錯誤。
+- 有欄列、排序、分頁或差異篩選的資料表使用 TanStack Table。共用樣式由 `ui/DataTable` 提供；重複比對表保留自己的 merged-cell grid，由 Table 處理 rows 與差異篩選。
+- Search params 使用 nuqs。前台 URL 由 `useSiteRouteState` 處理，後台站點與任務 board 由 `useBoardSearchParams` 處理；sign-in return marker 由 `useReturnQuery` 消費。保留原本的 push / replace、shallow / server navigation 與一次性讀取規則，不替 local filters 新增 URL persistence。
+- 兩個 Next app 啟用 React Compiler；ESLint 啟用 Rules of React。讓 compiler 處理 render 計算，無須預先加 `useMemo`。Effects 留給 DOM、Leaflet、瀏覽器事件、計時器與外部狀態同步；由事件直接造成的狀態變更放回 handler 或 workflow hook。

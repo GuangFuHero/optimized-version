@@ -37,7 +37,7 @@ importers:
         version: 22.6.5(@babel/traverse@7.29.0(supports-color@10.2.2))(@swc-node/register@1.11.1(@emnapi/core@1.9.2)(@emnapi/runtime@1.9.2)(@swc/core@1.15.24(@swc/helpers@0.5.21))(@swc/types@0.1.26)(supports-color@10.2.2)(typescript@5.9.3))(@swc/core@1.15.24(@swc/helpers@0.5.21))(debug@4.4.3(supports-color@10.2.2))(nx@22.6.5(@swc-node/register@1.11.1(@emnapi/core@1.9.2)(@emnapi/runtime@1.9.2)(@swc/core@1.15.24(@swc/helpers@0.5.21))(@swc/types@0.1.26)(supports-color@10.2.2)(typescript@5.9.3))(@swc/core@1.15.24(@swc/helpers@0.5.21))(debug@4.4.3(supports-color@10.2.2)))(supports-color@10.2.2)
       '@nx/next':
         specifier: ^22.6.5
-        version: 22.6.5(9d16328856975213ad1181a858b130ec)
+        version: 22.6.5(6f13f466059c59923a9a328b2dca52b2)
       '@nx/react':
         specifier: ^22.6.5
         version: 22.6.5(f397231d44375d693aeae73cefbca97f)
@@ -77,6 +77,9 @@ importers:
       '@types/react-dom':
         specifier: ^19.0.0
         version: 19.2.3(@types/react@19.2.14)
+      babel-plugin-react-compiler:
+        specifier: ^1.0.0
+        version: 1.0.0
       eslint:
         specifier: ^9.8.0
         version: 9.39.4(jiti@2.4.2)(supports-color@10.2.2)
@@ -96,8 +99,8 @@ importers:
         specifier: 7.35.0
         version: 7.35.0(eslint@9.39.4(jiti@2.4.2)(supports-color@10.2.2))
       eslint-plugin-react-hooks:
-        specifier: 5.0.0
-        version: 5.0.0(eslint@9.39.4(jiti@2.4.2)(supports-color@10.2.2))
+        specifier: 7.1.1
+        version: 7.1.1(eslint@9.39.4(jiti@2.4.2)(supports-color@10.2.2))(supports-color@10.2.2)
       jiti:
         specifier: 2.4.2
         version: 2.4.2
@@ -139,7 +142,7 @@ importers:
         version: 9.0.0(@emotion/react@11.14.0(@types/react@19.2.14)(react@19.2.5)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.14)(react@19.2.5)(supports-color@10.2.2))(@types/react@19.2.14)(react@19.2.5)(supports-color@10.2.2))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       '@mui/material-nextjs':
         specifier: ^9.0.1
-        version: 9.0.1(@emotion/cache@11.14.0)(@emotion/react@11.14.0(@types/react@19.2.14)(react@19.2.5)(supports-color@10.2.2))(@types/react@19.2.14)(next@16.4.2(@babel/core@7.29.0(supports-color@10.2.2))(@types/node@20.19.9)(babel-plugin-macros@3.1.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(sass@1.99.0))(react@19.2.5)
+        version: 9.0.1(@emotion/cache@11.14.0)(@emotion/react@11.14.0(@types/react@19.2.14)(react@19.2.5)(supports-color@10.2.2))(@types/react@19.2.14)(next@16.4.2(@babel/core@7.29.0(supports-color@10.2.2))(@types/node@20.19.9)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(sass@1.99.0))(react@19.2.5)
       '@rescue-frontend/data-access':
         specifier: workspace:*
         version: link:../../libs/data-access
@@ -149,6 +152,9 @@ importers:
       '@rescue-frontend/ui':
         specifier: workspace:*
         version: link:../../libs/ui
+      '@tanstack/react-form':
+        specifier: ^1.33.5
+        version: 1.33.5(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       '@tanstack/react-query':
         specifier: ^5.90.0
         version: 5.104.1(react@19.2.5)
@@ -157,7 +163,10 @@ importers:
         version: 0.577.0(react@19.2.5)
       next:
         specifier: ~16.4.2
-        version: 16.4.2(@babel/core@7.29.0(supports-color@10.2.2))(@types/node@20.19.9)(babel-plugin-macros@3.1.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(sass@1.99.0)
+        version: 16.4.2(@babel/core@7.29.0(supports-color@10.2.2))(@types/node@20.19.9)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(sass@1.99.0)
+      nuqs:
+        specifier: ^2.10.2
+        version: 2.10.2(next@16.4.2(@babel/core@7.29.0(supports-color@10.2.2))(@types/node@20.19.9)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(sass@1.99.0))(react@19.2.5)
       react:
         specifier: ^19.0.0
         version: 19.2.5
@@ -167,6 +176,9 @@ importers:
       sonner:
         specifier: ^2.0.7
         version: 2.0.8(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+      usehooks-ts:
+        specifier: ^3.1.1
+        version: 3.1.1(react@19.2.5)
 
   apps/demo:
     dependencies:
@@ -190,7 +202,7 @@ importers:
         version: link:../../libs/ui
       next:
         specifier: ~16.4.2
-        version: 16.4.2(@babel/core@7.29.0(supports-color@10.2.2))(@types/node@20.19.9)(babel-plugin-macros@3.1.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(sass@1.99.0)
+        version: 16.4.2(@babel/core@7.29.0(supports-color@10.2.2))(@types/node@20.19.9)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(sass@1.99.0)
       react:
         specifier: ^19.0.0
         version: 19.2.5
@@ -206,9 +218,6 @@ importers:
       '@tanstack/react-query':
         specifier: ^5.90.0
         version: 5.104.1(react@19.2.5)
-      '@urql/exchange-graphcache':
-        specifier: ^9.0.0
-        version: 9.0.0(@urql/core@6.0.1(graphql@16.13.2))(graphql@16.13.2)
       graphql:
         specifier: ^16.13.2
         version: 16.13.2
@@ -218,9 +227,6 @@ importers:
       react:
         specifier: ^19.0.0
         version: 19.2.5
-      urql:
-        specifier: ^5.0.1
-        version: 5.0.1(@urql/core@6.0.1(graphql@16.13.2))(react@19.2.5)
       zod:
         specifier: ^4.6.6
         version: 4.6.6
@@ -238,22 +244,22 @@ importers:
         version: 9.0.0(@emotion/react@11.14.0(@types/react@19.2.14)(react@19.2.5)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.14)(react@19.2.5)(supports-color@10.2.2))(@types/react@19.2.14)(react@19.2.5)(supports-color@10.2.2))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       '@mui/material-nextjs':
         specifier: ^9.0.1
-        version: 9.0.1(@emotion/cache@11.14.0)(@emotion/react@11.14.0(@types/react@19.2.14)(react@19.2.5)(supports-color@10.2.2))(@types/react@19.2.14)(next@16.4.2(@babel/core@7.29.0(supports-color@10.2.2))(@types/node@20.19.9)(babel-plugin-macros@3.1.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(sass@1.99.0))(react@19.2.5)
+        version: 9.0.1(@emotion/cache@11.14.0)(@emotion/react@11.14.0(@types/react@19.2.14)(react@19.2.5)(supports-color@10.2.2))(@types/react@19.2.14)(next@16.4.2(@babel/core@7.29.0(supports-color@10.2.2))(@types/node@20.19.9)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(sass@1.99.0))(react@19.2.5)
       '@rescue-frontend/data-access':
         specifier: workspace:*
         version: link:../data-access
       '@rescue-frontend/ui':
         specifier: workspace:*
         version: link:../ui
+      '@tanstack/react-form':
+        specifier: ^1.33.5
+        version: 1.33.5(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       '@tanstack/react-query':
         specifier: ^5.90.0
         version: 5.104.1(react@19.2.5)
       '@tanstack/react-table':
         specifier: ^9.2.4
         version: 9.2.4(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
-      '@urql/next':
-        specifier: ^2.0.0
-        version: 2.0.0(next@16.4.2(@babel/core@7.29.0(supports-color@10.2.2))(@types/node@20.19.9)(babel-plugin-macros@3.1.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(sass@1.99.0))(react@19.2.5)(urql@5.0.1(@urql/core@6.0.1(graphql@16.13.2))(react@19.2.5))
       date-fns:
         specifier: ^4.4.0
         version: 4.4.0
@@ -280,7 +286,10 @@ importers:
         version: 0.577.0(react@19.2.5)
       next:
         specifier: ~16.4.2
-        version: 16.4.2(@babel/core@7.29.0(supports-color@10.2.2))(@types/node@20.19.9)(babel-plugin-macros@3.1.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(sass@1.99.0)
+        version: 16.4.2(@babel/core@7.29.0(supports-color@10.2.2))(@types/node@20.19.9)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(sass@1.99.0)
+      nuqs:
+        specifier: ^2.10.2
+        version: 2.10.2(next@16.4.2(@babel/core@7.29.0(supports-color@10.2.2))(@types/node@20.19.9)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(sass@1.99.0))(react@19.2.5)
       plotly.js-dist-min:
         specifier: 4.1.1
         version: 4.1.1
@@ -293,21 +302,18 @@ importers:
       react-dom:
         specifier: ^19.0.0
         version: 19.2.5(react@19.2.5)
-      react-hook-form:
-        specifier: ^7.76.0
-        version: 7.76.0(react@19.2.5)
       sonner:
         specifier: ^2.0.7
         version: 2.0.8(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
-      urql:
-        specifier: ^5.0.1
-        version: 5.0.1(@urql/core@6.0.1(graphql@16.13.2))(react@19.2.5)
       usehooks-ts:
         specifier: ^3.1.1
         version: 3.1.1(react@19.2.5)
       zod:
         specifier: ^4.6.6
         version: 4.6.6
+      zustand:
+        specifier: ^5.0.16
+        version: 5.0.16(@types/react@19.2.14)(react@19.2.5)(use-sync-external-store@1.7.0(react@19.2.5))
 
   libs/ui:
     dependencies:
@@ -398,14 +404,6 @@ importers:
         version: 8.0.8(@types/node@20.19.9)(esbuild@0.27.7)(jiti@2.4.2)(less@4.5.1)(sass-embedded@1.99.0)(sass@1.99.0)(terser@5.46.1)(yaml@2.8.3)
 
 packages:
-
-  '@0no-co/graphql.web@1.2.0':
-    resolution: {integrity: sha512-/1iHy9TTr63gE1YcR5idjx8UREz1s0kFhydf3bBLCXyqjhkIc6igAzTOx3zPifCwFR87tsh/4Pa9cNts6d2otw==}
-    peerDependencies:
-      graphql: ^14.0.0 || ^15.0.0 || ^16.0.0
-    peerDependenciesMeta:
-      graphql:
-        optional: true
 
   '@adobe/css-tools@4.5.0':
     resolution: {integrity: sha512-6OzddxPio9UiWTCemp4N8cYLV2ZN1ncRnV1cVGtve7dhPOtRkleRyx32GQCYSwDYgaHU3USMm84tNsvKzRCa1Q==}
@@ -3468,6 +3466,9 @@ packages:
     resolution: {integrity: sha512-tlqY9xq5ukxTUZBmoOp+m61cqwQD5pHJtFY3Mn8CA8ps6yghLH/Hw8UPdqg4OLmFW3IFlcXnQNmo/dh8HzXYIQ==}
     engines: {node: '>=18'}
 
+  '@standard-schema/spec@1.1.0':
+    resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
+
   '@storybook/addon-docs@10.6.0':
     resolution: {integrity: sha512-Fk3rUQWeGyCfL170OkmRp6Ruyv7MHPb/xrKa6YNk7FlGmlVLi5tKzh2T/0J13vWEy8wiu2MV3IBu8iRsaUR+Cw==}
     peerDependencies:
@@ -3738,8 +3739,29 @@ packages:
   '@swc/types@0.1.26':
     resolution: {integrity: sha512-lyMwd7WGgG79RS7EERZV3T8wMdmPq3xwyg+1nmAM64kIhx5yl+juO2PYIHb7vTiPgPCj8LYjsNV2T5wiQHUEaw==}
 
+  '@tanstack/devtools-event-client@0.4.4':
+    resolution: {integrity: sha512-6T5Yop/793YI+H+5J8Hsyj4kCih9sl4t3ElLgKioW5hk3ocn+ZdSJ94tT7vL7uabxSugWYBZlOTMPzEw2puvQw==}
+    engines: {node: '>=18'}
+    hasBin: true
+
+  '@tanstack/form-core@1.33.5':
+    resolution: {integrity: sha512-3dfx9MBP0aq5sXKteikG629X9oviptrQj0IFRk9YGcb+lB7Kv5x8S17oOSk1wUWgjQZ4xVJEMbKwOAODymocgA==}
+
+  '@tanstack/pacer-lite@0.1.1':
+    resolution: {integrity: sha512-y/xtNPNt/YeyoVxE/JCx+T7yjEzpezmbb+toK8DDD1P4m7Kzs5YR956+7OKexG3f8aXgC3rLZl7b1V+yNUSy5w==}
+    engines: {node: '>=18'}
+
   '@tanstack/query-core@5.104.1':
     resolution: {integrity: sha512-TiRghcrGkUTE+M4JBxvpPSpBhxvIzQairw+cksrHYGr+2uwC77yW1SY9nYxnYRYOppvucf8rEg6b5byoz4rTpw==}
+
+  '@tanstack/react-form@1.33.5':
+    resolution: {integrity: sha512-LlRB28qJwO/QCGaHvWnbdh4haBgTFiZVmzA2uzxSBS3YA7/IqrQ6HOBK70CkFQ+DbflZ7NawsmSln13h5iIdTA==}
+    peerDependencies:
+      '@tanstack/react-start': '*'
+      react: ^17.0.0 || ^18.0.0 || ^19.0.0
+    peerDependenciesMeta:
+      '@tanstack/react-start':
+        optional: true
 
   '@tanstack/react-query@5.104.1':
     resolution: {integrity: sha512-Zz70EgjahNI7aCz8BZxM3vUGU44ycxEAzMuCUjLeA7SVhhOkg3ZgPjPJPvHjs6Rmky/dtmnu1WzjGHNHmhCoZQ==}
@@ -4292,21 +4314,6 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@urql/core@6.0.1':
-    resolution: {integrity: sha512-FZDiQk6jxbj5hixf2rEPv0jI+IZz0EqqGW8mJBEug68/zHTtT+f34guZDmyjJZyiWbj0vL165LoMr/TkeDHaug==}
-
-  '@urql/exchange-graphcache@9.0.0':
-    resolution: {integrity: sha512-5ACktvMFdnD5JC6DaSUrlj345c1JIUi7PwgvmnkwVOWsCRt/Vo9946UaG+sg69ku8seESMBK4xkeI41M39Dd5A==}
-    peerDependencies:
-      '@urql/core': ^6.0.0
-
-  '@urql/next@2.0.0':
-    resolution: {integrity: sha512-X7q/+MOUtX1suaDxGJdgjAqE/eyhcGr1XnTO0VpUnSPdPOkVUKm5RNDIQy4ecupTYKs++1j2YWcmAfLc9R/Gkw==}
-    peerDependencies:
-      next: '>=13.0.0'
-      react: '>=18.0.0'
-      urql: ^5.0.0
-
   '@vitest/expect@3.2.4':
     resolution: {integrity: sha512-Io0yyORnB6sikFlt8QW5K7slY4OjqNX9jmJQ02QDda8lyM6B5oNgVWoSoKPac8/kgnCUzuHQKrSLtu/uOqqrig==}
 
@@ -4711,6 +4718,9 @@ packages:
     resolution: {integrity: sha512-M762rNHfSF1EV3SLtnCJXFoQbbIIz0OyRwnCmV0KPC7qosSfCO0QLTSuJX3ayAebubhE6oYBAYPrBA5ljowaZg==}
     peerDependencies:
       '@babel/core': ^7.4.0 || ^8.0.0-0 <8.0.0
+
+  babel-plugin-react-compiler@1.0.0:
+    resolution: {integrity: sha512-Ixm8tFfoKKIPYdCCKYTsqv+Fd4IJ0DQqMyEimo+pxUOMUR9cVPlwTrFt9Avu+3cb6Zp3mAzl+t1MrG2fxxKsxw==}
 
   babel-plugin-transform-typescript-metadata@0.3.2:
     resolution: {integrity: sha512-mWEvCQTgXQf48yDqgN7CH50waTyYBeP2Lpqx4nNWab9sxEpdXVeKgfj1qYI2/TgUPQtNFZ85i3PemRtnXVYYJg==}
@@ -5620,12 +5630,6 @@ packages:
     peerDependencies:
       eslint: ^3 || ^4 || ^5 || ^6 || ^7 || ^8 || ^9
 
-  eslint-plugin-react-hooks@5.0.0:
-    resolution: {integrity: sha512-hIOwI+5hYGpJEc4uPRmz2ulCjAGD/N13Lukkh8cLV0i2IRk/bdZDYjgLVHj+U9Z704kLIdIO6iueGvxNur0sgw==}
-    engines: {node: '>=10'}
-    peerDependencies:
-      eslint: ^3.0.0 || ^4.0.0 || ^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0-0 || ^9.0.0
-
   eslint-plugin-react-hooks@7.1.1:
     resolution: {integrity: sha512-f2I7Gw6JbvCexzIInuSbZpfdQ44D7iqdWX01FKLvrPgqxoE7oMj8clOfto8U6vYiz4yd5oKu39rRSVOe1zRu0g==}
     engines: {node: '>=18'}
@@ -6275,6 +6279,7 @@ packages:
   image-size@0.5.5:
     resolution: {integrity: sha512-6TDAlDPZxUFCv+fuOkIoXT/V/f3Qbq8e37p+YOiYrUv3v9cc3/6x78VdfPgFVaB9dZYeLUfKgHRebpkm/oP2VQ==}
     engines: {node: '>=0.10.0'}
+    deprecated: Please migrate to image-size@2.x
     hasBin: true
 
   immutable@5.1.5:
@@ -7239,6 +7244,27 @@ packages:
   nth-check@2.1.1:
     resolution: {integrity: sha512-lqjrjmaOoAnWfMmBPL+XNnynZh2+swxiX3WUE0s4yEHI6m+AwrK2UZOimIRl3X/4QctVqS8AiZjFqyOGrMXb/w==}
 
+  nuqs@2.10.2:
+    resolution: {integrity: sha512-HaLMCr9H2wywEnTu3j+QW98EteDT3Kfmx3SJJ6JfcvCvkFi/g/fKd/oCXa5DF0x1s1l4zcFtzsq9bflj6RcM6A==}
+    peerDependencies:
+      '@remix-run/react': '>=2'
+      '@tanstack/react-router': ^1
+      next: '>=14.2.0'
+      react: '>=18.2.0 || ^19.0.0-0'
+      react-router: ^5 || ^6 || ^7 || ^8
+      react-router-dom: ^5 || ^6 || ^7
+    peerDependenciesMeta:
+      '@remix-run/react':
+        optional: true
+      '@tanstack/react-router':
+        optional: true
+      next:
+        optional: true
+      react-router:
+        optional: true
+      react-router-dom:
+        optional: true
+
   nwsapi@2.2.23:
     resolution: {integrity: sha512-7wfH4sLbt4M0gCDzGE6vzQBo0bfTKjU7Sfpqy/7gs1qBfYz2vEJH6vXcBKpO3+6Yu1telwd0t9HpyOoLEQQbIQ==}
 
@@ -7925,12 +7951,6 @@ packages:
     resolution: {integrity: sha512-J5bAZz+DXMMwW/wV3xzKke59Af6CHY7G4uYLN1OvBcKEsWOs4pQExj86BBKamxl/Ik5bx9whOrvBlSDfWzgSag==}
     peerDependencies:
       react: ^19.2.5
-
-  react-hook-form@7.76.0:
-    resolution: {integrity: sha512-eKtLGgFeSgkHqQD8J59AMZ9a4uD1D83iSIzt4YlTGD7liDen5rrjcUO1rVIGd9yC1gofryjtHbv+4ny4hkLWlw==}
-    engines: {node: '>=18.0.0'}
-    peerDependencies:
-      react: ^16.8.0 || ^17 || ^18 || ^19
 
   react-is@16.13.1:
     resolution: {integrity: sha512-24e6ynE2H+OKt4kqsOvNd8kBpV65zoxbA4BVsEOB3ARVWQki/DHzaUoC5KuON/BiccDaCCTZBuOcfZs70kR8bQ==}
@@ -9052,12 +9072,6 @@ packages:
   urlpattern-polyfill@10.1.0:
     resolution: {integrity: sha512-IGjKp/o0NL3Bso1PymYURCJxMPNAf/ILOpendP9f5B6e1rTJgdgiOvgfoT8VxCAdY+Wisb9uhGaJJf3yZ2V9nw==}
 
-  urql@5.0.1:
-    resolution: {integrity: sha512-r58gYlWvCTC19QvkTaARaCLV9/bp870byH/qbLaw3S7f8i/bC6x2Szub8RVXptiMxWmqq5dyVBjUL9G+xPEuqg==}
-    peerDependencies:
-      '@urql/core': ^6.0.0
-      react: '>= 16.8.0'
-
   use-sync-external-store@1.7.0:
     resolution: {integrity: sha512-6L+EeigHMQhdaIPNIFUKwfWJSwWFQ8gJbJ2DLOs5sDIegTwR9fRxvnM3uciHKjIZhFz+KAv2emhWMRvDmMcY8A==}
     peerDependencies:
@@ -9321,9 +9335,6 @@ packages:
   wildcard@2.0.1:
     resolution: {integrity: sha512-CC1bOL87PIWSBhDcTrdeLo6eGT7mCFtrg0uIJtqJUFyK+eJnzl8A1niH56uu7KMa5XFrtiV+AQuHO3n7DsHnLQ==}
 
-  wonka@6.3.6:
-    resolution: {integrity: sha512-MXH+6mDHAZ2GuMpgKS055FR6v0xVP3XwquxIMYXgiW+FejHQlMGlvVRZT4qMCxR+bEo/FCtIdKxwej9WV3YQag==}
-
   word-wrap@1.2.5:
     resolution: {integrity: sha512-BN22B5eaMMI9UMtjrGd5g5eCYPpCPDUy0FJXbYsaT5zYxjFOckS53SQDE3pWkVoWpHXVb3BrYcEN4Twa55B5cA==}
     engines: {node: '>=0.10.0'}
@@ -9446,11 +9457,25 @@ packages:
   zod@4.6.6:
     resolution: {integrity: sha512-4UmzQUF5fxvfcYHlbjBmejU+w+hbDnWFx4aS8kBx7nPBHcO2SqPbpAG8snbdg+Xse4pRefR98hgjFgIMCI/UhA==}
 
-snapshots:
+  zustand@5.0.16:
+    resolution: {integrity: sha512-Uv7e327ihlCfayfja3hDc0M64Upev1LWBKpRobdK4NyovDDPeeX4imWXc/wzC1yc6fkYPoAY/ncKVPAs2jrtQw==}
+    engines: {node: '>=12.20.0'}
+    peerDependencies:
+      '@types/react': '>=18.0.0'
+      immer: '>=9.0.6'
+      react: '>=18.0.0'
+      use-sync-external-store: '>=1.2.0'
+    peerDependenciesMeta:
+      '@types/react':
+        optional: true
+      immer:
+        optional: true
+      react:
+        optional: true
+      use-sync-external-store:
+        optional: true
 
-  '@0no-co/graphql.web@1.2.0(graphql@16.13.2)':
-    optionalDependencies:
-      graphql: 16.13.2
+snapshots:
 
   '@adobe/css-tools@4.5.0': {}
 
@@ -11554,11 +11579,11 @@ snapshots:
 
   '@mui/core-downloads-tracker@9.0.0': {}
 
-  '@mui/material-nextjs@9.0.1(@emotion/cache@11.14.0)(@emotion/react@11.14.0(@types/react@19.2.14)(react@19.2.5)(supports-color@10.2.2))(@types/react@19.2.14)(next@16.4.2(@babel/core@7.29.0(supports-color@10.2.2))(@types/node@20.19.9)(babel-plugin-macros@3.1.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(sass@1.99.0))(react@19.2.5)':
+  '@mui/material-nextjs@9.0.1(@emotion/cache@11.14.0)(@emotion/react@11.14.0(@types/react@19.2.14)(react@19.2.5)(supports-color@10.2.2))(@types/react@19.2.14)(next@16.4.2(@babel/core@7.29.0(supports-color@10.2.2))(@types/node@20.19.9)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(sass@1.99.0))(react@19.2.5)':
     dependencies:
       '@babel/runtime': 7.29.2
       '@emotion/react': 11.14.0(@types/react@19.2.14)(react@19.2.5)(supports-color@10.2.2)
-      next: 16.4.2(@babel/core@7.29.0(supports-color@10.2.2))(@types/node@20.19.9)(babel-plugin-macros@3.1.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(sass@1.99.0)
+      next: 16.4.2(@babel/core@7.29.0(supports-color@10.2.2))(@types/node@20.19.9)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(sass@1.99.0)
       react: 19.2.5
     optionalDependencies:
       '@emotion/cache': 11.14.0
@@ -11932,7 +11957,7 @@ snapshots:
       - vue-tsc
       - webpack-cli
 
-  '@nx/next@22.6.5(9d16328856975213ad1181a858b130ec)':
+  '@nx/next@22.6.5(6f13f466059c59923a9a328b2dca52b2)':
     dependencies:
       '@babel/plugin-proposal-decorators': 7.29.0(@babel/core@7.29.0(supports-color@10.2.2))(supports-color@10.2.2)
       '@nx/devkit': 22.6.5(nx@22.6.5(@swc-node/register@1.11.1(@emnapi/core@1.9.2)(@emnapi/runtime@1.9.2)(@swc/core@1.15.24(@swc/helpers@0.5.21))(@swc/types@0.1.26)(supports-color@10.2.2)(typescript@5.9.3))(@swc/core@1.15.24(@swc/helpers@0.5.21))(debug@4.4.3(supports-color@10.2.2)))
@@ -11945,7 +11970,7 @@ snapshots:
       '@svgr/webpack': 8.1.0(supports-color@10.2.2)(typescript@5.9.3)
       copy-webpack-plugin: 14.0.0(webpack@5.106.1(@swc/core@1.15.24(@swc/helpers@0.5.21))(esbuild@0.27.7))
       ignore: 5.3.2
-      next: 16.4.2(@babel/core@7.29.0(supports-color@10.2.2))(@types/node@20.19.9)(babel-plugin-macros@3.1.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(sass@1.99.0)
+      next: 16.4.2(@babel/core@7.29.0(supports-color@10.2.2))(@types/node@20.19.9)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(sass@1.99.0)
       semver: 7.7.4
       tslib: 2.8.1
       webpack-merge: 5.10.0
@@ -12877,6 +12902,8 @@ snapshots:
 
   '@sindresorhus/merge-streams@4.0.0': {}
 
+  '@standard-schema/spec@1.1.0': {}
+
   '@storybook/addon-docs@10.6.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(storybook@10.6.0(@types/react@19.2.14)(prettier@3.6.2)(react@19.2.5))':
     dependencies:
       '@mdx-js/react': 3.1.1(@types/react@19.2.14)(react@19.2.5)
@@ -13158,7 +13185,25 @@ snapshots:
     dependencies:
       '@swc/counter': 0.1.3
 
+  '@tanstack/devtools-event-client@0.4.4': {}
+
+  '@tanstack/form-core@1.33.5':
+    dependencies:
+      '@tanstack/devtools-event-client': 0.4.4
+      '@tanstack/pacer-lite': 0.1.1
+      '@tanstack/store': 0.11.1
+
+  '@tanstack/pacer-lite@0.1.1': {}
+
   '@tanstack/query-core@5.104.1': {}
+
+  '@tanstack/react-form@1.33.5(react-dom@19.2.5(react@19.2.5))(react@19.2.5)':
+    dependencies:
+      '@tanstack/form-core': 1.33.5
+      '@tanstack/react-store': 0.11.1(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+      react: 19.2.5
+    transitivePeerDependencies:
+      - react-dom
 
   '@tanstack/react-query@5.104.1(react@19.2.5)':
     dependencies:
@@ -13758,27 +13803,6 @@ snapshots:
   '@unrs/resolver-binding-win32-x64-msvc@1.11.1':
     optional: true
 
-  '@urql/core@6.0.1(graphql@16.13.2)':
-    dependencies:
-      '@0no-co/graphql.web': 1.2.0(graphql@16.13.2)
-      wonka: 6.3.6
-    transitivePeerDependencies:
-      - graphql
-
-  '@urql/exchange-graphcache@9.0.0(@urql/core@6.0.1(graphql@16.13.2))(graphql@16.13.2)':
-    dependencies:
-      '@0no-co/graphql.web': 1.2.0(graphql@16.13.2)
-      '@urql/core': 6.0.1(graphql@16.13.2)
-      wonka: 6.3.6
-    transitivePeerDependencies:
-      - graphql
-
-  '@urql/next@2.0.0(next@16.4.2(@babel/core@7.29.0(supports-color@10.2.2))(@types/node@20.19.9)(babel-plugin-macros@3.1.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(sass@1.99.0))(react@19.2.5)(urql@5.0.1(@urql/core@6.0.1(graphql@16.13.2))(react@19.2.5))':
-    dependencies:
-      next: 16.4.2(@babel/core@7.29.0(supports-color@10.2.2))(@types/node@20.19.9)(babel-plugin-macros@3.1.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(sass@1.99.0)
-      react: 19.2.5
-      urql: 5.0.1(@urql/core@6.0.1(graphql@16.13.2))(react@19.2.5)
-
   '@vitest/expect@3.2.4':
     dependencies:
       '@types/chai': 5.2.3
@@ -14302,6 +14326,10 @@ snapshots:
       '@babel/helper-define-polyfill-provider': 0.6.8(@babel/core@7.29.0(supports-color@10.2.2))(supports-color@10.2.2)
     transitivePeerDependencies:
       - supports-color
+
+  babel-plugin-react-compiler@1.0.0:
+    dependencies:
+      '@babel/types': 7.29.0
 
   babel-plugin-transform-typescript-metadata@0.3.2(@babel/core@7.29.0(supports-color@10.2.2))(@babel/traverse@7.29.0(supports-color@10.2.2)):
     dependencies:
@@ -15356,10 +15384,6 @@ snapshots:
       object.fromentries: 2.0.8
       safe-regex-test: 1.1.0
       string.prototype.includes: 2.0.1
-
-  eslint-plugin-react-hooks@5.0.0(eslint@9.39.4(jiti@2.4.2)(supports-color@10.2.2)):
-    dependencies:
-      eslint: 9.39.4(jiti@2.4.2)(supports-color@10.2.2)
 
   eslint-plugin-react-hooks@7.1.1(eslint@9.39.4(jiti@2.4.2)(supports-color@10.2.2))(supports-color@10.2.2):
     dependencies:
@@ -16983,7 +17007,7 @@ snapshots:
 
   neo-async@2.6.2: {}
 
-  next@16.4.2(@babel/core@7.29.0(supports-color@10.2.2))(@types/node@20.19.9)(babel-plugin-macros@3.1.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(sass@1.99.0):
+  next@16.4.2(@babel/core@7.29.0(supports-color@10.2.2))(@types/node@20.19.9)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(sass@1.99.0):
     dependencies:
       '@next/env': 16.4.2
       '@swc/helpers': 0.5.23
@@ -17002,6 +17026,7 @@ snapshots:
       '@next/swc-linux-x64-musl': 16.4.2
       '@next/swc-win32-arm64-msvc': 16.4.2
       '@next/swc-win32-x64-msvc': 16.4.2
+      babel-plugin-react-compiler: 1.0.0
       sass: 1.99.0
       sharp: 0.35.5(@types/node@20.19.9)
     transitivePeerDependencies:
@@ -17072,6 +17097,13 @@ snapshots:
   nth-check@2.1.1:
     dependencies:
       boolbase: 1.0.0
+
+  nuqs@2.10.2(next@16.4.2(@babel/core@7.29.0(supports-color@10.2.2))(@types/node@20.19.9)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(sass@1.99.0))(react@19.2.5):
+    dependencies:
+      '@standard-schema/spec': 1.1.0
+      react: 19.2.5
+    optionalDependencies:
+      next: 16.4.2(@babel/core@7.29.0(supports-color@10.2.2))(@types/node@20.19.9)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(sass@1.99.0)
 
   nwsapi@2.2.23:
     optional: true
@@ -17903,10 +17935,6 @@ snapshots:
     dependencies:
       react: 19.2.5
       scheduler: 0.27.0
-
-  react-hook-form@7.76.0(react@19.2.5):
-    dependencies:
-      react: 19.2.5
 
   react-is@16.13.1: {}
 
@@ -19180,12 +19208,6 @@ snapshots:
 
   urlpattern-polyfill@10.1.0: {}
 
-  urql@5.0.1(@urql/core@6.0.1(graphql@16.13.2))(react@19.2.5):
-    dependencies:
-      '@urql/core': 6.0.1(graphql@16.13.2)
-      react: 19.2.5
-      wonka: 6.3.6
-
   use-sync-external-store@1.7.0(react@19.2.5):
     dependencies:
       react: 19.2.5
@@ -19456,8 +19478,6 @@ snapshots:
 
   wildcard@2.0.1: {}
 
-  wonka@6.3.6: {}
-
   word-wrap@1.2.5: {}
 
   wrap-ansi@6.2.0:
@@ -19536,3 +19556,9 @@ snapshots:
       zod: 4.6.6
 
   zod@4.6.6: {}
+
+  zustand@5.0.16(@types/react@19.2.14)(react@19.2.5)(use-sync-external-store@1.7.0(react@19.2.5)):
+    optionalDependencies:
+      '@types/react': 19.2.14
+      react: 19.2.5
+      use-sync-external-store: 1.7.0(react@19.2.5)

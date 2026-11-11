@@ -1,5 +1,12 @@
 'use client';
 
+import { useReturnQuery } from '../../route/use-return-query';
+
+import { useMutation } from '@tanstack/react-query';
+import { useForm, useStore } from '@tanstack/react-form';
+import { createStore, useStore as useZustandStore } from 'zustand';
+import type { components } from '@rescue-frontend/data-access/openapi';
+
 import {
   Alert,
   Box,
@@ -63,7 +70,6 @@ import {
   replaceNotice,
   setPasswordBlocked,
   setPasswordErrorMessage,
-  stripAccountStepUpReturn,
   type AccountStepUpAction,
   type StepUpProblem,
 } from './account-step-up';
@@ -108,6 +114,35 @@ const LINE_TEXT =
 
 /** The page's three rows; one is open at a time. */
 type SecurityRowKey = 'password' | 'contact' | 'logout';
+type SecurityEditor =
+  | { kind: 'closed' | 'password' | 'logout' }
+  | { kind: 'contact'; type: AuthIdentityType | null };
+type StepUp = components['schemas']['StepUp'];
+type ContactProof = {
+  password: NonNullable<StepUp['password']>;
+  oldCode: NonNullable<StepUp['old_channel_code']>;
+  code: components['schemas']['VerifyContactRequest']['code'];
+};
+type ChangedPasswordDraft = Pick<
+  Parameters<typeof changePasswordAsync>[0],
+  'old_password' | 'new_password'
+> & {
+  confirm: Parameters<typeof changePasswordAsync>[0]['new_password'];
+};
+type FirstPasswordDraft = Pick<
+  Parameters<typeof setPasswordAsync>[0],
+  'password'
+> & {
+  confirm: Parameters<typeof setPasswordAsync>[0]['password'];
+  code: NonNullable<StepUp['old_channel_code']>;
+};
+type PasswordSubmission = { resending: boolean };
+const PASSWORD_SUBMISSION: PasswordSubmission = { resending: false };
+const EMPTY_CONTACT_PROOF: ContactProof = {
+  password: '',
+  oldCode: '',
+  code: '',
+};
 
 const ROW_BORDER = '#E5DDD8';
 const OPEN_BLUE = designTokens.color.brand.secondary.default;
@@ -256,6 +291,7 @@ export function AccountSecurityClient({
   contacts,
   loginMethods,
 }: AccountSecurityClientProps) {
+  const consumeReturn = useReturnQuery();
   const router = useRouter();
   const saltIdentity = saltLookupIdentity(contacts);
   const signsInWithPassword = hasPassword(loginMethods);
@@ -263,36 +299,104 @@ export function AccountSecurityClient({
   const googleOnly = cannotProveHere(contacts, loginMethods);
   // No email or phone to sign in with a password by: 設定登入密碼 says to add one first.
   const passwordBlocked = setPasswordBlocked(contacts, loginMethods);
-  const [oldPassword, setOldPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [newPasswordConfirm, setNewPasswordConfirm] = useState('');
-  const [passwordError, setPasswordError] = useState<string>();
+  const changedPassword = useMutation({
+    mutationFn: handleChangePasswordAsync,
+  });
+  const passwordForm = useForm({
+    defaultValues: {
+      old_password: '',
+      new_password: '',
+      confirm: '',
+    } satisfies ChangedPasswordDraft,
+    validators: {
+      onSubmit: ({ value }): string | undefined =>
+        !saltIdentity
+          ? '你的帳號還沒有已驗證的電子郵件或手機，沒辦法確認現在的密碼。'
+          : (newPasswordProblem(value.new_password, value.confirm) ??
+            undefined),
+    },
+    onSubmit: ({ value }): Promise<void> => changedPassword.mutateAsync(value),
+  });
+  const {
+    old_password: oldPassword,
+    new_password: newPassword,
+    confirm: newPasswordConfirm,
+  } = useStore(passwordForm.store, (state) => state.values);
+  const passwordError = useStore(
+    passwordForm.store,
+    (state) => state.errorMap.onSubmit,
+  );
+  const setPasswordError = (message?: string) =>
+    passwordForm.setErrorMap({ onSubmit: message });
   const [passwordSuccess, setPasswordSuccess] = useState<string>();
-  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const isChangingPassword = changedPassword.isPending;
 
-  const [setPasswordValue, setSetPasswordValue] = useState('');
-  const [setPasswordConfirm, setSetPasswordConfirm] = useState('');
+  const firstPassword = useMutation({ mutationFn: handleSetPasswordAsync });
+  const firstPasswordForm = useForm({
+    defaultValues: {
+      password: '',
+      confirm: '',
+      code: '',
+    } satisfies FirstPasswordDraft,
+    onSubmitMeta: PASSWORD_SUBMISSION,
+    validators: {
+      onSubmit: ({ value }): StepUpProblem | undefined => {
+        const message = newPasswordProblem(value.password, value.confirm);
+        return message ? { message, tone: 'error' } : undefined;
+      },
+    },
+    onSubmit: ({ value, meta }): Promise<void> =>
+      firstPassword.mutateAsync({ draft: value, ...meta }),
+  });
+  const {
+    password: setPasswordValue,
+    confirm: setPasswordConfirm,
+    code: setPasswordCode,
+  } = useStore(firstPasswordForm.store, (state) => state.values);
+  const setPasswordProblem = useStore(
+    firstPasswordForm.store,
+    (state) => state.errorMap.onSubmit ?? null,
+  );
+  const setSetPasswordProblem = (problem: StepUpProblem | null) =>
+    firstPasswordForm.setErrorMap({ onSubmit: problem ?? undefined });
   const [setPasswordStage, setSetPasswordStage] = useState<SetPasswordStage>({
     kind: 'enter',
   });
-  const [setPasswordCode, setSetPasswordCode] = useState('');
-  const [setPasswordProblem, setSetPasswordProblem] =
-    useState<StepUpProblem | null>(null);
   const [setPasswordNotice, setSetPasswordNotice] = useState<string>();
   const [setPasswordSuccessMessage, setSetPasswordSuccessMessage] =
     useState<string>();
-  const [isSettingPassword, setIsSettingPassword] = useState(false);
+  const isSettingPassword = firstPassword.isPending;
   // One more each time the password row is let go of (取消, or another row opened): an answer that
   // comes back after it is for a row the person has left, and is dropped, as in `use-add-contact.ts`.
   const passwordAttempt = useRef(0);
 
-  const [contactPassword, setContactPassword] = useState('');
-  const [contactOldCode, setContactOldCode] = useState('');
-  const [contactCode, setContactCode] = useState('');
+  const contactForm = useForm({
+    defaultValues: EMPTY_CONTACT_PROOF,
+    onSubmit: ({ value }): Promise<void> | void => {
+      switch (contact.stage.kind) {
+        case 'password':
+          return contact.submitPassword(value.password);
+        case 'old-code':
+          return contact.submitOldCode(value.oldCode.trim());
+        case 'code':
+          return contact.verify(value.code);
+      }
+    },
+  });
+  const {
+    password: contactPassword,
+    oldCode: contactOldCode,
+    code: contactCode,
+  } = useStore(contactForm.store, (state) => state.values);
   const [isLoggingOutAll, setIsLoggingOutAll] = useState(false);
-  const [openRow, setOpenRow] = useState<SecurityRowKey | null>(null);
-  // Which contact 電子郵件和手機 is changing — its 更換 or 新增 pressed — or null for the list.
-  const [contactKind, setContactKind] = useState<AuthIdentityType | null>(null);
+  const [editor] = useState(() =>
+    createStore<SecurityEditor>(() => ({ kind: 'closed' })),
+  );
+  const editing = useZustandStore(editor);
+  const openRow = editing.kind === 'closed' ? null : editing.kind;
+  const contactKind = editing.kind === 'contact' ? editing.type : null;
+  const setContactKind = (type: AuthIdentityType | null) =>
+    editor.setState({ kind: 'contact', type }, true);
   const contactHeader = useRef<HTMLButtonElement>(null);
 
   const { keep: keepContactDraft, take: takeContactDraft } =
@@ -340,10 +444,8 @@ export function AccountSecurityClient({
 
   // Each step asks for its own: what was typed for one does not carry into the next.
   useEffect(() => {
-    setContactPassword('');
-    setContactOldCode('');
-    setContactCode('');
-  }, [contact.stage.kind]);
+    contactForm.reset();
+  }, [contact.stage.kind, contactForm]);
 
   // Back from LINE (`account-step-up.ts`), once: off the address, then on with what was pressed.
   const handledReturn = useRef(false);
@@ -363,12 +465,7 @@ export function AccountSecurityClient({
       return;
     }
 
-    const address = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-    window.history.replaceState(
-      window.history.state,
-      '',
-      stripAccountStepUpReturn(address),
-    );
+    consumeReturn(['resume', 'step_up', 'step_up_error']);
 
     // A first password does not go to LINE any more (`setPasswordBlocked`): nothing to pick up.
     if (back.action !== 'add_contact') {
@@ -378,32 +475,18 @@ export function AccountSecurityClient({
     const draft = takeContactDraft();
 
     if (draft) {
-      setOpenRow('contact');
-      setContactKind(draft.type);
+      editor.setState({ kind: 'contact', type: draft.type }, true);
       resumeContact(draft, back.stepUp);
     }
-  }, [resumeContact, takeContactDraft]);
+  }, [consumeReturn, editor, resumeContact, takeContactDraft]);
 
-  async function handleChangePasswordAsync() {
-    if (!saltIdentity) {
-      setPasswordError(
-        '你的帳號還沒有已驗證的電子郵件或手機，沒辦法確認現在的密碼。',
-      );
-      return;
-    }
-
-    const newPasswordError = newPasswordProblem(
-      newPassword,
-      newPasswordConfirm,
-    );
-
-    if (newPasswordError) {
-      setPasswordError(newPasswordError);
-      return;
-    }
+  async function handleChangePasswordAsync({
+    old_password: oldPassword,
+    new_password: newPassword,
+  }: ChangedPasswordDraft): Promise<void> {
+    if (!saltIdentity) return;
 
     const asked = passwordAttempt.current;
-    setIsChangingPassword(true);
     setPasswordError(undefined);
     setPasswordSuccess(undefined);
 
@@ -436,10 +519,6 @@ export function AccountSecurityClient({
       setPasswordError(
         resolveAuthErrorMessage(error, '變更密碼失敗，請稍後再試。'),
       );
-    } finally {
-      if (asked === passwordAttempt.current) {
-        setIsChangingPassword(false);
-      }
     }
   }
 
@@ -448,17 +527,11 @@ export function AccountSecurityClient({
    * a code it sends to a contact the account already had. `resending` asks again without the code, for
    * 沒收到？重新寄一次.
    */
-  async function handleSetPasswordAsync({ resending = false } = {}) {
-    const passwordProblem = newPasswordProblem(
-      setPasswordValue,
-      setPasswordConfirm,
-    );
-
-    if (passwordProblem) {
-      setSetPasswordProblem({ message: passwordProblem, tone: 'error' });
-      return;
-    }
-
+  async function handleSetPasswordAsync({
+    draft,
+    resending,
+  }: { draft: FirstPasswordDraft } & PasswordSubmission): Promise<void> {
+    const { password: setPasswordValue, code: setPasswordCode } = draft;
     const withCode = setPasswordStage.kind === 'old-code' && !resending;
 
     if (withCode && setPasswordCode.trim().length < 4) {
@@ -467,7 +540,6 @@ export function AccountSecurityClient({
     }
 
     const asked = passwordAttempt.current;
-    setIsSettingPassword(true);
     setSetPasswordProblem(null);
     setSetPasswordNotice(undefined);
     setSetPasswordSuccessMessage(undefined);
@@ -489,8 +561,8 @@ export function AccountSecurityClient({
       });
 
       setSetPasswordSuccessMessage('已設定登入密碼，請用新密碼重新登入。');
-      setSetPasswordValue('');
-      setSetPasswordConfirm('');
+      firstPasswordForm.setFieldValue('password', '');
+      firstPasswordForm.setFieldValue('confirm', '');
       // The backend ends the session on a password created, as on one changed.
       signInAgain();
     } catch (error) {
@@ -500,8 +572,12 @@ export function AccountSecurityClient({
 
       const code = error instanceof ApiError ? error.code : undefined;
 
-      if (code === 'step_up_required' && !withCode) {
-        const ask = readStepUpRequired((error as ApiError).message);
+      if (
+        error instanceof ApiError &&
+        code === 'step_up_required' &&
+        !withCode
+      ) {
+        const ask = readStepUpRequired(error.message);
 
         if (ask.kind === 'old-code') {
           if (resending) {
@@ -511,7 +587,7 @@ export function AccountSecurityClient({
                 : '驗證碼已經重新寄出。',
             );
           } else {
-            setSetPasswordCode('');
+            firstPasswordForm.setFieldValue('code', '');
           }
           setSetPasswordStage(ask);
         } else {
@@ -530,10 +606,6 @@ export function AccountSecurityClient({
         message: setPasswordErrorMessage(error, withCode ? 'old-code' : 'send'),
         tone: 'error',
       });
-    } finally {
-      if (asked === passwordAttempt.current) {
-        setIsSettingPassword(false);
-      }
     }
   }
 
@@ -541,17 +613,11 @@ export function AccountSecurityClient({
   function resetRow(row: SecurityRowKey) {
     if (row === 'password') {
       passwordAttempt.current += 1;
-      setIsChangingPassword(false);
-      setIsSettingPassword(false);
-      setOldPassword('');
-      setNewPassword('');
-      setNewPasswordConfirm('');
-      setPasswordError(undefined);
-      setSetPasswordValue('');
-      setSetPasswordConfirm('');
+      changedPassword.reset();
+      firstPassword.reset();
+      passwordForm.reset();
+      firstPasswordForm.reset();
       setSetPasswordStage({ kind: 'enter' });
-      setSetPasswordCode('');
-      setSetPasswordProblem(null);
       setSetPasswordNotice(undefined);
     } else if (row === 'contact') {
       contact.cancel();
@@ -564,12 +630,17 @@ export function AccountSecurityClient({
       resetRow(openRow);
     }
 
-    setOpenRow(row);
+    editor.setState(
+      row === 'contact'
+        ? { kind: 'contact', type: contactKind }
+        : { kind: row },
+      true,
+    );
   }
 
   function closeRow(row: SecurityRowKey) {
     resetRow(row);
-    setOpenRow(null);
+    editor.setState({ kind: 'closed' }, true);
   }
 
   async function handleLogoutAllAsync() {
@@ -628,20 +699,32 @@ export function AccountSecurityClient({
             label="現在的密碼"
             type="password"
             value={oldPassword}
-            onChange={(event) => setOldPassword(event.target.value)}
+            onChange={(event) =>
+              passwordForm.setFieldValue('old_password', event.target.value, {
+                dontValidate: true,
+              })
+            }
           />
           <TextField
             label="新密碼"
             type="password"
             placeholder={newPasswordText.placeholder}
             value={newPassword}
-            onChange={(event) => setNewPassword(event.target.value)}
+            onChange={(event) =>
+              passwordForm.setFieldValue('new_password', event.target.value, {
+                dontValidate: true,
+              })
+            }
           />
           <TextField
             label="再輸入一次新密碼"
             type="password"
             value={newPasswordConfirm}
-            onChange={(event) => setNewPasswordConfirm(event.target.value)}
+            onChange={(event) =>
+              passwordForm.setFieldValue('confirm', event.target.value, {
+                dontValidate: true,
+              })
+            }
           />
 
           {passwordError ? (
@@ -660,7 +743,7 @@ export function AccountSecurityClient({
             disabled={isChangingPassword}
             sx={BIG_BUTTON}
             onClick={() => {
-              void handleChangePasswordAsync();
+              void passwordForm.handleSubmit();
             }}
           >
             更新密碼
@@ -685,13 +768,21 @@ export function AccountSecurityClient({
             type="password"
             placeholder={newPasswordText.placeholder}
             value={setPasswordValue}
-            onChange={(event) => setSetPasswordValue(event.target.value)}
+            onChange={(event) =>
+              firstPasswordForm.setFieldValue('password', event.target.value, {
+                dontValidate: true,
+              })
+            }
           />
           <TextField
             label="再輸入一次新密碼"
             type="password"
             value={setPasswordConfirm}
-            onChange={(event) => setSetPasswordConfirm(event.target.value)}
+            onChange={(event) =>
+              firstPasswordForm.setFieldValue('confirm', event.target.value, {
+                dontValidate: true,
+              })
+            }
           />
 
           {setPasswordStage.kind === 'old-code' ? (
@@ -705,7 +796,11 @@ export function AccountSecurityClient({
                 autoFocus
                 value={setPasswordCode}
                 slotProps={CODE_INPUT}
-                onChange={(event) => setSetPasswordCode(event.target.value)}
+                onChange={(event) =>
+                  firstPasswordForm.setFieldValue('code', event.target.value, {
+                    dontValidate: true,
+                  })
+                }
               />
             </>
           ) : null}
@@ -727,7 +822,7 @@ export function AccountSecurityClient({
             disabled={isSettingPassword}
             sx={BIG_BUTTON}
             onClick={() => {
-              void handleSetPasswordAsync();
+              void firstPasswordForm.handleSubmit();
             }}
           >
             {setPasswordStage.kind === 'old-code' ? '確認' : '設定密碼'}
@@ -738,7 +833,7 @@ export function AccountSecurityClient({
               disabled={isSettingPassword}
               sx={BIG_BUTTON}
               onClick={() => {
-                void handleSetPasswordAsync({ resending: true });
+                void firstPasswordForm.handleSubmit({ resending: true });
               }}
             >
               沒收到？重新寄一次
@@ -873,14 +968,16 @@ export function AccountSecurityClient({
               autoComplete="current-password"
               autoFocus
               value={contactPassword}
-              onChange={(event) => setContactPassword(event.target.value)}
+              onChange={(event) =>
+                contactForm.setFieldValue('password', event.target.value)
+              }
             />
             <Button
               variant="contained"
               disabled={contact.busy || !contactPassword}
               sx={BIG_BUTTON}
               onClick={() => {
-                void contact.submitPassword(contactPassword);
+                void contactForm.handleSubmit();
               }}
             >
               確認
@@ -910,13 +1007,15 @@ export function AccountSecurityClient({
               autoFocus
               value={contactOldCode}
               slotProps={CODE_INPUT}
-              onChange={(event) => setContactOldCode(event.target.value)}
+              onChange={(event) =>
+                contactForm.setFieldValue('oldCode', event.target.value)
+              }
             />
             <Button
               variant="contained"
               disabled={contact.busy || contactOldCode.trim().length < 4}
               sx={BIG_BUTTON}
-              onClick={() => contact.submitOldCode(contactOldCode.trim())}
+              onClick={() => void contactForm.handleSubmit()}
             >
               確認
             </Button>
@@ -961,14 +1060,16 @@ export function AccountSecurityClient({
               autoFocus
               value={contactCode}
               slotProps={CODE_INPUT}
-              onChange={(event) => setContactCode(event.target.value)}
+              onChange={(event) =>
+                contactForm.setFieldValue('code', event.target.value)
+              }
             />
             <Button
               variant="contained"
               disabled={contact.busy}
               sx={BIG_BUTTON}
               onClick={() => {
-                void contact.verify(contactCode);
+                void contactForm.handleSubmit();
               }}
             >
               {replacing ? '完成更換' : '完成新增'}
