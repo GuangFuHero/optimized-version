@@ -18,7 +18,7 @@
     "affected:lint": "nx affected -t lint",
     "graph": "nx graph",
     "reset": "nx reset",
-    "codegen": "graphql-codegen --config libs/data-access/src/graphql/codegen.ts && pnpm codegen:admin && pnpm codegen:openapi && prettier --write libs/data-access/src/graphql/__generated__ libs/data-access/src/admin/graphql/__generated__ libs/data-access/src/rest/openapi.d.ts",
+    "codegen": "graphql-codegen --config libs/data-access/codegen.ts && pnpm codegen:openapi && prettier --write libs/data-access/src/graphql/__generated__ libs/data-access/src/rest/openapi.d.ts",
     "typecheck": "pnpm -r typecheck",
     "dev:ui": "nx dev ui",
     "dev:admin": "nx dev admin",
@@ -26,8 +26,7 @@
     "start:admin": "nx start admin",
     "schemas:export": "cd ../Backend && PYTHONPATH=. ENV=testing uv run python scripts/export_frontend_schemas.py",
     "codegen:openapi": "pnpm --filter @rescue-frontend/data-access codegen:openapi",
-    "schemas:generate": "pnpm schemas:export && pnpm codegen",
-    "codegen:admin": "graphql-codegen --config libs/data-access/src/admin/graphql/codegen.ts"
+    "schemas:generate": "pnpm schemas:export && pnpm codegen"
   },
   "private": true,
   "devDependencies": {
@@ -54,22 +53,23 @@
     "@types/node": "20.19.9",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "babel-plugin-react-compiler": "^1.0.0",
     "eslint": "^9.8.0",
     "eslint-config-next": "^16.4.2",
     "eslint-config-prettier": "^10.0.0",
     "eslint-plugin-import": "2.31.0",
     "eslint-plugin-jsx-a11y": "6.10.1",
     "eslint-plugin-react": "7.35.0",
-    "eslint-plugin-react-hooks": "5.0.0",
+    "eslint-plugin-react-hooks": "7.1.1",
     "jiti": "2.4.2",
     "jsonc-eslint-parser": "^2.1.0",
     "nx": "22.6.5",
+    "openapi-typescript": "^7.13.0",
     "prettier": "~3.6.2",
     "tslib": "^2.3.0",
     "typescript": "~5.9.2",
     "typescript-eslint": "^8.40.0",
-    "vitest": "^5.0.1",
-    "openapi-typescript": "^7.13.0"
+    "vitest": "^5.0.1"
   },
   "engines": {
     "node": ">=22"

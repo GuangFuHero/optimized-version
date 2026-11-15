@@ -1,5 +1,7 @@
 'use client';
 
+import { useForm, useStore, type Updater } from '@tanstack/react-form';
+
 import {
   Alert,
   AlertTitle,
@@ -400,9 +402,29 @@ function HelpRequestFormDrawer({
   const [draft] = useState(() =>
     userId ? draftHold.read(sessionDraftStorage(), userId) : null,
   );
-  const [form, setForm] = useState<HelpRequestForm>(
+  const [openedValues] = useState(
     () => draft ?? emptyHelpRequestForm(seed, place),
   );
+  const formApi = useForm({
+    defaultValues: { draft: openedValues },
+    validators: {
+      onSubmit: ({
+        value,
+      }): ReturnType<typeof findMissingFields> | undefined => {
+        const missing = findMissingFields(value.draft, floorAreas);
+        return missing.length ? missing : undefined;
+      },
+    },
+    onSubmitInvalid: () => scrollToMissing(),
+    onSubmit: ({ value }) => onSubmit(value.draft),
+  });
+  const form = useStore(formApi.store, (state) => state.values.draft);
+  const touched = useStore(
+    formApi.store,
+    (state) => state.submissionAttempts > 0,
+  );
+  const setForm = (next: Updater<HelpRequestForm>) =>
+    formApi.setFieldValue('draft', next);
   const notesLabelId = useId();
   const addressId = useId();
   const addressNoteId = useId();
@@ -411,7 +433,6 @@ function HelpRequestFormDrawer({
   // into the photo box goes.
   const [round, setRound] = useState(0);
   // Marked red only after a first try to send, not while it is still being filled in.
-  const [touched, setTouched] = useState(false);
   const formRef = useRef<HTMLDivElement | null>(null);
   const addressRef = useRef<HTMLInputElement | null>(null);
   const addressNoteRef = useRef<HTMLDivElement | null>(null);
@@ -562,17 +583,6 @@ function HelpRequestFormDrawer({
       ?.focus({ preventScroll: true });
   };
 
-  const submit = () => {
-    setTouched(true);
-
-    if (missing.length) {
-      scrollToMissing();
-      return;
-    }
-
-    onSubmit(form);
-  };
-
   /** 取消 lets go of what was typed; ✕, the scrim and Escape only put it away for later. */
   const cancel = () => {
     if (userId) {
@@ -584,10 +594,12 @@ function HelpRequestFormDrawer({
 
   /** As a fresh opening would be — at the map's point, or the building's floor, if it was opened at one. */
   const startOver = () => {
-    setForm(emptyHelpRequestForm(seed, place));
+    formApi.reset(
+      { draft: emptyHelpRequestForm(seed, place) },
+      { keepDefaultValues: true },
+    );
     setCheck(null);
     setRestored(false);
-    setTouched(false);
     setRound((current) => current + 1);
   };
 
@@ -604,7 +616,7 @@ function HelpRequestFormDrawer({
           </Button>
           <Button
             variant="contained"
-            onClick={submit}
+            onClick={() => void formApi.handleSubmit()}
             disabled={submitting}
             sx={{ flex: 2 }}
           >

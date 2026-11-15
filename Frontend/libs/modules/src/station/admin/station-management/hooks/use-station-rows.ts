@@ -1,7 +1,6 @@
 'use client';
 
 import { useAllStations } from '@rescue-frontend/data-access/admin';
-import { useMemo } from 'react';
 
 import {
   toServerVariables,
@@ -16,7 +15,7 @@ export function useStationRows(
   options: { enabled?: boolean } = {},
 ) {
   const query = useAllStations(toServerVariables(filters), options);
-  const rows = useMemo(() => query.data?.items.map(toStationRow), [query.data]);
+  const rows = query.data?.items.map(toStationRow);
   return {
     rows: rows ?? NO_ROWS,
     truncated: query.data?.truncated ?? false,

@@ -1,5 +1,15 @@
 'use client';
 
+import { useForm, useStore } from '@tanstack/react-form';
+import {
+  columnFilteringFeature,
+  createFilteredRowModel,
+  filterFn_equals,
+  tableFeatures,
+  useTable,
+  type TableOptions,
+} from '@tanstack/react-table';
+
 import { Box, Dialog as MuiDialog, Stack } from '@mui/material';
 import {
   ArrowLeft,
@@ -13,7 +23,7 @@ import {
   Merge,
   RefreshCw,
 } from 'lucide-react';
-import { useMemo, useState, type ChangeEvent, type ReactNode } from 'react';
+import { useState, type ChangeEvent, type ReactNode } from 'react';
 import { toast } from 'sonner';
 
 import { ApiError } from '@rescue-frontend/data-access';
@@ -70,6 +80,36 @@ const { color, radius, shadow, typography } = designTokens;
 const LABEL_W = 132;
 const COL_W = 300;
 
+interface MergeDraft {
+  plan: MergePlan | null;
+}
+type ComparisonRow = {
+  id: string;
+  label: string;
+  read: (side: Side) => string;
+} & (
+  | { section: 'ticket' | 'task'; field: MergeField }
+  | { section: 'reference' }
+);
+const comparisonFeatures = tableFeatures({
+  columnFilteringFeature,
+  filteredRowModel: createFilteredRowModel(),
+  filterFns: { equals: filterFn_equals },
+});
+const comparisonColumns: TableOptions<
+  typeof comparisonFeatures,
+  ComparisonRow
+>['columns'] = [
+  { id: 'label', accessorKey: 'label' },
+  { id: 'low', accessorFn: (row) => row.read('low') },
+  { id: 'high', accessorFn: (row) => row.read('high') },
+  {
+    id: 'different',
+    accessorFn: (row) => row.read('low') !== row.read('high'),
+    filterFn: 'equals',
+  },
+];
+
 type ConfirmMode = 'merge' | 'separate' | 'confirm';
 
 function useFieldLabels(pair: DuplicatePairDetail | undefined): FieldLabels {
@@ -88,7 +128,7 @@ function useFieldLabels(pair: DuplicatePairDetail | undefined): FieldLabels {
     { includeInactive: false },
     { enabled: Boolean(pair?.tickets) },
   );
-  return useMemo<FieldLabels>(() => {
+  return ((): FieldLabels => {
     const ticketList = ticketConfigs.data?.ticketPropertyConfigs ?? [];
     const typeList = disasterTypes.data?.disasterTypes ?? [];
     return {
@@ -107,7 +147,7 @@ function useFieldLabels(pair: DuplicatePairDetail | undefined): FieldLabels {
       disasterType: (key) => typeList.find((t) => t.key === key)?.label || key,
       taskType: (key) => formatTicketTypeLabel(key),
     };
-  }, [ticketConfigs.data, disasterTypes.data]);
+  })();
 }
 
 export function CompareView({
@@ -243,11 +283,10 @@ function PairCompare({
   // 留一張 needs both tickets live; a side cancelled or deleted can only be judged (Spec 028 §2).
   const mergeable =
     ticketCard && Boolean(pair.tickets?.low && pair.tickets?.high);
-  const fields = useMemo(
-    () => (mergeable ? ticketFields(pair, labels) : null),
-    [pair, labels, mergeable],
-  );
-  const [plan, setPlan] = useState<MergePlan | null>(null);
+  const fields = mergeable ? ticketFields(pair, labels) : null;
+  const initialValues: MergeDraft = { plan: null };
+  const form = useForm({ defaultValues: initialValues });
+  const plan = useStore(form.store, (state) => state.values.plan);
   const currentPlan = plan ?? (fields ? defaultPlan(pair, fields) : null);
   const [diffOnly, setDiffOnly] = useState(false);
   const [stale, setStale] = useState(false);
@@ -255,7 +294,10 @@ function PairCompare({
   const editable = pending && canReview;
 
   const update = (change: (plan: MergePlan) => MergePlan) =>
-    setPlan((p) => change(p ?? (currentPlan as MergePlan)));
+    form.setFieldValue('plan', (previous) => {
+      const current = previous ?? currentPlan;
+      return current ? change(current) : null;
+    });
 
   return (
     <Stack
@@ -649,7 +691,6 @@ function CompareTable({
   const sameTime = gap === '同時';
   // A deleted side has no creation time: then neither side is called 最早 or later.
   const timed = gap !== '' && !sameTime;
-  let hiddenSame = 0;
 
   const plainRow = (
     key: string,
@@ -658,10 +699,6 @@ function CompareTable({
   ) => {
     const values = sides.map(read);
     const same = values[0] === values[1];
-    if (same && diffOnly) {
-      hiddenSame += 1;
-      return null;
-    }
     return (
       <Box key={key} sx={{ display: 'contents' }}>
         <Label top={8}>{label}</Label>
@@ -690,10 +727,6 @@ function CompareTable({
   const pickRow = (field: MergeField) => {
     const values = sides.map((side) => field.show(field.read(side)));
     const same = values[0] === values[1];
-    if (same && diffOnly) {
-      hiddenSame += 1;
-      return null;
-    }
     const edited = plan ? isEdited(field, plan) : false;
     return (
       <Box key={field.id} sx={{ display: 'contents' }}>
@@ -718,10 +751,10 @@ function CompareTable({
             // A row typed over on the right has neither cell chosen: picking one gives that up. A
             // combined row takes both, so neither is picked.
             const chosen =
-              Boolean(plan) &&
+              plan !== null &&
               !edited &&
               !field.combined &&
-              pickedSide(field, plan as MergePlan) === side;
+              pickedSide(field, plan) === side;
             return (
               <Box
                 key={side}
@@ -783,6 +816,84 @@ function CompareTable({
   const station = pair.entity_kind === 'station';
   const needs = fields && plan ? otherNeeds(pair, plan) : [];
   const photos = fields && plan ? photoRows(pair, plan) : [];
+  const pickRows = (
+    items: MergeField[],
+    section: 'ticket' | 'task',
+  ): ComparisonRow[] =>
+    items.map((field) => ({
+      section,
+      id: field.id,
+      label: field.label,
+      field,
+      read: (side) => field.show(field.read(side)),
+    }));
+  const reference = (
+    id: string,
+    label: string,
+    read: ComparisonRow['read'],
+  ): ComparisonRow => ({ section: 'reference', id, label, read });
+  const references =
+    ticketCard && fields
+      ? []
+      : [
+          reference('title', station ? '站點名稱' : '名稱', (side) =>
+            pair[side].deleted ? '已刪除' : (pair[side].title ?? '（未填）'),
+          ),
+          ...(!station
+            ? [
+                reference(
+                  'ticket',
+                  '任務單',
+                  (side) => pair[side].ticket_title ?? '（已取消或刪除）',
+                ),
+              ]
+            : []),
+          reference('type', '類型', (side) =>
+            !pair[side].type
+              ? '（未填）'
+              : station
+                ? getStationTypeLabel(pair[side].type)
+                : formatTicketTypeLabel(pair[side].type),
+          ),
+          reference('status', station ? '營運狀態' : '狀態', (side) =>
+            !pair[side].status
+              ? '（未填）'
+              : station
+                ? getOperationalStatusMeta(pair[side].status).label
+                : formatTicketStatusLabel(pair[side].status),
+          ),
+          reference('location', '位置', (side) =>
+            pair[side].latitude != null && pair[side].longitude != null
+              ? `${pair[side].latitude?.toFixed(5)}, ${pair[side].longitude?.toFixed(5)}`
+              : '（未填）',
+          ),
+        ];
+  const table = useTable({
+    features: comparisonFeatures,
+    columns: comparisonColumns,
+    data: fields
+      ? [...pickRows(fields.ticket, 'ticket'), ...pickRows(fields.task, 'task')]
+      : references,
+    getRowId: (row) => row.id,
+    state: {
+      columnFilters: diffOnly ? [{ id: 'different', value: true }] : [],
+    },
+  });
+  const rows = table.getRowModel().rows;
+  const renderRows = (section: ComparisonRow['section']) =>
+    rows
+      .filter((row) => row.original.section === section)
+      .map((row) =>
+        row.original.section === 'reference'
+          ? plainRow(row.id, row.original.label, (side) =>
+              row.getValue<string>(side),
+            )
+          : pickRow(row.original.field),
+      );
+  const ticketRows = renderRows('ticket');
+  const taskRows = renderRows('task');
+  const referenceRows = renderRows('reference');
+  const hiddenSame = table.getPreFilteredRowModel().rows.length - rows.length;
 
   return (
     <Box
@@ -923,14 +1034,14 @@ function CompareTable({
               title="任務單的欄位"
               note={editable ? '點一格，就把那個值帶到右邊的合併結果' : '唯讀'}
             />
-            {fields.ticket.map(pickRow)}
+            {ticketRows}
             {fields.task.length ? (
               <>
                 <Section
                   title="重複的需求"
                   note={editable ? '會合併成一筆；點一格帶到右邊' : '唯讀'}
                 />
-                {fields.task.map(pickRow)}
+                {taskRows}
               </>
             ) : null}
             {needs.length || photos.length ? (
@@ -1067,35 +1178,7 @@ function CompareTable({
                   : undefined
               }
             />
-            {plainRow('title', station ? '站點名稱' : '名稱', (side) =>
-              pair[side].deleted ? '已刪除' : (pair[side].title ?? '（未填）'),
-            )}
-            {!station
-              ? plainRow(
-                  'ticket',
-                  '任務單',
-                  (side) => pair[side].ticket_title ?? '（已取消或刪除）',
-                )
-              : null}
-            {plainRow('type', '類型', (side) =>
-              !pair[side].type
-                ? '（未填）'
-                : station
-                  ? getStationTypeLabel(pair[side].type)
-                  : formatTicketTypeLabel(pair[side].type),
-            )}
-            {plainRow('status', station ? '營運狀態' : '狀態', (side) =>
-              !pair[side].status
-                ? '（未填）'
-                : station
-                  ? getOperationalStatusMeta(pair[side].status).label
-                  : formatTicketStatusLabel(pair[side].status),
-            )}
-            {plainRow('location', '位置', (side) =>
-              pair[side].latitude != null && pair[side].longitude != null
-                ? `${pair[side].latitude?.toFixed(5)}, ${pair[side].longitude?.toFixed(5)}`
-                : '（未填）',
-            )}
+            {referenceRows}
           </>
         )}
 
@@ -1881,7 +1964,11 @@ function ConfirmDialog({
   onStale: () => void;
   onDone: () => void;
 }) {
-  const [note, setNote] = useState('');
+  const form = useForm({
+    defaultValues: { note: '' },
+    onSubmit: (): void => submit(),
+  });
+  const note = useStore(form.store, (state) => state.values.note);
   const reject = useDecideDuplicatePair('reject');
   const confirmDuplicate = useDecideDuplicatePair('confirm');
   const resolve = useResolveDuplicatePair();
@@ -1906,8 +1993,8 @@ function ConfirmDialog({
         : '只記下判定，兩張單都不會變。送出後不能復原。'
       : '送出後不能復原。這一對不會再提示，除非之後有人把它們改到相似。';
 
-  const fail = (err: unknown) =>
-    setError(err instanceof Error ? err.message : '送出失敗，請再試一次。');
+  const fail = (cause: Error) =>
+    setError(cause.message || '送出失敗，請再試一次。');
 
   const submit = () => {
     setError(null);
@@ -2045,7 +2132,7 @@ function ConfirmDialog({
               maxLength={NOTE_MAX_LENGTH}
               rows={2}
               onChange={(e: ChangeEvent<HTMLTextAreaElement>) =>
-                setNote(e.target.value)
+                form.setFieldValue('note', e.target.value)
               }
               data-dedup-note
               sx={{
@@ -2081,7 +2168,7 @@ function ConfirmDialog({
             回去修改
           </Button>
           <Button
-            onClick={submit}
+            onClick={() => void form.handleSubmit()}
             disabled={problems.length > 0 || submitting}
             startIcon={isMerge ? <Merge size={16} /> : <Check size={16} />}
           >

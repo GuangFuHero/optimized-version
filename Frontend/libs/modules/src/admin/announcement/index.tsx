@@ -1,5 +1,7 @@
 'use client';
 
+import { useForm, useStore } from '@tanstack/react-form';
+
 import {
   Box,
   Stack,
@@ -19,6 +21,7 @@ import {
   useCurrentUser,
   useSetAnnouncementActive,
   type AdminAnnouncementsQuery,
+  type CreateAnnouncementInput,
 } from '@rescue-frontend/data-access/admin';
 import {
   AnnouncementBanner,
@@ -346,10 +349,14 @@ function PublishAnnouncementDialog({
   live: Announcement[];
   onClose: () => void;
 }) {
-  const [placement, setPlacement] = useState<AnnouncementPlacement>(
-    AnnouncementPlacement.PublicPage,
-  );
-  const [content, setContent] = useState('');
+  const initialValues: Required<
+    Pick<CreateAnnouncementInput, 'placement' | 'content'>
+  > = { placement: AnnouncementPlacement.PublicPage, content: '' };
+  const form = useForm({
+    defaultValues: initialValues,
+    onSubmit: (): void => publish(),
+  });
+  const { placement, content } = useStore(form.store, (state) => state.values);
   const [confirming, setConfirming] = useState(false);
   const create = useCreateAnnouncement();
   const activate = useSetAnnouncementActive();
@@ -374,8 +381,7 @@ function PublishAnnouncementDialog({
         onSuccess: () => {
           toast.success(`已發布到${target.label}`);
           create.reset();
-          setContent('');
-          setPlacement(AnnouncementPlacement.PublicPage);
+          form.reset();
           setConfirming(false);
           onClose();
         },
@@ -407,7 +413,7 @@ function PublishAnnouncementDialog({
       open={open}
       title="發布公告"
       onClose={onClose}
-      onConfirm={publish}
+      onConfirm={() => void form.handleSubmit()}
       confirmLabel={confirming ? '確認發布' : '預覽無誤，發布'}
       confirmDisabled={!text || over}
       submitting={submitting}
@@ -420,7 +426,7 @@ function PublishAnnouncementDialog({
         value={placement}
         onChange={(_, value: AnnouncementPlacement | null) => {
           if (value) {
-            setPlacement(value);
+            form.setFieldValue('placement', value);
             setConfirming(false);
           }
         }}
@@ -511,7 +517,10 @@ function PublishAnnouncementDialog({
         value={content}
         placeholder="例：大平村上游土石流警報，志工請暫停前往"
         onChange={(event) => {
-          setContent(event.target.value.replace(/[\r\n]+/g, ' '));
+          form.setFieldValue(
+            'content',
+            event.target.value.replace(/[\r\n]+/g, ' '),
+          );
           setConfirming(false);
         }}
         error={

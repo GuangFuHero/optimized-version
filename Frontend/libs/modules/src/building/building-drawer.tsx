@@ -391,11 +391,7 @@ export function BuildingDrawer({
   // Kept through the closing slide, so the title and the floors do not blank out on the way.
   const [shownUuid, setShownUuid] = useState(buildingUuid);
 
-  useEffect(() => {
-    if (buildingUuid) {
-      setShownUuid(buildingUuid);
-    }
-  }, [buildingUuid]);
+  if (buildingUuid && buildingUuid !== shownUuid) setShownUuid(buildingUuid);
 
   const uuid = buildingUuid ?? shownUuid;
   const { building, tickets, mayHoldMore, fetching, error, hasData } =

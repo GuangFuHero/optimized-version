@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useLocalStorage } from 'usehooks-ts';
 
 import type { MarkdownTask } from '@rescue-frontend/ui';
@@ -35,12 +35,10 @@ export function useBriefingChecklist() {
     NO_RECORD,
     CHECKLIST_STORE,
   );
-  const items = useMemo(() => tasks.map((task) => task.label), [tasks]);
-  const marks = useMemo(() => readChecklist(record, items), [record, items]);
-  const save = useCallback(
-    (next: ChecklistMarks) => setRecord(recordChecklist(items, next)),
-    [items, setRecord],
-  );
+  const items = tasks.map((task) => task.label);
+  const marks = readChecklist(record, items);
+  const save = (next: ChecklistMarks) =>
+    setRecord(recordChecklist(items, next));
   const setTaskItems = useCallback((next: readonly MarkdownTask[]) => {
     setTasks((current) =>
       current.length === next.length &&
@@ -53,16 +51,13 @@ export function useBriefingChecklist() {
     );
   }, []);
 
-  return useMemo(
-    () => ({
-      items,
-      checked: new Set(marks.checked),
-      updated: new Set(marks.updated),
-      toggle: (item: string) => save(toggleItem(marks, item)),
-      dismissUpdates: () => save(dismissUpdates(marks)),
-      clear: () => save(NO_MARKS),
-      setTaskItems,
-    }),
-    [items, marks, save, setTaskItems],
-  );
+  return {
+    items,
+    checked: new Set(marks.checked),
+    updated: new Set(marks.updated),
+    toggle: (item: string) => save(toggleItem(marks, item)),
+    dismissUpdates: () => save(dismissUpdates(marks)),
+    clear: () => save(NO_MARKS),
+    setTaskItems,
+  };
 }

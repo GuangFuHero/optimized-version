@@ -4,6 +4,7 @@ import { Check, Lock, Mail, Phone, ShieldAlert, User } from 'lucide-react';
 
 import { Box, Stack, Typography } from '@mui/material';
 import { useState } from 'react';
+import { useForm, useStore } from '@tanstack/react-form';
 import type { ReactNode } from 'react';
 
 import { useUpdateCurrentUser } from '@rescue-frontend/data-access/admin';
@@ -90,7 +91,14 @@ function ContactField({
   contact?: components['schemas']['ContactOut'];
   onVerify: (value: string) => void;
 }) {
-  const [value, setValue] = useState(contact?.value ?? '');
+  const [openedValues] = useState(() => ({ value: contact?.value ?? '' }));
+  const form = useForm({
+    defaultValues: openedValues,
+    onSubmit: (): void => {
+      if (normalized) onVerify(normalized);
+    },
+  });
+  const value = useStore(form.store, (state) => state.values.value);
   const trimmed = value.trim();
   const validation = validateIdentityValue(type, trimmed);
   const normalized =
@@ -103,7 +111,7 @@ function ContactField({
         label={type === 'email' ? 'Email' : '電話'}
         hint="登入方式"
         value={value}
-        onChange={(event) => setValue(event.target.value)}
+        onChange={(event) => form.setFieldValue('value', event.target.value)}
         placeholder={type === 'email' ? '尚未設定 Email' : '尚未設定電話'}
         error={trimmed !== '' && validation !== true ? validation : null}
         leadingIcon={<FieldIcon size={17} />}
@@ -112,7 +120,7 @@ function ContactField({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => onVerify(normalized)}
+              onClick={() => void form.handleSubmit()}
             >
               驗證
             </Button>
@@ -145,7 +153,13 @@ export function ProfileSheet({
   onClose: () => void;
 }) {
   const updateCurrentUser = useUpdateCurrentUser();
-  const [name, setName] = useState(user.name);
+  const [openedValues] = useState(() => ({ name: user.name }));
+  const form = useForm({
+    defaultValues: openedValues,
+    onSubmit: ({ value }) =>
+      updateCurrentUser.mutate({ body: { name: value.name.trim() } }),
+  });
+  const name = useStore(form.store, (state) => state.values.name);
   const [verifying, setVerifying] = useState<{
     type: ContactType;
     value: string;
@@ -191,16 +205,19 @@ export function ProfileSheet({
           <Button
             variant="secondary"
             size="sm"
-            onClick={nameDirty ? () => setName(user.name) : onClose}
+            onClick={
+              nameDirty
+                ? () =>
+                    form.reset({ name: user.name }, { keepDefaultValues: true })
+                : onClose
+            }
           >
             {nameDirty ? '還原' : '關閉'}
           </Button>
           <Button
             size="sm"
             disabled={!nameDirty || !trimmedName || updateCurrentUser.isPending}
-            onClick={() =>
-              updateCurrentUser.mutate({ body: { name: trimmedName } })
-            }
+            onClick={() => void form.handleSubmit()}
           >
             儲存
           </Button>
@@ -213,7 +230,7 @@ export function ProfileSheet({
           label="名字"
           hint="會顯示在頂欄、任務指派與操作紀錄"
           value={name}
-          onChange={(event) => setName(event.target.value)}
+          onChange={(event) => form.setFieldValue('name', event.target.value)}
           error={
             trimmedName
               ? null

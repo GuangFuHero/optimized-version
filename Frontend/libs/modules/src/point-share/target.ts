@@ -1,14 +1,8 @@
-import type { Client } from 'urql';
-
 import {
   GetLinkedTicketDocument,
   GetStationDocument,
   GetTicketDocument,
-  StationFieldsFragmentDoc,
-  TicketFieldsFragmentDoc,
-  TicketNeedFieldsFragmentDoc,
-  createUrqlClient,
-  useFragment,
+  createGraphqlRequest,
   type GetStationQuery,
   type GetTicketQuery,
 } from '@rescue-frontend/data-access';
@@ -20,6 +14,7 @@ import {
 import { parseSiteRouteState } from '../route/parse';
 import { createSiteHref } from '../route/serialize';
 import type { SiteModule, SiteRouteState } from '../route/types';
+import { getBackendGraphqlUrl } from '../server/backend-api-url';
 import type { TicketNeed } from '../ticket/needs/need-claim';
 import {
   describeStationForShare,
@@ -46,23 +41,19 @@ type PointShareMarker = {
   };
 };
 
-const SHARE_QUERY_CONTEXT = {
-  requestPolicy: 'network-only' as const,
-  suspense: false,
-};
-
 function resolveDataType(marker: PointShareMarker) {
   return marker.detailType === 'ticket' ? 'ticket' : 'station';
 }
 
+type GraphqlRequest = ReturnType<typeof createGraphqlRequest>;
+
 function toPointShareMarkerFromStation(
-  stationRef: GetStationQuery['station'],
+  station: GetStationQuery['station'],
 ): PointShareMarker | null {
-  if (!stationRef) {
+  if (!station) {
     return null;
   }
 
-  const station = useFragment(StationFieldsFragmentDoc, stationRef);
   const title =
     station.name?.trim() || station.propertyName?.trim() || station.uuid;
 
@@ -80,13 +71,12 @@ function toPointShareMarkerFromStation(
 }
 
 function toPointShareMarkerFromTicket(
-  ticketRef: GetTicketQuery['ticket'],
+  ticket: GetTicketQuery['ticket'],
 ): PointShareMarker | null {
-  if (!ticketRef) {
+  if (!ticket) {
     return null;
   }
 
-  const ticket = useFragment(TicketFieldsFragmentDoc, ticketRef);
   const title =
     ticket.title.trim() || ticket.propertyName?.trim() || ticket.uuid;
 
@@ -96,9 +86,7 @@ function toPointShareMarkerFromTicket(
     detailType: 'ticket',
     // Read here rather than through `readTicketNeeds`, whose module is client-only: this runs in
     // the page's `generateMetadata`. Need names and headcounts reach a guest (ADR-281).
-    needs: (ticketRef.tasks ?? []).map((task) =>
-      useFragment(TicketNeedFieldsFragmentDoc, task),
-    ),
+    needs: ticket.tasks ?? [],
     ticketMeta: { taskType: ticket.taskType },
   };
 }
@@ -129,41 +117,29 @@ function buildRouteStateFromRoute({
  * 「救災列表」 on a link to a merged ticket.
  */
 export async function fetchTicketShareMarker(
-  client: Pick<Client, 'query'>,
+  request: GraphqlRequest,
   uuid: string,
 ): Promise<PointShareMarker | null> {
-  const result = await client
-    .query(GetTicketDocument, { uuid }, SHARE_QUERY_CONTEXT)
-    .toPromise();
+  const { ticket } = await request(GetTicketDocument, { uuid });
 
-  if (result.error) {
-    return null;
+  if (ticket) {
+    return toPointShareMarkerFromTicket(ticket);
   }
 
-  if (result.data?.ticket) {
-    return toPointShareMarkerFromTicket(result.data.ticket);
-  }
-
-  const linked = resolveLinkedTicket(
-    uuid,
-    await client
-      .query(GetLinkedTicketDocument, { uuid }, SHARE_QUERY_CONTEXT)
-      .toPromise(),
-  );
+  const linked = resolveLinkedTicket(uuid, {
+    data: await request(GetLinkedTicketDocument, { uuid }),
+  });
 
   if (linked.kind !== 'replace') {
     return null;
   }
 
-  const merged = await client
-    .query(GetTicketDocument, { uuid: linked.uuid }, SHARE_QUERY_CONTEXT)
-    .toPromise();
+  const merged = await request(GetTicketDocument, { uuid: linked.uuid });
 
-  return merged.error
-    ? null
-    : toPointShareMarkerFromTicket(merged.data?.ticket ?? null);
+  return toPointShareMarkerFromTicket(merged.ticket);
 }
 
+/** A failed read names nothing: the page keeps its own title. */
 async function fetchPointShareMarker({
   dataType,
   markerId,
@@ -171,27 +147,24 @@ async function fetchPointShareMarker({
   dataType: SiteRouteState['dataType'];
   markerId: string;
 }): Promise<PointShareMarker | null> {
-  const client = createUrqlClient({
-    runtime: 'server',
-    requestPolicy: 'network-only',
-    suspense: false,
+  const request = createGraphqlRequest({
+    url: getBackendGraphqlUrl(),
+    cache: 'no-store',
   });
 
-  if (dataType === 'ticket') {
-    const uuid = linkedTicketUuid(markerId);
+  try {
+    if (dataType === 'ticket') {
+      const uuid = linkedTicketUuid(markerId);
 
-    return uuid ? fetchTicketShareMarker(client, uuid) : null;
-  }
+      return uuid ? await fetchTicketShareMarker(request, uuid) : null;
+    }
 
-  const result = await client
-    .query(GetStationDocument, { uuid: markerId }, SHARE_QUERY_CONTEXT)
-    .toPromise();
+    const { station } = await request(GetStationDocument, { uuid: markerId });
 
-  if (result.error) {
+    return toPointShareMarkerFromStation(station);
+  } catch {
     return null;
   }
-
-  return toPointShareMarkerFromStation(result.data?.station ?? null);
 }
 
 export function createPointShareTarget({

@@ -2,6 +2,8 @@
 
 import { useEffect, useId, useState, type ReactNode } from 'react';
 
+import { useForm, useStore, type DeepValue } from '@tanstack/react-form';
+
 import { Box, Typography } from '@mui/material';
 import {
   useCreateStation,
@@ -21,12 +23,9 @@ import {
   buildCreateInput,
   buildUpdateInput,
   emptyStationForm,
-  followStationPin,
   formPosition,
   stationToForm,
-  updateStationForm,
   validateStationForm,
-  type StationFormErrors,
   type StationFormState,
 } from './station-form-model';
 
@@ -148,8 +147,25 @@ function LoadedStationForm(props: LoadedStationFormProps) {
     children,
   } = props;
   const formId = useId();
-  const [form, setForm] = useState(initial);
-  const [errors, setErrors] = useState<StationFormErrors>({});
+  const [openedValues] = useState(initial);
+  const formApi = useForm({
+    defaultValues: openedValues,
+    validators: {
+      onSubmit: ({ value }) => {
+        const fields = validateStationForm(value);
+        return Object.keys(fields).length ? { fields } : undefined;
+      },
+    },
+    onSubmit: () => submit(),
+  });
+  const form = useStore(formApi.store, (state) => state.values);
+  const fields = useStore(formApi.store, (state) => state.fieldMeta);
+  const errors = {
+    name: fields.name?.errors[0],
+    type: fields.type?.errors[0],
+    latitude: fields.latitude?.errors[0],
+    longitude: fields.longitude?.errors[0],
+  };
   const [notice, setNotice] = useState<string | null>(null);
   const [duplicateOf, setDuplicateOf] = useState<string | null>(null);
   const { status: authStatus } = useAuthSession();
@@ -162,25 +178,51 @@ function LoadedStationForm(props: LoadedStationFormProps) {
   // A pin moved on the map while the form is open: follow it.
   useEffect(() => {
     if (pinLat == null || pinLng == null) return;
-    setForm((current) => followStationPin(current, [pinLat, pinLng]));
-  }, [pinLat, pinLng]);
+    const current = formApi.state.values;
+    if (
+      current.latitude === String(pinLat) &&
+      current.longitude === String(pinLng)
+    )
+      return;
+    formApi.setFieldValue('latitude', String(pinLat));
+    formApi.setFieldValue('longitude', String(pinLng));
+    formApi.setFieldValue('addressToken', '');
+  }, [formApi, pinLat, pinLng]);
 
   // Once per pin: the query caches each position, so a lookup is never repeated.
   const lookup = useReverseGeocode(position);
   const lookupResult = lookup.data?.reverseGeocode;
   useEffect(() => {
     if (lookupResult) {
-      setForm((current) => applyReverseGeocode(current, lookupResult));
+      const filled = applyReverseGeocode(formApi.state.values, lookupResult);
+      for (const key of [
+        'fullAddress',
+        'addressToken',
+        'floor',
+        'room',
+      ] as const) {
+        formApi.setFieldValue(key, filled[key]);
+      }
     }
-  }, [lookupResult]);
+  }, [formApi, lookupResult]);
   const isResolvingAddress = lookup.isFetching;
 
   const change = <K extends keyof StationFormState>(
     key: K,
-    value: StationFormState[K],
+    value: DeepValue<StationFormState, K>,
   ) => {
-    setForm((current) => updateStationForm(current, key, value));
-    setErrors((current) => ({ ...current, [key]: undefined }));
+    if (
+      key === 'fullAddress' ||
+      ((key === 'latitude' || key === 'longitude') &&
+        formApi.state.values[key] !== value)
+    ) {
+      formApi.setFieldValue('addressToken', '');
+    }
+    formApi.setFieldValue(key, value);
+    formApi.setFieldMeta(key, (meta) => ({
+      ...meta,
+      errorMap: { ...meta.errorMap, onSubmit: undefined },
+    }));
   };
 
   const close = () => {
@@ -222,9 +264,6 @@ function LoadedStationForm(props: LoadedStationFormProps) {
       setNotice('目前尚未登入，無法儲存站點。請先登入後再試。');
       return;
     }
-    const nextErrors = validateStationForm(form);
-    setErrors(nextErrors);
-    if (Object.keys(nextErrors).length > 0) return;
     try {
       if (props.mode === 'create') await create();
       else await update(props.uuid);
@@ -240,7 +279,7 @@ function LoadedStationForm(props: LoadedStationFormProps) {
       noValidate
       onSubmit={(event) => {
         event.preventDefault();
-        void submit();
+        void formApi.handleSubmit();
       }}
       sx={{ display: 'flex', flexDirection: 'column', gap: '16px' }}
     >

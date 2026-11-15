@@ -1,8 +1,9 @@
+import { ApiError, createRestClient } from '@rescue-frontend/data-access';
 import { currentClientIp } from '@rescue-frontend/data-access/server';
 
 import { createSharedRefresh } from '../session/shared-refresh';
 import { authCookieNames } from './auth-cookies';
-import { getBackendApiBaseUrl } from './backend-api-url';
+import { getBackendOrigin } from './backend-api-url';
 
 export type SessionRefresh =
   | { kind: 'refreshed'; setCookies: string[] }
@@ -41,19 +42,25 @@ async function requestRefreshAsync(
   const clientIp = currentClientIp();
   if (clientIp) headers.set('x-forwarded-for', clientIp);
 
-  let response: Response;
   try {
-    response = await fetch(
-      `${getBackendApiBaseUrl()}/v1/auth/session/refresh`,
-      { method: 'POST', headers, cache: 'no-store', redirect: 'manual' },
-    );
-  } catch {
-    throw new RefreshUnavailableError();
+    const { response } = await createRestClient({
+      baseUrl: getBackendOrigin(),
+    }).POST('/api/v1/auth/session/refresh', {
+      headers,
+      cache: 'no-store',
+      redirect: 'manual',
+    });
+    if (response.status === 204) {
+      return { kind: 'refreshed', setCookies: response.headers.getSetCookie() };
+    }
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401 && error.response) {
+      return {
+        kind: 'refused',
+        setCookies: error.response.headers.getSetCookie(),
+      };
+    }
   }
-
-  const setCookies = response.headers.getSetCookie();
-  if (response.status === 204) return { kind: 'refreshed', setCookies };
-  if (response.status === 401) return { kind: 'refused', setCookies };
   throw new RefreshUnavailableError();
 }
 

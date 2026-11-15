@@ -31,6 +31,7 @@ const nextConfig = {
   // See: https://nx.dev/recipes/next/next-config-setup
   nx: {},
   poweredByHeader: false,
+  reactCompiler: true,
   async headers() {
     return [{ source: '/:path*', headers: securityHeaders }];
   },

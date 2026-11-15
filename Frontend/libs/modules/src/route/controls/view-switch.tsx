@@ -61,8 +61,8 @@ function SiteViewSwitchConnected(props: SiteViewSwitchProps) {
  * 連結一律經 {@link createSiteHref} 帶上目前的路由狀態：兩頁共用同一份篩選（`PUB-PS-102`），
  * 直接連到 `/list` 會把使用者篩好的條件丟掉。
  *
- * 地圖頁沒有 `SiteRouteContext`（它用自己的 `SiteMapRouteProvider`），`useSiteRouteState` 會退回
- * 讀 `useSearchParams`，因此要包 Suspense。fallback 用空狀態，跟側欄的做法一致。
+ * nuqs 的 query state 隨選取與瀏覽器歷史更新；連結使用同一份目前狀態。
+ * URL reader 放在 Suspense 裡，fallback 用空狀態，跟側欄的做法一致。
  */
 export function SiteViewSwitch(props: SiteViewSwitchProps) {
   return (

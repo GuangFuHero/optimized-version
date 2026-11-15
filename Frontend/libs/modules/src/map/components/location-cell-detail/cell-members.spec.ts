@@ -1,11 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { RescueMapMarkerItem } from '../../types';
-import {
-  EMPTY_CELL_MEMBERS,
-  nextCellMembersSkip,
-  withCellMembersPage,
-} from './cell-members';
+import { EMPTY_CELL_MEMBERS, withCellMembersPage } from './cell-members';
 
 function ticket(id: string): RescueMapMarkerItem {
   return {
@@ -32,7 +28,7 @@ describe('withCellMembersPage', () => {
 
     expect(ids(list)).toEqual(['a', 'b']);
     expect(list.hasMore).toBe(true);
-    expect(nextCellMembersSkip(list)).toBe(2);
+    expect(list.read).toBe(2);
   });
 
   it('adds a later page under the tickets already listed', () => {
@@ -44,12 +40,12 @@ describe('withCellMembersPage', () => {
     const list = withCellMembersPage(
       first,
       { members: [ticket('c')], read: 1, hasMore: false },
-      nextCellMembersSkip(first),
+      first.read,
     );
 
     expect(ids(list)).toEqual(['a', 'b', 'c']);
     expect(list.hasMore).toBe(false);
-    expect(nextCellMembersSkip(list)).toBe(3);
+    expect(list.read).toBe(3);
   });
 
   it('skips a ticket already listed: one filed between two pages repeats the last row', () => {
@@ -76,7 +72,7 @@ describe('withCellMembersPage', () => {
       0,
     );
 
-    expect(nextCellMembersSkip(list)).toBe(3);
+    expect(list.read).toBe(3);
   });
 
   it('starts again from a first page, as when the cell or the filter changes', () => {
@@ -92,11 +88,11 @@ describe('withCellMembersPage', () => {
     );
 
     expect(ids(list)).toEqual(['x']);
-    expect(nextCellMembersSkip(list)).toBe(1);
+    expect(list.read).toBe(1);
   });
 
   it('retries from where the list ends: a failed page leaves it as it was', () => {
-    expect(nextCellMembersSkip(EMPTY_CELL_MEMBERS)).toBe(0);
+    expect(EMPTY_CELL_MEMBERS.read).toBe(0);
 
     const first = withCellMembersPage(
       EMPTY_CELL_MEMBERS,
@@ -104,6 +100,6 @@ describe('withCellMembersPage', () => {
       0,
     );
 
-    expect(nextCellMembersSkip(first)).toBe(200);
+    expect(first.read).toBe(200);
   });
 });

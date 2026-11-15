@@ -166,11 +166,7 @@ export function AdminMapFilterBar({
       assignments: toggleExclusive(filters.assignments, value),
     });
 
-  useEffect(() => {
-    if (disabled) {
-      setOpen(false);
-    }
-  }, [disabled]);
+  if (disabled && open) setOpen(false);
 
   return (
     <Box

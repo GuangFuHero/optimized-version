@@ -1,7 +1,12 @@
+import {
+  ApiError,
+  createRestClient,
+  responseData,
+} from '@rescue-frontend/data-access';
 import type { components } from '@rescue-frontend/data-access/openapi';
 
 import { forwardedCookieHeader } from './auth-cookies';
-import { getBackendApiBaseUrl } from './backend-api-url';
+import { getBackendOrigin } from './backend-api-url';
 import { REFRESHABLE_CODES } from './session-refresh';
 import { REALM_HEADER, type Realm } from './site-realm';
 
@@ -45,37 +50,24 @@ export async function currentUserFromBackendAsync(
   const cookie = forwardedCookieHeader(cookieHeader, 'users/me');
   const headers = new Headers({ [REALM_HEADER]: realm });
   if (cookie) headers.set('cookie', cookie);
-  const response = await fetch(`${getBackendApiBaseUrl()}/v1/users/me`, {
-    headers,
-    cache: 'no-store',
-  });
-  if (response.status === 401) {
-    return REFRESHABLE_CODES.has(await errorCodeAsync(response))
-      ? READ_IN_BROWSER
-      : null;
-  }
-  if (
-    response.status === 403 &&
-    (await errorCodeAsync(response)) === 'back_office_identity_required'
-  ) {
-    return NO_BACK_OFFICE_IDENTITY;
-  }
-  // Anything else says nothing about who is signed in — the backend out of reach: the page fails
-  // rather than sending a signed-in person to the login page as if they were a guest.
-  if (!response.ok) {
-    throw new Error(`/users/me answered ${response.status}`);
-  }
 
-  return (await response.json()) as CurrentUser;
-}
-
-async function errorCodeAsync(response: Response): Promise<unknown> {
   try {
-    const body: unknown = await response.json();
-    return typeof body === 'object' && body !== null && 'code' in body
-      ? body.code
-      : undefined;
-  } catch {
-    return undefined;
+    return await createRestClient({ baseUrl: getBackendOrigin() })
+      .GET('/api/v1/users/me', { headers, cache: 'no-store' })
+      .then(responseData);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) {
+      return REFRESHABLE_CODES.has(error.code) ? READ_IN_BROWSER : null;
+    }
+    if (
+      error instanceof ApiError &&
+      error.status === 403 &&
+      error.code === 'back_office_identity_required'
+    ) {
+      return NO_BACK_OFFICE_IDENTITY;
+    }
+    // Anything else says nothing about who is signed in — the backend out of reach: the page fails
+    // rather than sending a signed-in person to the login page as if they were a guest.
+    throw error;
   }
 }

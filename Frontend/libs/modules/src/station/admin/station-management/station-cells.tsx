@@ -4,7 +4,7 @@ import { Box, Typography } from '@mui/material';
 import { designTokens, Tag } from '@rescue-frontend/ui';
 
 import { getOperationalStatusMeta } from '../../operational-status';
-import { getStationTypeIcon } from '../../station-type-icon';
+import { StationTypeIcon } from '../../station-type-icon';
 import { getStationTypeLabel } from '../../type-options';
 
 const { color, typography } = designTokens;
@@ -16,7 +16,6 @@ export function StatusBadge({ status }: { status: string | null | undefined }) {
 
 /** The prototype's `TypeChip` (station-shared.jsx): a muted icon before the type in subtle grey. */
 export function TypeChip({ type }: { type: string | null | undefined }) {
-  const TypeIcon = getStationTypeIcon(type);
   return (
     <Box
       sx={{
@@ -26,7 +25,10 @@ export function TypeChip({ type }: { type: string | null | undefined }) {
         minWidth: 0,
       }}
     >
-      <TypeIcon sx={{ fontSize: 16, color: color.fg.neutral.muted }} />
+      <StationTypeIcon
+        type={type}
+        sx={{ fontSize: 16, color: color.fg.neutral.muted }}
+      />
       <Typography
         noWrap
         sx={{ ...typography.label[400], color: color.fg.neutral.subtle }}

@@ -1,15 +1,17 @@
 'use client';
 
+import { useForm, useStore } from '@tanstack/react-form';
+
 import { Alert, Button, TextField } from '@mui/material';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { startTransition, useEffect, useId, useState } from 'react';
 
-import { type AuthIdentityType } from '@rescue-frontend/data-access';
 import {
   AuthFormError,
   authHref,
   RegisterForm,
   type AuthFormInitialValues,
+  type AuthIdentityType,
 } from './index';
 import {
   registerAsync,
@@ -64,15 +66,28 @@ export function RegisterFormClient({
   useEffect(() => {
     clearHandedOffIdentity();
   }, []);
-  const [verificationCode, setVerificationCode] = useState('');
+  const verificationForm = useForm({
+    defaultValues: { code: '' } satisfies Pick<
+      Parameters<typeof verifyAndSignInAsync>[0],
+      'code'
+    >,
+    onSubmit: (): Promise<void> => handleVerificationAsync(),
+  });
+  const verificationCode = useStore(
+    verificationForm.store,
+    (state) => state.values.code,
+  );
+  const isVerifying = useStore(
+    verificationForm.store,
+    (state) => state.isSubmitting,
+  );
   const [verificationError, setVerificationError] = useState<string>();
   const [verificationSuccess, setVerificationSuccess] = useState<string>();
-  const [isVerifying, setIsVerifying] = useState(false);
   const [isResending, setIsResending] = useState(false);
   const codeSentToId = useId();
 
   async function handleVerificationAsync() {
-    if (!pendingRegistration || isVerifying) {
+    if (!pendingRegistration) {
       return;
     }
 
@@ -83,7 +98,6 @@ export function RegisterFormClient({
       return;
     }
 
-    setIsVerifying(true);
     setVerificationError(undefined);
     setVerificationSuccess(undefined);
 
@@ -102,8 +116,6 @@ export function RegisterFormClient({
       setVerificationError(
         resolveAuthErrorMessage(error, VERIFY_FALLBACK_MESSAGE),
       );
-    } finally {
-      setIsVerifying(false);
     }
   }
 
@@ -141,7 +153,9 @@ export function RegisterFormClient({
         <TextField
           label="驗證碼"
           value={verificationCode}
-          onChange={(event) => setVerificationCode(event.target.value)}
+          onChange={(event) =>
+            verificationForm.setFieldValue('code', event.target.value)
+          }
           placeholder="請輸入 6 碼驗證碼"
           disabled={isVerifying}
           autoComplete="one-time-code"
@@ -168,7 +182,7 @@ export function RegisterFormClient({
           variant="contained"
           disabled={isVerifying || verificationCode.trim().length === 0}
           onClick={() => {
-            void handleVerificationAsync();
+            void verificationForm.handleSubmit();
           }}
         >
           完成驗證
@@ -188,7 +202,7 @@ export function RegisterFormClient({
           variant="text"
           onClick={() => {
             setPendingRegistration(null);
-            setVerificationCode('');
+            verificationForm.reset();
             setVerificationError(undefined);
             setVerificationSuccess(undefined);
           }}
