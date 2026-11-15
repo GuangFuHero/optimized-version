@@ -60,7 +60,7 @@
 | **RBAC 自管（僅 Super Admin）** | `rbac.assign`、`rbac.edit` |
 
 > `PII` 與檢視分離（ADR-012）：`ticket.view`（看得到單）≠ `ticket.view_pii`（看得到聯絡資訊）。
-> Dashboard 是衍生視圖（ADR-049），可見性繼承自來源模組，**刻意沒有自己的 permission key**。
+> 後台 BI 儀表板與它的 API 要 `analytics.view`（只授予四個後台角色），每張圖另外照舊要來源模組的 view 權限、只算該 scope 看得到的資料。
 > 部分鍵（`ticket.export`、`ai_duplicate.*`）已註冊進 catalog，但**目前 seed 尚未授予任何角色**——先讓 key 存在，待對應功能落地再 wire（見 `seed_rbac.py` 開頭）。
 > `pre_departure.*` 原本也在此列，功能落地後（briefing templates + briefings）已接上 enforcement 並授予 `super_admin`；
 > 同時補上原本沒有的 `pre_departure.delete`，與 `announcement.*` 的四鍵形狀對齊。

@@ -312,6 +312,8 @@
 
 > **部分被 ADR-300 取代**：`data_auditor` 不再是純唯讀，持有 `station.review` 與 `station.revoke`（`all`）；其餘寫入能力照舊沒有。
 
+> **部分修訂**：「Dashboard 沒有自己的權限」不再成立。後台 BI 儀表板與它的 API 現在要 `analytics.view`，授予 `data_auditor`、`super_admin`、`admin`、`member` 四個後台角色，因為它原本依賴的 `ticket.view`／`station.view` 每個註冊帳號都有。
+
 > **狀態:ACCEPTED 並已落地驗證（2026-07-09,`pytest` 367 passed、`ruff` 乾淨)。** 本條整合 2026-07-08/09 對照 `Docs/rbac-permissions-design.md`(v1.1)+ `Dashboard.md` §3~§7 後的修正,並取代 ADR-048 的 scope 部分。
 >
 > **落地內容**:`permissions.py` 移除 `DASHBOARD_*`;`rbac_scopes.py` 移除 `Scope.GOV`/`NGO`(留 none/own/team/zone/all,team 僅團隊管理用);`models/geo.py` + migration `2f9a1c7b6e04` drop `base_geometries.team_uuid`;`services/{station,ticket,closure_area}.py` 建立時不再寫 team_uuid;`seed_rbac.py` 角色重寫成 super_admin/data_auditor/user(平台)+ admin/member(團隊),廢除 gov_manager/ngo_manager;新增 `graphql/masking.py`(移植 PR #23 遮罩)+ `tickets/types.py` PII resolver 從 null 改遮罩(zone 判定改吃 geometry);測試:移除 `test_team_scope.py`(team-geo 已退場)、`test_rbac_scopes.py`/`test_authz.py` 的 team/gov/ngo 案例改 zone、`test_query_rbac.py` PII 斷言改遮罩、新增 `test_masking.py`。
