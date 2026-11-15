@@ -6,6 +6,7 @@ ends the client's access.
 
 import html
 import json
+import re
 import secrets
 import time
 from collections.abc import Callable
@@ -18,6 +19,7 @@ from mcp.server.auth.provider import (
     AuthorizationCode,
     AuthorizationParams,
     RefreshToken,
+    RegistrationError,
     TokenError,
     construct_redirect_uri,
 )
@@ -47,10 +49,28 @@ CONSENT_PATH = "/api/v1/mcp/consent"
 # The MCP endpoint's path, and the prefix of every OAuth path, so that the backend's paths can share a
 # hostname with the site, whose root paths (`/register`, …) are its own pages.
 MCP_PATH = "/mcp"
+# The only places a registered client may be sent back to: a loopback address (native clients such as
+# Claude Code, any port and path) or one of these hosted clients' fixed callbacks, matched exactly.
+_LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
+_CALLBACKS = {
+    "https://claude.ai/api/mcp/auth_callback",
+    "https://claude.com/api/mcp/auth_callback",
+    "https://www.cursor.com/agents/mcp/oauth/callback",
+    "https://chatgpt.com/connector_platform_oauth_redirect",
+}
+# ChatGPT's callback for an authorization server that does not return `iss`, one per connector.
+_CHATGPT_CONNECTOR_CALLBACK = re.compile(r"https://chatgpt\.com/connector/oauth/[^/?#]+")
 
 
 def _client_name(client: OAuthClientInformationFull) -> str:
     return client.client_name or client.client_id or "MCP client"
+
+
+def _allowed_redirect(uri: str) -> bool:
+    parts = urlsplit(uri)
+    if parts.scheme == "http" and parts.hostname in _LOOPBACK_HOSTS and "@" not in parts.netloc:
+        return True
+    return uri in _CALLBACKS or _CHATGPT_CONNECTOR_CALLBACK.fullmatch(uri) is not None
 
 
 def _token(access_token: str, refresh_token: str) -> OAuthToken:
@@ -91,7 +111,11 @@ class BackendOAuthProvider(OAuthProvider):
         await self.redis.expire(_CLIENT + client_id, SessionRepository(self.redis).ttl)
 
     async def register_client(self, client_info: OAuthClientInformationFull) -> None:
-        """Store a dynamically registered client."""
+        """Store a dynamically registered client whose every redirect URI is allowed."""
+        if not all(_allowed_redirect(str(uri)) for uri in client_info.redirect_uris or []):
+            raise RegistrationError(
+                "invalid_redirect_uri", "Only loopback addresses and known MCP clients' callbacks are allowed"
+            )
         await self.redis.set(
             _CLIENT + client_info.client_id, client_info.model_dump_json(), ex=_UNUSED_CLIENT_TTL
         )

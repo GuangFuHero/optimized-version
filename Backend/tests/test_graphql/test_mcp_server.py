@@ -680,3 +680,96 @@ async def test_register_is_rate_limited_and_unused_clients_expire_soon(client, r
     answers = [await client.post("/mcp/register", json=body) for _ in range(11)]
     assert [r.status_code for r in answers] == [201] * 10 + [429]
     assert 0 < await redis.ttl(f"mcp_client:{answers[0].json()['client_id']}".encode()) <= 3600
+
+
+_REGISTRATION = {"client_name": "pytest", "token_endpoint_auth_method": "none"}
+
+
+@pytest.mark.parametrize(
+    "redirect",
+    [
+        "http://127.0.0.1:47123/callback",
+        "http://localhost/any/path?x=1",
+        "http://[::1]:8787/callback",
+        "https://claude.ai/api/mcp/auth_callback",
+        "https://claude.com/api/mcp/auth_callback",
+        "https://www.cursor.com/agents/mcp/oauth/callback",
+        "https://chatgpt.com/connector_platform_oauth_redirect",
+        "https://chatgpt.com/connector/oauth/abc123",
+    ],
+)
+async def test_loopback_and_known_client_callbacks_register(client, redirect):
+    """Native clients' loopback addresses and the hosted clients' own callbacks are accepted."""
+    response = await client.post("/mcp/register", json={**_REGISTRATION, "redirect_uris": [redirect]})
+    assert response.status_code == 201, response.text
+
+
+@pytest.mark.parametrize(
+    "redirects",
+    [
+        ["https://evil.example/landing"],
+        ["http://127.0.0.1:9/cb", "https://evil.example/landing"],
+        ["https://claude.ai.evil.example/api/mcp/auth_callback"],
+        ["https://claude.ai/api/mcp/auth_callback/x"],
+        ["https://claude.ai/api/mcp/auth_callback?next=https://evil.example"],
+        ["https://user@claude.ai/api/mcp/auth_callback"],
+        ["https://chatgpt.com/connector/oauth/abc/evil"],
+        ["https://chatgpt.com/connector/oauth/"],
+        ["https://chatgpt.com.evil.example/connector/oauth/abc"],
+        ["http://localhost.evil.example/cb"],
+        ["http://127.0.0.1@evil.example/cb"],
+        ["http://evil@localhost/cb"],
+        ["https://localhost/cb"],
+    ],
+)
+async def test_any_other_redirect_uri_is_refused_and_nothing_is_stored(client, redis, redirects):
+    """One redirect URI outside the allowlist refuses the whole registration."""
+    response = await client.post("/mcp/register", json={**_REGISTRATION, "redirect_uris": redirects})
+    assert response.status_code == 400
+    assert response.json()["error"] == "invalid_redirect_uri"
+    assert await redis.keys("mcp_client:*") == []
+
+
+async def test_authorize_errors_and_a_denial_never_reach_an_outside_address(client, redis, login_user_auth):
+    """Authorize errors with a foreign redirect URI stay on the server, and a denial returns to loopback."""
+    user_uuid, _ = login_user_auth
+    outside = "https://evil.example/landing"
+    refused = await client.post("/mcp/register", json={**_REGISTRATION, "redirect_uris": [outside]})
+    loopback = "http://127.0.0.1:47123/callback"
+    reg = (await client.post("/mcp/register", json={**_REGISTRATION, "redirect_uris": [loopback]})).json()
+    unknown = await client.get(
+        "/mcp/authorize", params={"response_type": "code", "client_id": "nope", "redirect_uri": outside}
+    )
+    foreign = await client.get(
+        "/mcp/authorize",
+        params={"response_type": "code", "client_id": reg["client_id"], "redirect_uri": outside},
+    )
+    no_pkce = await client.get(
+        "/mcp/authorize",
+        params={"response_type": "code", "client_id": reg["client_id"], "redirect_uri": loopback},
+    )
+    _, challenge = _pkce()
+    authorize = await client.get(
+        "/mcp/authorize",
+        params={
+            "response_type": "code",
+            "client_id": reg["client_id"],
+            "redirect_uri": loopback,
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+        },
+    )
+    txn = parse_qs(urlsplit(authorize.headers["location"]).query)["txn"][0]
+    cookies = {access_cookie_name(): await token_for(redis, user_uuid, await _role_uuid("Login User"))}
+    denied = await client.post(
+        "/api/v1/mcp/consent",
+        data={"txn": txn, "decision": "deny"},
+        cookies=cookies,
+        headers={"Origin": SITE},
+    )
+    assert refused.status_code == 400
+    assert unknown.status_code == 400 and "location" not in unknown.headers
+    assert foreign.status_code == 400 and "location" not in foreign.headers
+    assert no_pkce.headers["location"].startswith(loopback + "?error=invalid_request")
+    assert denied.status_code == 303
+    assert denied.headers["location"].startswith(loopback + "?error=access_denied")
