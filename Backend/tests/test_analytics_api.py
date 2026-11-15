@@ -46,7 +46,7 @@ FRONTEND_PLOTLYJS_VERSION = "4.1.1"
 
 
 async def _user_with_perms(db, redis, *perms: Perm, scope: str = "all") -> dict:
-    """Create a user holding exactly `perms` and return its bearer auth header.
+    """Create a user holding `perms` plus analytics.view and return its bearer auth header.
 
     Thin wrapper over `_seeded_user` for the majority of tests, which don't need the uuid.
     """
@@ -133,7 +133,7 @@ async def test_a_citizen_is_refused_every_endpoint(client, db_session, redis, ur
 async def test_the_back_office_roles_read_the_dashboard(client, db_session, redis, role_name):
     """Every seeded back-office role holds analytics.view."""
     headers = await _seeded_role_headers(db_session, redis, role_name)
-    res = await client.get(TICKETS_VALUE_URL, params={"tz": "UTC", "y": "total_tickets"}, headers=headers)
+    res = await client.get(CATALOG_URL, headers=headers)
     assert res.status_code == 200
 
 

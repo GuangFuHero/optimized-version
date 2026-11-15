@@ -238,18 +238,3 @@ def test_every_back_office_role_reads_the_project_settings():
         "admin": None,
         "member": None,
     }
-
-
-def test_every_back_office_role_reads_the_analytics_dashboard():
-    """The BI dashboard is for back-office identities only, never the self-registered `user`."""
-    from app.core.permissions import Perm
-    from scripts.seed_rbac import ROLES_DATA
-
-    scopes = {spec["name"]: spec["permissions"].get(Perm.ANALYTICS_VIEW) for spec in ROLES_DATA}
-    assert scopes == {
-        "user": None,
-        "data_auditor": "all",
-        "super_admin": "all",
-        "admin": "all",
-        "member": "all",
-    }

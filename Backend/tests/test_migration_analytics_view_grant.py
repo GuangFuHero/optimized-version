@@ -1,7 +1,6 @@
-"""Migration 162b65c8ff5f: existing databases gain `analytics.view` as the RBAC seed grants it.
+"""Existing databases gain `analytics.view` as the RBAC seed grants it.
 
-Built like tests/test_migration_team_admin_grants.py: stop before the revision, write the roles a
-deployed database holds (one grant already set at runtime), upgrade, read the grants, step back.
+One grant already set at runtime keeps its scope, and stepping back removes the key with its grants.
 """
 
 import asyncio
