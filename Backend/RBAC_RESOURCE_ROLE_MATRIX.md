@@ -187,7 +187,7 @@
 |---|---|---|---|---|---|---|
 | analytics.view | — | — | all | all | all | all |
 
-> 後台 BI 儀表板與 `/api/v1/analytics/*` 每支 API 都要 `analytics.view`；圖表另外照舊要 `ticket.view`／`station.view`，也只算該 scope 看得到的資料。
+> 後台 BI 儀表板與 `/api/v1/analytics/*` 每支 API 都要 `analytics.view`；圖表另外照舊要 `ticket.view`／`station.view`，也只算該 scope 看得到的資料。gov 與 NGO team 的 admin、member 都有（ADR-462）。
 
 ### 專案設定 Project Settings
 
