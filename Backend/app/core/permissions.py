@@ -14,9 +14,9 @@ from enum import StrEnum
 class Perm(StrEnum):
     """A capability key. Every RBAC check (checkpoint 1) is keyed on one of these."""
 
-    # Dashboard is a derived/aggregate view (ADR-049): its visibility is inherited from the
-    # source modules (see tickets if you have ticket.view, etc.), so it holds no permission
-    # of its own — no DASHBOARD_* keys here on purpose.
+    # The BI dashboard and its analytics API. Each chart still needs the source module's view
+    # capability and only counts the rows that scope reaches.
+    ANALYTICS_VIEW = "analytics.view"
 
     # Ticket (PII split from the ticket itself: view != view_pii)
     TICKET_VIEW = "ticket.view"
