@@ -12,7 +12,7 @@ import time
 from collections.abc import Callable
 from urllib.parse import quote, urlsplit
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastmcp.server.auth.auth import AccessToken, ClientRegistrationOptions, OAuthProvider, RevocationOptions
 from mcp.server.auth.provider import (
@@ -46,9 +46,23 @@ _PENDING_TTL = 600
 # as a session.
 _UNUSED_CLIENT_TTL = 3600
 # Registered clients that have not signed in yet, by client_id with the time they are forgotten, so they can
-# be counted without scanning; at the cap a registration is refused.
+# be counted without scanning; past the cap the oldest of them are forgotten at once.
 _UNUSED_CLIENTS = "mcp_unused_clients"
 MAX_UNUSED_CLIENTS = 1000
+# Stores a new client and forgets the oldest unused ones past the cap, in one step so concurrent
+# registrations can't overshoot it. KEYS: set, client key prefix; ARGV: now, client_id, record, TTL, cap.
+_REGISTER_LUA = """
+redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', ARGV[1])
+redis.call('ZADD', KEYS[1], ARGV[1] + ARGV[4], ARGV[2])
+redis.call('SET', KEYS[2] .. ARGV[2], ARGV[3], 'EX', ARGV[4])
+local over = redis.call('ZCARD', KEYS[1]) - tonumber(ARGV[5])
+if over > 0 then
+  for _, old in ipairs(redis.call('ZRANGE', KEYS[1], 0, over - 1)) do
+    redis.call('DEL', KEYS[2] .. old)
+  end
+  redis.call('ZREMRANGEBYRANK', KEYS[1], 0, over - 1)
+end
+"""
 # What one registration may carry.
 MAX_CLIENT_NAME = 100
 MAX_REDIRECT_URIS = 5
@@ -117,13 +131,19 @@ class BackendOAuthProvider(OAuthProvider):
         raw = await self.redis.get(_CLIENT + client_id)
         return OAuthClientInformationFull.model_validate_json(raw) if raw else None
 
-    async def _keep_client(self, client_id: str) -> None:
-        """Keep a client that holds a session registered for another session lifetime."""
-        await self.redis.expire(_CLIENT + client_id, SessionRepository(self.redis).ttl)
-        await self.redis.zrem(_UNUSED_CLIENTS, client_id)
+    async def _keep_client(self, client: OAuthClientInformationFull) -> None:
+        """Keep a client that holds a session registered for another session lifetime.
+
+        It leaves the unused set first and is then written back, so a registration forgetting the oldest
+        unused clients at the same moment cannot lose it.
+        """
+        await self.redis.zrem(_UNUSED_CLIENTS, client.client_id)
+        await self.redis.set(
+            _CLIENT + client.client_id, client.model_dump_json(), ex=SessionRepository(self.redis).ttl
+        )
 
     async def register_client(self, client_info: OAuthClientInformationFull) -> None:
-        """Store a dynamically registered client that is small, has allowed redirect URIs and fits the cap."""
+        """Store a dynamically registered client that is small and has allowed redirect URIs."""
         if (
             len(client_info.client_name or "") > MAX_CLIENT_NAME
             or len(client_info.redirect_uris or []) > MAX_REDIRECT_URIS
@@ -138,15 +158,16 @@ class BackendOAuthProvider(OAuthProvider):
             raise RegistrationError(
                 "invalid_redirect_uri", "Only loopback addresses and known MCP clients' callbacks are allowed"
             )
-        # Added before counting, so concurrent registrations can only undercount the room left.
-        now = time.time()
-        await self.redis.zremrangebyscore(_UNUSED_CLIENTS, "-inf", now)
-        await self.redis.zadd(_UNUSED_CLIENTS, {client_info.client_id: now + _UNUSED_CLIENT_TTL})
-        if await self.redis.zcard(_UNUSED_CLIENTS) > MAX_UNUSED_CLIENTS:
-            await self.redis.zrem(_UNUSED_CLIENTS, client_info.client_id)
-            raise HTTPException(503, "Too many clients are waiting to sign in; try again later.")
-        await self.redis.set(
-            _CLIENT + client_info.client_id, client_info.model_dump_json(), ex=_UNUSED_CLIENT_TTL
+        await self.redis.eval(
+            _REGISTER_LUA,
+            2,
+            _UNUSED_CLIENTS,
+            _CLIENT,
+            time.time(),
+            client_info.client_id,
+            client_info.model_dump_json(),
+            _UNUSED_CLIENT_TTL,
+            MAX_UNUSED_CLIENTS,
         )
 
     async def authorize(self, client: OAuthClientInformationFull, params: AuthorizationParams) -> str:
@@ -178,7 +199,7 @@ class BackendOAuthProvider(OAuthProvider):
             access_token, refresh_token, _ = await auth_session.open_default_session(
                 db, self.redis, user, f"MCP: {_client_name(client)}", mcp_client=client.client_id
             )
-        await self._keep_client(client.client_id)
+        await self._keep_client(client)
         return _token(access_token, refresh_token)
 
     async def _mcp_session(self, sid: str | None, client_id: str | None = None) -> dict | None:
@@ -216,7 +237,7 @@ class BackendOAuthProvider(OAuthProvider):
                     # rotating, so the same token is sent once more.
                     if attempt or err.code != ErrorCode.IDENTITY_RESET:
                         raise TokenError("invalid_grant", err.detail) from err
-        await self._keep_client(client.client_id)
+        await self._keep_client(client)
         return _token(access_token, new_refresh)
 
     async def load_access_token(self, token: str) -> AccessToken | None:

@@ -11,7 +11,6 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from fastmcp import Client, FastMCP
-from fastmcp.experimental.transforms.code_mode import MontySandboxProvider
 from graphql import GraphQLField, GraphQLString
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
@@ -28,7 +27,7 @@ from app.models.auth import User
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.repositories.session_repository import SessionRepository
 from mcp_server import build_server, public_routes
-from mcp_server.tools import register_tools
+from mcp_server.tools import BackendCaller, register_tools
 from tests.conftest import ensure_role, token_for
 from tests.test_graphql import conftest as gql
 from tests.test_graphql.conftest import _create_user_with_grants, auth_header
@@ -803,33 +802,46 @@ async def test_a_registration_at_the_limits_is_accepted(client):
     assert (await client.post("/mcp/register", json=body)).status_code == 201
 
 
-async def test_registration_stops_at_the_cap_of_unused_clients(client, redis, monkeypatch, login_user_auth):
-    """At the cap a registration answers 503 and stores nothing; a client that signs in frees its place."""
+async def test_past_the_cap_the_oldest_unused_client_is_forgotten(
+    client, redis, monkeypatch, login_user_auth
+):
+    """A new client always registers; past the cap the oldest unused one goes, never a signed-in one."""
     monkeypatch.setattr("mcp_server.oauth.MAX_UNUSED_CLIENTS", 3)
-    body = {**_REGISTRATION, "redirect_uris": ["http://127.0.0.1:9/cb"]}
-    answers = [await client.post("/mcp/register", json=body) for _ in range(2)]
     user_uuid, _ = login_user_auth
-    # The third client, registered and allowed but not signed in yet.
-    client_id, code, verifier, redirect, _ = await _authorize_through_consent(
+    signed_in, code, verifier, redirect, _ = await _authorize_through_consent(
         client, redis, user_uuid, await _role_uuid("Login User")
     )
-    answers.append(await client.post("/mcp/register", json=body))
-    assert [r.status_code for r in answers] == [201, 201, 503]
-    assert len(await redis.keys("mcp_client:*")) == 3
-    assert await redis.zcard("mcp_unused_clients") == 3
     async with mcp_http() as http:
         token = await http.post(
             "/mcp/token",
             data={
                 "grant_type": "authorization_code",
-                "client_id": client_id,
+                "client_id": signed_in,
                 "code": code,
                 "code_verifier": verifier,
                 "redirect_uri": redirect,
             },
         )
     assert token.status_code == 200, token.text
-    assert (await client.post("/mcp/register", json=body)).status_code == 201
+    body = {**_REGISTRATION, "redirect_uris": ["http://127.0.0.1:9/cb"]}
+
+    async def register() -> str:
+        response = await client.post("/mcp/register", json=body)
+        assert response.status_code == 201, response.text
+        return response.json()["client_id"]
+
+    unused = [await register() for _ in range(4)]
+    oldest_authorize = await client.get(
+        "/mcp/authorize",
+        params={"response_type": "code", "client_id": unused[0], "redirect_uri": "http://127.0.0.1:9/cb"},
+    )
+    assert await redis.get(f"mcp_client:{unused[0]}") is None
+    assert oldest_authorize.status_code == 400
+    assert await redis.zcard("mcp_unused_clients") == 3
+    unused += await asyncio.gather(*(register() for _ in range(4)))
+    assert await redis.zcard("mcp_unused_clients") == 3
+    assert len(await redis.keys("mcp_client:*")) == 4
+    assert await redis.get(f"mcp_client:{signed_in}") is not None
 
 
 async def test_the_consent_page_marks_the_name_as_the_clients_own_and_names_the_identity(
@@ -861,10 +873,10 @@ async def test_the_consent_page_marks_the_name_as_the_clients_own_and_names_the_
     assert "的「一般使用者」身分開始讀取資料，也可以切換到這個帳號的其他身分。" in page.text
 
 
-async def test_one_execute_at_a_time_per_user_on_one_shared_worker(
+async def test_a_user_holds_at_most_one_worker_and_another_user_still_runs(
     client, redis, login_user_auth, monkeypatch
 ):
-    """A user's second execute, from any session, is refused while one runs; another user's still runs."""
+    """While A's execute runs inside the sandbox, A's second one is refused and B's runs at once."""
     pools = []
     real_pool = mcp_server.pydantic_monty.AsyncMonty
 
@@ -873,16 +885,18 @@ async def test_one_execute_at_a_time_per_user_on_one_shared_worker(
         return real_pool(**kwargs)
 
     monkeypatch.setattr(mcp_server.pydantic_monty, "AsyncMonty", spy)
-    real_run = MontySandboxProvider.run
+    real_request = BackendCaller.request
     started, release = asyncio.Event(), asyncio.Event()
 
-    async def held_run(self, code, **kwargs):
-        if "held" in code:
+    async def held_request(self, method, path, **kwargs):
+        # A's execute waits here inside a tool call, with its sandbox worker checked out.
+        if "held" in kwargs.get("json", {}).get("query", ""):
             started.set()
             await release.wait()
-        return await real_run(self, code, **kwargs)
+            return {"data": "held"}
+        return await real_request(self, method, path, **kwargs)
 
-    monkeypatch.setattr(MontySandboxProvider, "run", held_run)
+    monkeypatch.setattr(BackendCaller, "request", held_request)
     user_uuid, _ = login_user_auth
     role = await _role_uuid("Login User")
     token, same_user = await mcp_token(redis, user_uuid, role), await mcp_token(redis, user_uuid, role)
@@ -893,23 +907,30 @@ async def test_one_execute_at_a_time_per_user_on_one_shared_worker(
         return {"name": "execute", "arguments": {"code": code}}
 
     async with mcp_http() as http:
-        first = asyncio.create_task(rpc(http, token, "tools/call", execute("held = 1\nreturn held")))
+        first = asyncio.create_task(
+            rpc(
+                http,
+                token,
+                "tools/call",
+                execute("return await call_tool('graphql_query', {'query': '{ held }'})"),
+            )
+        )
         await started.wait()
         second = await rpc(http, same_user, "tools/call", execute("return 2"))
-        elsewhere = await rpc(http, other, "tools/call", execute("return 3"))
+        elsewhere = await asyncio.wait_for(rpc(http, other, "tools/call", execute("return 3")), 5)
         release.set()
         first = await first
-    assert pools == [{"max_processes": 1, "checkout_timeout": 10}]
+    assert pools == [{"max_processes": 2, "checkout_timeout": 10}]
     assert second["result"]["isError"] is True
     assert "Another execute of yours is still running" in second["result"]["content"][0]["text"]
     assert elsewhere["result"]["content"][0]["text"] == "3"
-    assert first["result"]["content"][0]["text"] == "1"
+    assert "held" in first["result"]["content"][0]["text"]
 
 
 async def test_an_execute_that_waits_too_long_for_the_worker_is_refused(
     client, redis, login_user_auth, monkeypatch
 ):
-    """While the only worker stays taken, an execute is refused as busy once its wait runs out."""
+    """While every worker stays taken, an execute is refused as busy once its wait runs out."""
     pools = []
     real_pool = mcp_server.pydantic_monty.AsyncMonty
 
@@ -922,7 +943,7 @@ async def test_an_execute_that_waits_too_long_for_the_worker_is_refused(
     user_uuid, _ = login_user_auth
     token = await mcp_token(redis, user_uuid, await _role_uuid("Login User"))
     async with mcp_http() as http:
-        async with pools[0].checkout():
+        async with pools[0].checkout(), pools[0].checkout():
             busy = await rpc(
                 http, token, "tools/call", {"name": "execute", "arguments": {"code": "return 1"}}
             )
