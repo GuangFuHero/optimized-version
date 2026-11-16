@@ -116,7 +116,9 @@ Read only is enforced, not listed:
 
 `mcp.use` decides whether an account may use the MCP and `mcp.unlimited_use` whether its tools' backend calls
 are limited; what they mean, their defaults, where each is checked and why are in ADR-463
-(`Spec/008-rbac-authorization/decisions.md`). The code is in `access.py`.
+(`Spec/008-rbac-authorization/decisions.md`). The code is in `access.py`. To switch a role off, set its
+scope to `none` in the RBAC settings rather than deleting the grant: each deploy re-runs the seed, which
+puts a deleted grant back.
 
 ## MCP tokens only read, everywhere
 

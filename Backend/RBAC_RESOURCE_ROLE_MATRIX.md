@@ -239,7 +239,7 @@
 | mcp.use | — | all | all | all | all | all |
 | mcp.unlimited_use | — | — | all | all | all | all |
 
-> 帳號的任一個可用身分持有 `mcp.use`，就能讓 MCP 用戶端登入，不論用戶端之後用哪個身分讀取。任一個身分持有 `mcp.unlimited_use` 就不限次數；其他帳號的 MCP 工具每分鐘最多呼叫後端 `MCP_TOOL_CALLS_PER_MINUTE` 次（預設 10）。在 `/admin/rbac` 改了，下一次請求或呼叫就生效（ADR-463）。
+> 帳號的任一個可用身分持有 `mcp.use`，就能讓 MCP 用戶端登入，不論用戶端之後用哪個身分讀取。任一個身分持有 `mcp.unlimited_use` 就不限次數；其他帳號的 MCP 工具每分鐘最多呼叫後端 `MCP_TOOL_CALLS_PER_MINUTE` 次（預設 10）。在 `/admin/rbac` 改了，下一次請求或呼叫就生效；要關掉某個角色，把 scope 設成 `none`，不要刪掉授予，部署重跑 seed 會把刪掉的補回來（ADR-463）。
 
 ### 後台人員申請 Role Request（功能 019）
 
