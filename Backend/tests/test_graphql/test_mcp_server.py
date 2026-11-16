@@ -1310,6 +1310,33 @@ async def test_an_account_holding_only_user_gets_ten_backend_calls_a_minute(clie
     assert "At most 10 tool calls a minute for this account; try again in" in error
 
 
+async def test_graphql_and_identity_switches_count_and_the_schema_tools_do_not(client, redis, monkeypatch):
+    """Each graphql_query and switch_identity counts once; graphql_schema and rest_routes never do."""
+    user_uuid, (role_uuid,) = await _user_holding("user")
+    token = await mcp_token(redis, user_uuid, role_uuid)
+    code = (
+        "for _ in range(10):\n"
+        "    await call_tool('graphql_schema', {'types': ['Query']})\n"
+        "    await call_tool('rest_routes', {})\n"
+        "for _ in range(5):\n"
+        "    await call_tool('graphql_query', {'query': '{ __typename }'})\n"
+        f"    await call_tool('switch_identity', {{'role_uuid': '{role_uuid}'}})\n"
+        "await call_tool('graphql_query', {'query': '{ __typename }'})"
+    )
+    reached = []
+    real = BackendCaller._in_process
+
+    async def counted(self, scope, receive, send):
+        reached.append(scope["path"])
+        await real(self, scope, receive, send)
+
+    monkeypatch.setattr(BackendCaller, "_in_process", counted)
+    async with mcp_http() as http:
+        answer = await rpc(http, token, "tools/call", {"name": "execute", "arguments": {"code": code}})
+    assert len(reached) == 10
+    assert "At most 10 tool calls a minute" in answer["result"]["content"][0]["text"]
+
+
 async def test_unlimited_use_on_another_identity_lifts_the_limit_while_acting_as_user(
     client, redis, monkeypatch
 ):
