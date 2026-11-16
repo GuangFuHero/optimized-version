@@ -29,7 +29,7 @@ from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssi
 from app.repositories.session_repository import SessionRepository
 from mcp_server import build_server, public_routes
 from mcp_server.tools import register_tools
-from tests.conftest import token_for
+from tests.conftest import ensure_role, token_for
 from tests.test_graphql import conftest as gql
 from tests.test_graphql.conftest import _create_user_with_grants, auth_header
 
@@ -835,8 +835,10 @@ async def test_registration_stops_at_the_cap_of_unused_clients(client, redis, mo
 async def test_the_consent_page_marks_the_name_as_the_clients_own_and_names_the_identity(
     client, redis, login_user_auth
 ):
-    """The page says the client chose its own name and which identity the client will read as."""
+    """The page says the client chose its own name, the identity it starts as, and that it can switch."""
     user_uuid, _ = login_user_auth
+    async with gql.test_db() as db:
+        db.add(UserRoleAssign(user_uuid=user_uuid, role_uuid=(await ensure_role(db, "user")).uuid))
     loopback = "http://127.0.0.1:47123/callback"
     body = {**_REGISTRATION, "client_name": "Claude", "redirect_uris": [loopback]}
     reg = (await client.post("/mcp/register", json=body)).json()
@@ -856,13 +858,13 @@ async def test_the_consent_page_marks_the_name_as_the_clients_own_and_names_the_
     page = await client.get(f"{consent.path}?{consent.query}", cookies=cookies)
     assert page.status_code == 200
     assert "<strong>Claude</strong>（名稱為用戶端自己提供，將返回 127.0.0.1:47123）" in page.text
-    assert "的「Login User」身分讀取資料" in page.text
+    assert "的「一般使用者」身分開始讀取資料，也可以切換到這個帳號的其他身分。" in page.text
 
 
-async def test_one_execute_at_a_time_per_session_on_one_shared_worker(
+async def test_one_execute_at_a_time_per_user_on_one_shared_worker(
     client, redis, login_user_auth, monkeypatch
 ):
-    """A second execute in one session is refused while the first runs; other sessions share one worker."""
+    """A user's second execute, from any session, is refused while one runs; another user's still runs."""
     pools = []
     real_pool = mcp_server.pydantic_monty.AsyncMonty
 
@@ -883,28 +885,51 @@ async def test_one_execute_at_a_time_per_session_on_one_shared_worker(
     monkeypatch.setattr(MontySandboxProvider, "run", held_run)
     user_uuid, _ = login_user_auth
     role = await _role_uuid("Login User")
-    token, other = await mcp_token(redis, user_uuid, role), await mcp_token(redis, user_uuid, role)
+    token, same_user = await mcp_token(redis, user_uuid, role), await mcp_token(redis, user_uuid, role)
+    other_uuid, other_role, _ = await _two_identity_user()
+    other = await mcp_token(redis, other_uuid, other_role)
+
+    def execute(code):
+        return {"name": "execute", "arguments": {"code": code}}
+
     async with mcp_http() as http:
-        first = asyncio.create_task(
-            rpc(
-                http, token, "tools/call", {"name": "execute", "arguments": {"code": "held = 1\nreturn held"}}
-            )
-        )
+        first = asyncio.create_task(rpc(http, token, "tools/call", execute("held = 1\nreturn held")))
         await started.wait()
-        second = await rpc(http, token, "tools/call", {"name": "execute", "arguments": {"code": "return 2"}})
-        elsewhere = await asyncio.gather(
-            *(
-                rpc(http, other, "tools/call", {"name": "execute", "arguments": {"code": f"return {n}"}})
-                for n in (3, 4)
-            )
-        )
+        second = await rpc(http, same_user, "tools/call", execute("return 2"))
+        elsewhere = await rpc(http, other, "tools/call", execute("return 3"))
         release.set()
         first = await first
-    assert pools == [{"max_processes": 1}]
+    assert pools == [{"max_processes": 1, "checkout_timeout": 10}]
     assert second["result"]["isError"] is True
-    assert "still running in this session" in second["result"]["content"][0]["text"]
-    assert [m["result"]["content"][0]["text"] for m in elsewhere] == ["3", "4"]
+    assert "Another execute of yours is still running" in second["result"]["content"][0]["text"]
+    assert elsewhere["result"]["content"][0]["text"] == "3"
     assert first["result"]["content"][0]["text"] == "1"
+
+
+async def test_an_execute_that_waits_too_long_for_the_worker_is_refused(
+    client, redis, login_user_auth, monkeypatch
+):
+    """While the only worker stays taken, an execute is refused as busy once its wait runs out."""
+    pools = []
+    real_pool = mcp_server.pydantic_monty.AsyncMonty
+
+    def spy(**kwargs):
+        pools.append(real_pool(**kwargs))
+        return pools[-1]
+
+    monkeypatch.setattr(mcp_server.pydantic_monty, "AsyncMonty", spy)
+    monkeypatch.setattr(mcp_server, "SANDBOX_WAIT_SECONDS", 0.5)
+    user_uuid, _ = login_user_auth
+    token = await mcp_token(redis, user_uuid, await _role_uuid("Login User"))
+    async with mcp_http() as http:
+        async with pools[0].checkout():
+            busy = await rpc(
+                http, token, "tools/call", {"name": "execute", "arguments": {"code": "return 1"}}
+            )
+        after = await rpc(http, token, "tools/call", {"name": "execute", "arguments": {"code": "return 1"}})
+    assert busy["result"]["isError"] is True
+    assert "The sandbox is busy" in busy["result"]["content"][0]["text"]
+    assert after["result"]["content"][0]["text"] == "1"
 
 
 async def test_execute_is_rate_limited_per_user(client, redis, login_user_auth):
