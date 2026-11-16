@@ -1618,6 +1618,21 @@ ADR-048 當初拒絕資源上的 team 歸屬，理由是「gov 把東西交給 N
 - ◾ 前台通知鈴鐺只顯示 `SITE_NOTICE_TYPES`（`Frontend/libs/modules/src/notification/site-notices.ts`）列出的類型。這三種要前端加進去才看得到，點下去要開哪個畫面也還沒定。
 - 測試：`tests/test_graphql/test_suggestions.py`。
 
+#### ADR-463 連 MCP 用戶端要 `mcp.use`，每個角色都有
+
+> **狀態：ACCEPTED**
+
+**Context**：
+
+- 後端內的 MCP server 讓帳號用 MCP 用戶端唯讀讀取資料。原本任何能登入的帳號都能用，沒辦法逐角色關掉。
+
+**Decision**：
+
+1. 新權限 `mcp.use`。seed 與 migration 以 `all` 授予每個角色（平台與團隊角色都有）；migration 只補缺少的授予，執行期已設定的 scope 不動。
+2. 帳號只要任一個可用身分持有 `mcp.use` 就能用，不只看目前的身分：MCP session 一律從預設身分（通常是 `user`）開始。
+3. 同意頁發授權碼前檢查，沒有就不發碼，頁面直接說這個帳號不能使用 MCP。每個 MCP 請求也檢查，拿掉後已連上的 session 在下一個請求就被拒，訊息說明原因。
+4. 執行期新建的角色沒有 `mcp.use`，要在 `/admin/rbac` 另外授予。
+
 ---
 
 ## 附錄 A. Scope 語意表（ADR-049 定案：純地理，無 gov/ngo）

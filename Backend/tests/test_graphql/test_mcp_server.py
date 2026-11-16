@@ -14,7 +14,7 @@ from fastmcp import Client, FastMCP
 from graphql import GraphQLField, GraphQLString
 from httpx import ASGITransport, AsyncClient
 from pydantic import ValidationError
-from sqlalchemy import select
+from sqlalchemy import select, text
 from starlette.applications import Starlette
 
 import mcp_server
@@ -41,9 +41,28 @@ SITE = "http://localhost:3000"
 BASE = "http://localhost:8000"
 
 
+async def everyone_may_use_mcp() -> None:
+    """Grant `mcp.use` to every role that exists now, as the seed and migration do for theirs."""
+    async with gql.test_db() as db:
+        await db.execute(
+            text(
+                "INSERT INTO permissions (uuid, key) VALUES (gen_random_uuid(), 'mcp.use') "
+                "ON CONFLICT DO NOTHING"
+            )
+        )
+        await db.execute(
+            text(
+                "INSERT INTO role_permission_assign (uuid, role_uuid, permission_uuid, scope) "
+                "SELECT gen_random_uuid(), r.uuid, p.uuid, 'all' FROM roles r, permissions p "
+                "WHERE p.key = 'mcp.use' ON CONFLICT ON CONSTRAINT uq_role_perm DO NOTHING"
+            )
+        )
+
+
 @asynccontextmanager
 async def mcp_http():
     """A fresh MCP app (its session manager runs once per instance) at its public paths; it calls `app`."""
+    await everyone_may_use_mcp()
     mcp_app = build_server(app).http_app(path="/mcp", stateless_http=True)
     public = Starlette(routes=public_routes(mcp_app))
     public.state.redis = app.state.redis
@@ -358,6 +377,7 @@ async def _authorize_through_consent(client, redis, user_uuid, role_uuid):
     assert guest.status_code == 302 and "/login?callbackUrl=" in guest.headers["location"]
     browser_token = await token_for(redis, user_uuid, role_uuid)
     cookies = {access_cookie_name(): browser_token}
+    await everyone_may_use_mcp()
     page = await client.get(consent_path, cookies=cookies)
     assert page.status_code == 200 and "pytest" in page.text
     txn = parse_qs(consent.query)["txn"][0]
@@ -885,6 +905,7 @@ async def test_the_consent_page_marks_the_name_as_the_clients_own_and_names_the_
     )
     consent = urlsplit(authorize.headers["location"])
     cookies = {access_cookie_name(): await token_for(redis, user_uuid, await _role_uuid("Login User"))}
+    await everyone_may_use_mcp()
     page = await client.get(f"{consent.path}?{consent.query}", cookies=cookies)
     assert page.status_code == 200
     assert "<strong>Claude</strong>（名稱為用戶端自己提供，將返回 127.0.0.1:47123）" in page.text
@@ -1111,3 +1132,148 @@ async def test_the_query_size_and_call_timeout_are_the_settings(client, redis, l
         _, too_slow = await call(http, token, "graphql_query", {"query": "{ __typename }"})
     assert "longer than 5 characters" in too_long
     assert "The call took longer than" in too_slow
+
+
+# --- mcp.use and the per-role tool-call allowance ---------------------------------------------------
+
+
+async def _user_holding(*role_names: str) -> tuple[str, list[str]]:
+    """A new account holding the named platform roles (made if missing); returns (user, role uuids)."""
+    async with gql.test_db() as db:
+        user = User(name=f"mcp-{uuid_mod.uuid4().hex[:8]}")
+        db.add(user)
+        await db.flush()
+        roles = [await ensure_role(db, name) for name in role_names]
+        for role in roles:
+            db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid))
+        return str(user.uuid), [str(role.uuid) for role in roles]
+
+
+async def _withdraw_mcp_use(role_uuid: str) -> None:
+    async with gql.test_db() as db:
+        await db.execute(
+            text(
+                "DELETE FROM role_permission_assign WHERE role_uuid = :r "
+                "AND permission_uuid = (SELECT uuid FROM permissions WHERE key = 'mcp.use')"
+            ),
+            {"r": role_uuid},
+        )
+
+
+async def test_an_account_without_mcp_use_gets_no_code(client, redis):
+    """The consent page says plainly the account can't use MCP, and allowing anyway issues no code."""
+    user_uuid, (role_uuid,) = await _user_holding("no-mcp-role")
+    loopback = "http://127.0.0.1:47123/callback"
+    reg = (await client.post("/mcp/register", json={**_REGISTRATION, "redirect_uris": [loopback]})).json()
+    _, challenge = _pkce()
+    authorize = await client.get(
+        "/mcp/authorize",
+        params={
+            "response_type": "code",
+            "client_id": reg["client_id"],
+            "redirect_uri": loopback,
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+        },
+    )
+    consent = urlsplit(authorize.headers["location"])
+    cookies = {access_cookie_name(): await token_for(redis, user_uuid, role_uuid)}
+    page = await client.get(f"{consent.path}?{consent.query}", cookies=cookies)
+    allowed = await client.post(
+        "/api/v1/mcp/consent",
+        data={"txn": parse_qs(consent.query)["txn"][0], "decision": "allow"},
+        cookies=cookies,
+        headers={"Origin": SITE},
+    )
+    assert page.status_code == 403 and "這個帳號不能使用 MCP" in page.text and "允許" not in page.text
+    assert allowed.status_code == 403 and "這個帳號不能使用 MCP" in allowed.text
+    assert await redis.keys("mcp_code:*") == []
+
+
+async def test_mcp_use_on_any_identity_is_enough(client, redis):
+    """An account whose current identity lacks mcp.use still uses MCP through another it holds."""
+    user_uuid, (without, with_it) = await _user_holding("no-mcp-role", "mcp-role")
+    await everyone_may_use_mcp()
+    await _withdraw_mcp_use(without)
+    token = await mcp_token(redis, user_uuid, without)
+    async with mcp_http() as http:
+        await _withdraw_mcp_use(without)
+        read, error = await call(http, token, "rest_get", {"path": "/api/v1/users/me"})
+    assert error is None and read["uuid"] == user_uuid
+
+
+async def test_withdrawing_mcp_use_cuts_a_session_off_at_its_next_request(client, redis):
+    """Once no identity holds mcp.use, the next request is refused with a plain reason."""
+    user_uuid, (role_uuid,) = await _user_holding("mcp-role")
+    token = await mcp_token(redis, user_uuid, role_uuid)
+    async with mcp_http() as http:
+        _, before = await call(http, token, "rest_get", {"path": "/api/v1/users/me"})
+        await _withdraw_mcp_use(role_uuid)
+        listed = await rpc(http, token, "tools/list", {})
+        called = await rpc(http, token, "tools/call", {"name": "execute", "arguments": {"code": "return 1"}})
+    assert before is None
+    for answer in (listed, called):
+        assert "result" not in answer
+        assert "may not use MCP" in answer["error"]["message"]
+
+
+async def _backend_calls(http, token, count: int, monkeypatch) -> tuple[int, str | None]:
+    """Make `count` backend calls in one execute; return (calls that reached the app, error text)."""
+    reached = []
+    real = BackendCaller._in_process
+
+    async def counted(self, scope, receive, send):
+        reached.append(scope["path"])
+        await real(self, scope, receive, send)
+
+    monkeypatch.setattr(BackendCaller, "_in_process", counted)
+    code = (
+        f"for _ in range({count}):\n    await call_tool('rest_get', {{'path': '/api/v1/users/me'}})\nreturn 1"
+    )
+    answer = await rpc(http, token, "tools/call", {"name": "execute", "arguments": {"code": code}})
+    error = answer["result"]["content"][0]["text"] if answer["result"].get("isError") else None
+    return len(reached), error
+
+
+async def test_an_account_holding_only_user_gets_ten_backend_calls_a_minute(client, redis, monkeypatch):
+    """The eleventh backend call in a minute is refused before it reaches the app, saying when to retry."""
+    user_uuid, (role_uuid,) = await _user_holding("user")
+    token = await mcp_token(redis, user_uuid, role_uuid)
+    async with mcp_http() as http:
+        reached, error = await _backend_calls(http, token, 11, monkeypatch)
+    assert reached == 10
+    assert "At most 10 tool calls a minute for this account; try again in" in error
+
+
+async def test_holding_a_role_without_a_limit_lifts_it_even_when_acting_as_user(client, redis, monkeypatch):
+    """An account that also holds an unlisted role has no tool-call limit, whatever identity it acts as."""
+    user_uuid, (user_role, _) = await _user_holding("user", "team-lead-like")
+    token = await mcp_token(redis, user_uuid, user_role)
+    async with mcp_http() as http:
+        reached, error = await _backend_calls(http, token, 12, monkeypatch)
+    assert (reached, error) == (12, None)
+
+
+async def test_the_most_generous_listed_role_sets_the_allowance(client, redis, monkeypatch):
+    """With every role listed, the account gets the largest allowance among them."""
+    monkeypatch.setattr(settings, "MCP_TOOL_CALLS_PER_MINUTE_BY_ROLE", {"user": 2, "reviewer": 3})
+    user_uuid, (user_role, _) = await _user_holding("user", "reviewer")
+    token = await mcp_token(redis, user_uuid, user_role)
+    async with mcp_http() as http:
+        reached, error = await _backend_calls(http, token, 4, monkeypatch)
+    assert reached == 3 and "At most 3 tool calls a minute" in error
+
+
+@pytest.mark.parametrize("value", ['{"user": 0}', '{"user": -2}', '{"user": "many"}', "not json"])
+async def test_a_bad_per_role_allowance_stops_the_settings(monkeypatch, value):
+    """Each per-role allowance must be a number above zero, given as JSON."""
+    monkeypatch.setenv("MCP_TOOL_CALLS_PER_MINUTE_BY_ROLE", value)
+    with pytest.raises((ValidationError, ValueError)):
+        Settings()
+
+
+async def test_the_per_role_allowance_is_read_from_the_environment_as_json(monkeypatch):
+    """The default is ten for `user`, and the environment replaces the whole map."""
+    assert Settings().MCP_TOOL_CALLS_PER_MINUTE_BY_ROLE == {"user": 10}
+    monkeypatch.setenv("MCP_TOOL_CALLS_PER_MINUTE_BY_ROLE", '{"user": 20, "member": 50}')
+    assert Settings().MCP_TOOL_CALLS_PER_MINUTE_BY_ROLE == {"user": 20, "member": 50}

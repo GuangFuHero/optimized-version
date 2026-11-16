@@ -37,6 +37,7 @@ from app.repositories.active_identity_repository import active_identity_reposito
 from app.repositories.auth_repository import user_repository
 from app.repositories.session_repository import SessionRepository
 from app.services import auth_session
+from mcp_server.access import may_use_mcp
 
 _CLIENT = "mcp_client:"
 _PENDING = "mcp_authorize:"
@@ -311,6 +312,13 @@ async def _signed_in_user(request: Request, db: AsyncSession, redis) -> User | N
         return None
 
 
+def _no_mcp_use() -> HTMLResponse:
+    return _page(
+        "<h1>無法授權</h1><p>這個帳號不能使用 MCP，所以無法讓 MCP 用戶端讀取資料。如有需要，請洽管理員。</p>",
+        403,
+    )
+
+
 def _expired() -> HTMLResponse:
     return _page("<p>這個授權要求已失效，請回到 MCP 用戶端重新連線。</p>", 400)
 
@@ -330,6 +338,8 @@ async def consent_page(
     if user is None:
         back = quote(f"{CONSENT_PATH}?txn={txn}", safe="")
         return RedirectResponse(f"{settings.SITE_APP_URL.rstrip('/')}/login?callbackUrl={back}", 302)
+    if not await may_use_mcp(db, str(user.uuid)):
+        return _no_mcp_use()
     record, client = pending
     redirect_host = urlsplit(record["params"]["redirect_uri"]).netloc or record["params"]["redirect_uri"]
     # The identity the session will open on, as `exchange_authorization_code` opens it.
@@ -365,6 +375,8 @@ async def consent_decision(
     if decision != "allow":
         target = construct_redirect_uri(str(params.redirect_uri), error="access_denied", state=params.state)
         return RedirectResponse(target, 303)
+    if not await may_use_mcp(db, str(user.uuid)):
+        return _no_mcp_use()
     code = AuthorizationCode(
         code=secrets.token_urlsafe(32),
         scopes=params.scopes or [],

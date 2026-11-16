@@ -232,6 +232,14 @@
 
 > `rbac.view`（feature 009 #25：`/admin/rbac` 唯讀面的 checkpoint-1 gate）只有 super_admin；`rbac.*` 全是 super_admin 專屬治理，不委派給其他角色。
 
+### MCP 用戶端
+
+| capability | Guest | user | data_auditor | super_admin | admin(team) | member(team) |
+|---|---|---|---|---|---|---|
+| mcp.use | — | all | all | all | all | all |
+
+> 帳號的任一個可用身分持有 `mcp.use`，就能讓 MCP 用戶端登入，不論用戶端之後用哪個身分讀取。同意頁發授權碼前、每個 MCP 請求都檢查；在 `/admin/rbac` 拿掉某個角色的 `mcp.use`，只持有這些角色的帳號下一個 MCP 請求就被拒（ADR-463）。
+
 ### 後台人員申請 Role Request（功能 019）
 
 | capability | Guest | user | data_auditor | super_admin | admin(team) | member(team) |

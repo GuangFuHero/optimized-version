@@ -9,12 +9,16 @@ from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from fastmcp.experimental.transforms.code_mode import CodeMode, MontySandboxProvider
 from fastmcp.server.dependencies import get_access_token
+from fastmcp.server.middleware import Middleware
+from mcp import MCPError
 from starlette.requests import Request
 from starlette.routing import Route
 
 from app.api.v1.endpoints.auth.deps import build_rate_limit_key, consume_rate_limit
 from app.core.config import settings
 from app.core.request_auth import resolve_client_ip
+from app.db.session import SessionLocal
+from mcp_server.access import NO_MCP_USE, may_use_mcp
 from mcp_server.oauth import MCP_PATH, BackendOAuthProvider, consent_router
 from mcp_server.tools import register_tools
 
@@ -127,6 +131,18 @@ class SharedSandbox(MontySandboxProvider):
             return await session.feed_run(code, inputs=inputs, external_lookup=external_functions)
 
 
+class RequireMcpUse(Middleware):
+    """Refuses every MCP request from an account that no longer holds `mcp.use` on any identity."""
+
+    async def on_request(self, context, call_next):
+        """Check the account, then pass the request on."""
+        async with SessionLocal() as db:
+            allowed = await may_use_mcp(db, get_access_token().subject)
+        if not allowed:
+            raise MCPError(code=-32003, message=NO_MCP_USE)
+        return await call_next(context)
+
+
 def build_server(app: FastAPI) -> FastMCP:
     """The MCP server whose tools call `app`'s endpoints, behind CodeMode."""
     sandbox = SharedSandbox(lambda: app.state.redis)
@@ -141,6 +157,7 @@ def build_server(app: FastAPI) -> FastMCP:
         auth=BackendOAuthProvider(lambda: app.state.redis),
         transforms=[CodeMode(sandbox_provider=sandbox, max_tool_calls=settings.MCP_MAX_TOOL_CALLS)],
         lifespan=sandbox.lifespan,
+        middleware=[RequireMcpUse()],
     )
     register_tools(server, app)
     return server
