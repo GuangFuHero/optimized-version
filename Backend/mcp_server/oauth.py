@@ -54,6 +54,8 @@ MAX_CLIENT_NAME = 100
 MAX_REDIRECT_URIS = 5
 MAX_REGISTRATION_BYTES = 8192
 _CODE_TTL = 300
+# The names the site shows for the platform roles a session can open on.
+_ROLE_NAMES = {"user": "一般使用者", "data_auditor": "資料檢核員", "super_admin": "超級管理員"}
 CONSENT_PATH = "/api/v1/mcp/consent"
 # The MCP endpoint's path, and the prefix of every OAuth path, so that the backend's paths can share a
 # hostname with the site, whose root paths (`/register`, …) are its own pages.
@@ -315,12 +317,13 @@ async def consent_page(
     redirect_host = urlsplit(record["params"]["redirect_uri"]).netloc or record["params"]["redirect_uri"]
     # The identity the session will open on, as `exchange_authorization_code` opens it.
     identity = await active_identity_repository.default_for_user(db, str(user.uuid))
-    as_identity = f"「{identity.role_name}」" if identity else ""
+    role = _ROLE_NAMES.get(identity.role_name, identity.role_name) if identity else ""
+    as_identity = f"「{role}」" if role else ""
     return _page(
         f"<h1>授權 MCP 用戶端</h1><p><strong>{html.escape(_client_name(client))}</strong>"
         f"（名稱為用戶端自己提供，將返回 {html.escape(redirect_host)}）想以 "
-        f"<strong>{html.escape(user.name)}</strong> 的{html.escape(as_identity)}身分讀取資料。"
-        "它只能讀取，不能新增、修改或刪除任何資料；登出網站即會中斷它的連線。</p>"
+        f"<strong>{html.escape(user.name)}</strong> 的{html.escape(as_identity)}身分開始讀取資料，"
+        "也可以切換到這個帳號的其他身分。它只能讀取，不能新增、修改或刪除任何資料；登出網站即會中斷它的連線。</p>"
         f'<form method="post"><input type="hidden" name="txn" value="{html.escape(txn)}">'
         '<button name="decision" value="allow">允許</button>'
         '<button name="decision" value="deny">拒絕</button></form>'

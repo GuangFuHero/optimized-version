@@ -1,6 +1,6 @@
 """A read-only MCP server inside the backend, signed in through the backend's own accounts and sessions."""
 
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 
 import pydantic_monty
 from fastapi import FastAPI
@@ -22,6 +22,8 @@ from mcp_server.tools import register_tools
 RATE_LIMITS = {"/register": (10, 3600), "/authorize": (30, 600)}
 # Per-user allowance, (times, seconds), on CodeMode's `execute`.
 EXECUTE_RATE_LIMIT = (10, 60)
+# How long an `execute` waits for the shared sandbox worker before it is refused as busy.
+SANDBOX_WAIT_SECONDS = 10
 _SERVER_METADATA = "/.well-known/oauth-authorization-server"
 
 
@@ -81,8 +83,8 @@ class _RateLimited:
 class SharedSandbox(MontySandboxProvider):
     """CodeMode's sandbox on one worker process for the whole app, opened with the MCP server.
 
-    An MCP session runs one `execute` at a time, and each user has an allowance of them; other sessions'
-    executes wait for the worker.
+    A user runs one `execute` at a time, in any of their sessions, within an allowance; other users' executes
+    wait for the worker, up to SANDBOX_WAIT_SECONDS.
     """
 
     def __init__(self, redis_of):
@@ -95,7 +97,7 @@ class SharedSandbox(MontySandboxProvider):
     @asynccontextmanager
     async def lifespan(self, server):
         """Keep the worker pool open while the MCP server runs."""
-        async with pydantic_monty.AsyncMonty(max_processes=1) as pool:
+        async with pydantic_monty.AsyncMonty(max_processes=1, checkout_timeout=SANDBOX_WAIT_SECONDS) as pool:
             self._pool = pool
             try:
                 yield {}
@@ -103,23 +105,26 @@ class SharedSandbox(MontySandboxProvider):
                 self._pool = None
 
     async def run(self, code, **kwargs):
-        """Run `code` unless its session is already running one or its user has used the allowance."""
-        access = get_access_token()
-        sid = access.claims["sid"]
-        if sid in self._running:
-            raise ToolError("Another execute is still running in this session; wait for it to finish.")
-        self._running.add(sid)
+        """Run `code` unless its user is already running one or has used the allowance."""
+        user = get_access_token().subject
+        if user in self._running:
+            raise ToolError("Another execute of yours is still running; wait for it to finish.")
+        self._running.add(user)
         try:
             times, seconds = EXECUTE_RATE_LIMIT
-            key = build_rate_limit_key(times, seconds, access.subject, "mcp/execute")
+            key = build_rate_limit_key(times, seconds, user, "mcp/execute")
             if not await consume_rate_limit(self._redis_of(), key, times, seconds):
                 raise ToolError(f"At most {times} executes per {seconds} seconds; try again later.")
             return await super().run(code, **kwargs)
         finally:
-            self._running.discard(sid)
+            self._running.discard(user)
 
     async def _run_monty(self, monty, *, code, inputs, external_functions):
-        async with self._pool.checkout(limits=self.limits) as session:
+        async with AsyncExitStack() as stack:
+            try:
+                session = await stack.enter_async_context(self._pool.checkout(limits=self.limits))
+            except TimeoutError as err:
+                raise ToolError("The sandbox is busy with other executes; try again shortly.") from err
             return await session.feed_run(code, inputs=inputs, external_lookup=external_functions)
 
 

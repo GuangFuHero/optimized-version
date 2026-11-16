@@ -94,8 +94,9 @@ Read only is enforced, not listed:
 - Every backend call times out after 30 seconds. CodeMode's sandbox (FastMCP defaults) allows 30 s and
   100 MB per `execute`, and at most 50 tool calls in it.
 - Every `execute` runs on one sandbox worker process shared by the whole app, so executes from different
-  sessions wait their turn. A session runs one `execute` at a time (a second one meanwhile is refused with
-  an error), and each user may start 10 per minute.
+  users wait their turn, for at most 10 seconds before being refused as busy. A user runs one `execute` at
+  a time across all their sessions (a second one meanwhile is refused with an error), and may start 10 per
+  minute. The 30 s limit counts sandbox time only, not time waiting on a tool call.
 - `/mcp/register` allows 10 registrations per IP per hour and `/mcp/authorize` 30 per IP per 10 minutes; a
   client that never finishes a sign-in is forgotten after an hour. A registration may carry a `client_name`
   of 100 characters, 5 redirect URIs and 8 KB in all (else 400 `invalid_client_metadata`), and at most
