@@ -1257,6 +1257,31 @@ async def test_without_mcp_use_a_refresh_is_refused_and_ends_the_session(client,
     assert (await client.get("/api/v1/users/me", headers=bearer)).status_code == 401
 
 
+async def test_a_code_issued_before_mcp_use_was_withdrawn_opens_no_session(client, redis, login_user_auth):
+    """The code exchange checks mcp.use too, so a code from before the change gets no token."""
+    user_uuid, _ = login_user_auth
+    role = await _role_uuid("Login User")
+    client_id, code, verifier, redirect, _ = await _authorize_through_consent(client, redis, user_uuid, role)
+    await _withdraw_mcp_use(role)
+    async with mcp_http() as http:
+        await _withdraw_mcp_use(role)
+        exchanged = await http.post(
+            "/mcp/token",
+            data={
+                "grant_type": "authorization_code",
+                "client_id": client_id,
+                "code": code,
+                "code_verifier": verifier,
+                "redirect_uri": redirect,
+            },
+        )
+    assert exchanged.json()["error"] == "invalid_grant", exchanged.text
+    assert "may not use MCP" in exchanged.json()["error_description"]
+    repo = SessionRepository(redis)
+    sids = [m.decode() for m in await redis.smembers(repo.USER_SESSIONS + user_uuid)]
+    assert not [sid for sid in sids if ((await repo.get_session(sid)) or {}).get("mcp_client")]
+
+
 async def _backend_calls(http, token, count: int, monkeypatch) -> tuple[int, str | None]:
     """Make `count` backend calls in one execute; return (calls that reached the app, error text)."""
     reached = []
