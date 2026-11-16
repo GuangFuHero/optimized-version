@@ -91,18 +91,21 @@ Read only is enforced, not listed:
   limits: depth 10, 10 aliases, 1 000 tokens.
 - `rest_get` only reaches GET routes under `/api/v1` outside `EXCLUDED_REST_PREFIXES` (auth, admin,
   bulk, map, rbac-test, invites, mcp).
-- Every backend call times out after 30 seconds. CodeMode's sandbox (FastMCP defaults) allows 30 s and
-  100 MB per `execute`, and at most 50 tool calls in it.
+- Every backend call times out after 30 seconds. CodeMode's sandbox allows 15 s of execution and 100 MB per
+  `execute`, and at most 50 tool calls in it; the 15 s counts sandbox time only, not time waiting for a
+  worker or on a tool call.
 - Every `execute` runs on one of two sandbox worker processes shared by the whole app; when both are busy,
   an `execute` waits at most 10 seconds before being refused as busy. A user runs one `execute` at a time
   across all their sessions (a second one meanwhile is refused with an error), so one user holds at most
-  one worker, and may start 10 per minute. The 30 s limit counts sandbox time only, not time waiting on a tool call.
+  one worker, and may start 10 per minute.
 - `/mcp/register` allows 10 registrations per IP per hour and `/mcp/authorize` 30 per IP per 10 minutes; a
   client that never finishes a sign-in is forgotten after an hour. A registration may carry a `client_name`
   of 100 characters, 5 redirect URIs and 8 KB in all (else 400 `invalid_client_metadata`). At most 1 000
   clients are kept waiting for their first sign-in: a new registration always succeeds and pushes out the
   oldest waiting one, so Redis holds at most 1 000 × 8 KB of them; a client that has signed in is never
   pushed out.
+- These limits are settings (`MCP_EXECUTE_SECONDS`, `MCP_SANDBOX_WORKERS`, `MCP_MAX_WAITING_CLIENTS`, … in
+  `app/core/config.py`); the numbers above are their defaults, and `DEPLOY.md` lists them all.
 
 `DENIED_ROOT_FIELDS` and `EXCLUDED_REST_PREFIXES` in `tools.py` are the only lists to maintain.
 

@@ -3,6 +3,7 @@
 import ipaddress
 import os
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -101,6 +102,28 @@ class Settings(BaseSettings):
     # The public URL MCP clients reach this backend at; the MCP endpoint and its OAuth paths are under
     # `{MCP_BASE_URL}/mcp`, so it can be the site's own URL.
     MCP_BASE_URL: str = os.getenv("MCP_BASE_URL", "http://localhost:8000")
+    # Limits on the MCP. Each must be above zero, so a wrong value stops the backend at startup instead of
+    # leaving the MCP without that limit.
+    # Sandbox execution time per CodeMode `execute`, in seconds; time waiting on backend calls or for a
+    # worker is not counted.
+    MCP_EXECUTE_SECONDS: float = Field(15.0, gt=0)
+    # Sandbox memory per `execute`, in bytes.
+    MCP_EXECUTE_MEMORY_BYTES: int = Field(100_000_000, gt=0)
+    # Sandbox worker processes shared by the app; each user holds at most one at a time.
+    MCP_SANDBOX_WORKERS: int = Field(2, gt=0)
+    # How long an `execute` waits for a free worker before it is refused as busy, in seconds.
+    MCP_SANDBOX_WAIT_SECONDS: float = Field(10.0, gt=0)
+    # Executes each user may start per window of seconds.
+    MCP_EXECUTES_PER_USER: int = Field(10, gt=0)
+    MCP_EXECUTE_WINDOW_SECONDS: int = Field(60, gt=0)
+    # Client registrations (`/mcp/register`) each IP may make per window of seconds.
+    MCP_REGISTERS_PER_IP: int = Field(10, gt=0)
+    MCP_REGISTER_WINDOW_SECONDS: int = Field(3600, gt=0)
+    # Sign-in starts (`/mcp/authorize`) each IP may make per window of seconds.
+    MCP_AUTHORIZES_PER_IP: int = Field(30, gt=0)
+    MCP_AUTHORIZE_WINDOW_SECONDS: int = Field(600, gt=0)
+    # Registered clients kept while waiting for their first sign-in; past it the oldest are forgotten.
+    MCP_MAX_WAITING_CLIENTS: int = Field(1000, gt=0)
 
     @property
     def trusted_proxy_networks(self) -> tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...]:
