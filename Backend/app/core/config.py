@@ -2,7 +2,6 @@
 
 import ipaddress
 import os
-from typing import Annotated
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -141,11 +140,8 @@ class Settings(BaseSettings):
     # Seconds a started sign-in waits on the consent page, and an authorization code stays valid.
     MCP_AUTHORIZE_REQUEST_SECONDS: int = Field(600, gt=0)
     MCP_CODE_SECONDS: int = Field(300, gt=0)
-    # Backend calls an account's MCP tools may make a minute, by role name, as JSON in the environment. An
-    # account gets the most generous of the roles it holds, and no limit if it holds a role not listed.
-    MCP_TOOL_CALLS_PER_MINUTE_BY_ROLE: dict[str, Annotated[int, Field(gt=0)]] = Field(
-        default_factory=lambda: {"user": 10}
-    )
+    # Backend calls an account's MCP tools may make a minute, unless the account holds mcp.unlimited_use.
+    MCP_TOOL_CALLS_PER_MINUTE: int = Field(10, gt=0)
 
     @property
     def trusted_proxy_networks(self) -> tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...]:

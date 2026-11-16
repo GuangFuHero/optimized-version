@@ -1,4 +1,4 @@
-"""Who may use the MCP, and how many backend calls a minute an account's tools may make."""
+"""Who may use the MCP, and how many backend calls a minute an account's tools may make (ADR-463)."""
 
 from types import SimpleNamespace
 
@@ -13,19 +13,21 @@ from app.repositories.active_identity_repository import active_identity_reposito
 NO_MCP_USE = "This account may not use MCP: none of its identities holds mcp.use. Ask an administrator."
 
 
-async def may_use_mcp(db: AsyncSession, user_uuid: str) -> bool:
-    """Whether any of the account's usable identities holds `mcp.use`, whichever one a session acts as."""
+async def _holds_on_any_identity(db: AsyncSession, user_uuid: str, perm: Perm) -> bool:
     for identity in await active_identity_repository.list_for_user(db, user_uuid):
         actor = SimpleNamespace(uuid=user_uuid, active_identity=identity)
-        if await resolve_scope(actor, Perm.MCP_USE, db) != Scope.NONE:
+        if await resolve_scope(actor, perm, db) != Scope.NONE:
             return True
     return False
 
 
+async def may_use_mcp(db: AsyncSession, user_uuid: str) -> bool:
+    """Whether any of the account's usable identities holds `mcp.use`, whichever one a session acts as."""
+    return await _holds_on_any_identity(db, user_uuid, Perm.MCP_USE)
+
+
 async def tool_calls_per_minute(db: AsyncSession, user_uuid: str) -> int | None:
-    """The account's allowance: the most generous among the roles it holds, or None if one has no limit."""
-    limits = settings.MCP_TOOL_CALLS_PER_MINUTE_BY_ROLE
-    roles = {identity.role_name for identity in await active_identity_repository.list_for_user(db, user_uuid)}
-    if not roles or not roles <= limits.keys():
+    """Backend calls a minute the account may make, or None when an identity holds `mcp.unlimited_use`."""
+    if await _holds_on_any_identity(db, user_uuid, Perm.MCP_UNLIMITED_USE):
         return None
-    return max(limits[role] for role in roles)
+    return settings.MCP_TOOL_CALLS_PER_MINUTE
