@@ -31,11 +31,14 @@ from graphql import (
 )
 from starlette.routing import Match
 
+from app.api.v1.endpoints.auth.deps import build_rate_limit_key, consume_rate_limit
 from app.core import security
 from app.core.config import settings
 from app.core.request_auth import MCP_IN_PROCESS, resolve_client_ip
+from app.db.session import SessionLocal
 from app.graphql.schema import schema as app_schema
 from app.repositories.session_repository import SessionRepository
+from mcp_server.access import tool_calls_per_minute
 
 # The only lists to maintain: root query fields and REST path prefixes the MCP never reaches.
 DENIED_ROOT_FIELDS = frozenset({"normalizeAddress", "reverseGeocode"})
@@ -162,8 +165,24 @@ class BackendCaller:
             "X-Forwarded-For": resolve_client_ip(get_http_request()),
         }
 
+    async def _count_call(self) -> None:
+        """Count one backend call against the account's allowance, or refuse it with when to retry."""
+        user = get_access_token().subject
+        async with SessionLocal() as db:
+            times = await tool_calls_per_minute(db, user)
+        if times is None:
+            return
+        redis = self.app.state.redis
+        key = build_rate_limit_key(times, 60, user, "mcp/tool-calls")
+        if not await consume_rate_limit(redis, key, times, 60):
+            wait = max(await redis.ttl(key), 1)
+            raise ToolError(
+                f"At most {times} tool calls a minute for this account; try again in {wait} seconds."
+            )
+
     async def request(self, method: str, path: str, **kwargs) -> Any:
         """Send one request to the app and return its JSON body, or raise its error for the agent."""
+        await self._count_call()
         transport = httpx.ASGITransport(app=self._in_process)
         try:
             async with (

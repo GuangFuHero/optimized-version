@@ -3794,7 +3794,8 @@ export interface components {
       | 'audit.export'
       | 'rbac.view'
       | 'rbac.assign'
-      | 'rbac.edit';
+      | 'rbac.edit'
+      | 'mcp.use';
     /**
      * PhotoForReviewResponse
      * @description One live photo on a ticket (Spec 028, ADR-384).

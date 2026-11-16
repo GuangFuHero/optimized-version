@@ -293,6 +293,11 @@ ROLES_DATA = [
     },
 ]
 
+# ADR-463: every role may connect an MCP client; taking `mcp.use` away from a role at /admin/rbac stops
+# its accounts from doing so.
+for _role in ROLES_DATA:
+    _role["permissions"][Perm.MCP_USE] = "all"
+
 
 async def ensure_role_grant(db: AsyncSession, *, role: Role, permission: Permission, scope: str) -> bool:
     """Insert a role→permission grant only when it is missing (ADR-055 idempotent bootstrap).

@@ -238,3 +238,12 @@ def test_every_back_office_role_reads_the_project_settings():
         "admin": None,
         "member": None,
     }
+
+
+def test_every_role_may_use_mcp():
+    """ADR-463: every seeded role holds mcp.use at `all`, so it can be taken away per role at runtime."""
+    from scripts.seed_rbac import ROLES_DATA
+
+    assert {role["name"]: role["permissions"].get(Perm.MCP_USE) for role in ROLES_DATA} == {
+        role["name"]: "all" for role in ROLES_DATA
+    }

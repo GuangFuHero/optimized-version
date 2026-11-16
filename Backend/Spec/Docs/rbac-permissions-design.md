@@ -58,6 +58,7 @@
 | **Pre-Departure（出勤前須知／行前通知）** | `pre_departure.view` ★、`pre_departure.publish`、`pre_departure.edit`、`pre_departure.delete` |
 | **Audit（稽核日誌）** | `audit.view` |
 | **RBAC 自管（僅 Super Admin）** | `rbac.assign`、`rbac.edit` |
+| **MCP（MCP 用戶端）** | `mcp.use`（每個角色都有，可在執行期逐角色拿掉，ADR-463） |
 
 > `PII` 與檢視分離（ADR-012）：`ticket.view`（看得到單）≠ `ticket.view_pii`（看得到聯絡資訊）。
 > Dashboard 是衍生視圖（ADR-049），可見性繼承自來源模組，**刻意沒有自己的 permission key**。
