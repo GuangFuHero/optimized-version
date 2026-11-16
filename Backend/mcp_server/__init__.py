@@ -1,9 +1,14 @@
 """A read-only MCP server inside the backend, signed in through the backend's own accounts and sessions."""
 
+from contextlib import asynccontextmanager
+
+import pydantic_monty
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastmcp import FastMCP
-from fastmcp.experimental.transforms.code_mode import CodeMode
+from fastmcp.exceptions import ToolError
+from fastmcp.experimental.transforms.code_mode import CodeMode, MontySandboxProvider
+from fastmcp.server.dependencies import get_access_token
 from starlette.requests import Request
 from starlette.routing import Route
 
@@ -15,6 +20,8 @@ from mcp_server.tools import register_tools
 # Per-IP allowances, (times, seconds), on the unauthenticated routes that write to Redis, by the MCP app's
 # own path.
 RATE_LIMITS = {"/register": (10, 3600), "/authorize": (30, 600)}
+# Per-user allowance, (times, seconds), on CodeMode's `execute`.
+EXECUTE_RATE_LIMIT = (10, 60)
 _SERVER_METADATA = "/.well-known/oauth-authorization-server"
 
 
@@ -71,8 +78,54 @@ class _RateLimited:
         await response(scope, receive, send)
 
 
+class SharedSandbox(MontySandboxProvider):
+    """CodeMode's sandbox on one worker process for the whole app, opened with the MCP server.
+
+    An MCP session runs one `execute` at a time, and each user has an allowance of them; other sessions'
+    executes wait for the worker.
+    """
+
+    def __init__(self, redis_of):
+        """`redis_of` returns the app's Redis client, which exists only once the app has started."""
+        super().__init__()
+        self._redis_of = redis_of
+        self._pool = None
+        self._running: set[str] = set()
+
+    @asynccontextmanager
+    async def lifespan(self, server):
+        """Keep the worker pool open while the MCP server runs."""
+        async with pydantic_monty.AsyncMonty(max_processes=1) as pool:
+            self._pool = pool
+            try:
+                yield {}
+            finally:
+                self._pool = None
+
+    async def run(self, code, **kwargs):
+        """Run `code` unless its session is already running one or its user has used the allowance."""
+        access = get_access_token()
+        sid = access.claims["sid"]
+        if sid in self._running:
+            raise ToolError("Another execute is still running in this session; wait for it to finish.")
+        self._running.add(sid)
+        try:
+            times, seconds = EXECUTE_RATE_LIMIT
+            key = build_rate_limit_key(times, seconds, access.subject, "mcp/execute")
+            if not await consume_rate_limit(self._redis_of(), key, times, seconds):
+                raise ToolError(f"At most {times} executes per {seconds} seconds; try again later.")
+            return await super().run(code, **kwargs)
+        finally:
+            self._running.discard(sid)
+
+    async def _run_monty(self, monty, *, code, inputs, external_functions):
+        async with self._pool.checkout(limits=self.limits) as session:
+            return await session.feed_run(code, inputs=inputs, external_lookup=external_functions)
+
+
 def build_server(app: FastAPI) -> FastMCP:
     """The MCP server whose tools call `app`'s endpoints, behind CodeMode."""
+    sandbox = SharedSandbox(lambda: app.state.redis)
     server = FastMCP(
         "救災平台",
         instructions=(
@@ -82,7 +135,8 @@ def build_server(app: FastAPI) -> FastMCP:
             "one; every read then runs with that identity's permissions and masking."
         ),
         auth=BackendOAuthProvider(lambda: app.state.redis),
-        transforms=[CodeMode()],
+        transforms=[CodeMode(sandbox_provider=sandbox)],
+        lifespan=sandbox.lifespan,
     )
     register_tools(server, app)
     return server

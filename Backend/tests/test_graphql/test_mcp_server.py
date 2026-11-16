@@ -1,5 +1,6 @@
 """The MCP server: OAuth onto backend sessions, generic read-only tools, identity choice and sign-out."""
 
+import asyncio
 import base64
 import hashlib
 import json
@@ -10,11 +11,13 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from fastmcp import Client, FastMCP
+from fastmcp.experimental.transforms.code_mode import MontySandboxProvider
 from graphql import GraphQLField, GraphQLString
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 from starlette.applications import Starlette
 
+import mcp_server
 from app.core.auth_cookies import access_cookie_name
 from app.core.identity import encode_act
 from app.core.permissions import Perm
@@ -773,3 +776,148 @@ async def test_authorize_errors_and_a_denial_never_reach_an_outside_address(clie
     assert no_pkce.headers["location"].startswith(loopback + "?error=invalid_request")
     assert denied.status_code == 303
     assert denied.headers["location"].startswith(loopback + "?error=access_denied")
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        {"client_name": "n" * 101},
+        {"redirect_uris": [f"http://127.0.0.1:{port}/cb" for port in range(6)]},
+        {"scope": "s " * 4200},
+    ],
+)
+async def test_an_oversized_registration_is_refused_and_nothing_is_stored(client, redis, extra):
+    """A long client_name, more than five redirect URIs or a registration over 8 KB is refused."""
+    body = {**_REGISTRATION, "redirect_uris": ["http://127.0.0.1:9/cb"], **extra}
+    response = await client.post("/mcp/register", json=body)
+    assert response.status_code == 400
+    assert response.json()["error"] == "invalid_client_metadata"
+    assert await redis.keys("mcp_client:*") == []
+    assert await redis.zcard("mcp_unused_clients") == 0
+
+
+async def test_a_registration_at_the_limits_is_accepted(client):
+    """A 100-character client_name with five redirect URIs still fits."""
+    redirects = [f"http://127.0.0.1:{port}/cb" for port in range(5)]
+    body = {**_REGISTRATION, "client_name": "n" * 100, "redirect_uris": redirects}
+    assert (await client.post("/mcp/register", json=body)).status_code == 201
+
+
+async def test_registration_stops_at_the_cap_of_unused_clients(client, redis, monkeypatch, login_user_auth):
+    """At the cap a registration answers 503 and stores nothing; a client that signs in frees its place."""
+    monkeypatch.setattr("mcp_server.oauth.MAX_UNUSED_CLIENTS", 3)
+    body = {**_REGISTRATION, "redirect_uris": ["http://127.0.0.1:9/cb"]}
+    answers = [await client.post("/mcp/register", json=body) for _ in range(2)]
+    user_uuid, _ = login_user_auth
+    # The third client, registered and allowed but not signed in yet.
+    client_id, code, verifier, redirect, _ = await _authorize_through_consent(
+        client, redis, user_uuid, await _role_uuid("Login User")
+    )
+    answers.append(await client.post("/mcp/register", json=body))
+    assert [r.status_code for r in answers] == [201, 201, 503]
+    assert len(await redis.keys("mcp_client:*")) == 3
+    assert await redis.zcard("mcp_unused_clients") == 3
+    async with mcp_http() as http:
+        token = await http.post(
+            "/mcp/token",
+            data={
+                "grant_type": "authorization_code",
+                "client_id": client_id,
+                "code": code,
+                "code_verifier": verifier,
+                "redirect_uri": redirect,
+            },
+        )
+    assert token.status_code == 200, token.text
+    assert (await client.post("/mcp/register", json=body)).status_code == 201
+
+
+async def test_the_consent_page_marks_the_name_as_the_clients_own_and_names_the_identity(
+    client, redis, login_user_auth
+):
+    """The page says the client chose its own name and which identity the client will read as."""
+    user_uuid, _ = login_user_auth
+    loopback = "http://127.0.0.1:47123/callback"
+    body = {**_REGISTRATION, "client_name": "Claude", "redirect_uris": [loopback]}
+    reg = (await client.post("/mcp/register", json=body)).json()
+    _, challenge = _pkce()
+    authorize = await client.get(
+        "/mcp/authorize",
+        params={
+            "response_type": "code",
+            "client_id": reg["client_id"],
+            "redirect_uri": loopback,
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+        },
+    )
+    consent = urlsplit(authorize.headers["location"])
+    cookies = {access_cookie_name(): await token_for(redis, user_uuid, await _role_uuid("Login User"))}
+    page = await client.get(f"{consent.path}?{consent.query}", cookies=cookies)
+    assert page.status_code == 200
+    assert "<strong>Claude</strong>（名稱為用戶端自己提供，將返回 127.0.0.1:47123）" in page.text
+    assert "的「Login User」身分讀取資料" in page.text
+
+
+async def test_one_execute_at_a_time_per_session_on_one_shared_worker(
+    client, redis, login_user_auth, monkeypatch
+):
+    """A second execute in one session is refused while the first runs; other sessions share one worker."""
+    pools = []
+    real_pool = mcp_server.pydantic_monty.AsyncMonty
+
+    def spy(**kwargs):
+        pools.append(kwargs)
+        return real_pool(**kwargs)
+
+    monkeypatch.setattr(mcp_server.pydantic_monty, "AsyncMonty", spy)
+    real_run = MontySandboxProvider.run
+    started, release = asyncio.Event(), asyncio.Event()
+
+    async def held_run(self, code, **kwargs):
+        if "held" in code:
+            started.set()
+            await release.wait()
+        return await real_run(self, code, **kwargs)
+
+    monkeypatch.setattr(MontySandboxProvider, "run", held_run)
+    user_uuid, _ = login_user_auth
+    role = await _role_uuid("Login User")
+    token, other = await mcp_token(redis, user_uuid, role), await mcp_token(redis, user_uuid, role)
+    async with mcp_http() as http:
+        first = asyncio.create_task(
+            rpc(
+                http, token, "tools/call", {"name": "execute", "arguments": {"code": "held = 1\nreturn held"}}
+            )
+        )
+        await started.wait()
+        second = await rpc(http, token, "tools/call", {"name": "execute", "arguments": {"code": "return 2"}})
+        elsewhere = await asyncio.gather(
+            *(
+                rpc(http, other, "tools/call", {"name": "execute", "arguments": {"code": f"return {n}"}})
+                for n in (3, 4)
+            )
+        )
+        release.set()
+        first = await first
+    assert pools == [{"max_processes": 1}]
+    assert second["result"]["isError"] is True
+    assert "still running in this session" in second["result"]["content"][0]["text"]
+    assert [m["result"]["content"][0]["text"] for m in elsewhere] == ["3", "4"]
+    assert first["result"]["content"][0]["text"] == "1"
+
+
+async def test_execute_is_rate_limited_per_user(client, redis, login_user_auth):
+    """The eleventh execute in a minute from one user is refused, in any of their sessions."""
+    user_uuid, _ = login_user_auth
+    role = await _role_uuid("Login User")
+    tokens = [await mcp_token(redis, user_uuid, role) for _ in range(2)]
+    async with mcp_http() as http:
+        answers = [
+            await rpc(
+                http, tokens[n % 2], "tools/call", {"name": "execute", "arguments": {"code": "return 1"}}
+            )
+            for n in range(11)
+        ]
+    assert [bool(m["result"].get("isError")) for m in answers] == [False] * 10 + [True]
+    assert "At most 10 executes per 60 seconds" in answers[-1]["result"]["content"][0]["text"]

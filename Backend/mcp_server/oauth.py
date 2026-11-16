@@ -12,7 +12,7 @@ import time
 from collections.abc import Callable
 from urllib.parse import quote, urlsplit
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastmcp.server.auth.auth import AccessToken, ClientRegistrationOptions, OAuthProvider, RevocationOptions
 from mcp.server.auth.provider import (
@@ -33,6 +33,7 @@ from app.core.redis import get_redis
 from app.core.request_auth import accept_access_token
 from app.db.session import SessionLocal
 from app.models.auth import User
+from app.repositories.active_identity_repository import active_identity_repository
 from app.repositories.auth_repository import user_repository
 from app.repositories.session_repository import SessionRepository
 from app.services import auth_session
@@ -44,6 +45,14 @@ _PENDING_TTL = 600
 # A registered client that never finishes a sign-in is forgotten after this; one that does lives as long
 # as a session.
 _UNUSED_CLIENT_TTL = 3600
+# Registered clients that have not signed in yet, by client_id with the time they are forgotten, so they can
+# be counted without scanning; at the cap a registration is refused.
+_UNUSED_CLIENTS = "mcp_unused_clients"
+MAX_UNUSED_CLIENTS = 1000
+# What one registration may carry.
+MAX_CLIENT_NAME = 100
+MAX_REDIRECT_URIS = 5
+MAX_REGISTRATION_BYTES = 8192
 _CODE_TTL = 300
 CONSENT_PATH = "/api/v1/mcp/consent"
 # The MCP endpoint's path, and the prefix of every OAuth path, so that the backend's paths can share a
@@ -109,13 +118,31 @@ class BackendOAuthProvider(OAuthProvider):
     async def _keep_client(self, client_id: str) -> None:
         """Keep a client that holds a session registered for another session lifetime."""
         await self.redis.expire(_CLIENT + client_id, SessionRepository(self.redis).ttl)
+        await self.redis.zrem(_UNUSED_CLIENTS, client_id)
 
     async def register_client(self, client_info: OAuthClientInformationFull) -> None:
-        """Store a dynamically registered client whose every redirect URI is allowed."""
+        """Store a dynamically registered client that is small, has allowed redirect URIs and fits the cap."""
+        if (
+            len(client_info.client_name or "") > MAX_CLIENT_NAME
+            or len(client_info.redirect_uris or []) > MAX_REDIRECT_URIS
+            or len(client_info.model_dump_json().encode()) > MAX_REGISTRATION_BYTES
+        ):
+            raise RegistrationError(
+                "invalid_client_metadata",
+                f"At most {MAX_CLIENT_NAME} characters of client_name, {MAX_REDIRECT_URIS} redirect_uris "
+                f"and {MAX_REGISTRATION_BYTES} bytes in all",
+            )
         if not all(_allowed_redirect(str(uri)) for uri in client_info.redirect_uris or []):
             raise RegistrationError(
                 "invalid_redirect_uri", "Only loopback addresses and known MCP clients' callbacks are allowed"
             )
+        # Added before counting, so concurrent registrations can only undercount the room left.
+        now = time.time()
+        await self.redis.zremrangebyscore(_UNUSED_CLIENTS, "-inf", now)
+        await self.redis.zadd(_UNUSED_CLIENTS, {client_info.client_id: now + _UNUSED_CLIENT_TTL})
+        if await self.redis.zcard(_UNUSED_CLIENTS) > MAX_UNUSED_CLIENTS:
+            await self.redis.zrem(_UNUSED_CLIENTS, client_info.client_id)
+            raise HTTPException(503, "Too many clients are waiting to sign in; try again later.")
         await self.redis.set(
             _CLIENT + client_info.client_id, client_info.model_dump_json(), ex=_UNUSED_CLIENT_TTL
         )
@@ -286,10 +313,14 @@ async def consent_page(
         return RedirectResponse(f"{settings.SITE_APP_URL.rstrip('/')}/login?callbackUrl={back}", 302)
     record, client = pending
     redirect_host = urlsplit(record["params"]["redirect_uri"]).netloc or record["params"]["redirect_uri"]
+    # The identity the session will open on, as `exchange_authorization_code` opens it.
+    identity = await active_identity_repository.default_for_user(db, str(user.uuid))
+    as_identity = f"「{identity.role_name}」" if identity else ""
     return _page(
         f"<h1>授權 MCP 用戶端</h1><p><strong>{html.escape(_client_name(client))}</strong>"
-        f"（將返回 {html.escape(redirect_host)}）想以 <strong>{html.escape(user.name)}</strong> "
-        "的身分讀取資料。它只能讀取，不能新增、修改或刪除任何資料；登出網站即會中斷它的連線。</p>"
+        f"（名稱為用戶端自己提供，將返回 {html.escape(redirect_host)}）想以 "
+        f"<strong>{html.escape(user.name)}</strong> 的{html.escape(as_identity)}身分讀取資料。"
+        "它只能讀取，不能新增、修改或刪除任何資料；登出網站即會中斷它的連線。</p>"
         f'<form method="post"><input type="hidden" name="txn" value="{html.escape(txn)}">'
         '<button name="decision" value="allow">允許</button>'
         '<button name="decision" value="deny">拒絕</button></form>'
