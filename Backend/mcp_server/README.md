@@ -104,8 +104,9 @@ Read only is enforced, not listed:
   clients are kept waiting for their first sign-in: a new registration always succeeds and pushes out the
   oldest waiting one, so Redis holds at most 1 000 × 8 KB of them; a client that has signed in is never
   pushed out.
-- These limits are settings (`MCP_EXECUTE_SECONDS`, `MCP_SANDBOX_WORKERS`, `MCP_MAX_WAITING_CLIENTS`, … in
-  `app/core/config.py`); the numbers above are their defaults, and `DEPLOY.md` lists them all.
+- Every number in this list except `/graphql`'s own depth, alias and token limits is a setting
+  (`MCP_EXECUTE_SECONDS`, `MCP_SANDBOX_WORKERS`, `MCP_MAX_WAITING_CLIENTS`, … in `app/core/config.py`); the
+  numbers above are their defaults, and `DEPLOY.md` lists them all.
 
 `DENIED_ROOT_FIELDS` and `EXCLUDED_REST_PREFIXES` in `tools.py` are the only lists to maintain.
 

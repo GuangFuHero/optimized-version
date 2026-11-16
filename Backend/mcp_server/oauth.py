@@ -41,10 +41,6 @@ from app.services import auth_session
 _CLIENT = "mcp_client:"
 _PENDING = "mcp_authorize:"
 _CODE = "mcp_code:"
-_PENDING_TTL = 600
-# A registered client that never finishes a sign-in is forgotten after this; one that does lives as long
-# as a session.
-_UNUSED_CLIENT_TTL = 3600
 # Registered clients that have not signed in yet, by client_id with the time they are forgotten, so they can
 # be counted without scanning; past MCP_MAX_WAITING_CLIENTS the oldest of them are forgotten at once.
 _UNUSED_CLIENTS = "mcp_unused_clients"
@@ -62,11 +58,6 @@ if over > 0 then
   redis.call('ZREMRANGEBYRANK', KEYS[1], 0, over - 1)
 end
 """
-# What one registration may carry.
-MAX_CLIENT_NAME = 100
-MAX_REDIRECT_URIS = 5
-MAX_REGISTRATION_BYTES = 8192
-_CODE_TTL = 300
 # The names the site shows for the platform roles a session can open on.
 _ROLE_NAMES = {"user": "一般使用者", "data_auditor": "資料檢核員", "super_admin": "超級管理員"}
 CONSENT_PATH = "/api/v1/mcp/consent"
@@ -143,15 +134,19 @@ class BackendOAuthProvider(OAuthProvider):
 
     async def register_client(self, client_info: OAuthClientInformationFull) -> None:
         """Store a dynamically registered client that is small and has allowed redirect URIs."""
+        name, uris, size = (
+            settings.MCP_CLIENT_NAME_MAX_CHARS,
+            settings.MCP_MAX_REDIRECT_URIS,
+            settings.MCP_REGISTRATION_MAX_BYTES,
+        )
         if (
-            len(client_info.client_name or "") > MAX_CLIENT_NAME
-            or len(client_info.redirect_uris or []) > MAX_REDIRECT_URIS
-            or len(client_info.model_dump_json().encode()) > MAX_REGISTRATION_BYTES
+            len(client_info.client_name or "") > name
+            or len(client_info.redirect_uris or []) > uris
+            or len(client_info.model_dump_json().encode()) > size
         ):
             raise RegistrationError(
                 "invalid_client_metadata",
-                f"At most {MAX_CLIENT_NAME} characters of client_name, {MAX_REDIRECT_URIS} redirect_uris "
-                f"and {MAX_REGISTRATION_BYTES} bytes in all",
+                f"At most {name} characters of client_name, {uris} redirect_uris and {size} bytes in all",
             )
         if not all(_allowed_redirect(str(uri)) for uri in client_info.redirect_uris or []):
             raise RegistrationError(
@@ -165,7 +160,7 @@ class BackendOAuthProvider(OAuthProvider):
             time.time(),
             client_info.client_id,
             client_info.model_dump_json(),
-            _UNUSED_CLIENT_TTL,
+            settings.MCP_UNUSED_CLIENT_SECONDS,
             settings.MCP_MAX_WAITING_CLIENTS,
         )
 
@@ -173,7 +168,9 @@ class BackendOAuthProvider(OAuthProvider):
         """Park the request and send the browser to the consent page on the site."""
         pending = secrets.token_urlsafe(32)
         record = {"client_id": client.client_id, "params": params.model_dump(mode="json")}
-        await self.redis.set(_PENDING + pending, json.dumps(record), ex=_PENDING_TTL)
+        await self.redis.set(
+            _PENDING + pending, json.dumps(record), ex=settings.MCP_AUTHORIZE_REQUEST_SECONDS
+        )
         return f"{settings.SITE_APP_URL.rstrip('/')}{CONSENT_PATH}?txn={pending}"
 
     async def load_authorization_code(
@@ -371,7 +368,7 @@ async def consent_decision(
     code = AuthorizationCode(
         code=secrets.token_urlsafe(32),
         scopes=params.scopes or [],
-        expires_at=time.time() + _CODE_TTL,
+        expires_at=time.time() + settings.MCP_CODE_SECONDS,
         client_id=client.client_id,
         code_challenge=params.code_challenge,
         redirect_uri=params.redirect_uri,
@@ -379,6 +376,6 @@ async def consent_decision(
         resource=params.resource,
         subject=str(user.uuid),
     )
-    await redis.set(_CODE + code.code, code.model_dump_json(), ex=_CODE_TTL)
+    await redis.set(_CODE + code.code, code.model_dump_json(), ex=settings.MCP_CODE_SECONDS)
     target = construct_redirect_uri(str(params.redirect_uri), code=code.code, state=params.state)
     return RedirectResponse(target, 303)

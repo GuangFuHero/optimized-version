@@ -32,6 +32,7 @@ from graphql import (
 from starlette.routing import Match
 
 from app.core import security
+from app.core.config import settings
 from app.core.request_auth import MCP_IN_PROCESS, resolve_client_ip
 from app.graphql.schema import schema as app_schema
 from app.repositories.session_repository import SessionRepository
@@ -47,10 +48,6 @@ EXCLUDED_REST_PREFIXES = (
     "/api/v1/invites",
     "/api/v1/mcp",
 )
-
-# Refused before parsing; `/graphql` itself then limits depth to 10, aliases to 10 and tokens to 1000.
-MAX_DOCUMENT_CHARS = 20_000
-CALL_TIMEOUT_SECONDS = 30
 
 
 def _live_schema() -> GraphQLSchema:
@@ -80,8 +77,9 @@ def _root_fields(selection_set, fragments: dict, seen: frozenset = frozenset()) 
 
 def check_read_only_query(document: str) -> None:
     """Refuse a document that is not purely queries, reaches a denied root field, or is too long."""
-    if len(document) > MAX_DOCUMENT_CHARS:
-        raise ToolError(f"The query is longer than {MAX_DOCUMENT_CHARS} characters.")
+    # Refused before parsing; `/graphql` itself then limits depth to 10, aliases to 10 and tokens to 1000.
+    if len(document) > settings.MCP_QUERY_MAX_CHARS:
+        raise ToolError(f"The query is longer than {settings.MCP_QUERY_MAX_CHARS} characters.")
     try:
         parsed = parse(document)
     except GraphQLError as err:
@@ -169,12 +167,14 @@ class BackendCaller:
         transport = httpx.ASGITransport(app=self._in_process)
         try:
             async with (
-                asyncio.timeout(CALL_TIMEOUT_SECONDS),
+                asyncio.timeout(settings.MCP_CALL_TIMEOUT_SECONDS),
                 httpx.AsyncClient(transport=transport, base_url="http://backend") as client,
             ):
                 response = await client.request(method, path, headers=await self._headers(), **kwargs)
         except TimeoutError as err:
-            raise ToolError(f"The call took longer than {CALL_TIMEOUT_SECONDS} seconds.") from err
+            raise ToolError(
+                f"The call took longer than {settings.MCP_CALL_TIMEOUT_SECONDS:g} seconds."
+            ) from err
         if response.status_code >= 400:
             raise ToolError(f"{response.status_code}: {response.text}")
         if not response.content:
