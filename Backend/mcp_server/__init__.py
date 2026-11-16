@@ -139,7 +139,7 @@ def build_server(app: FastAPI) -> FastMCP:
             "one; every read then runs with that identity's permissions and masking."
         ),
         auth=BackendOAuthProvider(lambda: app.state.redis),
-        transforms=[CodeMode(sandbox_provider=sandbox)],
+        transforms=[CodeMode(sandbox_provider=sandbox, max_tool_calls=settings.MCP_MAX_TOOL_CALLS)],
         lifespan=sandbox.lifespan,
     )
     register_tools(server, app)

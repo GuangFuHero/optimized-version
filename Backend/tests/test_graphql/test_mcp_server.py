@@ -1023,11 +1023,32 @@ async def test_the_sandbox_applies_both_its_time_and_memory_limit(
         "MCP_AUTHORIZES_PER_IP",
         "MCP_AUTHORIZE_WINDOW_SECONDS",
         "MCP_MAX_WAITING_CLIENTS",
+        "MCP_MAX_TOOL_CALLS",
+        "MCP_CALL_TIMEOUT_SECONDS",
+        "MCP_QUERY_MAX_CHARS",
+        "MCP_CLIENT_NAME_MAX_CHARS",
+        "MCP_MAX_REDIRECT_URIS",
+        "MCP_REGISTRATION_MAX_BYTES",
+        "MCP_UNUSED_CLIENT_SECONDS",
+        "MCP_AUTHORIZE_REQUEST_SECONDS",
+        "MCP_CODE_SECONDS",
     ],
 )
-@pytest.mark.parametrize("value", ["0", "-1", "lots"])
+@pytest.mark.parametrize("value", ["0", "-1", "lots", "inf"])
 async def test_an_mcp_limit_that_is_not_above_zero_stops_the_settings(monkeypatch, name, value):
     """A zero, negative or non-numeric limit in the environment fails at startup."""
     monkeypatch.setenv(name, value)
     with pytest.raises(ValidationError):
         Settings()
+
+
+async def test_the_tool_call_limit_per_execute_is_the_setting(client, redis, login_user_auth, monkeypatch):
+    """CodeMode stops an execute at MCP_MAX_TOOL_CALLS tool calls."""
+    monkeypatch.setattr(settings, "MCP_MAX_TOOL_CALLS", 1)
+    user_uuid, _ = login_user_auth
+    token = await mcp_token(redis, user_uuid, await _role_uuid("Login User"))
+    code = "await call_tool('rest_routes', {})\nreturn await call_tool('rest_routes', {})"
+    async with mcp_http() as http:
+        answer = await rpc(http, token, "tools/call", {"name": "execute", "arguments": {"code": code}})
+    assert answer["result"]["isError"] is True
+    assert "at most 1 call_tool()" in answer["result"]["content"][0]["text"]

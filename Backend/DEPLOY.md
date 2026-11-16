@@ -158,7 +158,7 @@ plan.
 | `REFRESH_REUSE_GRACE_SECONDS` | `30` (default) | `30` (default) | `30` (default) |
 | `TRUSTED_PROXIES` | the default, while every proxy reaches the backend over the docker network | `127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7`, the default | the default |
 | `MCP_BASE_URL` | the site's URL, once its tunnel has the MCP route (not set up yet) | `https://staging.wan-guard.com` (see [MCP clients](#mcp-clients)) | `http://localhost:8000` (default) |
-| MCP limits, `MCP_EXECUTE_SECONDS` … `MCP_MAX_WAITING_CLIENTS` | the defaults | the defaults | the defaults (see **MCP limits** below) |
+| MCP limits, `MCP_EXECUTE_SECONDS` … `MCP_CODE_SECONDS` | the defaults | the defaults | the defaults (see **MCP limits** below) |
 
 - **MCP limits**: optional; each is set only to change its default, and must be above zero, or the backend
   stops at startup. The backend reads them when it starts, so a change takes a restart.
@@ -172,6 +172,14 @@ plan.
   - `MCP_AUTHORIZES_PER_IP` = `30` per `MCP_AUTHORIZE_WINDOW_SECONDS` = `600` (`/mcp/authorize`).
   - `MCP_MAX_WAITING_CLIENTS` = `1000`: registered clients kept while waiting for their first sign-in; past
     it the oldest are forgotten.
+  - `MCP_MAX_TOOL_CALLS` = `50`: tool calls one `execute` may make.
+  - `MCP_CALL_TIMEOUT_SECONDS` = `30`: how long one backend call from a tool may take.
+  - `MCP_QUERY_MAX_CHARS` = `20000`: length of a GraphQL document a tool accepts.
+  - `MCP_CLIENT_NAME_MAX_CHARS` = `100`, `MCP_MAX_REDIRECT_URIS` = `5`, `MCP_REGISTRATION_MAX_BYTES` = `8192`:
+    what one client registration may carry.
+  - `MCP_UNUSED_CLIENT_SECONDS` = `3600`: how long a registered client is kept before its first sign-in.
+  - `MCP_AUTHORIZE_REQUEST_SECONDS` = `600`: how long a started sign-in waits on the consent page.
+  - `MCP_CODE_SECONDS` = `300`: how long an authorization code stays valid.
 - **Why `admin-staging` and not `admin.staging`**: Cloudflare's free certificate covers `wan-guard.com` and
   one level of subdomain below it. `admin.staging.wan-guard.com` is two levels deep and would get no
   certificate.

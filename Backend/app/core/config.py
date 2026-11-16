@@ -106,13 +106,13 @@ class Settings(BaseSettings):
     # leaving the MCP without that limit.
     # Sandbox execution time per CodeMode `execute`, in seconds; time waiting on backend calls or for a
     # worker is not counted.
-    MCP_EXECUTE_SECONDS: float = Field(15.0, gt=0)
+    MCP_EXECUTE_SECONDS: float = Field(15.0, gt=0, allow_inf_nan=False)
     # Sandbox memory per `execute`, in bytes.
     MCP_EXECUTE_MEMORY_BYTES: int = Field(100_000_000, gt=0)
     # Sandbox worker processes shared by the app; each user holds at most one at a time.
     MCP_SANDBOX_WORKERS: int = Field(2, gt=0)
     # How long an `execute` waits for a free worker before it is refused as busy, in seconds.
-    MCP_SANDBOX_WAIT_SECONDS: float = Field(10.0, gt=0)
+    MCP_SANDBOX_WAIT_SECONDS: float = Field(10.0, gt=0, allow_inf_nan=False)
     # Executes each user may start per window of seconds.
     MCP_EXECUTES_PER_USER: int = Field(10, gt=0)
     MCP_EXECUTE_WINDOW_SECONDS: int = Field(60, gt=0)
@@ -124,6 +124,22 @@ class Settings(BaseSettings):
     MCP_AUTHORIZE_WINDOW_SECONDS: int = Field(600, gt=0)
     # Registered clients kept while waiting for their first sign-in; past it the oldest are forgotten.
     MCP_MAX_WAITING_CLIENTS: int = Field(1000, gt=0)
+    # Tool calls one `execute` may make.
+    MCP_MAX_TOOL_CALLS: int = Field(50, gt=0)
+    # How long one backend call from a tool may take, in seconds.
+    MCP_CALL_TIMEOUT_SECONDS: float = Field(30.0, gt=0, allow_inf_nan=False)
+    # Characters a GraphQL document from a tool may have; it is refused before parsing beyond that.
+    MCP_QUERY_MAX_CHARS: int = Field(20_000, gt=0)
+    # What one client registration may carry: name length, redirect URIs, and its whole size in bytes.
+    MCP_CLIENT_NAME_MAX_CHARS: int = Field(100, gt=0)
+    MCP_MAX_REDIRECT_URIS: int = Field(5, gt=0)
+    MCP_REGISTRATION_MAX_BYTES: int = Field(8192, gt=0)
+    # Seconds a registered client is kept before its first sign-in; one that signs in lives as long as a
+    # session.
+    MCP_UNUSED_CLIENT_SECONDS: int = Field(3600, gt=0)
+    # Seconds a started sign-in waits on the consent page, and an authorization code stays valid.
+    MCP_AUTHORIZE_REQUEST_SECONDS: int = Field(600, gt=0)
+    MCP_CODE_SECONDS: int = Field(300, gt=0)
 
     @property
     def trusted_proxy_networks(self) -> tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...]:
