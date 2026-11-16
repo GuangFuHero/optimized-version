@@ -37,7 +37,7 @@ from app.repositories.active_identity_repository import active_identity_reposito
 from app.repositories.auth_repository import user_repository
 from app.repositories.session_repository import SessionRepository
 from app.services import auth_session
-from mcp_server.access import may_use_mcp
+from mcp_server.access import NO_MCP_USE, may_use_mcp
 
 _CLIENT = "mcp_client:"
 _PENDING = "mcp_authorize:"
@@ -223,6 +223,9 @@ class BackendOAuthProvider(OAuthProvider):
     ) -> OAuthToken:
         """Rotate through the backend's own refresh, so its reuse detection and identity checks apply."""
         async with SessionLocal() as db:
+            if not await may_use_mcp(db, refresh_token.subject):
+                await SessionRepository(self.redis).revoke_mcp_sessions(refresh_token.subject)
+                raise TokenError("invalid_grant", NO_MCP_USE)
             for attempt in range(2):
                 try:
                     access_token, new_refresh, _ = await auth_session.refresh_session(
