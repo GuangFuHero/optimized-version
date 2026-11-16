@@ -22,7 +22,9 @@ from mcp_server.tools import register_tools
 RATE_LIMITS = {"/register": (10, 3600), "/authorize": (30, 600)}
 # Per-user allowance, (times, seconds), on CodeMode's `execute`.
 EXECUTE_RATE_LIMIT = (10, 60)
-# How long an `execute` waits for the shared sandbox worker before it is refused as busy.
+# Sandbox worker processes shared by the app, and how long an `execute` waits for one before it is refused
+# as busy.
+SANDBOX_WORKERS = 2
 SANDBOX_WAIT_SECONDS = 10
 _SERVER_METADATA = "/.well-known/oauth-authorization-server"
 
@@ -81,10 +83,10 @@ class _RateLimited:
 
 
 class SharedSandbox(MontySandboxProvider):
-    """CodeMode's sandbox on one worker process for the whole app, opened with the MCP server.
+    """CodeMode's sandbox on SANDBOX_WORKERS worker processes shared by the app, opened with the MCP server.
 
-    A user runs one `execute` at a time, in any of their sessions, within an allowance; other users' executes
-    wait for the worker, up to SANDBOX_WAIT_SECONDS.
+    A user runs one `execute` at a time, in any of their sessions, within an allowance, so one user holds at
+    most one worker; other users' executes wait for one up to SANDBOX_WAIT_SECONDS.
     """
 
     def __init__(self, redis_of):
@@ -97,7 +99,9 @@ class SharedSandbox(MontySandboxProvider):
     @asynccontextmanager
     async def lifespan(self, server):
         """Keep the worker pool open while the MCP server runs."""
-        async with pydantic_monty.AsyncMonty(max_processes=1, checkout_timeout=SANDBOX_WAIT_SECONDS) as pool:
+        async with pydantic_monty.AsyncMonty(
+            max_processes=SANDBOX_WORKERS, checkout_timeout=SANDBOX_WAIT_SECONDS
+        ) as pool:
             self._pool = pool
             try:
                 yield {}
