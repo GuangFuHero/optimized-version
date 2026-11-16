@@ -104,10 +104,8 @@ Read only is enforced, not listed:
   clients are kept waiting for their first sign-in: a new registration always succeeds and pushes out the
   oldest waiting one, so Redis holds at most 1 000 × 8 KB of them; a client that has signed in is never
   pushed out.
-- Each backend call a tool makes (`graphql_query`, `rest_get`, `switch_identity`) counts against the
-  account's allowance from `MCP_TOOL_CALLS_PER_MINUTE_BY_ROLE` (default: 10 a minute for an account holding
-  only `user`; no limit for one holding any role not listed), in a 60-second window from its first call. Over
-  it, the call is refused before it reaches the endpoint, with the seconds left to wait.
+- Each backend call a tool makes counts against `MCP_TOOL_CALLS_PER_MINUTE` (10) unless the account holds
+  `mcp.unlimited_use` (see "Who may use it").
 - Every number in this list except `/graphql`'s own depth, alias and token limits is a setting
   (`MCP_EXECUTE_SECONDS`, `MCP_SANDBOX_WORKERS`, `MCP_MAX_WAITING_CLIENTS`, … in `app/core/config.py`); the
   numbers above are their defaults, and `DEPLOY.md` lists them all.
@@ -116,9 +114,9 @@ Read only is enforced, not listed:
 
 ## Who may use it
 
-An account may use the MCP while any of its usable identities holds `mcp.use`, which every role has by
-default. The consent page issues no code without it and says so, and every MCP request checks it again, so
-taking it away from a role at `/admin/rbac` cuts that role's accounts off at their next request.
+`mcp.use` decides whether an account may use the MCP and `mcp.unlimited_use` whether its tools' backend calls
+are limited; what they mean, their defaults, where each is checked and why are in ADR-463
+(`Spec/008-rbac-authorization/decisions.md`). The code is in `access.py`.
 
 ## MCP tokens only read, everywhere
 

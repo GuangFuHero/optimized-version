@@ -1,4 +1,4 @@
-"""Existing databases gain `mcp.use` on every role, as the RBAC seed grants it.
+"""Existing databases gain `mcp.use` and `mcp.unlimited_use` as the RBAC seed grants them.
 
 One grant already set at runtime keeps its scope, and stepping back removes the key with its grants.
 """
@@ -40,16 +40,21 @@ async def _alembic(*args: str) -> None:
 
 
 async def _state(conn) -> dict:
-    """{role: scope} for every grant of mcp.use, and whether the key is registered."""
+    """{key: {role: scope}} for every grant of the two keys, and which keys are registered."""
     rows = await conn.execute(
         text(
-            "SELECT r.name, a.scope FROM role_permission_assign a"
+            "SELECT p.key, r.name, a.scope FROM role_permission_assign a"
             " JOIN roles r ON r.uuid = a.role_uuid JOIN permissions p ON p.uuid = a.permission_uuid"
-            " WHERE p.key = 'mcp.use'"
+            " WHERE p.key IN ('mcp.use', 'mcp.unlimited_use')"
         )
     )
-    key = await conn.scalar(text("SELECT count(*) FROM permissions WHERE key = 'mcp.use'"))
-    return {"grants": dict(rows.all()), "key": bool(key)}
+    grants: dict = {}
+    for key, role, scope in rows.all():
+        grants.setdefault(key, {})[role] = scope
+    keys = await conn.scalars(
+        text("SELECT key FROM permissions WHERE key IN ('mcp.use', 'mcp.unlimited_use')")
+    )
+    return {"grants": grants, "keys": set(keys)}
 
 
 @pytest_asyncio.fixture(scope="session", loop_scope="session")
@@ -101,17 +106,20 @@ async def states():
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_existing_databases_gain_what_the_seed_grants(states):
-    """Every role gets mcp.use, one made at runtime too, except where a runtime grant already stood."""
-    seeded = {
-        spec["name"]: spec["permissions"][Perm.MCP_USE]
-        for spec in ROLES_DATA
-        if Perm.MCP_USE in spec["permissions"]
+    """Every role gets what the seed grants, one made at runtime too, except where a runtime grant stood."""
+
+    def seeded(perm):
+        return {spec["name"]: spec["permissions"][perm] for spec in ROLES_DATA if perm in spec["permissions"]}
+
+    assert len(seeded(Perm.MCP_USE)) == len(ROLES_DATA)
+    assert "user" not in seeded(Perm.MCP_UNLIMITED_USE)
+    assert states["upgraded"]["grants"] == {
+        "mcp.use": {**seeded(Perm.MCP_USE), "ops": "all", "member": "none"},
+        "mcp.unlimited_use": {**seeded(Perm.MCP_UNLIMITED_USE), "ops": "all"},
     }
-    assert len(seeded) == len(ROLES_DATA)
-    assert states["upgraded"]["grants"] == {**seeded, "ops": "all", "member": "none"}
 
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_stepping_back_removes_the_key_and_every_grant(states):
-    """The runtime grant goes with the key."""
-    assert states["downgraded"] == {"grants": {}, "key": False}
+    """The runtime grant goes with the keys."""
+    assert states["downgraded"] == {"grants": {}, "keys": set()}

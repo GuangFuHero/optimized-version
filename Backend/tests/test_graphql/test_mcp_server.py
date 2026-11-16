@@ -42,19 +42,20 @@ BASE = "http://localhost:8000"
 
 
 async def everyone_may_use_mcp() -> None:
-    """Grant `mcp.use` to every role that exists now, as the seed and migration do for theirs."""
+    """Grant every role now in the database `mcp.use`, and all but `user` `mcp.unlimited_use`."""
     async with gql.test_db() as db:
         await db.execute(
             text(
-                "INSERT INTO permissions (uuid, key) VALUES (gen_random_uuid(), 'mcp.use') "
-                "ON CONFLICT DO NOTHING"
+                "INSERT INTO permissions (uuid, key) VALUES (gen_random_uuid(), 'mcp.use'), "
+                "(gen_random_uuid(), 'mcp.unlimited_use') ON CONFLICT DO NOTHING"
             )
         )
         await db.execute(
             text(
                 "INSERT INTO role_permission_assign (uuid, role_uuid, permission_uuid, scope) "
                 "SELECT gen_random_uuid(), r.uuid, p.uuid, 'all' FROM roles r, permissions p "
-                "WHERE p.key = 'mcp.use' ON CONFLICT ON CONSTRAINT uq_role_perm DO NOTHING"
+                "WHERE p.key = 'mcp.use' OR (p.key = 'mcp.unlimited_use' AND r.name <> 'user') "
+                "ON CONFLICT ON CONSTRAINT uq_role_perm DO NOTHING"
             )
         )
 
@@ -1053,6 +1054,7 @@ async def test_the_sandbox_applies_both_its_time_and_memory_limit(
         "MCP_UNUSED_CLIENT_SECONDS",
         "MCP_AUTHORIZE_REQUEST_SECONDS",
         "MCP_CODE_SECONDS",
+        "MCP_TOOL_CALLS_PER_MINUTE",
     ],
 )
 @pytest.mark.parametrize("value", ["0", "-1", "lots", "inf"])
@@ -1149,14 +1151,14 @@ async def _user_holding(*role_names: str) -> tuple[str, list[str]]:
         return str(user.uuid), [str(role.uuid) for role in roles]
 
 
-async def _withdraw_mcp_use(role_uuid: str) -> None:
+async def _withdraw_mcp_use(role_uuid: str, key: str = "mcp.use") -> None:
     async with gql.test_db() as db:
         await db.execute(
             text(
                 "DELETE FROM role_permission_assign WHERE role_uuid = :r "
-                "AND permission_uuid = (SELECT uuid FROM permissions WHERE key = 'mcp.use')"
+                "AND permission_uuid = (SELECT uuid FROM permissions WHERE key = :k)"
             ),
-            {"r": role_uuid},
+            {"r": role_uuid, "k": key},
         )
 
 
@@ -1245,8 +1247,10 @@ async def test_an_account_holding_only_user_gets_ten_backend_calls_a_minute(clie
     assert "At most 10 tool calls a minute for this account; try again in" in error
 
 
-async def test_holding_a_role_without_a_limit_lifts_it_even_when_acting_as_user(client, redis, monkeypatch):
-    """An account that also holds an unlisted role has no tool-call limit, whatever identity it acts as."""
+async def test_unlimited_use_on_another_identity_lifts_the_limit_while_acting_as_user(
+    client, redis, monkeypatch
+):
+    """An account that also holds a role with mcp.unlimited_use has no limit, even acting as `user`."""
     user_uuid, (user_role, _) = await _user_holding("user", "team-lead-like")
     token = await mcp_token(redis, user_uuid, user_role)
     async with mcp_http() as http:
@@ -1254,26 +1258,34 @@ async def test_holding_a_role_without_a_limit_lifts_it_even_when_acting_as_user(
     assert (reached, error) == (12, None)
 
 
-async def test_the_most_generous_listed_role_sets_the_allowance(client, redis, monkeypatch):
-    """With every role listed, the account gets the largest allowance among them."""
-    monkeypatch.setattr(settings, "MCP_TOOL_CALLS_PER_MINUTE_BY_ROLE", {"user": 2, "reviewer": 3})
-    user_uuid, (user_role, _) = await _user_holding("user", "reviewer")
+async def test_a_per_user_grant_of_unlimited_use_lifts_the_limit(client, redis, monkeypatch):
+    """A super admin can exempt one account with a direct grant."""
+    user_uuid, (user_role,) = await _user_holding("user")
+    await everyone_may_use_mcp()
+    async with gql.test_db() as db:
+        await db.execute(
+            text(
+                "INSERT INTO user_permission_assign (uuid, user_uuid, permission_uuid, scope) "
+                "SELECT gen_random_uuid(), :u, uuid, 'all' FROM permissions WHERE key = 'mcp.unlimited_use'"
+            ),
+            {"u": user_uuid},
+        )
     token = await mcp_token(redis, user_uuid, user_role)
     async with mcp_http() as http:
-        reached, error = await _backend_calls(http, token, 4, monkeypatch)
-    assert reached == 3 and "At most 3 tool calls a minute" in error
+        reached, error = await _backend_calls(http, token, 12, monkeypatch)
+    assert (reached, error) == (12, None)
 
 
-@pytest.mark.parametrize("value", ['{"user": 0}', '{"user": -2}', '{"user": "many"}', "not json"])
-async def test_a_bad_per_role_allowance_stops_the_settings(monkeypatch, value):
-    """Each per-role allowance must be a number above zero, given as JSON."""
-    monkeypatch.setenv("MCP_TOOL_CALLS_PER_MINUTE_BY_ROLE", value)
-    with pytest.raises((ValidationError, ValueError)):
-        Settings()
-
-
-async def test_the_per_role_allowance_is_read_from_the_environment_as_json(monkeypatch):
-    """The default is ten for `user`, and the environment replaces the whole map."""
-    assert Settings().MCP_TOOL_CALLS_PER_MINUTE_BY_ROLE == {"user": 10}
-    monkeypatch.setenv("MCP_TOOL_CALLS_PER_MINUTE_BY_ROLE", '{"user": 20, "member": 50}')
-    assert Settings().MCP_TOOL_CALLS_PER_MINUTE_BY_ROLE == {"user": 20, "member": 50}
+async def test_taking_unlimited_use_from_a_role_limits_the_next_calls(client, redis, monkeypatch):
+    """A change in the RBAC settings applies at the next counted call, with the configured number."""
+    monkeypatch.setattr(settings, "MCP_TOOL_CALLS_PER_MINUTE", 2)
+    user_uuid, (user_role, lead) = await _user_holding("user", "team-lead-like")
+    token = await mcp_token(redis, user_uuid, user_role)
+    async with mcp_http() as http:
+        before = await _backend_calls(http, token, 3, monkeypatch)
+        await _withdraw_mcp_use(lead, "mcp.unlimited_use")
+        monkeypatch.undo()
+        monkeypatch.setattr(settings, "MCP_TOOL_CALLS_PER_MINUTE", 2)
+        after = await _backend_calls(http, token, 3, monkeypatch)
+    assert before == (3, None)
+    assert after[0] == 2 and "At most 2 tool calls a minute" in after[1]
