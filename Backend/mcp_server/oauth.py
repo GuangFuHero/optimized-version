@@ -41,14 +41,14 @@ from app.services import auth_session
 _CLIENT = "mcp_client:"
 _PENDING = "mcp_authorize:"
 _CODE = "mcp_code:"
-# Registered clients that have not signed in yet, by client_id with the time they are forgotten, so they can
+# Registered clients that have not signed in yet, by client_id with the time they registered, so they can
 # be counted without scanning; past MCP_MAX_WAITING_CLIENTS the oldest of them are forgotten at once.
 _UNUSED_CLIENTS = "mcp_unused_clients"
 # Stores a new client and forgets the oldest unused ones past the cap, in one step so concurrent
 # registrations can't overshoot it. KEYS: set, client key prefix; ARGV: now, client_id, record, TTL, cap.
 _REGISTER_LUA = """
-redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', ARGV[1])
-redis.call('ZADD', KEYS[1], ARGV[1] + ARGV[4], ARGV[2])
+redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', ARGV[1] - ARGV[4])
+redis.call('ZADD', KEYS[1], ARGV[1], ARGV[2])
 redis.call('SET', KEYS[2] .. ARGV[2], ARGV[3], 'EX', ARGV[4])
 local over = redis.call('ZCARD', KEYS[1]) - tonumber(ARGV[5])
 if over > 0 then

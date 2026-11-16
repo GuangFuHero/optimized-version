@@ -1052,3 +1052,62 @@ async def test_the_tool_call_limit_per_execute_is_the_setting(client, redis, log
         answer = await rpc(http, token, "tools/call", {"name": "execute", "arguments": {"code": code}})
     assert answer["result"]["isError"] is True
     assert "at most 1 call_tool()" in answer["result"]["content"][0]["text"]
+
+
+@pytest.mark.parametrize(
+    ("name", "value", "extra"),
+    [
+        ("MCP_CLIENT_NAME_MAX_CHARS", 3, {"client_name": "abcd"}),
+        ("MCP_MAX_REDIRECT_URIS", 1, {"redirect_uris": ["http://127.0.0.1:1/cb", "http://127.0.0.1:2/cb"]}),
+        ("MCP_REGISTRATION_MAX_BYTES", 100, {}),
+    ],
+)
+async def test_the_registration_limits_are_the_settings(client, redis, monkeypatch, name, value, extra):
+    """Each registration limit refuses past its setting, not past a fixed number."""
+    monkeypatch.setattr(settings, name, value)
+    body = {**_REGISTRATION, "redirect_uris": ["http://127.0.0.1:9/cb"], **extra}
+    response = await client.post("/mcp/register", json=body)
+    assert response.status_code == 400
+    assert response.json()["error"] == "invalid_client_metadata"
+
+
+async def test_the_lifetimes_are_the_settings(client, redis, monkeypatch, login_user_auth):
+    """An unused client, a started sign-in and a code live as long as their settings say."""
+    monkeypatch.setattr(settings, "MCP_UNUSED_CLIENT_SECONDS", 100)
+    monkeypatch.setattr(settings, "MCP_AUTHORIZE_REQUEST_SECONDS", 50)
+    monkeypatch.setattr(settings, "MCP_CODE_SECONDS", 40)
+    body = {**_REGISTRATION, "redirect_uris": ["http://127.0.0.1:9/cb"]}
+    unused = (await client.post("/mcp/register", json=body)).json()["client_id"]
+    _, challenge = _pkce()
+    await client.get(
+        "/mcp/authorize",
+        params={
+            "response_type": "code",
+            "client_id": unused,
+            "redirect_uri": "http://127.0.0.1:9/cb",
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+        },
+    )
+    (pending,) = await redis.keys("mcp_authorize:*")
+    user_uuid, _ = login_user_auth
+    _, code, _, _, _ = await _authorize_through_consent(
+        client, redis, user_uuid, await _role_uuid("Login User")
+    )
+    assert 0 < await redis.ttl(f"mcp_client:{unused}") <= 100
+    assert 0 < await redis.ttl(pending) <= 50
+    assert 0 < await redis.ttl(f"mcp_code:{code}") <= 40
+
+
+async def test_the_query_size_and_call_timeout_are_the_settings(client, redis, login_user_auth, monkeypatch):
+    """A tool refuses a query past MCP_QUERY_MAX_CHARS and stops a call past MCP_CALL_TIMEOUT_SECONDS."""
+    user_uuid, _ = login_user_auth
+    token = await mcp_token(redis, user_uuid, await _role_uuid("Login User"))
+    async with mcp_http() as http:
+        monkeypatch.setattr(settings, "MCP_QUERY_MAX_CHARS", 5)
+        _, too_long = await call(http, token, "graphql_query", {"query": "{ __typename }"})
+        monkeypatch.setattr(settings, "MCP_QUERY_MAX_CHARS", 20_000)
+        monkeypatch.setattr(settings, "MCP_CALL_TIMEOUT_SECONDS", 0.000001)
+        _, too_slow = await call(http, token, "graphql_query", {"query": "{ __typename }"})
+    assert "longer than 5 characters" in too_long
+    assert "The call took longer than" in too_slow
