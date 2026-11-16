@@ -46,9 +46,8 @@ _PENDING_TTL = 600
 # as a session.
 _UNUSED_CLIENT_TTL = 3600
 # Registered clients that have not signed in yet, by client_id with the time they are forgotten, so they can
-# be counted without scanning; past the cap the oldest of them are forgotten at once.
+# be counted without scanning; past MCP_MAX_WAITING_CLIENTS the oldest of them are forgotten at once.
 _UNUSED_CLIENTS = "mcp_unused_clients"
-MAX_UNUSED_CLIENTS = 1000
 # Stores a new client and forgets the oldest unused ones past the cap, in one step so concurrent
 # registrations can't overshoot it. KEYS: set, client key prefix; ARGV: now, client_id, record, TTL, cap.
 _REGISTER_LUA = """
@@ -167,7 +166,7 @@ class BackendOAuthProvider(OAuthProvider):
             client_info.client_id,
             client_info.model_dump_json(),
             _UNUSED_CLIENT_TTL,
-            MAX_UNUSED_CLIENTS,
+            settings.MCP_MAX_WAITING_CLIENTS,
         )
 
     async def authorize(self, client: OAuthClientInformationFull, params: AuthorizationParams) -> str:

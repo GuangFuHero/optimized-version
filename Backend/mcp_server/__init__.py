@@ -13,19 +13,11 @@ from starlette.requests import Request
 from starlette.routing import Route
 
 from app.api.v1.endpoints.auth.deps import build_rate_limit_key, consume_rate_limit
+from app.core.config import settings
 from app.core.request_auth import resolve_client_ip
 from mcp_server.oauth import MCP_PATH, BackendOAuthProvider, consent_router
 from mcp_server.tools import register_tools
 
-# Per-IP allowances, (times, seconds), on the unauthenticated routes that write to Redis, by the MCP app's
-# own path.
-RATE_LIMITS = {"/register": (10, 3600), "/authorize": (30, 600)}
-# Per-user allowance, (times, seconds), on CodeMode's `execute`.
-EXECUTE_RATE_LIMIT = (10, 60)
-# Sandbox worker processes shared by the app, and how long an `execute` waits for one before it is refused
-# as busy.
-SANDBOX_WORKERS = 2
-SANDBOX_WAIT_SECONDS = 10
 _SERVER_METADATA = "/.well-known/oauth-authorization-server"
 
 
@@ -83,15 +75,18 @@ class _RateLimited:
 
 
 class SharedSandbox(MontySandboxProvider):
-    """CodeMode's sandbox on SANDBOX_WORKERS worker processes shared by the app, opened with the MCP server.
+    """CodeMode's sandbox on MCP_SANDBOX_WORKERS worker processes for the app, opened with the MCP server.
 
     A user runs one `execute` at a time, in any of their sessions, within an allowance, so one user holds at
-    most one worker; other users' executes wait for one up to SANDBOX_WAIT_SECONDS.
+    most one worker; other users' executes wait for one up to MCP_SANDBOX_WAIT_SECONDS.
     """
 
     def __init__(self, redis_of):
         """`redis_of` returns the app's Redis client, which exists only once the app has started."""
         super().__init__()
+        # Only these keys change, so FastMCP's other sandbox limits stay.
+        self.limits["max_feed_duration_secs"] = settings.MCP_EXECUTE_SECONDS
+        self.limits["max_memory"] = settings.MCP_EXECUTE_MEMORY_BYTES
         self._redis_of = redis_of
         self._pool = None
         self._running: set[str] = set()
@@ -100,7 +95,7 @@ class SharedSandbox(MontySandboxProvider):
     async def lifespan(self, server):
         """Keep the worker pool open while the MCP server runs."""
         async with pydantic_monty.AsyncMonty(
-            max_processes=SANDBOX_WORKERS, checkout_timeout=SANDBOX_WAIT_SECONDS
+            max_processes=settings.MCP_SANDBOX_WORKERS, checkout_timeout=settings.MCP_SANDBOX_WAIT_SECONDS
         ) as pool:
             self._pool = pool
             try:
@@ -115,7 +110,7 @@ class SharedSandbox(MontySandboxProvider):
             raise ToolError("Another execute of yours is still running; wait for it to finish.")
         self._running.add(user)
         try:
-            times, seconds = EXECUTE_RATE_LIMIT
+            times, seconds = settings.MCP_EXECUTES_PER_USER, settings.MCP_EXECUTE_WINDOW_SECONDS
             key = build_rate_limit_key(times, seconds, user, "mcp/execute")
             if not await consume_rate_limit(self._redis_of(), key, times, seconds):
                 raise ToolError(f"At most {times} executes per {seconds} seconds; try again later.")
@@ -153,11 +148,17 @@ def build_server(app: FastAPI) -> FastMCP:
 
 def public_routes(mcp_app) -> list[Route]:
     """A route per path of `mcp_app`, at its public path, so every other path keeps the API's own 404."""
+    # Per-IP allowances, (times, seconds), on the unauthenticated routes that write to Redis, by the MCP app's
+    # own path.
+    rate_limits = {
+        "/register": (settings.MCP_REGISTERS_PER_IP, settings.MCP_REGISTER_WINDOW_SECONDS),
+        "/authorize": (settings.MCP_AUTHORIZES_PER_IP, settings.MCP_AUTHORIZE_WINDOW_SECONDS),
+    }
     routes = []
     for path in {route.path for route in mcp_app.routes}:
         endpoint = mcp_app if public_path(path) == path else _At(mcp_app, path)
-        if path in RATE_LIMITS:
-            endpoint = _RateLimited(endpoint, path, *RATE_LIMITS[path])
+        if path in rate_limits:
+            endpoint = _RateLimited(endpoint, path, *rate_limits[path])
         routes.append(Route(public_path(path), endpoint=endpoint, include_in_schema=False))
     return routes
 

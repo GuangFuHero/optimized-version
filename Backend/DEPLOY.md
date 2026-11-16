@@ -158,7 +158,20 @@ plan.
 | `REFRESH_REUSE_GRACE_SECONDS` | `30` (default) | `30` (default) | `30` (default) |
 | `TRUSTED_PROXIES` | the default, while every proxy reaches the backend over the docker network | `127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7`, the default | the default |
 | `MCP_BASE_URL` | the site's URL, once its tunnel has the MCP route (not set up yet) | `https://staging.wan-guard.com` (see [MCP clients](#mcp-clients)) | `http://localhost:8000` (default) |
+| MCP limits, `MCP_EXECUTE_SECONDS` … `MCP_MAX_WAITING_CLIENTS` | the defaults | the defaults | the defaults (see **MCP limits** below) |
 
+- **MCP limits**: optional; each is set only to change its default, and must be above zero, or the backend
+  stops at startup. The backend reads them when it starts, so a change takes a restart.
+  - `MCP_EXECUTE_SECONDS` = `15`: sandbox execution time per `execute`, not counting time waiting for a
+    worker or on backend calls.
+  - `MCP_EXECUTE_MEMORY_BYTES` = `100000000`: sandbox memory per `execute`.
+  - `MCP_SANDBOX_WORKERS` = `2`: sandbox worker processes; each user holds at most one at a time.
+  - `MCP_SANDBOX_WAIT_SECONDS` = `10`: how long an `execute` waits for a free worker before it is refused.
+  - `MCP_EXECUTES_PER_USER` = `10` per `MCP_EXECUTE_WINDOW_SECONDS` = `60`.
+  - `MCP_REGISTERS_PER_IP` = `10` per `MCP_REGISTER_WINDOW_SECONDS` = `3600` (`/mcp/register`).
+  - `MCP_AUTHORIZES_PER_IP` = `30` per `MCP_AUTHORIZE_WINDOW_SECONDS` = `600` (`/mcp/authorize`).
+  - `MCP_MAX_WAITING_CLIENTS` = `1000`: registered clients kept while waiting for their first sign-in; past
+    it the oldest are forgotten.
 - **Why `admin-staging` and not `admin.staging`**: Cloudflare's free certificate covers `wan-guard.com` and
   one level of subdomain below it. `admin.staging.wan-guard.com` is two levels deep and would get no
   certificate.

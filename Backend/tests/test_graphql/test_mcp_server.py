@@ -13,11 +13,13 @@ import pytest
 from fastmcp import Client, FastMCP
 from graphql import GraphQLField, GraphQLString
 from httpx import ASGITransport, AsyncClient
+from pydantic import ValidationError
 from sqlalchemy import select
 from starlette.applications import Starlette
 
 import mcp_server
 from app.core.auth_cookies import access_cookie_name
+from app.core.config import Settings, settings
 from app.core.identity import encode_act
 from app.core.permissions import Perm
 from app.core.security import _decode_access_payload, create_access_token
@@ -26,7 +28,8 @@ from app.main import app
 from app.models.auth import User
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.repositories.session_repository import SessionRepository
-from mcp_server import build_server, public_routes
+from mcp_server import SharedSandbox, build_server, public_routes
+from mcp_server.oauth import BackendOAuthProvider
 from mcp_server.tools import BackendCaller, register_tools
 from tests.conftest import ensure_role, token_for
 from tests.test_graphql import conftest as gql
@@ -806,7 +809,7 @@ async def test_past_the_cap_the_oldest_unused_client_is_forgotten(
     client, redis, monkeypatch, login_user_auth
 ):
     """A new client always registers; past the cap the oldest unused one goes, never a signed-in one."""
-    monkeypatch.setattr("mcp_server.oauth.MAX_UNUSED_CLIENTS", 3)
+    monkeypatch.setattr(settings, "MCP_MAX_WAITING_CLIENTS", 3)
     user_uuid, _ = login_user_auth
     signed_in, code, verifier, redirect, _ = await _authorize_through_consent(
         client, redis, user_uuid, await _role_uuid("Login User")
@@ -842,6 +845,21 @@ async def test_past_the_cap_the_oldest_unused_client_is_forgotten(
     assert await redis.zcard("mcp_unused_clients") == 3
     assert len(await redis.keys("mcp_client:*")) == 4
     assert await redis.get(f"mcp_client:{signed_in}") is not None
+
+
+async def test_a_client_signing_in_while_it_is_pushed_out_is_written_back(client, redis, monkeypatch):
+    """A client forgotten as the oldest waiting one just as it signs in is kept, and is no longer waiting."""
+    monkeypatch.setattr(settings, "MCP_MAX_WAITING_CLIENTS", 1)
+    body = {**_REGISTRATION, "redirect_uris": ["http://127.0.0.1:9/cb"]}
+    first = (await client.post("/mcp/register", json=body)).json()["client_id"]
+    provider = BackendOAuthProvider(lambda: redis)
+    signing_in = await provider.get_client(first)
+    assert (await client.post("/mcp/register", json=body)).status_code == 201
+    assert await provider.get_client(first) is None
+    await provider._keep_client(signing_in)
+    assert await provider.get_client(first) == signing_in
+    assert await redis.zscore("mcp_unused_clients", first) is None
+    assert await redis.ttl(f"mcp_client:{first}") > 3600
 
 
 async def test_the_consent_page_marks_the_name_as_the_clients_own_and_names_the_identity(
@@ -939,7 +957,7 @@ async def test_an_execute_that_waits_too_long_for_the_worker_is_refused(
         return pools[-1]
 
     monkeypatch.setattr(mcp_server.pydantic_monty, "AsyncMonty", spy)
-    monkeypatch.setattr(mcp_server, "SANDBOX_WAIT_SECONDS", 0.5)
+    monkeypatch.setattr(settings, "MCP_SANDBOX_WAIT_SECONDS", 0.5)
     user_uuid, _ = login_user_auth
     token = await mcp_token(redis, user_uuid, await _role_uuid("Login User"))
     async with mcp_http() as http:
@@ -967,3 +985,49 @@ async def test_execute_is_rate_limited_per_user(client, redis, login_user_auth):
         ]
     assert [bool(m["result"].get("isError")) for m in answers] == [False] * 10 + [True]
     assert "At most 10 executes per 60 seconds" in answers[-1]["result"]["content"][0]["text"]
+
+
+async def test_the_sandbox_applies_both_its_time_and_memory_limit(
+    client, redis, login_user_auth, monkeypatch
+):
+    """The execution time and memory settings both reach the sandbox; FastMCP's other limits stay."""
+    assert SharedSandbox(lambda: redis).limits == {"max_feed_duration_secs": 15.0, "max_memory": 100_000_000}
+    monkeypatch.setattr(settings, "MCP_EXECUTE_SECONDS", 1.0)
+    monkeypatch.setattr(settings, "MCP_EXECUTE_MEMORY_BYTES", 10_000_000)
+    user_uuid, _ = login_user_auth
+    token = await mcp_token(redis, user_uuid, await _role_uuid("Login User"))
+
+    def execute(code):
+        return {"name": "execute", "arguments": {"code": code}}
+
+    async with mcp_http() as http:
+        spin = await rpc(http, token, "tools/call", execute("while True:\n    pass"))
+        grow = await rpc(http, token, "tools/call", execute("return len('x' * 50_000_000)"))
+        small = await rpc(http, token, "tools/call", execute("return len('x' * 1_000)"))
+    assert spin["result"]["isError"] is True and "time limit" in spin["result"]["content"][0]["text"]
+    assert grow["result"]["isError"] is True and "memory" in grow["result"]["content"][0]["text"].lower()
+    assert small["result"]["content"][0]["text"] == "1000"
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "MCP_EXECUTE_SECONDS",
+        "MCP_EXECUTE_MEMORY_BYTES",
+        "MCP_SANDBOX_WORKERS",
+        "MCP_SANDBOX_WAIT_SECONDS",
+        "MCP_EXECUTES_PER_USER",
+        "MCP_EXECUTE_WINDOW_SECONDS",
+        "MCP_REGISTERS_PER_IP",
+        "MCP_REGISTER_WINDOW_SECONDS",
+        "MCP_AUTHORIZES_PER_IP",
+        "MCP_AUTHORIZE_WINDOW_SECONDS",
+        "MCP_MAX_WAITING_CLIENTS",
+    ],
+)
+@pytest.mark.parametrize("value", ["0", "-1", "lots"])
+async def test_an_mcp_limit_that_is_not_above_zero_stops_the_settings(monkeypatch, name, value):
+    """A zero, negative or non-numeric limit in the environment fails at startup."""
+    monkeypatch.setenv(name, value)
+    with pytest.raises(ValidationError):
+        Settings()
