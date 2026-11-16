@@ -18,6 +18,7 @@ from app.api.v1.endpoints.auth.deps import build_rate_limit_key, consume_rate_li
 from app.core.config import settings
 from app.core.request_auth import resolve_client_ip
 from app.db.session import SessionLocal
+from app.repositories.session_repository import SessionRepository
 from mcp_server.access import NO_MCP_USE, may_use_mcp
 from mcp_server.oauth import MCP_PATH, BackendOAuthProvider, consent_router
 from mcp_server.tools import register_tools
@@ -132,13 +133,22 @@ class SharedSandbox(MontySandboxProvider):
 
 
 class RequireMcpUse(Middleware):
-    """Refuses every MCP request from an account that no longer holds `mcp.use` on any identity."""
+    """Refuses every MCP request from an account that no longer holds `mcp.use` on any identity.
+
+    It also ends the account's MCP sessions, so their tokens stop working on the other endpoints too.
+    """
+
+    def __init__(self, redis_of):
+        """`redis_of` returns the app's Redis client, which exists only once the app has started."""
+        self._redis_of = redis_of
 
     async def on_request(self, context, call_next):
         """Check the account, then pass the request on."""
+        user = get_access_token().subject
         async with SessionLocal() as db:
-            allowed = await may_use_mcp(db, get_access_token().subject)
+            allowed = await may_use_mcp(db, user)
         if not allowed:
+            await SessionRepository(self._redis_of()).revoke_mcp_sessions(user)
             raise MCPError(code=-32003, message=NO_MCP_USE)
         return await call_next(context)
 
@@ -157,7 +167,7 @@ def build_server(app: FastAPI) -> FastMCP:
         auth=BackendOAuthProvider(lambda: app.state.redis),
         transforms=[CodeMode(sandbox_provider=sandbox, max_tool_calls=settings.MCP_MAX_TOOL_CALLS)],
         lifespan=sandbox.lifespan,
-        middleware=[RequireMcpUse()],
+        middleware=[RequireMcpUse(lambda: app.state.redis)],
     )
     register_tools(server, app)
     return server

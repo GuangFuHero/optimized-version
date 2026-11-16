@@ -1205,18 +1205,56 @@ async def test_mcp_use_on_any_identity_is_enough(client, redis):
 
 
 async def test_withdrawing_mcp_use_cuts_a_session_off_at_its_next_request(client, redis):
-    """Once no identity holds mcp.use, the next request is refused with a plain reason."""
+    """The next MCP request is refused with the reason and ends the session, so the token stops everywhere."""
     user_uuid, (role_uuid,) = await _user_holding("mcp-role")
     token = await mcp_token(redis, user_uuid, role_uuid)
+    bearer = {"Authorization": f"Bearer {token}"}
     async with mcp_http() as http:
         _, before = await call(http, token, "rest_get", {"path": "/api/v1/users/me"})
+        assert (await client.get("/api/v1/users/me", headers=bearer)).status_code == 200
         await _withdraw_mcp_use(role_uuid)
-        listed = await rpc(http, token, "tools/list", {})
-        called = await rpc(http, token, "tools/call", {"name": "execute", "arguments": {"code": "return 1"}})
+        refused = await rpc(http, token, "tools/list", {})
+        again = await http.post(
+            "/mcp", json={"jsonrpc": "2.0", "id": 2, "method": "tools/list"}, headers=bearer
+        )
     assert before is None
-    for answer in (listed, called):
-        assert "result" not in answer
-        assert "may not use MCP" in answer["error"]["message"]
+    assert "result" not in refused and "may not use MCP" in refused["error"]["message"]
+    assert again.status_code == 401
+    assert (await client.get("/api/v1/users/me", headers=bearer)).status_code == 401
+
+
+async def test_without_mcp_use_a_refresh_is_refused_and_ends_the_session(client, redis, login_user_auth):
+    """A client that only refreshes is cut off too: the refresh is refused with the reason."""
+    user_uuid, _ = login_user_auth
+    role = await _role_uuid("Login User")
+    client_id, code, verifier, redirect, _ = await _authorize_through_consent(client, redis, user_uuid, role)
+    async with mcp_http() as http:
+        tokens = await http.post(
+            "/mcp/token",
+            data={
+                "grant_type": "authorization_code",
+                "client_id": client_id,
+                "code": code,
+                "code_verifier": verifier,
+                "redirect_uri": redirect,
+            },
+        )
+        await _withdraw_mcp_use(role)
+        refreshed = await http.post(
+            "/mcp/token",
+            data={
+                "grant_type": "refresh_token",
+                "client_id": client_id,
+                "refresh_token": tokens.json()["refresh_token"],
+            },
+        )
+    assert refreshed.status_code == 401, refreshed.text
+    assert (
+        refreshed.json()["error"] == "invalid_grant"
+        and "may not use MCP" in refreshed.json()["error_description"]
+    )
+    bearer = {"Authorization": f"Bearer {tokens.json()['access_token']}"}
+    assert (await client.get("/api/v1/users/me", headers=bearer)).status_code == 401
 
 
 async def _backend_calls(http, token, count: int, monkeypatch) -> tuple[int, str | None]:
