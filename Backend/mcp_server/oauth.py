@@ -192,6 +192,8 @@ class BackendOAuthProvider(OAuthProvider):
             user = await user_repository.get_by_uuid(db, authorization_code.subject)
             if user is None:
                 raise TokenError("invalid_grant", "The account no longer exists.")
+            if not await may_use_mcp(db, str(user.uuid)):
+                raise TokenError("invalid_grant", NO_MCP_USE)
             await auth_session.record_login(db, user)
             access_token, refresh_token, _ = await auth_session.open_default_session(
                 db, self.redis, user, f"MCP: {_client_name(client)}", mcp_client=client.client_id
