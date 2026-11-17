@@ -3,6 +3,8 @@
 FastAPI + Strawberry GraphQL + SQLAlchemy（async、asyncpg）+ PostgreSQL（PostGIS + H3）+ Redis，使用 **Python 3.13**。
 
 > 動手修改後端程式碼或新增測試前，請務必閱讀 **[`Backend/CLAUDE.md`](CLAUDE.md)** 與根目錄 **[`CLAUDE.md`](../CLAUDE.md)**。
+>
+> 本頁只講本機開發。要部署到雲端或自己的主機，請看根目錄的 **[`DEPLOY.md`](../DEPLOY.md)**。
 
 ---
 

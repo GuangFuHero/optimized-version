@@ -4,6 +4,8 @@
 
 **目前狀態**：Phase 1 開發中（目標 115/06/15）｜**授權**：GPL-3.0
 
+> **要部署到伺服器？** 請看 [`DEPLOY.md`](DEPLOY.md)。最上面的表會告訴你從哪一節開始：部署更新到現有的 Staging、在 GCP 從零架設一套，或在自己的電腦架設（僅供測試使用）。
+
 ---
 
 ## 目錄
@@ -46,6 +48,7 @@
 - **前端工程師** → 本頁「[5 分鐘跑起完整系統](#5-分鐘跑起完整系統onboarding-guide)」→ [`Frontend/CLAUDE.md`](Frontend/CLAUDE.md) → [`Frontend/README.md`](Frontend/README.md) → [`Frontend/docs/README.md`](Frontend/docs/README.md)
 - **後端工程師** → 本頁「[5 分鐘跑起完整系統](#5-分鐘跑起完整系統onboarding-guide)」→ [`Backend/CLAUDE.md`](Backend/CLAUDE.md) → [`Backend/README.md`](Backend/README.md)
 - **設計 / PM** → 本頁「[共用元件庫模組規劃](#共用元件庫模組規劃)」→ [`Design/GUIDE.md`](Design/GUIDE.md)
+- **要部署的人（團隊成員、廠商）** → [`DEPLOY.md`](DEPLOY.md)，先看最上面的「請依你的情境選擇閱讀起點」
 
 ---
 
