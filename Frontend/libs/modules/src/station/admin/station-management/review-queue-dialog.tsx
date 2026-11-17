@@ -43,6 +43,7 @@ import {
 } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
+import { useIntersectionObserver } from 'usehooks-ts';
 
 import { useStationRows } from './hooks/use-station-rows';
 import {
@@ -263,16 +264,17 @@ type QueueRow = ReturnType<typeof useStationRows>['rows'][number];
 
 /**
  * A queued station's suggestions, each with its conflict. The list and the detail pane both call
- * it, so every station in the queue can show 衝突 and the selected one reads the same cache.
+ * it, so a station in the queue can show 衝突 and the selected one reads the same cache. `read`
+ * holds it back: a row reads only once it has been on screen.
  */
-function useQueuedStation(row: QueueRow | null) {
+function useQueuedStation(row: QueueRow | null, read = true) {
   const uuid = row?.uuid ?? '';
   const canViewHistory = row?.raw.viewerCanViewHistory ?? false;
-  const review = useStationReview({ uuid });
+  const review = useStationReview({ uuid }, { enabled: read });
   // Conflicts come from the station's history; without it they are unknown, never "none".
   const history = useStationHistory(
     { path: { uuid }, query: { limit: HISTORY_PAGE } },
-    { enabled: canViewHistory && Boolean(uuid) },
+    { enabled: read && canViewHistory && Boolean(uuid) },
   );
   const historyPage =
     history.isSuccess && history.data
@@ -282,7 +284,12 @@ function useQueuedStation(row: QueueRow | null) {
   return { review, history, historyPage, fields, canViewHistory };
 }
 
-/** A station in the queue: 衝突 once a field is known to conflict, else how much waits. */
+/**
+ * A station in the queue: 衝突 once a field is known to conflict, else how much waits. Its review
+ * and history are read once the row scrolls into view, not as the queue opens: the queue can hold
+ * thousands of stations, and reading them all would send two requests for each at once. Until then
+ * it shows how many fields wait, which the list already has.
+ */
 function QueueItem({
   row,
   active,
@@ -292,11 +299,15 @@ function QueueItem({
   active: boolean;
   onSelect: () => void;
 }) {
-  const { fields } = useQueuedStation(row);
+  const { ref, isIntersecting } = useIntersectionObserver({
+    freezeOnceVisible: true,
+  });
+  const { fields } = useQueuedStation(row, isIntersecting || active);
   const { firstSuggestedAt } = suggestionVersions(null, fields);
 
   return (
     <ButtonBase
+      ref={ref}
       onClick={onSelect}
       sx={{
         width: '100%',
