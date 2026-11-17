@@ -1,22 +1,16 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
-import { setClientIpResolver } from './request-async';
-
 /**
  * Carries the browser's IP across a server-side request so outbound backend calls can forward it.
  *
  * The backend rate-limits per caller IP, but every call it sees originates from this server. Without
- * forwarding, all users share one allowance. Threading a parameter through every data-access
- * function would touch ~18 signatures and every call site, so the IP rides here instead.
+ * forwarding, all users share one allowance.
  *
  * Server-only. This module imports `node:async_hooks`, so it must never reach a client bundle —
  * which is why it is not exported from the package barrel and lives behind
- * `@rescue-frontend/data-access/server`. `requestAsync` stays free of node imports and reads the IP
- * through the resolver registered below.
+ * `@rescue-frontend/data-access/server`.
  */
 const clientIpStorage = new AsyncLocalStorage<string>();
-
-setClientIpResolver(() => clientIpStorage.getStore());
 
 /** Run `handler` with `clientIp` attached to every backend call it makes. */
 export function runWithClientIp<T>(
@@ -26,7 +20,7 @@ export function runWithClientIp<T>(
   return clientIp ? clientIpStorage.run(clientIp, handler) : handler();
 }
 
-/** The IP `runWithClientIp` attached, for a backend call made with `fetch` rather than `requestAsync`. */
+/** The IP `runWithClientIp` attached. */
 export function currentClientIp(): string | undefined {
   return clientIpStorage.getStore();
 }

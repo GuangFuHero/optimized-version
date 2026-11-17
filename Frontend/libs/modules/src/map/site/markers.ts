@@ -1,16 +1,13 @@
 import {
-  StationFieldsFragmentDoc,
-  TicketFieldsFragmentDoc,
-  useFragment,
-  type FragmentType,
   type GetMapAreasQuery,
   type GetStationsQuery,
   type GetTicketsQuery,
   type StationFieldsFragment,
+  type TicketFieldsFragment,
 } from '@rescue-frontend/data-access';
 import type { Geometry, Polygon } from 'geojson';
 
-import { areaSignature, isAreaKind } from '../areas';
+import { isAreaKind } from '../areas';
 import type {
   RescueMapArea,
   RescueMapClosureArea,
@@ -141,9 +138,8 @@ export function dedupeMarkersById(markers: readonly RescueMapMarkerItem[]) {
 }
 
 export function mapStationToMarker(
-  stationRef: GetStationsQuery['stations']['items'][number],
+  station: GetStationsQuery['stations']['items'][number],
 ): RescueMapMarkerItem | null {
-  const station = useFragment(StationFieldsFragmentDoc, stationRef);
   const position = readPointPosition(station.geometry as never);
 
   if (!position) {
@@ -188,15 +184,14 @@ export function mapStationToMarker(
  * A ticket as any query reads it. `suspectedDuplicateOf` is asked for by the map, the list and a
  * ticket's detail only, so a ticket filed through 請求協助 or read in a building comes without it.
  */
-type TicketMarkerRef = FragmentType<typeof TicketFieldsFragmentDoc> &
+type TicketMarkerFields = TicketFieldsFragment &
   Partial<
     Pick<GetTicketsQuery['tickets']['items'][number], 'suspectedDuplicateOf'>
   >;
 
 export function mapTicketToMarker(
-  ticketRef: TicketMarkerRef,
+  ticket: TicketMarkerFields,
 ): RescueMapMarkerItem | null {
-  const ticket = useFragment(TicketFieldsFragmentDoc, ticketRef);
   const position = readPointPosition(ticket.geometry as never);
 
   if (!position) {
@@ -231,7 +226,7 @@ export function mapTicketToMarker(
       contactPhone: ticket.contactPhone,
       createdBy: ticket.createdBy,
       auditStatus: ticket.auditStatus,
-      suspectedDuplicateOf: ticketRef.suspectedDuplicateOf,
+      suspectedDuplicateOf: ticket.suspectedDuplicateOf,
       createdAt: ticket.createdAt?.toString() ?? null,
       updatedAt: ticket.updatedAt?.toString() ?? null,
     },
@@ -326,14 +321,4 @@ export function mapAreasToOverlays(
   });
 
   return overlays;
-}
-
-export function areaOverlaysSignature({
-  closureAreas,
-  publicZones,
-}: {
-  closureAreas: readonly RescueMapClosureArea[];
-  publicZones: readonly RescueMapPublicZone[];
-}): string {
-  return [...closureAreas, ...publicZones].map(areaSignature).join('\n');
 }

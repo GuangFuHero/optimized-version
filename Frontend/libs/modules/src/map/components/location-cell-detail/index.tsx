@@ -3,7 +3,8 @@
 import { Hexagon } from 'lucide-react';
 
 import { Box, ButtonBase, IconButton, Stack, Typography } from '@mui/material';
-import { type Ref, useCallback, useEffect, useRef, useState } from 'react';
+import { skipToken, useInfiniteQuery } from '@tanstack/react-query';
+import { type Ref, useEffect, useRef } from 'react';
 
 import {
   Button,
@@ -27,7 +28,6 @@ import { LocationPrivacyNotice } from '../location-privacy-notice';
 import {
   type CellMembersList,
   EMPTY_CELL_MEMBERS,
-  nextCellMembersSkip,
   withCellMembersPage,
 } from './cell-members';
 
@@ -59,6 +59,14 @@ interface CellMembers extends CellMembersList {
   status: 'loading' | 'idle' | 'error';
 }
 
+/** For a cell whose tickets came with it: nothing to read. */
+const OWN_MEMBERS: ReturnType<LocationCellMembersLoader> = {
+  queryKey: ['site-map', 'cell-members', 'own'],
+  queryFn: skipToken,
+  initialPageParam: 0,
+  getNextPageParam: () => undefined,
+};
+
 /**
  * The cell's tickets: its own, or with `loadMembers`, read a page at a time from the first. A page
  * that comes back after the cell or the filter changed, or after the panel closed, is dropped.
@@ -67,72 +75,35 @@ function useCellMembers(
   cell: RescueMapLocationCell,
   loadMembers: LocationCellMembersLoader | undefined,
 ): CellMembers & { loadMore: () => void; retry: () => void } {
-  const [state, setState] = useState<CellMembers>(() =>
-    loadMembers
-      ? { ...EMPTY_CELL_MEMBERS, status: 'loading' }
-      : {
-          members: cell.members,
-          read: cell.members.length,
-          hasMore: false,
-          status: 'idle',
-        },
-  );
-  // Moved on by each run of the effect below and as it is cleaned up: a page keeps the run it was
-  // asked in, and is listed only if that run is still the current one.
-  const runRef = useRef(0);
-  const stateRef = useRef(state);
-  stateRef.current = state;
+  const query = useInfiniteQuery(loadMembers?.(cell.cell) ?? OWN_MEMBERS);
 
-  const load = useCallback(
-    async (skip: number) => {
-      if (!loadMembers) {
-        return;
-      }
-
-      const run = runRef.current;
-      // A first page lists the cell afresh: what was listed was for another cell or filter.
-      setState((current) =>
-        skip === 0
-          ? { ...EMPTY_CELL_MEMBERS, status: 'loading' }
-          : { ...current, status: 'loading' },
-      );
-
-      try {
-        const page = await loadMembers(cell.cell, skip);
-
-        if (run === runRef.current) {
-          setState((current) => ({
-            ...withCellMembersPage(current, page, skip),
-            status: 'idle',
-          }));
-        }
-      } catch {
-        if (run === runRef.current) {
-          setState((current) => ({ ...current, status: 'error' }));
-        }
-      }
-    },
-    [cell.cell, loadMembers],
-  );
-
-  useEffect(() => {
-    runRef.current += 1;
-    void load(0);
-
-    return () => {
-      runRef.current += 1;
+  if (!loadMembers) {
+    return {
+      members: cell.members,
+      read: cell.members.length,
+      hasMore: false,
+      status: 'idle',
+      loadMore: () => undefined,
+      retry: () => undefined,
     };
-  }, [load]);
+  }
 
-  const own: CellMembers = {
-    members: cell.members,
-    read: cell.members.length,
-    hasMore: false,
-    status: 'idle',
+  const { data, isFetching, isError, fetchNextPage, refetch } = query;
+  const list =
+    data?.pages.reduce(
+      (listed, page, index) =>
+        withCellMembersPage(listed, page, data.pageParams[index] ?? 0),
+      EMPTY_CELL_MEMBERS,
+    ) ?? EMPTY_CELL_MEMBERS;
+  // A page that failed changed nothing, so its retry asks from the same place.
+  const next = () => void (data ? fetchNextPage() : refetch());
+
+  return {
+    ...list,
+    status: isFetching ? 'loading' : isError ? 'error' : 'idle',
+    loadMore: next,
+    retry: next,
   };
-  const next = () => void load(nextCellMembersSkip(stateRef.current));
-
-  return { ...(loadMembers ? state : own), loadMore: next, retry: next };
 }
 
 /**
@@ -158,10 +129,6 @@ export function LocationCellDetail({
   // Where a page asked for under the list starts. The button pressed for it goes away when the
   // last page is in or the page fails, and a keyboard user's focus would go with it.
   const askedFromRef = useRef<number | null>(null);
-  const askFromFoot = (ask: () => void) => () => {
-    askedFromRef.current = members.length;
-    ask();
-  };
 
   useEffect(() => {
     const from = askedFromRef.current;
@@ -339,8 +306,14 @@ export function LocationCellDetail({
           hasMore={hasMore}
           listed={members.length > 0}
           retryRef={retryRef}
-          onLoadMore={askFromFoot(loadMore)}
-          onRetry={askFromFoot(retry)}
+          onLoadMore={() => {
+            askedFromRef.current = members.length;
+            loadMore();
+          }}
+          onRetry={() => {
+            askedFromRef.current = members.length;
+            retry();
+          }}
         />
       </Stack>
     </Box>

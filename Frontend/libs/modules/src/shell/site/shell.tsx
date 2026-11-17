@@ -17,7 +17,6 @@ import {
 } from '../../role-request';
 import type { ApplyReturn } from '../../role-request/apply-return';
 import { RoleRequestReturn } from '../../role-request/role-request-return';
-import { SiteRouteProvider } from '../../route/use-site-route-state';
 import { MyStationReportsHost } from '../../station/suggestion/my-station-reports-drawer';
 import { StationSuggestionHost } from '../../station/suggestion/station-suggestion-host';
 import { HelpRequestHost } from '../../ticket/help-request/help-request-host';
@@ -240,7 +239,9 @@ export function SiteShell({
       {pathname.startsWith('/map') ? null : <MobileRequestHelpFab />}
 
       {/* Inside the route providers: once a ticket is filed it turns the page to it. */}
-      <HelpRequestHost isAuthenticated={isAuthenticated} />
+      <Suspense fallback={null}>
+        <HelpRequestHost isAuthenticated={isAuthenticated} />
+      </Suspense>
 
       {/* Opened from a station's detail, on the map or the list (`openStationSuggestion`). */}
       <StationSuggestionHost isAuthenticated={isAuthenticated} />
@@ -258,7 +259,7 @@ export function SiteShell({
       {pathname.startsWith('/map') ? (
         <SiteMapRouteProvider>{content}</SiteMapRouteProvider>
       ) : (
-        <SiteRouteProvider>{content}</SiteRouteProvider>
+        content
       )}
     </>
   );

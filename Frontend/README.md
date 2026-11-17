@@ -32,12 +32,13 @@
 
 | 類別 | 使用技術 |
 | :--- | :--- |
-| **Monorepo** | Nx 22 + pnpm workspaces |
-| **App framework** | Next.js 16（App Router）、React 19 |
-| **UI 與地圖** | MUI 9 + Emotion、Leaflet + leaflet.markercluster、Storybook |
-| **資料存取** | urql 5（前台含 graphcache）、GraphQL Code Generator、openapi-fetch、TanStack Query |
-| **驗證** | 後端核發的 `HttpOnly` session cookie；前端透過 Next.js BFF proxy 轉發（`/api/v1/*`、`/api/graphql`） |
-| **語言與工具** | TypeScript 5.9（strict）、Vitest 5、ESLint 9（flat config）、Prettier |
+| **Monorepo**：Nx 22 + pnpm workspaces，各 app 與 library 使用自己的 `package.json` |
+| **App framework**：Next.js 16（App Router）、React 19 |
+| **UI與地圖** | MUI 9 + Emotion、Leaflet + leaflet.markercluster（地圖） |
+| **資料存取** | GraphQL Code Generator、openapi-fetch、TanStack Query |
+| **Client state / 表單 / 資料表** | Zustand、nuqs、TanStack Form / Table；兩個 app 啟用 React Compiler |
+| **驗證** | 後端的 `HttpOnly` session cookie + 共用 REST / GraphQL proxy（`/api/v1/*`、`/api/graphql`） |
+| **語言與工具** | TypeScript 5.9（strict）、ESLint 9（flat config）、Prettier |
 
 ---
 

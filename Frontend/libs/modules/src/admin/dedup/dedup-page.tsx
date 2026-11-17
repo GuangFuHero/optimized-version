@@ -2,7 +2,7 @@
 
 import { Box, Stack, Tab } from '@mui/material';
 import { ChevronRight, CircleCheck, Trash2 } from 'lucide-react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { parseAsString, useQueryState } from 'nuqs';
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 
 import {
@@ -62,10 +62,14 @@ export function decidedListQuery(
 
 /** The page reads the open pair from `?pair=`, so it renders inside the route's Suspense. */
 export function DedupReviewPage() {
-  const router = useRouter();
-  const pathname = usePathname();
-  const params = useSearchParams();
-  const openUuid = params.get('pair');
+  const [openUuid, setOpenUuid] = useQueryState(
+    'pair',
+    parseAsString.withOptions({
+      history: 'push',
+      shallow: false,
+      scroll: true,
+    }),
+  );
   const [tab, setTab] = useState<PairTab>('ticket');
   const [view, setView] = useState<PairView>('pending');
   const [sort, setSort] = useState<Sort>('similarity');
@@ -133,11 +137,7 @@ export function DedupReviewPage() {
 
   // The compare screen is a page of its own: the browser's back button returns to the list.
   const open = (uuid: string | null) => {
-    const next = new URLSearchParams(params.toString());
-    if (uuid) next.set('pair', uuid);
-    else next.delete('pair');
-    const search = next.toString();
-    router.push(search ? `${pathname}?${search}` : pathname);
+    void setOpenUuid(uuid);
   };
 
   if (openUuid) {

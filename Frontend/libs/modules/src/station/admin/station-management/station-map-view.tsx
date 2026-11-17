@@ -12,14 +12,16 @@ import {
   X,
 } from 'lucide-react';
 import {
+  useCallback,
+  useSyncExternalStore,
   useEffect,
   useLayoutEffect,
-  useMemo,
   useRef,
   useState,
   type Ref,
   type RefObject,
 } from 'react';
+import { useEventCallback } from 'usehooks-ts';
 
 import { Map } from '../../../map';
 import type {
@@ -97,14 +99,10 @@ export function StationMapView({
       filtersFromLink && readShownFilters('station-management') !== filtersKey,
   );
   const zoom = useMapZoom(leafletMap);
-  const markers = useMemo(
-    () =>
-      rows
-        .map((row) => toStationMarker(row, row.uuid === selectedUuid))
-        .filter((m): m is RescueMapMarkerItem => m !== null),
-    [rows, selectedUuid],
-  );
-  const legend = useMemo(() => getPresentStationTypes(rows), [rows]);
+  const markers = rows
+    .map((row) => toStationMarker(row, row.uuid === selectedUuid))
+    .filter((m): m is RescueMapMarkerItem => m !== null);
+  const legend = getPresentStationTypes(rows);
   const selectedRow = rows.find((row) => row.uuid === selectedUuid) ?? null;
 
   useFitStations(leafletMap, markers, selectedUuid, {
@@ -245,17 +243,20 @@ export function StationMapView({
 
 /** The map's zoom, followed as it changes; null until the map is built. */
 function useMapZoom(map: LeafletMap | null): number | null {
-  const [zoom, setZoom] = useState<number | null>(null);
-  useEffect(() => {
-    if (!map) return undefined;
-    const update = () => setZoom(map.getZoom());
-    update();
-    map.on('zoomend', update);
-    return () => {
-      map.off('zoomend', update);
-    };
-  }, [map]);
-  return zoom;
+  const subscribe = useCallback(
+    (notify: () => void) => {
+      map?.on('zoomend', notify);
+      return () => {
+        map?.off('zoomend', notify);
+      };
+    },
+    [map],
+  );
+  return useSyncExternalStore(
+    subscribe,
+    () => map?.getZoom() ?? null,
+    () => null,
+  );
 }
 
 /**
@@ -279,10 +280,8 @@ function useFitStations(
   },
 ) {
   const framedKeyRef = useRef<string | null>(null);
-  const selectedRef = useRef(selectedUuid);
-  selectedRef.current = selectedUuid;
-  const markersRef = useRef(markers);
-  markersRef.current = markers;
+  const getSelected = useEventCallback(() => selectedUuid);
+  const getMarkers = useEventCallback(() => markers);
   // Asked again as the count changes, for filters still waiting on their first stations.
   const pointCount = markers.length;
 
@@ -294,14 +293,14 @@ function useFitStations(
       loading,
       restored: restoredRef.current,
       arrivedWithNewFilters,
-      selected: Boolean(selectedRef.current),
+      selected: Boolean(getSelected()),
       pointCount,
     });
     if (step === 'wait') return;
     framedKeyRef.current = filtersKey;
     rememberShownFilters('station-management', filtersKey);
     if (step === 'keep') return;
-    const points = markersRef.current.map((marker) => marker.position);
+    const points = getMarkers().map((marker) => marker.position);
     if (points.length === 1) {
       map.setView(points[0], 15);
     } else {
@@ -323,12 +322,11 @@ function useFlyToSelected(
   markers: readonly RescueMapMarkerItem[],
   selectedUuid: string | null,
 ) {
-  const markersRef = useRef(markers);
-  markersRef.current = markers;
+  const getMarkers = useEventCallback(() => markers);
 
   useEffect(() => {
     if (!map || !selectedUuid) return;
-    const marker = markersRef.current.find((m) => m.id === selectedUuid);
+    const marker = getMarkers().find((m) => m.id === selectedUuid);
     if (!marker) return;
     map.flyTo(marker.position, Math.max(map.getZoom(), FOCUS_ZOOM), {
       duration: 0.6,

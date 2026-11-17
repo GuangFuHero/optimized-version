@@ -1,13 +1,6 @@
 'use client';
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useReducer,
-  useRef,
-  useState,
-} from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Box, Drawer, Stack, Typography, useMediaQuery } from '@mui/material';
 
@@ -18,7 +11,7 @@ import {
 } from '../building';
 import { RescueMapDetailDrawer } from '../map/components/rescue-map-detail-drawer';
 import { RESCUE_MAP_DESKTOP_DETAIL_DRAWER_WIDTH } from '../map/constants';
-import { countDetailOpenings } from '../map/detail-openings';
+import { useMarkerDetail } from '../map/hooks/use-marker-detail';
 import { useRescueMapController } from '../map/hooks/use-rescue-map-controller';
 import type { RescueMapGoneTicket, RescueMapMarkerItem } from '../map/types';
 import {
@@ -45,8 +38,8 @@ import { createTaskMatchTicketDetailOverrides } from '../ticket/task-match';
 import { resolveTicketSearch } from '../ticket/ticket-search';
 import {
   floorHelpForOpenBuilding,
-  readLinkedSelection,
-  useLinkedTicketLookup,
+  useLinkedSelection,
+  type LinkedSelectionOptions,
   usePaginatedRescueMapMarkers,
 } from '../map/site';
 import { SiteListRow } from './site-list-row';
@@ -94,7 +87,6 @@ export function SiteListView() {
     pageIds,
     replaceTicket,
   } = usePaginatedRescueMapMarkers(state);
-  const lookUpLinkedTicket = useLinkedTicketLookup();
 
   const controller = useRescueMapController({
     routeState: state,
@@ -136,22 +128,13 @@ export function SiteListView() {
   const [showFullNeeds, setShowFullNeeds] = useState(false);
   // A status filter set to finished or cancelled asks for them outright: nothing left to fold.
   const closedTicketsAsked = showsClosedTickets(controller.subDataTypes);
-  const ticketList = useMemo(
-    () =>
-      dataType === 'ticket'
-        ? listTickets(controller.markers, {
-            showFull: showFullNeeds || closedTicketsAsked,
-            q: ticketQuery,
-          })
-        : null,
-    [
-      closedTicketsAsked,
-      controller.markers,
-      dataType,
-      showFullNeeds,
-      ticketQuery,
-    ],
-  );
+  const ticketList =
+    dataType === 'ticket'
+      ? listTickets(controller.markers, {
+          showFull: showFullNeeds || closedTicketsAsked,
+          q: ticketQuery,
+        })
+      : null;
   const listRows: readonly {
     marker: RescueMapMarkerItem;
     needs?: ListedTicket['needs'];
@@ -179,18 +162,12 @@ export function SiteListView() {
   const [unlistedItem, setUnlistedItem] = useState<
     RescueMapMarkerItem | RescueMapGoneTicket | null
   >(null);
-  // The last selection seen in the list, or opened beside it. One that drops out of it afterwards was
-  // filtered out or found deleted, and its drawer shuts, without asking again.
-  const listedSelectionRef = useRef<string | undefined>(undefined);
 
-  const selectedMarker = useMemo(
-    () =>
-      controller.markers.find(
-        (marker) => marker.id === controller.selectedMarkerId,
-      ) ??
-      (unlistedItem?.id === controller.selectedMarkerId ? unlistedItem : null),
-    [controller.markers, controller.selectedMarkerId, unlistedItem],
-  );
+  const selectedMarker =
+    controller.markers.find(
+      (marker) => marker.id === controller.selectedMarkerId,
+    ) ??
+    (unlistedItem?.id === controller.selectedMarkerId ? unlistedItem : null);
 
   // A ticket found gone (deleted) leaves the list — and, opened from a link past the loaded
   // pages, its looked-up copy too: the selection then has nothing left to show, and its drawer
@@ -208,30 +185,17 @@ export function SiteListView() {
     [replaceTicket],
   );
 
-  const [displayMarker, setDisplayMarker] = useState<
-    RescueMapMarkerItem | RescueMapGoneTicket | null
-  >(selectedMarker);
-  const [{ open: detailOpen, openings: detailOpenings }, setDetailOpen] =
-    useReducer(countDetailOpenings, {
-      open: Boolean(selectedMarker),
-      openings: 0,
-    });
+  const {
+    displayMarker,
+    detailOpen,
+    detailOpenings,
+    setDetailOpen,
+    setDisplayMarker,
+  } = useMarkerDetail(selectedMarker, Boolean(controller.selectedMarkerId));
   // The phone's drawer opens on a phone only. Hidden by CSS on a wider screen, it was still an open
   // modal, and MUI hid the rest of the page — the list, the detail panel — from screen readers.
   const isPhone = useMediaQuery((theme) => theme.breakpoints.down('tablet'));
   const [shareTarget, setShareTarget] = useState<PointShareTarget | null>(null);
-
-  useEffect(() => {
-    if (selectedMarker) {
-      setDisplayMarker(selectedMarker);
-      setDetailOpen(true);
-      return;
-    }
-
-    if (!controller.selectedMarkerId) {
-      setDetailOpen(false);
-    }
-  }, [controller.selectedMarkerId, selectedMarker]);
 
   // The tab's title and the share tags name what is open, as on the map (point-share's
   // document-metadata.ts): picking a card here changes only `?id=`, which the server's
@@ -260,86 +224,26 @@ export function SiteListView() {
     );
   }, [controller.selectedMarkerId, module, selectedMarker, state]);
 
-  useEffect(() => {
-    const selectedId = controller.selectedMarkerId;
-
-    // Before the first page is in, every ticket looks missing: judged then, a link straight to one
-    // found an empty list and closed its drawer.
-    if (!selectedId || !hasFetchedOnce || isFetching) {
-      return;
-    }
-
-    if (controller.markers.some((marker) => marker.id === selectedId)) {
-      listedSelectionRef.current = selectedId;
-      return;
-    }
-
-    if (unlistedItem?.id === selectedId) {
-      listedSelectionRef.current = selectedId;
-      return;
-    }
-
-    const clearSelection = () => {
-      setDetailOpen(false);
-      controller.setSelectedMarkerId(undefined);
-    };
-
-    // Listed before and gone now: a filter left it out, and the drawer goes with it. Never listed:
-    // a link to a ticket past the loaded pages, or one not there at all, looked up on its own — only
-    // the backend says it is gone (ADR-444), but for a link cut short, which names no ticket at all.
-    // Stations are not looked up.
-    const linkedSelection = readLinkedSelection({
-      selectedId,
-      dataType,
-      seenLoaded: listedSelectionRef.current === selectedId,
-    });
-
-    if (linkedSelection.kind === 'let-go') {
-      clearSelection();
-      return;
-    }
-
-    if (linkedSelection.kind === 'replace') {
-      controller.setSelectedMarkerId(linkedSelection.uuid);
-      return;
-    }
-
-    if (linkedSelection.kind === 'gone') {
-      setUnlistedItem(linkedSelection.ticket);
-      return;
-    }
-
-    let cancelled = false;
-
-    void lookUpLinkedTicket(selectedId).then((linked) => {
-      if (cancelled) {
-        return;
-      }
-
-      if (linked.kind === 'ticket') {
-        setUnlistedItem(linked.marker);
-      } else if (linked.kind === 'replace') {
-        controller.setSelectedMarkerId(linked.uuid);
-      } else if (linked.kind === 'gone') {
-        setUnlistedItem(linked.ticket);
-      } else {
-        clearSelection();
-      }
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
+  const selectLinked = useCallback(
+    (id: string | undefined) => {
+      if (!id) setDetailOpen(false);
+      controller.setSelectedMarkerId(id);
+    },
+    [controller.setSelectedMarkerId],
+  );
+  const resolveLinked = useCallback<LinkedSelectionOptions['resolve']>(
+    (answer) =>
+      setUnlistedItem(answer.kind === 'ticket' ? answer.marker : answer.ticket),
+    [],
+  );
+  useLinkedSelection({
+    selectedId: controller.selectedMarkerId,
     dataType,
-    hasFetchedOnce,
-    isFetching,
-    lookUpLinkedTicket,
-    unlistedItem,
-    controller.markers,
-    controller.selectedMarkerId,
-    controller.setSelectedMarkerId,
-  ]);
+    ready: hasFetchedOnce && !isFetching,
+    hasItem: Boolean(selectedMarker),
+    select: selectLinked,
+    resolve: resolveLinked,
+  });
 
   useEffect(() => {
     const target = loadMoreRef.current;
@@ -604,7 +508,9 @@ export function SiteListView() {
                 color: color.fg.neutral.muted,
               }}
             >
-              <Typography sx={{ fontSize: displayTextSize[14] }}>沒有符合條件的資料</Typography>
+              <Typography sx={{ fontSize: displayTextSize[14] }}>
+                沒有符合條件的資料
+              </Typography>
             </Stack>
           ) : (
             <Stack spacing={1.5}>
@@ -757,5 +663,9 @@ export function SiteListView() {
   // The list keeps its own copy of each ticket — its needs, and its status on the row's badge — so
   // a claim, a release or a stop made in a row or in the drawer is reported back here to update
   // that ticket's row.
-  return <NeedClaimProvider onTicketReloaded={showReloadedTicket}>{view}</NeedClaimProvider>;
+  return (
+    <NeedClaimProvider onTicketReloaded={showReloadedTicket}>
+      {view}
+    </NeedClaimProvider>
+  );
 }

@@ -1,5 +1,8 @@
 'use client';
 
+import { useForm, useStore } from '@tanstack/react-form';
+import type { components } from '@rescue-frontend/data-access/openapi';
+
 import { Alert, AlertTitle, Button, Stack } from '@mui/material';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { startTransition, useState } from 'react';
@@ -11,11 +14,15 @@ import {
   AuthReturnHint,
   normalizeIdentityValue,
   validateIdentityValue,
-  type AuthIdentityType,
 } from './index';
 import { forgotPasswordAsync } from '../api/client';
 import { resolveAuthErrorMessage } from '../api/error-messages';
 import { AuthActionCard } from '../shared/auth-action-card';
+
+const EMPTY_IDENTITY: components['schemas']['ForgotPasswordRequest'] = {
+  type: 'email',
+  value: '',
+};
 
 /**
  * 忘記密碼 (design `site-auth.jsx` `ForgotView`). The backend answers alike whether the account
@@ -28,25 +35,30 @@ export function ForgotPasswordFormClient() {
   const router = useRouter();
   // The page the sign-in should end on, carried through the reset and back to login.
   const callbackUrl = useSearchParams().get('callbackUrl');
-  const [identityType, setIdentityType] = useState<AuthIdentityType>('email');
-  const [identity, setIdentity] = useState('');
-  // Checked when sent, not while typed.
-  const [identityError, setIdentityError] = useState<string>();
+  const form = useForm({
+    defaultValues: EMPTY_IDENTITY,
+    validators: {
+      onSubmit: ({ value }) => {
+        const result = validateIdentityValue(value.type, value.value);
+        return result === true ? undefined : { fields: { value: result } };
+      },
+    },
+    onSubmit: (): Promise<void> => handleSubmitAsync(),
+  });
+  const { type: identityType, value: identity } = useStore(
+    form.store,
+    (state) => state.values,
+  );
+  const identityError = useStore(
+    form.store,
+    (state) => state.fieldMeta.value?.errors[0],
+  );
+  const isSubmitting = useStore(form.store, (state) => state.isSubmitting);
   const [errorMessage, setErrorMessage] = useState<string>();
-  const [isSubmitting, setIsSubmitting] = useState(false);
   /** The account a code was asked for, as sent; the form is locked while there is one. */
   const [sentTo, setSentTo] = useState<string>();
 
   async function handleSubmitAsync() {
-    const validation = validateIdentityValue(identityType, identity);
-
-    if (validation !== true) {
-      setIdentityError(validation);
-      return;
-    }
-
-    setIsSubmitting(true);
-    setIdentityError(undefined);
     setErrorMessage(undefined);
 
     try {
@@ -62,8 +74,6 @@ export function ForgotPasswordFormClient() {
       setErrorMessage(
         resolveAuthErrorMessage(error, '無法送出重設密碼請求，請稍後再試。'),
       );
-    } finally {
-      setIsSubmitting(false);
     }
   }
 
@@ -79,9 +89,7 @@ export function ForgotPasswordFormClient() {
           value={identityType}
           disabled={locked}
           onChange={(value) => {
-            setIdentityType(value);
-            setIdentity('');
-            setIdentityError(undefined);
+            form.reset({ type: value, value: '' }, { keepDefaultValues: true });
             setErrorMessage(undefined);
           }}
         />
@@ -95,8 +103,11 @@ export function ForgotPasswordFormClient() {
           autoComplete={identityType === 'email' ? 'email' : 'tel'}
           value={identity}
           onChange={(value) => {
-            setIdentity(value);
-            setIdentityError(undefined);
+            form.setFieldValue('value', value);
+            form.setFieldMeta('value', (meta) => ({
+              ...meta,
+              errorMap: { ...meta.errorMap, onSubmit: undefined },
+            }));
             setErrorMessage(undefined);
           }}
           errorText={identityError}
@@ -135,7 +146,7 @@ export function ForgotPasswordFormClient() {
             variant="contained"
             disabled={isSubmitting || identity.trim().length === 0}
             onClick={() => {
-              void handleSubmitAsync();
+              void form.handleSubmit();
             }}
             sx={{ minHeight: 44, borderRadius: '999px' }}
           >

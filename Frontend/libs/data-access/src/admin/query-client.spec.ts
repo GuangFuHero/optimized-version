@@ -1,6 +1,6 @@
-import { CombinedError } from 'urql';
 import { describe, expect, it, vi } from 'vitest';
 
+import { GraphqlError } from '../graphql/request';
 import ApiError from '../rest/api-error';
 import {
   createAdminQueryClient,
@@ -41,7 +41,7 @@ describe('createAdminQueryClient — SILENT_ERROR_META', () => {
   });
 
   it('still reports a 401 that comes back from GraphQL', async () => {
-    const error = new CombinedError({
+    const error = new GraphqlError({
       response: new Response(null, { status: 401 }),
       networkError: new Error('Unauthorized'),
     });
@@ -65,8 +65,8 @@ describe('createAdminQueryClient — SILENT_ERROR_META', () => {
         await reported(new ApiError(403, 'Permission Denied.'), silent),
       ).toEqual([]);
     }
-    const graphql = new CombinedError({
-      graphQLErrors: ['403: Permission Denied.'],
+    const graphql = new GraphqlError({
+      graphQLErrors: [{ message: '403: Permission Denied.' }],
     });
     expect(await reported(graphql, false)).toEqual([]);
   });

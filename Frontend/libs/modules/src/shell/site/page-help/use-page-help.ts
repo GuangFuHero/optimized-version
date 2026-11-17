@@ -1,30 +1,9 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
-import { useCallback, useSyncExternalStore } from 'react';
 
-import { localDeviceStorage } from '../../../storage';
-
-import {
-  SITE_PAGE_HELP,
-  hasSeenPageHelp,
-  markPageHelpSeen,
-  pageHelpKey,
-  type PageHelp,
-  type SitePageHelpKey,
-} from './page-help';
-
-// One record for the desktop ？ and the phone menu's row alike: opened in one, the other's dot goes.
-const listeners = new Set<() => void>();
-// Opened this visit, for a device that will not keep the mark: the dot goes now, back next time.
-const seenThisVisit = new Set<SitePageHelpKey>();
-
-function subscribe(listener: () => void) {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
-}
+import { SITE_PAGE_HELP, pageHelpKey, type PageHelp } from './page-help';
+import { usePageHelpSeen } from './use-page-help-seen';
 
 export interface CurrentPageHelp {
   help: PageHelp;
@@ -36,25 +15,7 @@ export interface CurrentPageHelp {
 /** This page's help, or null on a page without any (行前資訊, the account pages). */
 export function usePageHelp(): CurrentPageHelp | null {
   const key = pageHelpKey(usePathname() ?? '');
-  const seen = useSyncExternalStore(
-    subscribe,
-    () =>
-      key === null ||
-      seenThisVisit.has(key) ||
-      hasSeenPageHelp(localDeviceStorage(), key),
-    // Seen, on the server and while hydrating: the device's record is read only once on it.
-    () => true,
-  );
-
-  const markSeen = useCallback(() => {
-    if (!key) {
-      return;
-    }
-
-    seenThisVisit.add(key);
-    markPageHelpSeen(localDeviceStorage(), key);
-    listeners.forEach((listener) => listener());
-  }, [key]);
+  const { seen, markSeen } = usePageHelpSeen(key);
 
   return key ? { help: SITE_PAGE_HELP[key], fresh: !seen, markSeen } : null;
 }

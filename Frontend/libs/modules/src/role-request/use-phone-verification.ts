@@ -1,6 +1,10 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
+import { useForm, useStore } from '@tanstack/react-form';
+
+import { useCallback, useState } from 'react';
+
+import { useEventCallback } from 'usehooks-ts';
 
 import { ApiError } from '@rescue-frontend/data-access';
 import type { components } from '@rescue-frontend/data-access/openapi';
@@ -66,14 +70,23 @@ export function usePhoneVerification({
   onReauth,
 }: PhoneVerificationOptions) {
   const [stage, setStage] = useState<PhoneVerifyStage>({ kind: 'enter' });
-  const [phone, setPhone] = useState('');
+  const phoneForm = useForm({
+    defaultValues: { phone: '' } satisfies {
+      phone: Parameters<typeof addContactAsync>[0]['value'];
+    },
+    validators: { onSubmit: ({ value }) => mobileProblem(value.phone) },
+    onSubmitInvalid: () => setError(null),
+    onSubmit: (): void => performSend(),
+  });
+  const phone = useStore(phoneForm.store, (state) => state.values.phone);
+  const phoneProblem = useStore(
+    phoneForm.store,
+    (state) => state.errorMap.onSubmit,
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  // The latest, without making `request` — and `resume`, which the drawer runs in an effect — new
-  // on every render.
-  const onReauthRef = useRef(onReauth);
-  onReauthRef.current = onReauth;
+  const reauth = useEventCallback(onReauth);
 
   const request = useCallback(
     async (
@@ -99,7 +112,7 @@ export function usePhoneVerification({
             setStage({ kind: 'enter' });
             setError('LINE 驗證已逾時，請再傳送一次驗證碼');
           } else {
-            onReauthRef.current(typed);
+            reauth(typed);
           }
           return;
         }
@@ -110,7 +123,9 @@ export function usePhoneVerification({
               ? { kind: 'password' }
               : {
                   kind: 'old-code',
-                  message: oldCodeMessage((cause as ApiError).message),
+                  message: oldCodeMessage(
+                    cause instanceof ApiError ? cause.message : '',
+                  ),
                 },
           );
           return;
@@ -121,18 +136,11 @@ export function usePhoneVerification({
         setBusy(false);
       }
     },
-    [account.hasPassword],
+    [account.hasPassword, reauth],
   );
 
   /** 傳送驗證碼: a password account is asked for it first, so the code goes out in one try. */
-  const send = () => {
-    const problem = mobileProblem(phone);
-
-    if (problem) {
-      setError(problem);
-      return;
-    }
-
+  const performSend = (): void => {
     if (account.hasPassword) {
       setError(null);
       setStage({ kind: 'password' });
@@ -141,6 +149,8 @@ export function usePhoneVerification({
 
     void request(phone, 'send');
   };
+
+  const send = () => void phoneForm.handleSubmit();
 
   const submitPassword = async (password: string) => {
     if (!account.saltIdentifier) {
@@ -206,7 +216,8 @@ export function usePhoneVerification({
 
   /** A different number: the steps start over, as a code waits under the number it went to. */
   const changePhone = (next: string) => {
-    setPhone(next);
+    phoneForm.setFieldValue('phone', next);
+    phoneForm.setErrorMap({ onSubmit: undefined });
 
     if (stage.kind !== 'enter') {
       setStage({ kind: 'enter' });
@@ -219,10 +230,10 @@ export function usePhoneVerification({
   /** Each opening of the drawer starts from no number typed. */
   const reset = useCallback(() => {
     setStage({ kind: 'enter' });
-    setPhone('');
+    phoneForm.reset();
     setError(null);
     setNotice(null);
-  }, []);
+  }, [phoneForm]);
 
   /**
    * Back from LINE: the number as it was typed, and with the proof made, the code goes out by
@@ -230,7 +241,7 @@ export function usePhoneVerification({
    */
   const resume = useCallback(
     (typed: string, outcome: ApplyReturn['stepUp']) => {
-      setPhone(typed);
+      phoneForm.setFieldValue('phone', typed);
 
       if (outcome === 'ok') {
         void request(typed, 'send', undefined, true);
@@ -238,14 +249,14 @@ export function usePhoneVerification({
         setError(stepUpReturnErrorMessage(outcome.error));
       }
     },
-    [request],
+    [phoneForm, request],
   );
 
   return {
     stage,
     phone,
     busy,
-    error,
+    error: error ?? phoneProblem ?? null,
     notice,
     send,
     submitPassword,

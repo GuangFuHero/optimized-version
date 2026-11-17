@@ -76,7 +76,7 @@
 - 同一個 refresh token 只換一次：一個頁面同時發出的請求一起等同一次 refresh。換好之後的 30 秒內，還帶著舊 token
   的請求會拿到同一組新 cookie；後端的寬限期也是 30 秒（ADR-330）。
 
-browser 端的 `sessionExpiryFetch`（urql client、auth API client、登入狀態的 store 都用它）看到 `x-wg-session: expired`
+browser 端的 `sessionExpiryFetch`（前台的 GraphQL / REST client、登入狀態的 store 都用它）看到 `x-wg-session: expired`
 時：記下「登入已失效」的提示、通知其他分頁、把這個分頁重新整理成訪客。一個分頁只做一次，同時回來好幾個標記也一樣。
 
 ## 頁面 render 前先 refresh（`apps/demo/src/proxy.ts`）
@@ -112,7 +112,7 @@ Component 不能設 cookie，瀏覽器留著已經輪替掉的 refresh token，�
 - 還在讀（`loading`）：不算，等讀完再比。
 - 這個分頁自己正在登出：交給登出流程自己重新整理，不重複。
 
-用整頁重新整理而不是 `router.refresh()`，是因為登入時抓的資料（列表的認領、地圖的精確位置、urql 的快取）存在
+用整頁重新整理而不是 `router.refresh()`，是因為登入時抓的資料（列表的認領、地圖的精確位置、TanStack Query 的快取）存在
 browser 裡，`router.refresh()` 只會重畫 server 那部分，訪客會繼續看到登入的人才看得到的東西。反過來也一樣：
 訪客時抓的結果沒有登入的人自己的資料，自己已經承接的需求還會顯示「接這筆」。
 

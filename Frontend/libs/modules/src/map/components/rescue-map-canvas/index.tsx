@@ -1,14 +1,10 @@
 'use client';
 
 import L from 'leaflet';
-import {
-  useEffect,
-  useRef,
-  useState,
-  useSyncExternalStore,
-  type ReactNode,
-} from 'react';
+import { useEventCallback } from 'usehooks-ts';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { createStore, useStore } from 'zustand';
 
 import {
   areaKind,
@@ -126,7 +122,9 @@ function createDraftPointIcon(): L.DivIcon {
 const VIEWPORT_SYNC_DEBOUNCE_MS = 250;
 /** Adds `L.markerClusterGroup` to the global `L` that `leaflet` set, which is why it loads after it. */
 const MARKER_CLUSTER_MODULE_ID = 'leaflet.markercluster';
-const EMPTY_VIEWPORT_STATE: RescueMapViewportStoreSnapshot = {};
+const EMPTY_VIEWPORT_STORE = createStore<RescueMapViewportStoreSnapshot>()(
+  () => ({}),
+);
 
 interface MarkerHandle {
   marker: L.Marker;
@@ -655,19 +653,6 @@ function syncAreaLayer<T extends RescueMapArea>({
   });
 }
 
-/** Unsubscribe handle for the no-op store. Named so the empty body reads as deliberate. */
-function unsubscribeNoop() {
-  // Nothing was subscribed, so there is nothing to tear down.
-}
-
-function subscribeViewportStoreNoop() {
-  return unsubscribeNoop;
-}
-
-function getEmptyViewportState(): RescueMapViewportStoreSnapshot {
-  return EMPTY_VIEWPORT_STATE;
-}
-
 function syncViewportStateToController(
   map: L.Map,
   controller: RescueMapControllerValue,
@@ -692,13 +677,13 @@ function syncMarkerLayer({
   items,
   handles,
   leaflet,
-  onMarkerClickRef,
+  clickMarker,
 }: {
   markerLayer: MarkerClusterGroupLike;
   items: readonly RescueMapMarkerItem[];
   handles: Map<string, MarkerHandle>;
   leaflet: typeof import('leaflet');
-  onMarkerClickRef: React.MutableRefObject<(item: RescueMapMarkerItem) => void>;
+  clickMarker: (item: RescueMapMarkerItem) => void;
 }) {
   const nextIds = new Set(items.map((item) => item.id));
 
@@ -726,7 +711,7 @@ function syncMarkerLayer({
 
       marker.on('click', () => {
         const handle = handles.get(item.id);
-        onMarkerClickRef.current(handle?.item ?? item);
+        clickMarker(handle?.item ?? item);
       });
 
       markerLayer.addLayer(marker);
@@ -900,15 +885,13 @@ function syncLocationCellLayer({
   cellLayer,
   cells,
   selectedId,
-  onCellClickRef,
+  clickCell,
 }: {
   map: L.Map;
   cellLayer: L.LayerGroup;
   cells: readonly RescueMapLocationCell[];
   selectedId: string | undefined;
-  onCellClickRef: React.MutableRefObject<
-    ((cell: RescueMapLocationCell) => void) | undefined
-  >;
+  clickCell: ((cell: RescueMapLocationCell) => void) | undefined;
 }): LocationCellLabel[] {
   cellLayer.clearLayers();
 
@@ -916,7 +899,7 @@ function syncLocationCellLayer({
     const selected = cell.id === selectedId;
     const { fill, edge } = getLocationCellColours(cell);
     const corners = locationCellBoundary(cell.cell);
-    const onClick = () => onCellClickRef.current?.(cell);
+    const onClick = () => clickCell?.(cell);
 
     L.polygon(corners, {
       color: edge,
@@ -992,12 +975,7 @@ export function RescueMapCanvas({
   onMapReady,
   onViewChange,
 }: RescueMapCanvasProps) {
-  const externalViewportState =
-    useSyncExternalStore<RescueMapViewportStoreSnapshot>(
-      viewportStore?.subscribe ?? subscribeViewportStoreNoop,
-      viewportStore?.getSnapshot ?? getEmptyViewportState,
-      viewportStore?.getSnapshot ?? getEmptyViewportState,
-    );
+  const externalViewportState = useStore(viewportStore ?? EMPTY_VIEWPORT_STORE);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
@@ -1025,12 +1003,12 @@ export function RescueMapCanvas({
   const publicZoneHandlesRef = useRef<Map<string, AreaHandle>>(new Map());
   // Places the areas' labels again, once what is being drawn now is on the map.
   const queueAreaLabelsRef = useRef<(() => void) | null>(null);
-  const controllerRef = useRef(controller);
-  const onMapClickRef = useRef(onMapClick);
-  const onMarkerClickRef = useRef(onMarkerClick);
-  const onLocationCellClickRef = useRef(onLocationCellClick);
-  const onDraftPointChangeRef = useRef(onDraftPointChange);
-  const onViewChangeRef = useRef(onViewChange);
+  const getController = useEventCallback(() => controller);
+  const clickMap = useEventCallback(onMapClick);
+  const clickMarker = useEventCallback(onMarkerClick);
+  const clickCell = useEventCallback(onLocationCellClick);
+  const changeDraftPoint = useEventCallback(onDraftPointChange);
+  const changeView = useEventCallback(onViewChange);
   const initialViewportStateRef = useRef(externalViewportState);
   // Read once, when the map is built.
   const mapOptionsRef = useRef({
@@ -1039,13 +1017,6 @@ export function RescueMapCanvas({
     zoomControlPosition,
     onMapReady,
   });
-
-  controllerRef.current = controller;
-  onMapClickRef.current = onMapClick;
-  onMarkerClickRef.current = onMarkerClick;
-  onLocationCellClickRef.current = onLocationCellClick;
-  onDraftPointChangeRef.current = onDraftPointChange;
-  onViewChangeRef.current = onViewChange;
 
   // 地圖實例整個生命週期只建立一次；受控的視角變化由下方 setView 效果套用，
   // 避免位置寫回路由狀態後反過來把整張地圖銷毀重建。
@@ -1062,9 +1033,9 @@ export function RescueMapCanvas({
           center: initialViewportState.position.center,
           zoom:
             initialViewportState.position.zoom ??
-            controllerRef.current.initialView.zoom,
+            getController().initialView.zoom,
         }
-      : controllerRef.current.initialView;
+      : getController().initialView;
     const map = L.map(host, {
       // Added below with Chinese names: Leaflet's own reads "Zoom in" / "Zoom out" to a screen reader.
       zoomControl: false,
@@ -1111,10 +1082,10 @@ export function RescueMapCanvas({
     buildingLayer.addTo(map);
     syncMarkerLayer({
       markerLayer: buildingLayer,
-      items: getBuildingMarkers(controllerRef.current.markers),
+      items: getBuildingMarkers(getController().markers),
       handles: buildingHandles,
       leaflet: L,
-      onMarkerClickRef,
+      clickMarker,
     });
 
     void import(MARKER_CLUSTER_MODULE_ID).then(() => {
@@ -1186,10 +1157,10 @@ export function RescueMapCanvas({
       markerLayerRef.current = markerLayer;
       syncMarkerLayer({
         markerLayer,
-        items: getPinnedMarkers(controllerRef.current.markers),
+        items: getPinnedMarkers(getController().markers),
         handles: markerHandles,
         leaflet: L,
-        onMarkerClickRef,
+        clickMarker,
       });
       queueAreaLabelsRef.current?.();
     });
@@ -1203,7 +1174,7 @@ export function RescueMapCanvas({
         return;
       }
 
-      syncViewportStateToController(currentMap, controllerRef.current);
+      syncViewportStateToController(currentMap, getController());
     };
 
     // Told on the map's own moves, as the prototype's `watchMapLast` is on `moveend`; not on the
@@ -1211,7 +1182,7 @@ export function RescueMapCanvas({
     const reportViewChange = () => {
       const center = map.getCenter();
 
-      onViewChangeRef.current?.({
+      changeView?.({
         center: [center.lat, center.lng],
         zoom: map.getZoom(),
       });
@@ -1226,7 +1197,7 @@ export function RescueMapCanvas({
     };
 
     const handleMapClick = (event: L.LeafletMouseEvent) => {
-      onMapClickRef.current?.([event.latlng.lat, event.latlng.lng]);
+      clickMap?.([event.latlng.lat, event.latlng.lng]);
     };
 
     // A picked point is let go once the map moves under it, as its bubble would point elsewhere
@@ -1234,7 +1205,7 @@ export function RescueMapCanvas({
     // autopan does, and is not the person moving the map.
     const releaseDraftPoint = () => {
       if (!draftDraggingRef.current) {
-        onDraftPointChangeRef.current?.(null);
+        changeDraftPoint?.(null);
       }
     };
 
@@ -1360,7 +1331,7 @@ export function RescueMapCanvas({
 
     try {
       map.setView([nextLat, nextLng], nextZoom, { animate: false });
-      syncViewportStateToController(map, controllerRef.current);
+      syncViewportStateToController(map, getController());
     } catch {
       // Ignore map view races during rapid controlled updates.
     }
@@ -1476,7 +1447,7 @@ export function RescueMapCanvas({
         items: getBuildingMarkers(controller.markers),
         handles: buildingHandlesRef.current,
         leaflet: L,
-        onMarkerClickRef,
+        clickMarker,
       });
     }
 
@@ -1491,7 +1462,7 @@ export function RescueMapCanvas({
       items: getPinnedMarkers(controller.markers),
       handles: markerHandlesRef.current,
       leaflet: L,
-      onMarkerClickRef,
+      clickMarker,
     });
     queueAreaLabelsRef.current?.();
   }, [controller.markers]);
@@ -1519,7 +1490,7 @@ export function RescueMapCanvas({
       cellLayer,
       cells: locationCells,
       selectedId: controller.selectedMarkerId,
-      onCellClickRef: onLocationCellClickRef,
+      clickCell: clickCell,
     });
     queueAreaLabelsRef.current?.();
   }, [locationCells, controller.selectedMarkerId]);
@@ -1743,7 +1714,6 @@ export function RescueMapCanvas({
       draftBubbleRef.current?.remove();
       draftMarkerRef.current = null;
       draftBubbleRef.current = null;
-      setDraftBubbleHost(null);
       return;
     }
 
@@ -1787,24 +1757,26 @@ export function RescueMapCanvas({
       draftDraggingRef.current = false;
 
       const { lat, lng } = crosshair.getLatLng();
-      onDraftPointChangeRef.current?.({ lat, lng });
+      changeDraftPoint?.({ lat, lng });
     });
 
+    bubble.on('add', () => {
+      const bubbleHost = bubble.getElement() ?? null;
+
+      // A tap on the bubble is never the map's, or it picks a new point under the button. Stopped here
+      // rather than left to Leaflet: a button that lets the point go takes the bubble off the map, and
+      // Leaflet, walking up from the button to see whose tap it was, no longer finds the bubble.
+      if (bubbleHost) {
+        L.DomEvent.on(bubbleHost, 'click', L.DomEvent.stopPropagation);
+      }
+
+      setDraftBubbleHost(bubbleHost);
+    });
+    bubble.on('remove', () => setDraftBubbleHost(null));
     crosshair.addTo(map);
     bubble.addTo(map);
     draftMarkerRef.current = crosshair;
     draftBubbleRef.current = bubble;
-
-    const bubbleHost = bubble.getElement() ?? null;
-
-    // A tap on the bubble is never the map's, or it picks a new point under the button. Stopped here
-    // rather than left to Leaflet: a button that lets the point go takes the bubble off the map, and
-    // Leaflet, walking up from the button to see whose tap it was, no longer finds the bubble.
-    if (bubbleHost) {
-      L.DomEvent.on(bubbleHost, 'click', L.DomEvent.stopPropagation);
-    }
-
-    setDraftBubbleHost(bubbleHost);
   }, [draftLat, draftLng]);
 
   return (

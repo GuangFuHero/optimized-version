@@ -1,10 +1,11 @@
 'use client';
 
+import { useMutation } from '@tanstack/react-query';
 import { useCallback, useState } from 'react';
-import { useMutation } from 'urql';
 
 import { WithdrawRoleRequestDocument } from '@rescue-frontend/data-access';
 
+import { siteGraphqlMutation } from '../session/site-clients';
 import { roleRequestErrorMessage } from './error';
 
 /**
@@ -14,8 +15,8 @@ import { roleRequestErrorMessage } from './error';
 export function useWithdrawRoleRequest(onSubmitted: () => void) {
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [{ fetching: submitting }, withdrawRoleRequest] = useMutation(
-    WithdrawRoleRequestDocument,
+  const withdrawal = useMutation(
+    siteGraphqlMutation(WithdrawRoleRequestDocument),
   );
 
   const request = () => {
@@ -23,20 +24,20 @@ export function useWithdrawRoleRequest(onSubmitted: () => void) {
     setConfirming(true);
   };
 
-  const confirm = async (uuid: string) => {
+  const confirm = (uuid: string) => {
     setError(null);
-    const result = await withdrawRoleRequest({ uuid });
-
-    if (result.error) {
-      setError(
-        roleRequestErrorMessage(result.error, '撤回失敗，請稍後再試一次。'),
-      );
-    } else {
-      setConfirming(false);
-    }
-
-    // Either way: the drawer goes back to the form, or shows what the application became instead.
-    onSubmitted();
+    withdrawal.mutate(
+      { uuid },
+      {
+        onSuccess: () => setConfirming(false),
+        onError: (failure) =>
+          setError(
+            roleRequestErrorMessage(failure, '撤回失敗，請稍後再試一次。'),
+          ),
+        // Either way: the drawer goes back to the form, or shows what the application became instead.
+        onSettled: () => onSubmitted(),
+      },
+    );
   };
 
   // Stable, so the drawer's opening effect can call it.
@@ -48,7 +49,7 @@ export function useWithdrawRoleRequest(onSubmitted: () => void) {
   return {
     confirming,
     error,
-    submitting,
+    submitting: withdrawal.isPending,
     request,
     confirm,
     cancel: () => setConfirming(false),

@@ -1,9 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useForm, useStore } from '@tanstack/react-form';
 
 import { Box, ButtonBase, Typography } from '@mui/material';
-import { useUpdateTicketTask } from '@rescue-frontend/data-access/admin';
+import {
+  useUpdateTicketTask,
+  type UpdateTicketTaskInput,
+} from '@rescue-frontend/data-access/admin';
 import { Button, Callout, designTokens, TextInput } from '@rescue-frontend/ui';
 import { PenLine } from 'lucide-react';
 
@@ -11,6 +15,7 @@ import {
   progressNoteErrorMessage,
   type ClaimError,
 } from '../../needs/claim-error';
+import { useReportBusy } from './hooks/use-busy-keys';
 import { progressNoteInput } from './model/task-actions';
 
 const { color, radius, typography } = designTokens;
@@ -35,16 +40,20 @@ export function ProgressNote({
 }) {
   const updateTask = useUpdateTicketTask();
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState('');
+  const form = useForm({
+    defaultValues: { progressNote: '' } satisfies Pick<
+      UpdateTicketTaskInput,
+      'progressNote'
+    >,
+    onSubmit: (): Promise<void> => save(),
+  });
+  const draft = useStore(form.store, (state) => state.values.progressNote);
   const [error, setError] = useState<string | null>(null);
   const saving = updateTask.isPending;
-  useEffect(() => {
-    onBusyChange?.(saving);
-  }, [saving, onBusyChange]);
-  useEffect(() => () => onBusyChange?.(false), [onBusyChange]);
+  useReportBusy(saving, onBusyChange);
 
   const open = () => {
-    setDraft(note ?? '');
+    form.reset({ progressNote: note ?? '' }, { keepDefaultValues: true });
     setError(null);
     setEditing(true);
   };
@@ -73,7 +82,7 @@ export function ProgressNote({
         aria-label="進度備註"
         onSubmit={(event) => {
           event.preventDefault();
-          void save();
+          void form.handleSubmit();
         }}
         sx={{ display: 'flex', flexDirection: 'column', gap: '8px' }}
       >
@@ -85,7 +94,9 @@ export function ProgressNote({
           autoFocus
           value={draft}
           disabled={saving}
-          onChange={(event) => setDraft(event.target.value)}
+          onChange={(event) =>
+            form.setFieldValue('progressNote', event.target.value)
+          }
         />
         {error ? <Callout tone="danger">{error}</Callout> : null}
         <Box sx={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>

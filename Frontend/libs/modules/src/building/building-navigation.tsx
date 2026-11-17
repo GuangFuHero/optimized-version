@@ -1,7 +1,6 @@
 'use client';
 
 import { Button, Stack, Typography } from '@mui/material';
-import { useMemo } from 'react';
 
 import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
 
@@ -42,10 +41,7 @@ export function BuildingTicketNavigation({
   onSelectTicket,
 }: BuildingTicketNavigationProps) {
   const { building, tickets } = useBuilding(buildingUuid);
-  const order = useMemo(
-    () => (building ? buildingTicketOrder(building.floors, tickets) : []),
-    [building, tickets],
-  );
+  const order = building ? buildingTicketOrder(building.floors, tickets) : [];
 
   // A building deleted since: the ticket stays, standing alone.
   if (!building) {

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { spaceErrorMessage } from './space-error';
 
-/** A refused building-map write, as urql hands it over: the backend's message is the contract. */
+/** A refused building-map write, as the GraphQL client hands it over: the backend's message is the contract. */
 function refused(message: string) {
   return { graphQLErrors: [{ message }] };
 }
