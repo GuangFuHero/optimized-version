@@ -5,7 +5,8 @@ reads TTF or OTF but not WOFF2, and has no CJK glyphs of its own. These two file
 from the design system, cut down to the characters the card draws: a few kilobytes instead of 5.9 MB
 each. The full fonts are only on the designer's branch `sucrelindesign`, under
 `Design/前台/_ds/wan-guard-design-system-…/fonts/`. Noto Sans TC is under the SIL Open Font License;
-the subset keeps the font's name table, which carries it.
+the subset keeps the font's name table, which carries it, and `OFL.txt` beside the fonts holds the
+full license text.
 
 Change the card's `TITLE` or `SUBTITLE` and cut them again from the repository root, or the new
 characters are drawn as empty boxes. First copy the full fonts out of the design branch into a
