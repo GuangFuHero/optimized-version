@@ -12,14 +12,26 @@ function isUnder(pathname: string, section: string): boolean {
   return pathname === section || pathname.startsWith(`${section}/`);
 }
 
-/** The line under the card, or null when no page is waiting for the sign-in. */
-export function returnHint(callbackUrl: string | null): string | null {
-  if (!callbackUrl) {
+/** Where `callbackUrl` points, or null when it cannot be read as an address. */
+function callbackPath(callbackUrl: string): string | null {
+  try {
+    // next-auth sometimes hands on a whole address rather than a path.
+    return new URL(callbackUrl, 'http://localhost').pathname;
+  } catch {
     return null;
   }
+}
 
-  // next-auth sometimes hands on a whole address rather than a path.
-  const { pathname } = new URL(callbackUrl, 'http://localhost');
+/**
+ * The line under the card, or null when no page is waiting for the sign-in. A `callbackUrl` that is
+ * not an address (anyone can type one into the bar) gets no line, and the page still signs in.
+ */
+export function returnHint(callbackUrl: string | null): string | null {
+  const pathname = callbackUrl ? callbackPath(callbackUrl) : null;
+
+  if (pathname === null) {
+    return null;
+  }
 
   if (isUnder(pathname, '/map')) {
     return `${HINT_PREFIX}，地圖的位置與篩選都會保留。`;
