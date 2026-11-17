@@ -23,6 +23,7 @@ import {
   type SpaceTicket,
 } from './space-analysis';
 import type { SpaceHouseholdTarget } from './household-input';
+import { readSpaceTickets } from './space-partial';
 
 /**
  * What the signed-in identity may do with spaces, from the backend's capability list — never the
@@ -147,19 +148,31 @@ function combineSpaceTickets<T>(
   };
 }
 
-/** One space with its tickets, for the floor view. `space` is null once it's gone. */
+/**
+ * One space for the floor view. `building` is null while it loads, when it failed, and once it's
+ * gone (`isLoading`, `error` tell which). Its tickets are read apart: `space` waits for them, and
+ * until then `tickets` says whether they are on their way or failed (`readSpaceTickets`).
+ */
 export function useSpace(uuid: string | null) {
   const building = useBuildingMap({ uuid: uuid ?? '' });
-  const tickets = useBuildingMapTickets({ buildingMapUuid: uuid ?? '' });
+  const ticketsQuery = useBuildingMapTickets({ buildingMapUuid: uuid ?? '' });
   const found = building.data?.buildingMap ?? null;
-  const ticketList = tickets.data?.buildingMapTickets;
-
-  const space = found ? loadedSpace(found, ticketList ?? []) : null;
+  const tickets = readSpaceTickets({
+    data: ticketsQuery.data?.buildingMapTickets,
+    error: ticketsQuery.error,
+  });
 
   return {
-    space,
-    isLoading: building.isPending || tickets.isPending,
-    error: building.error ?? tickets.error ?? null,
+    building: found,
+    space:
+      found && tickets.state === 'loaded'
+        ? loadedSpace(found, tickets.tickets)
+        : null,
+    tickets: tickets.state,
+    retryingTickets: ticketsQuery.isFetching,
+    retryTickets: () => void ticketsQuery.refetch(),
+    isLoading: building.isPending,
+    error: building.error ?? null,
   };
 }
 
