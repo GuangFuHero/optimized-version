@@ -1,6 +1,14 @@
 name: Pull Request Notifications
-permissions:
-  contents: read
+
+# PR titles and branch names are written by whoever opened the PR, including
+# people outside the team who open one from a fork. They reach the shell only
+# through `env:` and are read as "$VAR". Do not put `${{ ... }}` inside a
+# `run:` block in this file: GitHub pastes the value into the script before
+# bash reads it, so the text would run as commands.
+# https://docs.github.com/en/actions/security-for-github-actions/security-guides/security-hardening-for-github-actions#understanding-the-risk-of-script-injections
+
+# Neither job reads the repository or calls the GitHub API.
+permissions: {}
 
 on:
   pull_request:
@@ -22,37 +30,55 @@ jobs:
       action: ${{ steps.set_pr_info.outputs.action }}
       should_notify: ${{ steps.set_pr_info.outputs.should_notify }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: Determine PR information
         id: set_pr_info
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_ACTION: ${{ github.event.action }}
+          REVIEW_STATE: ${{ github.event.review.state }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_STATE: ${{ github.event.pull_request.state }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+          BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
         run: |
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            echo "pr_number=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
-            echo "pr_title=${{ github.event.pull_request.title }}" >> $GITHUB_OUTPUT
-            echo "pr_author=${{ github.event.pull_request.user.login }}" >> $GITHUB_OUTPUT
-            echo "pr_state=${{ github.event.pull_request.state }}" >> $GITHUB_OUTPUT
-            echo "pr_url=${{ github.event.pull_request.html_url }}" >> $GITHUB_OUTPUT
-            echo "pr_branch=${{ github.event.pull_request.head.ref }}" >> $GITHUB_OUTPUT
-            echo "base_branch=${{ github.event.pull_request.base.ref }}" >> $GITHUB_OUTPUT
-            echo "action=${{ github.event.action }}" >> $GITHUB_OUTPUT
-            echo "should_notify=true" >> $GITHUB_OUTPUT
-            echo "PR event detected: ${{ github.event.action }}"
-          elif [[ "${{ github.event_name }}" == "pull_request_review" ]]; then
-            echo "pr_number=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
-            echo "pr_title=${{ github.event.pull_request.title }}" >> $GITHUB_OUTPUT
-            echo "pr_author=${{ github.event.pull_request.user.login }}" >> $GITHUB_OUTPUT
-            echo "pr_state=${{ github.event.pull_request.state }}" >> $GITHUB_OUTPUT
-            echo "pr_url=${{ github.event.pull_request.html_url }}" >> $GITHUB_OUTPUT
-            echo "pr_branch=${{ github.event.pull_request.head.ref }}" >> $GITHUB_OUTPUT
-            echo "base_branch=${{ github.event.pull_request.base.ref }}" >> $GITHUB_OUTPUT
-            echo "action=review_${{ github.event.review.state }}" >> $GITHUB_OUTPUT
-            echo "should_notify=true" >> $GITHUB_OUTPUT
-            echo "PR review event detected: ${{ github.event.review.state }}"
+          # Every output uses a random delimiter, so a value that contains a
+          # line such as "EOF" cannot end early and set the other outputs.
+          set_output() {
+            local delimiter
+            delimiter="EOF_$(openssl rand -hex 16)"
+            {
+              printf '%s<<%s\n' "$1" "$delimiter"
+              printf '%s\n' "$2"
+              printf '%s\n' "$delimiter"
+            } >> "$GITHUB_OUTPUT"
+          }
+
+          case "$EVENT_NAME" in
+            pull_request) action="$EVENT_ACTION" ;;
+            pull_request_review) action="review_$REVIEW_STATE" ;;
+            *)
+              set_output should_notify "false"
+              echo "No notification needed for this event"
+              exit 0
+              ;;
+          esac
+
+          set_output pr_number "$PR_NUMBER"
+          set_output pr_title "$PR_TITLE"
+          set_output pr_author "$PR_AUTHOR"
+          set_output pr_state "$PR_STATE"
+          set_output pr_url "$PR_URL"
+          set_output pr_branch "$PR_BRANCH"
+          set_output base_branch "$BASE_BRANCH"
+          set_output action "$action"
+          set_output should_notify "true"
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            printf 'PR event detected: %s\n' "$EVENT_ACTION"
           else
-            echo "should_notify=false" >> $GITHUB_OUTPUT
-            echo "No notification needed for this event"
+            printf 'PR review event detected: %s\n' "$REVIEW_STATE"
           fi
 
   notify:
@@ -60,26 +86,32 @@ jobs:
     if: needs.init.outputs.should_notify == 'true'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: Display PR Notification
+        env:
+          PR_NUMBER: ${{ needs.init.outputs.pr_number }}
+          PR_TITLE: ${{ needs.init.outputs.pr_title }}
+          PR_AUTHOR: ${{ needs.init.outputs.pr_author }}
+          ACTION: ${{ needs.init.outputs.action }}
+          PR_STATE: ${{ needs.init.outputs.pr_state }}
+          PR_BRANCH: ${{ needs.init.outputs.pr_branch }}
+          BASE_BRANCH: ${{ needs.init.outputs.base_branch }}
+          PR_URL: ${{ needs.init.outputs.pr_url }}
         run: |
           echo "🚀 Pull Request Notification"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "PR #${{ needs.init.outputs.pr_number }}: ${{ needs.init.outputs.pr_title }}"
-          echo "Author: ${{ needs.init.outputs.pr_author }}"
-          echo "Action: ${{ needs.init.outputs.action }}"
-          echo "State: ${{ needs.init.outputs.pr_state }}"
-          echo "Branch: ${{ needs.init.outputs.pr_branch }} → ${{ needs.init.outputs.base_branch }}"
-          echo "URL: ${{ needs.init.outputs.pr_url }}"
+          printf 'PR #%s: %s\n' "$PR_NUMBER" "$PR_TITLE"
+          printf 'Author: %s\n' "$PR_AUTHOR"
+          printf 'Action: %s\n' "$ACTION"
+          printf 'State: %s\n' "$PR_STATE"
+          printf 'Branch: %s → %s\n' "$PR_BRANCH" "$BASE_BRANCH"
+          printf 'URL: %s\n' "$PR_URL"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
+      # Values in `with:` are handed to the action as plain strings and are not
+      # run by a shell, so the outputs can go here directly.
       - name: Notify Discord
         if: always()
         uses: sarisia/actions-status-discord@v1
-        env:
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         with:
           webhook: ${{ secrets.DISCORD_WEBHOOK_URL }}
           title: "Pull Request: ${{ needs.init.outputs.pr_title }}"
