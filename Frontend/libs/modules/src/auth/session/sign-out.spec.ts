@@ -2,7 +2,7 @@ import { ApiError } from '@rescue-frontend/data-access';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { endExpiredSession } from '../../session/end-expired-session';
-import { signOutHereAsync } from './sign-out';
+import { signOutEverywhereAsync, signOutHereAsync } from './sign-out';
 
 /** The tab's own page: what it would reload or leave for. */
 function fakeBrowserTab() {
@@ -67,5 +67,40 @@ describe('signOutHereAsync', () => {
     endExpiredSession();
 
     expect(location.reload).toHaveBeenCalledOnce();
+  });
+});
+
+// The backend's `POST /auth/logout-all` is the one thing faked.
+describe('signOutEverywhereAsync', () => {
+  it('leaves for the sign-in page once every session has ended', async () => {
+    const location = fakeBrowserTab();
+
+    const outcome = await signOutEverywhereAsync(async () => undefined);
+
+    expect(outcome).toBe('signed-out');
+    expect(location.assign).toHaveBeenCalledWith('/login');
+  });
+
+  it('stays on the page, still signed in, when the backend refuses', async () => {
+    const location = fakeBrowserTab();
+
+    const outcome = await signOutEverywhereAsync(async () => {
+      throw new ApiError(500, 'Internal Server Error', 'internal_error');
+    });
+
+    expect(outcome).toBe('still-signed-in');
+    expect(location.assign).not.toHaveBeenCalled();
+    expect(location.reload).not.toHaveBeenCalled();
+  });
+
+  it('stays on the page when the backend never answers', async () => {
+    const location = fakeBrowserTab();
+
+    const outcome = await signOutEverywhereAsync(async () => {
+      throw new TypeError('Failed to fetch');
+    });
+
+    expect(outcome).toBe('still-signed-in');
+    expect(location.assign).not.toHaveBeenCalled();
   });
 });
