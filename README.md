@@ -4,7 +4,9 @@
 
 **目前狀態**：Phase 1 開發中（目標 115/06/15）｜**授權**：GPL-3.0
 
-> **要部署到伺服器？** 請看 [`DEPLOY.md`](DEPLOY.md)。最上面的表會告訴你從哪一節開始：部署更新到現有的 Staging、在 GCP 從零架設一套，或在自己的電腦架設（僅供測試使用）。
+> **要部署到伺服器？** 請看 [`DEPLOY.md`](DEPLOY.md)。最上面的表會告訴你從哪一節開始：部署更新到現有的 Staging、在 GCP 從零架設一套，或在自己的電腦架設、讓別人用網址連進來（僅供測試使用）。
+>
+> **只想在自己的電腦上跑起來試用？** 照本頁的「[5 分鐘跑起完整系統](#5-分鐘跑起完整系統onboarding-guide)」做就好，不用看 `DEPLOY.md`，也不用申請任何外部服務。
 
 ---
 
@@ -80,10 +82,10 @@
 
 | 工具 | 版本需求 | 用途 |
 | :--- | :--- | :--- |
-| **Docker Desktop** | 最新穩定版 | 執行 PostgreSQL（PostGIS + H3）、Redis 與 FastAPI 後端開發容器 |
+| **Docker Desktop**（Linux 裝 Docker Engine 與 Compose 外掛即可） | 最新穩定版 | 執行 PostgreSQL（PostGIS + H3）、Redis 與 FastAPI 後端開發容器 |
 | **Node.js** | `>= 22` | 執行前端 Next.js 與 Nx 工具鏈 |
 | **pnpm** | `corepack enable` 自動啟用 | 管理前端 monorepo 與根目錄啟動指令 |
-| **Python + `uv`** | Python `3.13` | 在本機跑後端 `pytest`、或執行 `pnpm schemas:generate` 匯出型別時需要 |
+| **Python + `uv`** | Python `3.13` | `pnpm setup` 會用它建立後端虛擬環境，所以第一次就要裝；在本機跑後端 `pytest`、或執行 `pnpm schemas:generate` 匯出型別時也會用到 |
 
 ### 2. 一鍵初始化與日常啟動
 
