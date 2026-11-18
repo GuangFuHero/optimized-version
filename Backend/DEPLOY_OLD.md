@@ -156,32 +156,7 @@ plan.
 | `OAUTH_REDIRECT_BASE_URL` | `https://wan-guard.com` | `https://staging.wan-guard.com` | `http://localhost:3000` (default) |
 | `GOOGLE_CLIENT_SECRET`, `LINE_CHANNEL_SECRET` | Secret Manager | `staging-backend-google-client-secret`, `staging-backend-line-channel-secret`, written by `gen_env` | `Backend/.env` |
 | `REFRESH_REUSE_GRACE_SECONDS` | `30` (default) | `30` (default) | `30` (default) |
-| `TRUSTED_PROXIES` | the default, while every proxy reaches the backend over the docker network | `127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7`, the default | the default |
-| `MCP_BASE_URL` | the site's URL, once its tunnel has the MCP route (not set up yet) | `https://staging.wan-guard.com` (see [MCP clients](#mcp-clients)) | `http://localhost:8000` (default) |
-| MCP limits, `MCP_EXECUTE_SECONDS` … `MCP_TOOL_CALLS_PER_MINUTE` | the defaults | the defaults | the defaults (see **MCP limits** below) |
 
-- **MCP limits**: optional; each is set only to change its default, and must be above zero, or the backend
-  stops at startup. The backend reads them when it starts, so a change takes a restart.
-  - `MCP_EXECUTE_SECONDS` = `15`: sandbox execution time per `execute`, not counting time waiting for a
-    worker or on backend calls.
-  - `MCP_EXECUTE_MEMORY_BYTES` = `100000000`: sandbox memory per `execute`.
-  - `MCP_SANDBOX_WORKERS` = `2`: sandbox worker processes; each user holds at most one at a time.
-  - `MCP_SANDBOX_WAIT_SECONDS` = `10`: how long an `execute` waits for a free worker before it is refused.
-  - `MCP_EXECUTES_PER_USER` = `10` per `MCP_EXECUTE_WINDOW_SECONDS` = `60`.
-  - `MCP_REGISTERS_PER_IP` = `10` per `MCP_REGISTER_WINDOW_SECONDS` = `3600` (`/mcp/register`).
-  - `MCP_AUTHORIZES_PER_IP` = `30` per `MCP_AUTHORIZE_WINDOW_SECONDS` = `600` (`/mcp/authorize`).
-  - `MCP_MAX_WAITING_CLIENTS` = `1000`: registered clients kept while waiting for their first sign-in; past
-    it the oldest are forgotten.
-  - `MCP_MAX_TOOL_CALLS` = `50`: tool calls one `execute` may make.
-  - `MCP_CALL_TIMEOUT_SECONDS` = `30`: how long one backend call from a tool may take.
-  - `MCP_QUERY_MAX_CHARS` = `20000`: length of a GraphQL document a tool accepts.
-  - `MCP_CLIENT_NAME_MAX_CHARS` = `100`, `MCP_MAX_REDIRECT_URIS` = `5`, `MCP_REGISTRATION_MAX_BYTES` = `8192`:
-    what one client registration may carry.
-  - `MCP_UNUSED_CLIENT_SECONDS` = `3600`: how long a registered client is kept before its first sign-in.
-  - `MCP_AUTHORIZE_REQUEST_SECONDS` = `600`: how long a started sign-in waits on the consent page.
-  - `MCP_CODE_SECONDS` = `300`: how long an authorization code stays valid.
-  - `MCP_TOOL_CALLS_PER_MINUTE` = `10`: backend calls an account's MCP tools may make a minute, unless the
-    account holds `mcp.unlimited_use` (which roles hold it is set in the RBAC settings).
 - **Why `admin-staging` and not `admin.staging`**: Cloudflare's free certificate covers `wan-guard.com` and
   one level of subdomain below it. `admin.staging.wan-guard.com` is two levels deep and would get no
   certificate.
@@ -205,37 +180,6 @@ plan.
 Both are public hostnames of the staging tunnel, set in the Cloudflare Zero Trust dashboard.
 
 `APP_BASE_URL`, the base of the links in emails and SMS, moved to `https://staging.wan-guard.com` too.
-
-### MCP clients
-
-The backend serves a read-only MCP server (`mcp_server/README.md`). MCP clients use the site's hostname,
-`https://staging.wan-guard.com/mcp`; the backend has no public hostname of its own. Everything the MCP serves
-is under `/mcp`, plus its two discovery documents:
-
-```
-staging.wan-guard.com
-  /mcp, /mcp/register, /mcp/authorize, /mcp/token, /mcp/revoke     ─┐
-  /.well-known/oauth-protected-resource/mcp                          ├─▶ http://backend:8000
-  /.well-known/oauth-authorization-server/mcp                       ─┘
-  everything else (/register is the site's sign-up page)              ─▶ http://frontend:3000
-```
-
-The tunnel sends those paths to the backend, so they never pass through the site. To open it:
-
-1. In the Cloudflare Zero Trust dashboard, add a public hostname to the staging tunnel: hostname
-   `staging.wan-guard.com`, path `^/(mcp(/.*)?|\.well-known/oauth-(protected-resource|authorization-server)/mcp)$`,
-   service `http://backend:8000`. Put it above the `staging.wan-guard.com` → `http://frontend:3000` entry: the
-   tunnel uses the first entry that matches.
-2. `MCP_BASE_URL=https://staging.wan-guard.com` is already in `scripts/deploy-config.staging.env`. Without it,
-   the OAuth metadata points clients at `http://localhost:8000` and every sign-in fails.
-3. Leave `TRUSTED_PROXIES` at the default: cloudflared reaches the backend from the docker network and puts
-   the caller's IP last in `X-Forwarded-For`.
-4. Check: `curl https://staging.wan-guard.com/.well-known/oauth-authorization-server/mcp` answers JSON whose
-   `issuer` is `https://staging.wan-guard.com/mcp`, and `https://staging.wan-guard.com/register` is still the
-   site's sign-up page.
-
-Until step 1 is done, `/mcp` on the site answers the site's 404 and nothing else changes. Signing in goes
-through the site's own `/api/v1/mcp/consent` page, so the site needs nothing new.
 
 ### Redirect URIs to register
 

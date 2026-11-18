@@ -1658,7 +1658,7 @@ ADR-048 當初拒絕資源上的 team 歸屬，理由是「gov 把東西交給 N
 3. 檢查的位置，讓 RBAC 設定一改就生效：
    - `mcp.use`：同意頁發授權碼前檢查，沒有就不發碼，頁面直接說這個帳號不能使用 MCP。用授權碼換 token、每個 MCP 請求與每次換發 token 也檢查：拿掉後，已連上的 session 下一個請求或換發就被拒，訊息說明原因，同時結束這個帳號所有的 MCP session。MCP 的 token 也能直接讀其他 API，只拒絕 MCP 請求的話，token 在其他地方還能用到過期、也還能換發。
    - `mcp.unlimited_use`：每一次工具呼叫後端、計數之前檢查，改了下一次呼叫就照新設定算。
-4. 沒有 `mcp.unlimited_use` 的帳號，MCP 工具每分鐘最多呼叫後端 `MCP_TOOL_CALLS_PER_MINUTE` 次（伺服器設定，預設 10）：
+4. 沒有 `mcp.unlimited_use` 的帳號，MCP 工具每分鐘最多呼叫後端 `MCP_TOOL_CALLS_PER_MINUTE` 次（伺服器設定，預設 10，列在 repo 根目錄的 `DEPLOY.md`）：
    - 一次 `graphql_query`、`rest_get` 或 `switch_identity` 算一次；`graphql_schema`、`rest_routes` 不呼叫後端，不算。
    - 按帳號計數，不分身分與 session，用既有的 Redis 限流：從第一次計數起算 60 秒。
    - 超過時這一次呼叫在送到後端之前就被拒，訊息寫幾秒後可以再試。沒有每日上限。
