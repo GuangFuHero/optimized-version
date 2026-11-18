@@ -32,9 +32,9 @@
 
 | 類別 | 使用技術 |
 | :--- | :--- |
-| **Monorepo**：Nx 22 + pnpm workspaces，各 app 與 library 使用自己的 `package.json` |
-| **App framework**：Next.js 16（App Router）、React 19 |
-| **UI與地圖** | MUI 9 + Emotion、Leaflet + leaflet.markercluster（地圖） |
+| **Monorepo** | Nx 22 + pnpm workspaces，各 app 與 library 使用自己的 `package.json` |
+| **App framework** | Next.js 16（App Router）、React 19 |
+| **UI 與地圖** | MUI 9 + Emotion、Leaflet + leaflet.markercluster（地圖） |
 | **資料存取** | GraphQL Code Generator、openapi-fetch、TanStack Query |
 | **Client state / 表單 / 資料表** | Zustand、nuqs、TanStack Form / Table；兩個 app 啟用 React Compiler |
 | **驗證** | 後端的 `HttpOnly` session cookie + 共用 REST / GraphQL proxy（`/api/v1/*`、`/api/graphql`） |
@@ -142,7 +142,7 @@ Frontend/
       src/station/             #   站點領域邏輯
       src/role-request/        #   申請成為後台人員與入隊審核
       src/session/             #   前端登入階段與 token refresh 協調
-    data-access/               # @rescue-frontend/data-access：GraphQL documents、codegen 產物、REST client、urql 與 TanStack Query hooks
+    data-access/               # @rescue-frontend/data-access：GraphQL documents、codegen 產物、GraphQL / REST client、TanStack Query hooks
   docs/                        # 詳細開發文件，入口是 docs/README.md
 ```
 
