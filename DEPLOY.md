@@ -197,7 +197,7 @@ gcloud secrets versions access latest --project=wanguard-250923 --secret=staging
 > 💡 **為什麼後台網址叫 `admin-staging.wan-guard.com` 而不是 `admin.staging.wan-guard.com`？**
 > 因為 Cloudflare 免費通用 SSL 憑證僅涵蓋 `*.wan-guard.com`（一層子網域），若用兩層子網域（`admin.staging.*`）會無法通過憑證驗證。也因為 Staging 與 Production 共用上層網域 `.wan-guard.com`，系統透過不同的 `AUTH_COOKIE_PREFIX`（`wgstg` vs `wg`）確保兩邊的 Cookie 不會互相干擾。
 
-**MCP 上限**：都是選填，只有要改預設值時才設。每個值都必須大於 0，設錯時後端啟動就會停下。後端只在啟動時讀取，改了要重啟後端。
+**MCP 上限**：都是選填，只有要改預設值時才設，和其他非機密設定一樣寫在 `Backend/scripts/deploy-config.staging.env`。每個值都必須大於 0，設錯時後端啟動就會停下。後端只在啟動時讀取，改了要重啟後端。
 
 | 設定變數 | 預設值 | 限制的內容 |
 | :--- | :--- | :--- |
@@ -281,7 +281,7 @@ staging.wan-guard.com
 
 - **規則順序**：Tunnel 使用第一條符合的規則，所以 MCP 那條要排在 `staging.wan-guard.com` → `http://frontend:3000` 之前。
 - **`MCP_BASE_URL`**：已寫在 `Backend/scripts/deploy-config.staging.env`。沒有設定時，OAuth metadata 會叫用戶端去 `http://localhost:8000`，每次登入都會失敗。
-- **`TRUSTED_PROXIES`**：維持預設值。cloudflared 從 Docker 內網連到後端，並把呼叫者的 IP 放在 `X-Forwarded-For` 的最後一個。
+- **`TRUSTED_PROXIES`**：維持預設值。Cloudflare 會把呼叫者的 IP 附加在 `X-Forwarded-For` 的最後一個，cloudflared 再從 Docker 內網把請求交給後端。
 - **檢查**：`curl https://staging.wan-guard.com/.well-known/oauth-authorization-server/mcp` 回傳 JSON，其中 `issuer` 是 `https://staging.wan-guard.com/mcp`；`https://staging.wan-guard.com/register` 仍然是前台的註冊頁。
 - 規則加上之前，前台的 `/mcp` 只會回前台的 404，其他功能不受影響。登入走前台自己的 `/api/v1/mcp/consent` 頁面，前台不需要新增任何東西。
 
@@ -565,7 +565,7 @@ git clone https://github.com/<你的帳號或組織>/optimized-version.git /opt/
 1. **[`Backend/scripts/deploy.sh`](Backend/scripts/deploy.sh)**
    - 第 22 行：`GCS_BUCKET="gs://<你的備份-bucket-名稱>"`
    - 第 273 行：部署完成後檢查的兩個網址，改成你的前台與後台網址（不改的話，第 2 節驗收清單（2-C）檢查到的會是團隊 Staging 的網址）
-2. **[`Backend/scripts/deploy-config.staging.env`](Backend/scripts/deploy-config.staging.env)**：將 `SITE_APP_URL`、`ADMIN_APP_URL`、`APP_BASE_URL`、`OAUTH_REDIRECT_BASE_URL`、`AUTH_ALLOWED_ORIGINS`、`AUTH_COOKIE_DOMAIN`、`GOOGLE_CLIENT_ID`、`LINE_CHANNEL_ID` 改為你自己的網域與 Client ID，`EMAIL_FROM` 改成你在 SMTP2GO 驗證過的寄件信箱
+2. **[`Backend/scripts/deploy-config.staging.env`](Backend/scripts/deploy-config.staging.env)**：將 `SITE_APP_URL`、`ADMIN_APP_URL`、`APP_BASE_URL`、`OAUTH_REDIRECT_BASE_URL`、`MCP_BASE_URL`、`AUTH_ALLOWED_ORIGINS`、`AUTH_COOKIE_DOMAIN`、`GOOGLE_CLIENT_ID`、`LINE_CHANNEL_ID` 改為你自己的網域與 Client ID，`EMAIL_FROM` 改成你在 SMTP2GO 驗證過的寄件信箱
 
 最簡單的改法是直接在 GitHub 網頁上編輯你 fork 裡的這兩個檔案並 commit 到 `main`。主機不用另外設定 GitHub 帳號，`deploy.sh` 部署時會自己抓到最新版。**不要在主機上直接改檔案**：`deploy.sh` 會檢查 Git 工作目錄是否乾淨，有未 commit 的修改就會停止。
 
