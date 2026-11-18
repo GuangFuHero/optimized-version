@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { Box } from '@mui/material';
 
@@ -18,17 +18,16 @@ import {
   pinnedBesideBuildings,
   PlaceHereAction,
   PointShareDrawer,
-  readLinkedSelection,
   SITE_FALLBACK_DATA_TYPE,
   SiteMapControls,
   syncDocumentMetadata,
   useAuthSession,
   useCellMembersLoader,
   useCreatedTicketMarker,
-  useLinkedTicketLookup,
+  useLinkedSelection,
+  type LinkedSelectionOptions,
   useSiteMapBuildings,
   useSiteMapLiveData,
-  useSiteMapLiveDataSnapshot,
   useSiteMapRouteState,
   useSiteMapViewportState,
   useSiteMapViewportStore,
@@ -95,13 +94,12 @@ function SiteMapViewportDataLayer({
   const { status: authStatus } = useAuthSession();
   const viewportState = useSiteMapViewportState();
   const viewportStore = useSiteMapViewportStore();
-  const liveDataStore = useSiteMapLiveData(baseRouteState);
-  const liveDataSnapshot = useSiteMapLiveDataSnapshot(liveDataStore);
+  const liveData = useSiteMapLiveData(baseRouteState);
   const isAuthenticated = authStatus === 'authenticated';
-  const mergedRouteState = useMemo<SiteRouteState>(
-    () => mergeRouteStateWithViewport(baseRouteState, viewportState),
-    [baseRouteState, viewportState],
-  );
+  const mergedRouteState = mergeRouteStateWithViewport(
+    baseRouteState,
+    viewportState,
+  ) satisfies SiteRouteState;
   // A blank spot tapped on the map, for 請求協助 there.
   const [draftPoint, setDraftPoint] = useState<RescueMapDraftPoint | null>(
     null,
@@ -111,13 +109,6 @@ function SiteMapViewportDataLayer({
   const handleMapClick = useCallback(([lat, lng]: [number, number]) => {
     setDraftPoint({ lat, lng });
   }, []);
-
-  // Let go once a pin or cell is opened: left standing, it would read as belonging to it.
-  useEffect(() => {
-    if (selectedMarkerId) {
-      setDraftPoint(null);
-    }
-  }, [selectedMarkerId]);
 
   useEffect(() => {
     if (!draftPoint) {
@@ -134,16 +125,9 @@ function SiteMapViewportDataLayer({
     return () => window.removeEventListener('keydown', letGoOnEscape);
   }, [draftPoint]);
 
-  const draftPointAction = useMemo(
-    () =>
-      draftPoint ? (
-        <PlaceHereAction
-          point={draftPoint}
-          onPlaced={() => setDraftPoint(null)}
-        />
-      ) : null,
-    [draftPoint],
-  );
+  const draftPointAction = draftPoint ? (
+    <PlaceHereAction point={draftPoint} onPlaced={() => setDraftPoint(null)} />
+  ) : null;
 
   // Tickets found gone since — deleted. The live data drops them itself; one made here is
   // dropped here, or it would stand in for the fetched one it was waiting for.
@@ -173,26 +157,24 @@ function SiteMapViewportDataLayer({
 
   // A link to a ticket the view never fetched — past its 200, outside it, left out by a filter, or
   // not there at all — asks the backend (ADR-444): the ticket, or why there is none.
-  const lookUpLinkedTicket = useLinkedTicketLookup();
   const [linkedTicketMarker, setLinkedTicketMarker] =
     useState<RescueMapMarkerItem | null>(null);
   const [goneTicket, setGoneTicket] = useState<RescueMapGoneTicket | null>(
     null,
   );
-  // The last selection seen in the view. One that drops out of it afterwards was panned or filtered
-  // away, not deleted, and is let go without asking.
-  const seenSelectionRef = useRef<string | undefined>(undefined);
 
   // Let go once another ticket is opened, or none — judged when the selection moves, not when the
   // ticket is set: the selection follows it a render later.
-  useEffect(() => {
-    const letGo = <T extends { id: string }>(current: T | null) =>
-      current && current.id !== selectedMarkerId ? null : current;
-
-    setBuildingTicketMarker(letGo);
-    setLinkedTicketMarker(letGo);
-    setGoneTicket(letGo);
-  }, [selectedMarkerId]);
+  const [previousSelection, setPreviousSelection] = useState(selectedMarkerId);
+  if (previousSelection !== selectedMarkerId) {
+    setPreviousSelection(selectedMarkerId);
+    if (selectedMarkerId && draftPoint) setDraftPoint(null);
+    if (buildingTicketMarker && buildingTicketMarker.id !== selectedMarkerId)
+      setBuildingTicketMarker(null);
+    if (linkedTicketMarker && linkedTicketMarker.id !== selectedMarkerId)
+      setLinkedTicketMarker(null);
+    if (goneTicket && goneTicket.id !== selectedMarkerId) setGoneTicket(null);
+  }
 
   // The open buildings, on the map of tickets only.
   const buildings = useSiteMapBuildings(
@@ -202,34 +184,22 @@ function SiteMapViewportDataLayer({
   // A ticket made here stays on the map until the view fetches it too; from then on the fetched
   // one, being fresher, is the one shown. So does one opened from a building or a link, while open,
   // and one read with its cell. A building's tickets are its entry's to show, but for the one open.
-  const visibleMarkers = useMemo(
-    () => [
-      ...pinnedBesideBuildings(
-        dedupeMarkersById([
-          ...liveDataSnapshot.markers,
-          ...[
-            ...createdMarkers,
-            ...(buildingTicketMarker ? [buildingTicketMarker] : []),
-            ...(linkedTicketMarker ? [linkedTicketMarker] : []),
-            ...cellMembers,
-          ].filter((marker) => !goneTicketIds.includes(marker.id)),
-        ]),
-        buildings.drawn,
-        selectedMarkerId,
-      ),
-      ...buildings.markers,
-    ],
-    [
-      buildingTicketMarker,
-      buildings,
-      cellMembers,
-      createdMarkers,
-      goneTicketIds,
-      linkedTicketMarker,
-      liveDataSnapshot.markers,
+  const visibleMarkers = [
+    ...pinnedBesideBuildings(
+      dedupeMarkersById([
+        ...liveData.markers,
+        ...[
+          ...createdMarkers,
+          ...(buildingTicketMarker ? [buildingTicketMarker] : []),
+          ...(linkedTicketMarker ? [linkedTicketMarker] : []),
+          ...cellMembers,
+        ].filter((marker) => !goneTicketIds.includes(marker.id)),
+      ]),
+      buildings.drawn,
       selectedMarkerId,
-    ],
-  );
+    ),
+    ...buildings.markers,
+  ];
 
   // 在這一層請求協助 in the drawer of a building the map knows the point of.
   const requestHelpOnFloor = floorHelpForOpenBuilding(
@@ -252,7 +222,7 @@ function SiteMapViewportDataLayer({
       onMapRouteStateChange({
         ...mergeRouteStateWithViewport(
           baseRouteState,
-          viewportStore.getSnapshot(),
+          viewportStore.getState(),
         ),
         selectedMarkerId: marker.id,
       });
@@ -266,7 +236,7 @@ function SiteMapViewportDataLayer({
       onMapRouteStateChange({
         ...mergeRouteStateWithViewport(
           baseRouteState,
-          viewportStore.getSnapshot(),
+          viewportStore.getState(),
         ),
         selectedMarkerId: ticketUuid,
       }),
@@ -280,14 +250,14 @@ function SiteMapViewportDataLayer({
         module: 'map',
         state: mergeRouteStateWithViewport(
           baseRouteState,
-          viewportStore.getSnapshot(),
+          viewportStore.getState(),
         ),
         origin: window.location.origin,
       }),
     [baseRouteState, viewportStore],
   );
 
-  const metadataTarget = useMemo(() => {
+  const metadataTarget = (() => {
     const selectedMarker = visibleMarkers.find(
       (marker) => marker.id === baseRouteState.selectedMarkerId,
     );
@@ -297,102 +267,41 @@ function SiteMapViewportDataLayer({
     }
 
     return createCurrentPointShareTarget(selectedMarker);
-  }, [
-    baseRouteState.selectedMarkerId,
-    createCurrentPointShareTarget,
-    visibleMarkers,
-  ]);
+  })();
 
   useEffect(() => {
     syncDocumentMetadata(metadataTarget, DEFAULT_MAP_METADATA);
   }, [metadataTarget]);
 
-  useEffect(() => {
-    const selectedId = baseRouteState.selectedMarkerId;
-
-    if (!selectedId) {
-      return;
-    }
-
-    if (!liveDataSnapshot.hasFetchedOnce || liveDataSnapshot.isFetching) {
-      return;
-    }
-
-    // A guest's location cell is selectable too, and is not a marker of its own; one the backend
-    // counted may have none of its tickets in the page.
-    if (
-      hasRescueMapDetailItem(visibleMarkers, selectedId, liveDataSnapshot.cells)
-    ) {
-      seenSelectionRef.current = selectedId;
-      return;
-    }
-
-    if (goneTicket?.id === selectedId) {
-      return;
-    }
-
-    // `?id=` replaced, not pushed: going back skips the link as it was.
-    const select = (uuid: string | undefined) =>
-      onReplaceRouteState({
-        ...mergedRouteState,
-        selectedMarkerId: uuid,
-      });
-    const letGo = () => select(undefined);
-
-    const linkedSelection = readLinkedSelection({
-      selectedId,
-      dataType: baseRouteState.dataType ?? SITE_FALLBACK_DATA_TYPE,
-      seenLoaded: seenSelectionRef.current === selectedId,
-    });
-
-    if (linkedSelection.kind === 'let-go') {
-      letGo();
-      return;
-    }
-
-    if (linkedSelection.kind === 'replace') {
-      select(linkedSelection.uuid);
-      return;
-    }
-
-    if (linkedSelection.kind === 'gone') {
-      setGoneTicket(linkedSelection.ticket);
-      return;
-    }
-
-    let cancelled = false;
-
-    void lookUpLinkedTicket(selectedId).then((linked) => {
-      if (cancelled) {
-        return;
-      }
-
-      if (linked.kind === 'ticket') {
-        setLinkedTicketMarker(linked.marker);
-      } else if (linked.kind === 'replace') {
-        select(linked.uuid);
-      } else if (linked.kind === 'gone') {
-        setGoneTicket(linked.ticket);
-      } else {
-        letGo();
-      }
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    baseRouteState.dataType,
-    baseRouteState.selectedMarkerId,
-    goneTicket,
-    liveDataSnapshot.cells,
-    liveDataSnapshot.hasFetchedOnce,
-    liveDataSnapshot.isFetching,
-    lookUpLinkedTicket,
-    mergedRouteState,
-    onReplaceRouteState,
-    visibleMarkers,
-  ]);
+  const selectLinked = useCallback(
+    (id: string | undefined) => {
+      onReplaceRouteState({ ...mergedRouteState, selectedMarkerId: id });
+    },
+    [mergedRouteState, onReplaceRouteState],
+  );
+  const resolveLinked = useCallback<LinkedSelectionOptions['resolve']>(
+    (answer) => {
+      if (answer.kind === 'ticket') setLinkedTicketMarker(answer.marker);
+      else setGoneTicket(answer.ticket);
+    },
+    [],
+  );
+  useLinkedSelection({
+    selectedId: selectedMarkerId,
+    dataType: baseRouteState.dataType ?? SITE_FALLBACK_DATA_TYPE,
+    ready: liveData.hasFetchedOnce && !liveData.isFetching,
+    hasItem: Boolean(
+      selectedMarkerId &&
+        hasRescueMapDetailItem(
+          visibleMarkers,
+          selectedMarkerId,
+          liveData.cells,
+        ),
+    ),
+    resolvedId: goneTicket?.id,
+    select: selectLinked,
+    resolve: resolveLinked,
+  });
 
   const createTicketDetailOverrides = useCallback(
     (marker: RescueMapMarkerItem) =>
@@ -423,7 +332,7 @@ function SiteMapViewportDataLayer({
         const dropGone = (current: RescueMapMarkerItem | null) =>
           current?.id === ticketUuid ? null : current;
 
-        liveDataStore.dismissMarker(ticketUuid);
+        liveData.dismissMarker(ticketUuid);
         setGoneTicketIds((current) =>
           current.includes(ticketUuid) ? current : [...current, ticketUuid],
         );
@@ -433,15 +342,15 @@ function SiteMapViewportDataLayer({
       }
 
       if (reloaded.ticketStatus) {
-        liveDataStore.replaceTicketStatus(ticketUuid, reloaded.ticketStatus);
+        liveData.replaceTicketStatus(ticketUuid, reloaded.ticketStatus);
       }
     },
-    [liveDataStore],
+    [liveData.dismissMarker, liveData.replaceTicketStatus],
   );
 
   // Drawn with the controls, inside the map's own column: centred on the map, and clear of a detail
   // panel open beside it, where the panel's list ends in 再顯示 200 筆 or 再試一次.
-  const cellsNotice = liveDataSnapshot.cellsNotice;
+  const cellsNotice = liveData.cellsNotice;
   const renderControls = useCallback(
     (controller: RescueMapControllerValue) => (
       <>
@@ -476,10 +385,10 @@ function SiteMapViewportDataLayer({
         <Box sx={{ minHeight: 0 }}>
           <Map
             markers={visibleMarkers}
-            locationCells={liveDataSnapshot.cells}
+            locationCells={liveData.cells}
             loadLocationCellMembers={loadCellMembers}
-            closureAreas={liveDataSnapshot.closureAreas}
-            publicZones={liveDataSnapshot.publicZones}
+            closureAreas={liveData.closureAreas}
+            publicZones={liveData.publicZones}
             routeState={baseRouteState}
             onRouteStateChange={onMapRouteStateChange}
             showScale

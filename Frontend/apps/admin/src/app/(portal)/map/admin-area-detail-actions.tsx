@@ -1,5 +1,8 @@
 'use client';
 
+import { useForm, useStore } from '@tanstack/react-form';
+import type { UpdateAreaInput } from '@rescue-frontend/data-access/admin';
+
 import {
   Box,
   Button,
@@ -27,11 +30,10 @@ import { designTokens } from '@rescue-frontend/ui';
 const { color, typography } = designTokens;
 
 /** What an area form changes: only what changed is sent. `informationSource` is a 危險區's alone. */
-export interface AreaChanges {
-  name?: string;
-  note?: string | null;
-  informationSource?: string | null;
-}
+export type AreaChanges = Pick<
+  UpdateAreaInput,
+  'name' | 'note' | 'informationSource'
+>;
 
 /** What an admin may do to an area, and how. Absent for someone who may only look. */
 export interface AreaActions {
@@ -97,7 +99,14 @@ export function AreaTeamsSection({
   item: AdminAreaListItem;
   actions: AreaActions | undefined;
 }) {
-  const [adding, setAdding] = useState('');
+  const form = useForm({
+    defaultValues: { adding: '' },
+    onSubmit: ({ value, formApi }): void => {
+      actions?.onAddTeam(value.adding);
+      formApi.reset();
+    },
+  });
+  const adding = useStore(form.store, (state) => state.values.adding);
   const assigned = item.teams.map((name, index) => ({
     name,
     uuid: item.teamUuids[index],
@@ -154,7 +163,9 @@ export function AreaTeamsSection({
             size="small"
             label="加入團隊"
             value={adding}
-            onChange={(event) => setAdding(event.target.value)}
+            onChange={(event) =>
+              form.setFieldValue('adding', event.target.value)
+            }
             sx={{ flex: 1 }}
           >
             {addable.map((team) => (
@@ -166,10 +177,7 @@ export function AreaTeamsSection({
           <Button
             variant="outlined"
             disabled={adding === ''}
-            onClick={() => {
-              actions?.onAddTeam(adding);
-              setAdding('');
-            }}
+            onClick={() => void form.handleSubmit()}
           >
             加入
           </Button>
@@ -192,13 +200,26 @@ export function AreaEditForm({
   onSave: (changes: AreaChanges) => void;
   onCancel: () => void;
 }) {
-  const [name, setName] = useState(item.name ?? '');
-  const [note, setNote] = useState(item.note ?? '');
+  const [openedValues] = useState(() => ({
+    name: item.name ?? '',
+    note: item.note ?? '',
+    source: informationSource ?? '',
+  }));
+  const form = useForm({
+    defaultValues: openedValues,
+    onSubmit: (): void => {
+      const changes: AreaChanges = {};
+      if (nameChanged) changes.name = name.trim();
+      if (noteChanged) changes.note = note.trim() || null;
+      if (sourceChanged) changes.informationSource = source.trim() || null;
+      onSave(changes);
+    },
+  });
+  const { name, note, source } = useStore(form.store, (state) => state.values);
   const length = countNameCharacters(name);
   const over = length > AREA_LABEL_NAME_MAX;
   const nameChanged = name.trim() !== (item.name ?? '');
   const noteChanged = note.trim() !== (item.note ?? '');
-  const [source, setSource] = useState(informationSource ?? '');
   const hasSource = item.kind === 'hazardous_zone';
   const sourceChanged =
     hasSource && source.trim() !== (informationSource ?? '');
@@ -211,7 +232,7 @@ export function AreaEditForm({
         label="名稱"
         required
         value={name}
-        onChange={(event) => setName(event.target.value)}
+        onChange={(event) => form.setFieldValue('name', event.target.value)}
         error={over}
         helperText={
           over
@@ -222,7 +243,7 @@ export function AreaEditForm({
       <TextField
         label="備註（選填）"
         value={note}
-        onChange={(event) => setNote(event.target.value)}
+        onChange={(event) => form.setFieldValue('note', event.target.value)}
         multiline
         minRows={3}
       />
@@ -230,7 +251,7 @@ export function AreaEditForm({
         <TextField
           label="資料來源（選填）"
           value={source}
-          onChange={(event) => setSource(event.target.value)}
+          onChange={(event) => form.setFieldValue('source', event.target.value)}
           placeholder="例如：機關名稱或網址"
         />
       ) : null}
@@ -241,15 +262,7 @@ export function AreaEditForm({
         <Button
           variant="contained"
           disabled={!canSave}
-          onClick={() =>
-            onSave({
-              ...(nameChanged ? { name: name.trim() } : {}),
-              ...(noteChanged ? { note: note.trim() || null } : {}),
-              ...(sourceChanged
-                ? { informationSource: source.trim() || null }
-                : {}),
-            })
-          }
+          onClick={() => void form.handleSubmit()}
         >
           儲存
         </Button>

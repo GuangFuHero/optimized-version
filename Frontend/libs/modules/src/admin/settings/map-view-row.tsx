@@ -4,6 +4,7 @@ import { MapPin } from 'lucide-react';
 
 import { Stack, Typography } from '@mui/material';
 import { useCallback, useState } from 'react';
+import { useForm, useStore } from '@tanstack/react-form';
 import { toast } from 'sonner';
 
 import { useUpdateProjectSettings } from '@rescue-frontend/data-access/admin';
@@ -24,6 +25,8 @@ import {
 import { NeedsNameHint, SettingsRow } from './settings-layout';
 
 const { color, typography } = designTokens;
+type MapViewDraft = { current: MapView | null };
+const EMPTY_MAP_VIEW: MapViewDraft = { current: null };
 
 /**
  * Where every map opens for this disaster (MAP-VIEW-101 to 103, Carol's option B): the view is set by
@@ -41,14 +44,18 @@ export function MapViewRow({
   needsName: boolean;
 }) {
   const [initial] = useState(() => initialMapView(saved));
-  const [current, setCurrent] = useState<MapView | null>(null);
+  const form = useForm({
+    defaultValues: EMPTY_MAP_VIEW,
+    onSubmit: (): void => save(),
+  });
+  const current = useStore(form.store, (state) => state.values.current);
   const [request, setRequest] = useState<MapViewPickerRequest | null>(null);
   const update = useUpdateProjectSettings();
   const same = sameMapView(saved, current);
 
   const handleMove = useCallback(
-    (view: MapViewValue) => setCurrent(mapViewFromMap(view)),
-    [],
+    (view: MapViewValue) => form.setFieldValue('current', mapViewFromMap(view)),
+    [form],
   );
 
   const save = () => {
@@ -132,7 +139,7 @@ export function MapViewRow({
               size="sm"
               startIcon={<MapPin size={14} />}
               disabled={!current || same || needsName || update.isPending}
-              onClick={save}
+              onClick={() => void form.handleSubmit()}
             >
               設成預設位置
             </Button>

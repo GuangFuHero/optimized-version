@@ -1,16 +1,6 @@
-/**
- * Word that a ticket changed on the server — a need claimed or given back, added or deleted — so
- * that every view of it reloads. Whoever changes it may sit far from those views: 我的任務 lives in
- * the account menu, outside the page whose list and drawer show the ticket. One channel for the
- * whole app, with no React tree to share.
- */
+import { createStore } from 'zustand';
 
 import type { CreateHelpRequestMutation } from '@rescue-frontend/data-access';
-
-const channel = new EventTarget();
-const TICKET_CHANGED = 'ticket-changed';
-const TICKET_REREAD = 'ticket-reread';
-const TICKET_CREATED = 'ticket-created';
 
 type TicketFiled = Extract<
   CreateHelpRequestMutation['createHelpRequest'],
@@ -22,61 +12,44 @@ export type CreatedTicket = TicketFiled['ticket'] & {
   tasks: TicketFiled['tasks'];
 };
 
-export function announceTicketChanged(ticketUuid: string): void {
-  channel.dispatchEvent(
-    new CustomEvent(TICKET_CHANGED, { detail: ticketUuid }),
-  );
+type TicketEvent =
+  | { kind: 'changed'; uuid: string }
+  | { kind: 'reread'; uuid: string }
+  | { kind: 'created'; ticket: CreatedTicket };
+
+const events = createStore<TicketEvent | null>(() => null);
+
+/** Signals a server change so mounted ticket views can refresh their queries. */
+export function announceTicketChanged(uuid: string): void {
+  events.setState({ kind: 'changed', uuid }, true);
 }
 
-/** Listen for it; returns what stops listening, for an effect's cleanup. */
-export function onTicketChanged(
-  listener: (ticketUuid: string) => void,
-): () => void {
-  const handle = (event: Event) =>
-    listener((event as CustomEvent<string>).detail);
-
-  channel.addEventListener(TICKET_CHANGED, handle);
-
-  return () => channel.removeEventListener(TICKET_CHANGED, handle);
+export function onTicketChanged(listener: (uuid: string) => void): () => void {
+  return events.subscribe((event) => {
+    if (event?.kind === 'changed') listener(event.uuid);
+  });
 }
 
-/**
- * Word that a page read a ticket again after a change (`NeedClaimProvider`), for a copy of it the
- * page does not hold to read it again too: a building's tickets, shown in its drawer and stepped
- * through from a ticket's detail. The cache cannot do it: tickets are not keyed in it.
- */
-export function announceTicketReread(ticketUuid: string): void {
-  channel.dispatchEvent(new CustomEvent(TICKET_REREAD, { detail: ticketUuid }));
+/** Signals a completed refresh to dependent building views. */
+export function announceTicketReread(uuid: string): void {
+  events.setState({ kind: 'reread', uuid }, true);
 }
 
-/** Listen for it; returns what stops listening, for an effect's cleanup. */
-export function onTicketReread(
-  listener: (ticketUuid: string) => void,
-): () => void {
-  const handle = (event: Event) =>
-    listener((event as CustomEvent<string>).detail);
-
-  channel.addEventListener(TICKET_REREAD, handle);
-
-  return () => channel.removeEventListener(TICKET_REREAD, handle);
+export function onTicketReread(listener: (uuid: string) => void): () => void {
+  return events.subscribe((event) => {
+    if (event?.kind === 'reread') listener(event.uuid);
+  });
 }
 
-/**
- * Word that a ticket was just filed (請求協助, in the site shell). No view holds it yet, so there
- * is nothing to reload: the ticket itself goes with the word, for the map and the list to add.
- */
+/** Gives mounted maps and lists the newly created ticket until their next query refresh. */
 export function announceTicketCreated(ticket: CreatedTicket): void {
-  channel.dispatchEvent(new CustomEvent(TICKET_CREATED, { detail: ticket }));
+  events.setState({ kind: 'created', ticket }, true);
 }
 
-/** Listen for it; returns what stops listening, for an effect's cleanup. */
 export function onTicketCreated(
   listener: (ticket: CreatedTicket) => void,
 ): () => void {
-  const handle = (event: Event) =>
-    listener((event as CustomEvent<CreatedTicket>).detail);
-
-  channel.addEventListener(TICKET_CREATED, handle);
-
-  return () => channel.removeEventListener(TICKET_CREATED, handle);
+  return events.subscribe((event) => {
+    if (event?.kind === 'created') listener(event.ticket);
+  });
 }

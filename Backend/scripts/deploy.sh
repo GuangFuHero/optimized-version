@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One-command staging deploy. Runbook & design rationale: Backend/DEPLOY.md.
+# One-command staging deploy. Runbook & design rationale: DEPLOY.md.
 # Usage:
 #   ./scripts/deploy.sh              deploy origin/main
 #   ./scripts/deploy.sh <git-ref>    deploy a tag/SHA (also the manual-rollback path)
@@ -189,7 +189,7 @@ main() {
     docker_root=$(docker info --format '{{.DockerRootDir}}')
     free_gb=$(( $(df -BM --output=avail "$docker_root" | tail -n 1 | tr -dc '0-9') / 1024 ))
     log "disk: ${free_gb}G free under $docker_root"
-    (( free_gb >= MIN_FREE_GB )) || die "under ${MIN_FREE_GB}G free: clear space first (Backend/DEPLOY.md)"
+    (( free_gb >= MIN_FREE_GB )) || die "under ${MIN_FREE_GB}G free: clear space first (DEPLOY.md)"
 
     log "[2/9] recording rollback baseline (from the RUNNING container, not tags)"
     OLD_SHA=$(git rev-parse HEAD)

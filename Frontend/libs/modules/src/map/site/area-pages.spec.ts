@@ -1,26 +1,21 @@
 import { describe, expect, it } from 'vitest';
 
-import { fetchAllAreaPages, type AreaPageResult } from './area-pages';
+import { fetchAllAreaPages } from './area-pages';
 
-/**
- * A page as `GetMapAreas` returns it, its areas named by their place in the list. The fragment's
- * masking is only in the types.
- */
-function page(skip: number, count: number, totalCount: number): AreaPageResult {
+/** A page as `GetMapAreas` returns it, its areas named by their place in the list. */
+function page(skip: number, count: number, totalCount: number) {
   return {
-    data: {
-      areas: {
-        items: Array.from({ length: count }, (_, index) => ({
-          uuid: `area-${skip + index}`,
-        })),
-        pageInfo: {
-          totalCount,
-          hasNextPage: skip + count < totalCount,
-          hasPreviousPage: skip > 0,
-        },
+    areas: {
+      items: Array.from({ length: count }, (_, index) => ({
+        uuid: `area-${skip + index}`,
+      })),
+      pageInfo: {
+        totalCount,
+        hasNextPage: skip + count < totalCount,
+        hasPreviousPage: skip > 0,
       },
-    } as never,
-  };
+    },
+  } as never;
 }
 
 const uuids = (items: readonly { uuid: unknown }[]) =>
@@ -86,8 +81,10 @@ describe('fetchAllAreaPages', () => {
     const failure = new Error('page 2 failed');
 
     const result = await fetchAllAreaPages(
-      async (skip) =>
-        skip === 100 ? { error: failure as never } : page(skip, 100, 300),
+      async (skip) => {
+        if (skip === 100) throw failure;
+        return page(skip, 100, 300);
+      },
       { pageSize: 100 },
     );
 
@@ -104,7 +101,7 @@ describe('fetchAllAreaPages', () => {
 
     const result = await fetchAllAreaPages(async (skip) => {
       asked.push(skip);
-      return { error: failure as never };
+      throw failure;
     });
 
     expect(asked).toEqual([0]);

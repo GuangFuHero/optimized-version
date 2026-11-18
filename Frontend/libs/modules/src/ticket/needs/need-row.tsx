@@ -15,7 +15,7 @@ import {
 } from './need-claim';
 import { NeedClaimButton } from './need-claim-button';
 import { useNeedClaim } from './need-claim-provider';
-import { NeedProgressBar, needTypeIcon } from './need-parts';
+import { NeedProgressBar, NeedTypeIcon } from './need-parts';
 import { useNeedActions } from './use-need-actions';
 
 const { color, radius, typography } = designTokens;
@@ -43,12 +43,15 @@ export function NeedRow({
   isAuthenticated,
 }: NeedRowProps) {
   const { requestClaim, requestSignIn } = useNeedClaim();
-  const actions = useNeedActions(need, { ticketUuid, ticketStatus, ticketCreatedBy });
+  const actions = useNeedActions(need, {
+    ticketUuid,
+    ticketStatus,
+    ticketCreatedBy,
+  });
   const claim = resolveNeedClaim(need, { ticketStatus, isAuthenticated });
   const quota = formatNeedQuota(need, claim.kind);
   const closed = claim.kind === 'fulfilled';
   const full = !closed && isNeedFull(need);
-  const TypeIcon = needTypeIcon(need.taskType);
 
   return (
     <Box
@@ -56,7 +59,9 @@ export function NeedRow({
         p: 1.5,
         borderRadius: `${radius.md}px`,
         border: `1px solid ${
-          claim.kind === 'mine' ? color.brand.secondary.default : color.border.default
+          claim.kind === 'mine'
+            ? color.brand.secondary.default
+            : color.border.default
         }`,
         bgcolor: full ? color.bg.success.subtle : color.bg.neutral.default,
         // Still listed, but set back: it has its people, and there is no place left to take.
@@ -64,7 +69,10 @@ export function NeedRow({
       }}
     >
       <Stack direction="row" sx={{ alignItems: 'center', gap: 1 }}>
-        <TypeIcon sx={{ fontSize: 16, color: color.fg.neutral.muted, flexShrink: 0 }} />
+        <NeedTypeIcon
+          taskType={need.taskType}
+          sx={{ fontSize: 16, color: color.fg.neutral.muted, flexShrink: 0 }}
+        />
         <Typography
           sx={{
             flex: 1,
@@ -82,14 +90,22 @@ export function NeedRow({
         </SiteBadge>
         {/* Top right, where a card keeps its menu, apart from the claim button below.
             Pulled into the row's padding, so its 36px target does not make the line taller. */}
-        <NeedActionsMenu needName={need.taskName} items={actions} sx={{ my: -1, mr: -1 }} />
+        <NeedActionsMenu
+          needName={need.taskName}
+          items={actions}
+          sx={{ my: -1, mr: -1 }}
+        />
       </Stack>
 
       <Stack direction="row" sx={{ mt: 1, alignItems: 'center', gap: 1.5 }}>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           {quota.fraction === null ? null : (
             <Box sx={{ mb: 0.5 }}>
-              <NeedProgressBar fraction={quota.fraction} full={full} height={6} />
+              <NeedProgressBar
+                fraction={quota.fraction}
+                full={full}
+                height={6}
+              />
             </Box>
           )}
           <Typography
@@ -107,7 +123,11 @@ export function NeedRow({
           claim={claim}
           needName={need.taskName}
           onClaim={() => requestClaim(ticketUuid, need.uuid)}
-          onSignIn={requestSignIn ? () => requestSignIn(ticketUuid, need.uuid) : undefined}
+          onSignIn={
+            requestSignIn
+              ? () => requestSignIn(ticketUuid, need.uuid)
+              : undefined
+          }
         />
       </Stack>
     </Box>

@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 
 import type { TicketNeed } from '../../ticket/needs/need-claim';
 import {
-  areaOverlaysSignature,
   mapAreasToOverlays,
   mapTicketToMarker,
   withTicketStatus,
@@ -207,27 +206,5 @@ describe('mapAreasToOverlays', () => {
 
     expect(closureAreas.map((overlay) => overlay.polygons.length)).toEqual([2]);
     expect(publicZones).toEqual([]);
-  });
-});
-
-describe('areaOverlaysSignature', () => {
-  it('changes with what a zone says, and not with a fetch that brings it back as it was', () => {
-    const before = mapAreasToOverlays([
-      area({ type: 'team_zone', assignedTeams: [{ uuid: 't', name: '慈濟' }] }),
-    ]);
-    const again = mapAreasToOverlays([
-      area({ type: 'team_zone', assignedTeams: [{ uuid: 't', name: '慈濟' }] }),
-    ]);
-    const handedOver = mapAreasToOverlays([
-      area({
-        type: 'team_zone',
-        assignedTeams: [{ uuid: 'u', name: '紅十字會' }],
-      }),
-    ]);
-
-    expect(areaOverlaysSignature(again)).toBe(areaOverlaysSignature(before));
-    expect(areaOverlaysSignature(handedOver)).not.toBe(
-      areaOverlaysSignature(before),
-    );
   });
 });

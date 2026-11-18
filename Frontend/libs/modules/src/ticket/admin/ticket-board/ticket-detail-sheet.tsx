@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 
 import { Box, ButtonBase, Tab, Typography } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
@@ -93,14 +93,15 @@ export function TicketDetailSheet({
   const query = useTicket({ uuid: uuid ?? '' }, { enabled: Boolean(uuid) });
   // Active types only (retired ones need project.edit); a retired key shows as itself.
   const disasterTypes = useDisasterTypes({ includeInactive: false });
-  const disasterLabels = useMemo(
-    () =>
-      Object.fromEntries(
-        (disasterTypes.data?.disasterTypes ?? []).map((d) => [d.key, d.label]),
-      ),
-    [disasterTypes.data],
+  const disasterLabels = Object.fromEntries(
+    (disasterTypes.data?.disasterTypes ?? []).map((d) => [d.key, d.label]),
   );
   const [activeTab, setActiveTab] = useState<DetailTab>('info');
+  const [previousUuid, setPreviousUuid] = useState(uuid);
+  if (previousUuid !== uuid) {
+    setPreviousUuid(uuid);
+    setActiveTab('info');
+  }
   // The edit form is saving, or a need is being added, assigned or taken off: Escape, the
   // backdrop and × wait for it.
   const [formBusy, setFormBusy] = useState(false);
@@ -109,8 +110,6 @@ export function TicketDetailSheet({
   const close = () => {
     if (!busy) onClose();
   };
-
-  useEffect(() => setActiveTab('info'), [uuid]);
 
   const state = ticketDetailState(query);
   const ticket = query.data?.ticket;

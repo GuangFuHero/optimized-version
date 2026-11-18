@@ -1,12 +1,19 @@
 'use client';
 
-import { Alert, Button, ButtonBase, Stack, Typography } from '@mui/material';
-import { useState } from 'react';
-import { useMutation } from 'urql';
+import { useForm, useStore } from '@tanstack/react-form';
 
-import { CreateTicketTaskDocument } from '@rescue-frontend/data-access';
+import { Alert, Button, ButtonBase, Stack, Typography } from '@mui/material';
+import { useMutation } from '@tanstack/react-query';
+import { useState } from 'react';
+
+import {
+  CreateTicketTaskDocument,
+  type GraphqlError,
+  type CreateTicketTaskMutationVariables,
+} from '@rescue-frontend/data-access';
 import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
 
+import { siteGraphqlMutation } from '../../session/site-clients';
 import { addNeedErrorMessage } from '../needs/claim-error';
 import { useNeedClaim } from '../needs/need-claim-provider';
 import { announceTicketChanged } from '../ticket-changes';
@@ -22,11 +29,14 @@ import {
   emptyNeed,
   isQuantityMissing,
   rescueNeedRow,
-  type NeedDraft,
 } from './help-request-form';
 import { NeedDraftRow } from './need-draft-row';
 
 const { color, radius } = designTokens;
+const EMPTY_ACK: Pick<
+  CreateTicketTaskMutationVariables,
+  'acknowledgedDuplicateOf'
+> = {};
 
 /** Whether the viewer is offered 「再加一件」 on this ticket — its requester, while it is not cancelled. */
 export function useCanAddNeed(ticket: {
@@ -58,73 +68,79 @@ interface HeldNeed {
  */
 export function AddNeedPanel({ ticketUuid, needCount }: AddNeedPanelProps) {
   const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState<NeedDraft>(emptyNeed);
-  const [touched, setTouched] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const form = useForm({
+    defaultValues: { draft: emptyNeed() },
+    onSubmitMeta: EMPTY_ACK,
+    validators: {
+      onSubmit: ({ value }) =>
+        toCreateTicketTaskInput(ticketUuid, value.draft) &&
+        !isQuantityMissing(value.draft)
+          ? undefined
+          : true,
+    },
+    onSubmit: ({ meta }): Promise<void> =>
+      submit(meta.acknowledgedDuplicateOf ?? undefined),
+  });
+  const draft = useStore(form.store, (state) => state.values.draft);
+  const touched = useStore(form.store, (state) => state.submissionAttempts > 0);
   const [error, setError] = useState<string | null>(null);
   // Open is kept apart from what is shown, so the dialog keeps its content while it fades out.
   const [heldOpen, setHeldOpen] = useState(false);
   const [held, setHeld] = useState<HeldNeed | null>(null);
   const [heldError, setHeldError] = useState<string | null>(null);
-  const [, createTicketTask] = useMutation(CreateTicketTaskDocument);
+  const mutation = useMutation(siteGraphqlMutation(CreateTicketTaskDocument));
 
+  const { mutateAsync: createTicketTask, isPending: submitting } = mutation;
   const close = () => {
     setOpen(false);
-    setDraft(emptyNeed());
-    setTouched(false);
+    form.reset();
     setError(null);
     setHeldOpen(false);
   };
 
   /** Sent as typed, or again with a suspect named once the requester said it is not the same. */
   const submit = async (acknowledgedDuplicateOf?: string) => {
-    setTouched(true);
-
     const input = toCreateTicketTaskInput(ticketUuid, draft);
 
     if (!input || isQuantityMissing(draft) || submitting) {
       return;
     }
 
-    setSubmitting(true);
     setError(null);
     setHeldError(null);
 
     try {
-      const result = await createTicketTask({ input, acknowledgedDuplicateOf });
-      const answer = result.data?.createTicketTask;
-      const outcome = answer
-        ? readAddNeedOutcome(answer, input.taskName)
-        : null;
+      const outcome = readAddNeedOutcome(
+        (await createTicketTask({ input, acknowledgedDuplicateOf }))
+          .createTicketTask,
+        input.taskName,
+      );
 
       // Held: nothing was added, so nothing on the ticket changed.
-      if (outcome?.kind === 'held') {
+      if (outcome.kind === 'held') {
         setHeld(outcome);
         setHeldOpen(true);
         return;
       }
 
-      // Answered either way: added, or the ticket changed under them — deleted, say — which every
-      // view of it should now show.
-      if (!result.error?.networkError) {
+      announceTicketChanged(ticketUuid);
+      close();
+    } catch (failure) {
+      const refusal = failure as GraphqlError;
+
+      // Refused, the ticket may have changed under them — deleted, say — which every view of it
+      // should now show; a dropped connection says nothing about it.
+      if (!refusal.networkError) {
         announceTicketChanged(ticketUuid);
       }
 
-      if (result.error) {
-        const message = addNeedErrorMessage(result.error);
+      const message = addNeedErrorMessage(refusal);
 
-        if (acknowledgedDuplicateOf) {
-          setHeldError(message);
-        } else {
-          setError(message);
-        }
-
-        return;
+      if (acknowledgedDuplicateOf) {
+        setHeldError(message);
+      } else {
+        setError(message);
       }
-
-      close();
-    } finally {
-      setSubmitting(false);
     }
   };
 
@@ -138,7 +154,9 @@ export function AddNeedPanel({ ticketUuid, needCount }: AddNeedPanelProps) {
       error={heldError}
       submitting={submitting}
       onBack={() => setHeldOpen(false)}
-      onConfirm={() => void submit(held?.acknowledge)}
+      onConfirm={() =>
+        void form.handleSubmit({ acknowledgedDuplicateOf: held?.acknowledge })
+      }
       // Leaving for one of the tickets: what was typed goes, as in the prototype.
       onLeave={close}
     />
@@ -201,7 +219,7 @@ export function AddNeedPanel({ ticketUuid, needCount }: AddNeedPanelProps) {
         canRemove={false}
         invalid={unchosen}
         quantityMissing={touched && isQuantityMissing(draft)}
-        onChange={setDraft}
+        onChange={(next) => form.setFieldValue('draft', next)}
         onRemove={close}
       />
       {/* As in a new request: right under the need, once it is someone trapped or hurt. */}
@@ -218,7 +236,7 @@ export function AddNeedPanel({ ticketUuid, needCount }: AddNeedPanelProps) {
         </Button>
         <Button
           variant="contained"
-          onClick={() => void submit()}
+          onClick={() => void form.handleSubmit()}
           disabled={submitting}
           sx={{ flex: 2 }}
         >

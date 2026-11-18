@@ -3,12 +3,12 @@
 import { Box, ButtonBase, Stack, Typography } from '@mui/material';
 import Link from 'next/link';
 import type { MouseEvent, ReactNode } from 'react';
+import { useMutation, type UseQueryResult } from '@tanstack/react-query';
 import { useState } from 'react';
-import type { UseQueryState } from 'urql';
-import { useMutation } from 'urql';
 
 import {
   ReleaseClaimDocument,
+  type GraphqlError,
   type MyTaskAssignmentsQuery,
 } from '@rescue-frontend/data-access';
 import {
@@ -20,6 +20,7 @@ import {
 
 import { BRIEFING_HREF } from '../../briefing/href';
 import { useSiteRouteState } from '../../route';
+import { siteGraphqlMutation } from '../../session/site-clients';
 import { releaseErrorMessage } from '../needs/claim-error';
 import { announceTicketChanged } from '../ticket-changes';
 import {
@@ -37,7 +38,7 @@ interface MyClaimsListProps {
    * `myTaskAssignments`, read by the drawer at each opening — its tab counts them — so a claim
    * made since shows up.
    */
-  result: UseQueryState<MyTaskAssignmentsQuery>;
+  result: UseQueryResult<MyTaskAssignmentsQuery>;
   /** Reads the drawer's lists again, once a place given back is answered. */
   reload: () => void;
   /** Leaving for another page: the drawer lives in the account menu, which stays across pages. */
@@ -281,12 +282,14 @@ function Notice({ icon, children }: { icon?: ReactNode; children: ReactNode }) {
 
 /** 我承接的: the needs the viewer claimed, newest first. */
 export function MyClaimsList({
-  result: { data, fetching, error },
+  result: { data, isFetching: fetching, error },
   reload,
   onLeave,
 }: MyClaimsListProps) {
   const route = useSiteRouteState();
-  const [, executeRelease] = useMutation(ReleaseClaimDocument);
+  const { mutateAsync: executeRelease } = useMutation(
+    siteGraphqlMutation(ReleaseClaimDocument),
+  );
   // Open is kept apart from what is being confirmed, so the dialog keeps its content while it
   // fades out — as the claim confirmation does.
   const [releaseOpen, setReleaseOpen] = useState(false);
@@ -329,17 +332,22 @@ export function MyClaimsList({
     setReleaseError(null);
 
     try {
-      const result = await executeRelease({ uuid: releasing.assignmentUuid });
+      const refusal = await executeRelease({
+        uuid: releasing.assignmentUuid,
+      }).then(
+        () => null,
+        (failure: GraphqlError) => failure,
+      );
 
       // Answered either way: the place went back, or the need had changed under the volunteer.
       // Both the drawer's lists and every view of the ticket behind the drawer read it again.
-      if (!result.error?.networkError) {
+      if (!refusal?.networkError) {
         announceTicketChanged(releasing.ticketUuid);
         reload();
       }
 
-      if (result.error) {
-        setReleaseError(releaseErrorMessage(result.error));
+      if (refusal) {
+        setReleaseError(releaseErrorMessage(refusal));
         return;
       }
 

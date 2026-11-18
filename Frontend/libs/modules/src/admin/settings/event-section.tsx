@@ -3,7 +3,9 @@
 import { Radio } from 'lucide-react';
 
 import { Stack, Typography } from '@mui/material';
-import { useEffect, useId, useState } from 'react';
+import { useId, useState } from 'react';
+import { useEventListener } from 'usehooks-ts';
+import { useForm, useStore } from '@tanstack/react-form';
 import { toast } from 'sonner';
 
 import {
@@ -38,7 +40,19 @@ function EventBasics({
   saved: EventBasicsDraft;
   canEdit: boolean;
 }) {
-  const [draft, setDraft] = useState(saved);
+  const [openedValues] = useState(saved);
+  const form = useForm({
+    defaultValues: openedValues,
+    validators: { onSubmit: ({ value }) => nameProblem(value.name) },
+    onSubmit: ({ value }) =>
+      update.mutateAsync({ body: basicsBody(value) }).then(
+        () => {
+          toast.success('已儲存這次災害的基本資料');
+        },
+        () => undefined,
+      ),
+  });
+  const draft = useStore(form.store, (state) => state.values);
   const update = useUpdateProjectSettings();
   const nameId = useId();
   const shortNameId = useId();
@@ -46,23 +60,12 @@ function EventBasics({
   const problem = nameProblem(draft.name);
 
   // A close or reload with the name edited asks first, as the briefing editor does.
-  useEffect(() => {
-    if (!dirty) return;
-    const beforeUnload = (event: BeforeUnloadEvent) => {
+  useEventListener('beforeunload', (event) => {
+    if (dirty) {
       event.preventDefault();
       event.returnValue = '';
-    };
-    window.addEventListener('beforeunload', beforeUnload);
-    return () => window.removeEventListener('beforeunload', beforeUnload);
-  }, [dirty]);
-
-  const save = () => {
-    if (problem) return;
-    update.mutate(
-      { body: basicsBody(draft) },
-      { onSuccess: () => toast.success('已儲存這次災害的基本資料') },
-    );
-  };
+    }
+  });
 
   return (
     <>
@@ -79,7 +82,7 @@ function EventBasics({
           error={dirty ? problem : undefined}
           placeholder={canEdit ? '例：花蓮馬太鞍溪堰塞湖專案' : '還沒有設定'}
           inputProps={{ maxLength: NAME_MAX_LENGTH }}
-          onChange={(event) => setDraft({ ...draft, name: event.target.value })}
+          onChange={(event) => form.setFieldValue('name', event.target.value)}
         />
       </SettingsRow>
       <SettingsRow
@@ -94,7 +97,7 @@ function EventBasics({
           placeholder={canEdit ? '例：花蓮馬太鞍溪' : undefined}
           inputProps={{ maxLength: SHORT_NAME_MAX_LENGTH }}
           onChange={(event) =>
-            setDraft({ ...draft, shortName: event.target.value })
+            form.setFieldValue('shortName', event.target.value)
           }
         />
       </SettingsRow>
@@ -116,14 +119,14 @@ function EventBasics({
             variant="ghost"
             size="sm"
             disabled={update.isPending}
-            onClick={() => setDraft(saved)}
+            onClick={() => form.reset(saved, { keepDefaultValues: true })}
           >
             還原
           </Button>
           <Button
             size="sm"
             disabled={Boolean(problem) || update.isPending}
-            onClick={save}
+            onClick={() => void form.handleSubmit()}
           >
             儲存
           </Button>

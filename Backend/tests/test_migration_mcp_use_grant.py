@@ -16,7 +16,7 @@ from app.core.permissions import Perm
 from scripts.seed_rbac import ROLES_DATA
 from tests.conftest import _ADMIN_DB_URL, TEST_DB_URL
 
-_BEFORE = "42cb936beed5"
+_BEFORE = "162b65c8ff5f"
 _DB_NAME = f"{TEST_DB_URL.rsplit('/', 1)[-1]}_mcp_use"
 _DB_URL = TEST_DB_URL.rsplit("/", 1)[0] + "/" + _DB_NAME
 _BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

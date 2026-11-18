@@ -71,7 +71,7 @@ describe('roleRequestErrorMessage', () => {
     );
   });
 
-  it('reads an HTTP 401, which urql hands over as a network error, as a sign-in that ran out', () => {
+  it('reads an HTTP 401, which comes as a network error, as a sign-in that ran out', () => {
     expect(
       roleRequestErrorMessage({
         networkError: new Error('Unauthorized'),

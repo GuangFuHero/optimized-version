@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 
 import { Box, ButtonBase, Stack, Typography } from '@mui/material';
 
@@ -61,7 +61,7 @@ export function BuildingEntryList({
   onOpen,
 }: BuildingEntryListProps) {
   const [expanded, setExpanded] = useState(false);
-  const rows = useMemo(() => buildingEntries(buildings, q), [buildings, q]);
+  const rows = buildingEntries(buildings, q);
 
   if (rows.length === 0) {
     return null;

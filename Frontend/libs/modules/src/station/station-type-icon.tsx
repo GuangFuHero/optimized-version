@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 
 import { themedIcon } from '@rescue-frontend/ui';
+import type { SvgIconProps } from '@mui/material';
 
 import { normalizeStationType, type StationTypeValue } from './type-options';
 
@@ -44,20 +45,26 @@ export function getStationTypeLucideIcon(type?: string | null): LucideIcon {
   return (key && STATION_TYPE_LUCIDE_ICONS[key]) || MapPin;
 }
 
-const themed = new Map<LucideIcon, ReturnType<typeof themedIcon>>();
+const themed = {
+  water: themedIcon(Droplets),
+  shelter: themedIcon(Tent),
+  shower: themedIcon(ShowerHead),
+  toilet: themedIcon(Toilet),
+  transport: themedIcon(Bus),
+  medical: themedIcon(HeartPulse),
+  supply: themedIcon(Package),
+  gas_station: themedIcon(Fuel),
+  charge: themedIcon(BatteryCharging),
+  power: themedIcon(Zap),
+  cellular: themedIcon(RadioTower),
+} satisfies Record<StationTypeValue, ReturnType<typeof themedIcon>>;
+const fallback = themedIcon(MapPin);
 
-/**
- * The type's icon as an MUI `SvgIcon`, for a place that sizes and colours it through `sx`, as the
- * other icons there are. Made once per icon, so a list re-renders the same component.
- */
-export function getStationTypeIcon(type?: string | null) {
-  const icon = getStationTypeLucideIcon(type);
-  let component = themed.get(icon);
-
-  if (!component) {
-    component = themedIcon(icon);
-    themed.set(icon, component);
-  }
-
-  return component;
+export function StationTypeIcon({
+  type,
+  ...props
+}: Omit<SvgIconProps, 'type'> & { type?: string | null }) {
+  const key = normalizeStationType(type);
+  const Icon = key ? themed[key] : fallback;
+  return <Icon {...props} />;
 }

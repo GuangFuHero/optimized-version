@@ -78,9 +78,7 @@ export function AdminShell({
   );
 
   // Widening past the breakpoint closes the drawer, so it does not reopen on the next narrowing.
-  useEffect(() => {
-    if (!mobile) setOpenedOn(null);
-  }, [mobile]);
+  if (!mobile && openedOn !== null) setOpenedOn(null);
 
   return (
     <Box

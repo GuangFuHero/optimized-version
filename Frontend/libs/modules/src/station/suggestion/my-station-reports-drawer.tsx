@@ -3,8 +3,8 @@
 import { Box, Stack, Typography } from '@mui/material';
 import Link from 'next/link';
 import type { MouseEvent, ReactNode } from 'react';
-import { useEffect, useState } from 'react';
-import { useQuery } from 'urql';
+import { useQuery } from '@tanstack/react-query';
+import { useEffect } from 'react';
 
 import { MyStationSuggestionsDocument } from '@rescue-frontend/data-access';
 import {
@@ -16,6 +16,7 @@ import {
 } from '@rescue-frontend/ui';
 
 import { useSiteRouteState } from '../../route';
+import { siteGraphqlQuery } from '../../session/site-clients';
 import { SiteActionDrawer } from '../../shell/site/site-action-drawer';
 import {
   openReportedStation,
@@ -24,12 +25,9 @@ import {
   STATION_REPORT_OUTCOME_LOOKS,
   type StationReport,
 } from './my-station-reports';
-import { onOpenMyStationReports } from './open-my-station-reports';
+import { useMyStationReportsOpen } from './open-my-station-reports';
 
 const { color, iconSize, radius, typography } = designTokens;
-
-// The list's own loading line inside the drawer rather than suspending the page behind it.
-const QUERY_CONTEXT = { suspense: false } as const;
 
 /**
  * One report (prototype `StationReportsDrawer`): when it was sent, the station, how it came out,
@@ -236,11 +234,11 @@ function Notice({ icon, children }: { icon?: ReactNode; children: ReactNode }) {
  */
 function MyStationReportsContent({ onClose }: { onClose: () => void }) {
   const route = useSiteRouteState();
-  const [{ data, fetching, error }] = useQuery({
-    query: MyStationSuggestionsDocument,
-    requestPolicy: 'network-only',
-    context: QUERY_CONTEXT,
-  });
+  const {
+    data,
+    isFetching: fetching,
+    error,
+  } = useQuery(siteGraphqlQuery(MyStationSuggestionsDocument, {}));
 
   const openStation = (event: MouseEvent<HTMLElement>, stationUuid: string) => {
     const opening = openReportedStation(route, stationUuid);
@@ -293,24 +291,25 @@ function MyStationReportsContent({ onClose }: { onClose: () => void }) {
   );
 }
 
+const closeReports = () => useMyStationReportsOpen.setState(false, true);
+
 /**
  * 我回報的站點 (prototype `StationReportsDrawer`), its own entry in the account menu beside
  * 我的任務: a task is someone coming or going to help, a report is public data that was wrong.
  * Kept once in the site shell and opened through `openMyStationReports`.
  */
 export function MyStationReportsHost() {
-  const [open, setOpen] = useState(false);
-
-  useEffect(() => onOpenMyStationReports(() => setOpen(true)), []);
+  const open = useMyStationReportsOpen();
+  useEffect(() => closeReports, []);
 
   return (
     <SiteActionDrawer
       open={open}
       title="我回報的站點"
       subtitle="你對資源站點提出的修改建議，以及審核結果"
-      onClose={() => setOpen(false)}
+      onClose={closeReports}
     >
-      <MyStationReportsContent onClose={() => setOpen(false)} />
+      <MyStationReportsContent onClose={closeReports} />
     </SiteActionDrawer>
   );
 }

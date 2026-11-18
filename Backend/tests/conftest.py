@@ -3,6 +3,9 @@
 import os
 
 os.environ["ENV"] = "testing"
+# Local Backend/.env sets AUTH_COOKIE_SECURE=false for plain-http localhost development; keep the
+# test suite on the production default (True) regardless of whether a local .env file is present.
+os.environ["AUTH_COOKIE_SECURE"] = "true"
 
 # pytest-xdist (`-n N`) runs each worker in its own process and exports its name — gw0, gw1, … —
 # before this module is imported; unset in a plain run. Tests empty the database tables and flush
