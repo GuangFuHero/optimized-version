@@ -284,7 +284,7 @@ staging.wan-guard.com
 - **`MCP_BASE_URL`**：已寫在 `Backend/scripts/deploy-config.staging.env`。沒有設定時，OAuth metadata 會叫用戶端去 `http://localhost:8000`，每次登入都會失敗。
 - **`TRUSTED_PROXIES`**：維持預設值。Cloudflare 會把呼叫者的 IP 附加在 `X-Forwarded-For` 的最後面，cloudflared 再從 Docker 內網把請求交給後端。
 - **檢查**：`curl https://staging.wan-guard.com/.well-known/oauth-authorization-server/mcp` 回傳 JSON，其中 `issuer` 是 `https://staging.wan-guard.com/mcp`；`https://staging.wan-guard.com/register` 仍然是前台的註冊頁。
-- 規則加上之前，前台的 `/mcp` 只會回前台的 404，其他功能不受影響。同意頁 `/api/v1/mcp/consent` 由後端提供，走前台原本的 `/api/v1` proxy，不需要加 Tunnel 規則，前台也不需要新增任何東西。
+- 規則加上之前，前台的 `/mcp` 只會回前台的 404，其他功能不受影響。同意頁 `/api/v1/mcp/consent` 由後端提供，走前台原本的 `/api/v1` proxy，不需要新的 Tunnel 規則或前台設定；前台要部署到包含這次修改的版本，同意頁的「允許」按鈕才能用。
 
 ---
 
