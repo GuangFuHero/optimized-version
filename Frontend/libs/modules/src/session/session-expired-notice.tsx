@@ -1,8 +1,15 @@
 'use client';
 
-import { Box, ButtonBase, Portal, Snackbar, Typography } from '@mui/material';
+import {
+  Box,
+  ButtonBase,
+  NoSsr,
+  Portal,
+  Snackbar,
+  Typography,
+} from '@mui/material';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 import {
   designTokens,
@@ -27,16 +34,18 @@ const GAP_BELOW_TOP_BAR = 12;
  * which sits at the foot and times out.
  */
 export function SessionExpiredNotice() {
-  const router = useRouter();
-  const [open, setOpen] = useState(false);
+  return (
+    <NoSsr>
+      <ClientSessionExpiredNotice />
+    </NoSsr>
+  );
+}
 
-  // In an effect: sessionStorage exists only in the browser, and reading it while rendering would
-  // differ from the server's markup.
-  useEffect(() => {
-    if (takeSessionExpired(sessionStorageOrNull())) {
-      setOpen(true);
-    }
-  }, []);
+function ClientSessionExpiredNotice() {
+  const router = useRouter();
+  const [open, setOpen] = useState(() =>
+    takeSessionExpired(sessionStorageOrNull()),
+  );
 
   const signInAgain = () => {
     setOpen(false);

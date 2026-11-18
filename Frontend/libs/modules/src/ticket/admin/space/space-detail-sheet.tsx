@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 import { Box, ButtonBase, Typography } from '@mui/material';
 import { useDeleteBuildingMap } from '@rescue-frontend/data-access/admin';
@@ -86,8 +86,11 @@ export function SpaceDetailSheet({
   const { space, isLoading, error } = useSpace(uuid);
   const caps = useSpaceCapabilities();
   const [editing, setEditing] = useState(false);
-
-  useEffect(() => setEditing(false), [uuid]);
+  const [previousUuid, setPreviousUuid] = useState(uuid);
+  if (previousUuid !== uuid) {
+    setPreviousUuid(uuid);
+    setEditing(false);
+  }
 
   return (
     <SheetFrame

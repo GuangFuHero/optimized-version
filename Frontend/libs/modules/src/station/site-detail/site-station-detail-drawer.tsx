@@ -17,7 +17,7 @@ import { SiteDetailRow } from '../../shell/site/detail-info';
 import { SiteBadge } from '../../shell/site/site-badge';
 import { StationDetailFooterAction } from '../admin/station-detail/station-detail-footer-action';
 import type { StationDetailActionProps } from '../admin/station-detail/types';
-import { getStationTypeIcon } from '../station-type-icon';
+import { StationTypeIcon } from '../station-type-icon';
 import { describeSiteStation } from './site-station-detail';
 
 const { color, iconSize, radius, spacing } = designTokens;
@@ -45,7 +45,6 @@ export function SiteStationDetailDrawer({
   secondaryAction,
 }: SiteStationDetailDrawerProps) {
   const detail = describeSiteStation(marker);
-  const TypeIcon = getStationTypeIcon(marker.stationMeta?.type);
 
   return (
     <Box
@@ -100,7 +99,10 @@ export function SiteStationDetailDrawer({
             color: color.brand.secondary.subtle,
           }}
         >
-          <TypeIcon sx={{ fontSize: 20 }} />
+          <StationTypeIcon
+            type={marker.stationMeta?.type}
+            sx={{ fontSize: 20 }}
+          />
         </Box>
         <Box sx={{ minWidth: 0 }}>
           <Typography

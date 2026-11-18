@@ -1,5 +1,7 @@
 'use client';
 
+import type { DeepValue } from '@tanstack/react-form';
+
 import { useId, type ReactNode } from 'react';
 
 import {
@@ -28,7 +30,7 @@ export interface StationFormFieldsProps {
   errors: StationFormErrors;
   onChange: <K extends keyof StationFormState>(
     key: K,
-    value: StationFormState[K],
+    value: DeepValue<StationFormState, K>,
   ) => void;
   /** The coordinate fields lost focus: the place to move a map pin to the typed position. */
   onCoordinatesBlur?: () => void;

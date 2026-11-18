@@ -235,7 +235,11 @@ function createStationSummary({
   };
 }
 
-export function RescueMapDetailDrawer({
+export function RescueMapDetailDrawer(props: RescueMapDetailDrawerProps) {
+  return <RescueMapDetailDrawerView key={props.marker?.id ?? ''} {...props} />;
+}
+
+function RescueMapDetailDrawerView({
   marker,
   onClose,
   onSelectMarker,
@@ -248,10 +252,6 @@ export function RescueMapDetailDrawer({
 }: RescueMapDetailDrawerProps) {
   const [activeStationTab, setActiveStationTab] =
     useState<StationDetailTabId>('info');
-
-  useEffect(() => {
-    setActiveStationTab('info');
-  }, [marker?.id]);
 
   const closeAction = {
     ariaLabel: '關閉詳情',

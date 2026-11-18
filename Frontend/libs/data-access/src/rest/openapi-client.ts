@@ -9,9 +9,16 @@ const backendError = z.object({
   code: z.string().optional(),
 });
 
-export function createRestClient(fetcher: typeof fetch = fetch) {
+/**
+ * The REST client: in the browser through the app's own `/api/v1` proxy (`baseUrl` empty), on the
+ * server to the backend itself. Throws `ApiError` for any answer that is not OK.
+ */
+export function createRestClient({
+  fetch: fetcher = fetch,
+  baseUrl = '',
+}: { fetch?: typeof fetch; baseUrl?: string } = {}) {
   const client = createClient<paths>({
-    baseUrl: '',
+    baseUrl,
     credentials: 'include',
     fetch: fetcher,
   });
@@ -28,6 +35,7 @@ export function createRestClient(fetcher: typeof fetch = fetch) {
           response.status,
           parsed.data?.detail ?? `API request failed (${response.status}).`,
           parsed.data?.code,
+          response,
         );
       }
     },

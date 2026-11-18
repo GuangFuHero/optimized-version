@@ -33,6 +33,7 @@ const nextConfig = {
   // See: https://nx.dev/recipes/next/next-config-setup
   nx: {},
   poweredByHeader: false,
+  reactCompiler: true,
   async headers() {
     return [
       { source: SITE_SECURITY_HEADERS_SOURCE, headers: securityHeaders },

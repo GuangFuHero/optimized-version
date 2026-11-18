@@ -11,6 +11,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useState } from 'react';
+import { useForm, useStore } from '@tanstack/react-form';
 import { toast } from 'sonner';
 
 import {
@@ -101,7 +102,11 @@ export function DisasterTypesRow({
     { enabled: canEdit && vocab.length > 0 },
   ).data?.ticketPropertyConfigs;
   const update = useUpdateProjectSettings();
-  const [adding, setAdding] = useState('');
+  const form = useForm({
+    defaultValues: { adding: '' },
+    onSubmit: (): void => add(),
+  });
+  const adding = useStore(form.store, (state) => state.values.adding);
   const [removing, setRemoving] = useState<string | null>(null);
   const addable = addableDisasterTypes(vocab, selected);
   const label = (key: string) => disasterTypeLabel(vocab, key);
@@ -117,7 +122,7 @@ export function DisasterTypesRow({
       { body: { disaster_types: [...selected, key] } },
       {
         onSuccess: () => {
-          setAdding('');
+          form.reset();
           toast.success(
             bringsNothing
               ? `已加入這次災害。「${label(key)}」還沒有專屬欄位，任務單不會多出題目。`
@@ -182,7 +187,9 @@ export function DisasterTypesRow({
               displayEmpty
               size="small"
               disabled={needsName || update.isPending}
-              onChange={(event) => setAdding(event.target.value)}
+              onChange={(event) =>
+                form.setFieldValue('adding', event.target.value)
+              }
               IconComponent={ChevronDown}
               inputProps={{ 'aria-label': '選一種災害類型' }}
               renderValue={(value) =>
@@ -217,7 +224,7 @@ export function DisasterTypesRow({
               size="sm"
               startIcon={<Plus size={14} />}
               disabled={!adding || needsName || update.isPending}
-              onClick={add}
+              onClick={() => void form.handleSubmit()}
             >
               加入
             </Button>

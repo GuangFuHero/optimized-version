@@ -181,6 +181,14 @@
 > 擋住只會讓持有 `ticket.add` 的民眾送得出單、看不到題目。`includeInactive` 仍各自要
 > `dynamic_field.edit` / `project.edit`。
 
+### 儀表板 Analytics
+
+| capability | Guest | user | data_auditor | super_admin | admin(team) | member(team) |
+|---|---|---|---|---|---|---|
+| analytics.view | — | — | all | all | all | all |
+
+> 後台 BI 儀表板與 `/api/v1/analytics/*` 每支 API 都要 `analytics.view`；圖表另外照舊要 `ticket.view`／`station.view`，也只算該 scope 看得到的資料。gov 與 NGO team 的 admin、member 都有（ADR-462）。
+
 ### 專案設定 Project Settings
 
 一個部署 = 一場（混合型）災害的全域設定（ADR-090）。獨立於 `dynamic_field.*`：改災害型別會**連動整批動態欄位的可見性**，比改單一欄位定義重得多。

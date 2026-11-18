@@ -1,4 +1,5 @@
 import nx from '@nx/eslint-plugin';
+import reactHooks from 'eslint-plugin-react-hooks';
 
 // A hex, rgb() or rgba() colour anywhere in a string.
 const COLOUR = String.raw`/(^|[^\w&])#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\b|\brgba?\(/`;
@@ -63,6 +64,7 @@ export default [
   ...nx.configs['flat/base'],
   ...nx.configs['flat/typescript'],
   ...nx.configs['flat/javascript'],
+  reactHooks.configs.flat['recommended-latest'],
   {
     ignores: ['**/dist', '**/out-tsc'],
   },

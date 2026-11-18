@@ -15,6 +15,7 @@ import pytest
 from geoalchemy2.shape import from_shape
 from plotly.offline import get_plotlyjs_version
 from shapely.geometry import Point
+from sqlalchemy import delete, select
 
 from app.api.v1.endpoints.analytics import _in_catalog_unit
 from app.core.permissions import Perm
@@ -30,6 +31,7 @@ from app.services import chart_render
 from app.services.analytics_common import MAX_TREND_DAYS
 from app.services.ticket import TASK_TYPES
 from tests.conftest import auth_headers_for
+from tests.test_dedup_review_api import _headers as _seeded_role_headers
 
 TICKETS_URL = "/api/v1/analytics/tickets/chart"
 STATIONS_URL = "/api/v1/analytics/stations/chart"
@@ -44,7 +46,7 @@ FRONTEND_PLOTLYJS_VERSION = "4.1.1"
 
 
 async def _user_with_perms(db, redis, *perms: Perm, scope: str = "all") -> dict:
-    """Create a user holding exactly `perms` and return its bearer auth header.
+    """Create a user holding `perms` plus analytics.view and return its bearer auth header.
 
     Thin wrapper over `_seeded_user` for the majority of tests, which don't need the uuid.
     """
@@ -53,7 +55,7 @@ async def _user_with_perms(db, redis, *perms: Perm, scope: str = "all") -> dict:
 
 
 async def _seeded_user(db, redis, *perms: Perm, scope: str = "all") -> tuple[str, dict]:
-    """Create a user holding exactly `perms`; return its uuid and bearer auth header.
+    """Create a user holding `perms` plus analytics.view; return its uuid and bearer auth header.
 
     Direct model inserts, matching tests/test_admin_api.py — the default `user` role from
     seed_rbac.py holds ticket.view, so a 403 test needs a bare role like this. The uuid
@@ -62,8 +64,9 @@ async def _seeded_user(db, redis, *perms: Perm, scope: str = "all") -> tuple[str
     role = Role(name=f"role_{'_'.join(p.name for p in perms) or 'bare'}", kind="platform")
     db.add(role)
     await db.flush()
-    for perm in perms:
-        permission = Permission(key=perm.value)
+    for perm in (Perm.ANALYTICS_VIEW, *perms):
+        permission = await db.scalar(select(Permission).where(Permission.key == perm.value))
+        permission = permission or Permission(key=perm.value)
         db.add(permission)
         await db.flush()
         db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope))
@@ -101,6 +104,53 @@ async def test_chart_requires_the_domain_permission(client, db_session, redis):
     headers = await _user_with_perms(db_session, redis, Perm.STATION_VIEW)
     res = await client.get(TICKETS_URL, params={"tz": "UTC", "y": "total_tickets"}, headers=headers)
     assert res.status_code == 403
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("url", "y"),
+    [
+        (CATALOG_URL, None),
+        (TICKETS_URL, "total_tickets"),
+        (TICKETS_DATA_URL, "total_tickets"),
+        (TICKETS_VALUE_URL, "total_tickets"),
+        (STATIONS_URL, "station_count"),
+        (STATIONS_DATA_URL, "station_count"),
+        (STATIONS_VALUE_URL, "station_count"),
+    ],
+)
+async def test_a_citizen_is_refused_every_endpoint(client, db_session, redis, url, y):
+    """The `user` role holds ticket.view and station.view at `all`, but not analytics.view."""
+    # Replace the bare `user` role db_session adds with the one the seed grants.
+    await db_session.execute(delete(Role).where(Role.name == "user"))
+    headers = await _seeded_role_headers(db_session, redis, "user")
+    res = await client.get(url, params={"tz": "UTC", "y": y} if y else {}, headers=headers)
+    assert res.status_code == 403
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role_name", ["data_auditor", "super_admin", "admin", "member"])
+async def test_the_back_office_roles_read_the_dashboard(client, db_session, redis, role_name):
+    """Every seeded back-office role holds analytics.view."""
+    headers = await _seeded_role_headers(db_session, redis, role_name)
+    res = await client.get(CATALOG_URL, headers=headers)
+    assert res.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_revoking_analytics_view_refuses_the_next_request(client, db_session, redis):
+    """Grants are read on every request, so deleting the grant takes effect without a restart."""
+    headers = await _seeded_role_headers(db_session, redis, "data_auditor")
+    assert (await client.get(CATALOG_URL, headers=headers)).status_code == 200
+    role = select(Role.uuid).where(Role.name == "data_auditor").scalar_subquery()
+    perm = select(Permission.uuid).where(Permission.key == Perm.ANALYTICS_VIEW.value).scalar_subquery()
+    await db_session.execute(
+        delete(RolePermissionAssign).where(
+            RolePermissionAssign.role_uuid == role, RolePermissionAssign.permission_uuid == perm
+        )
+    )
+    await db_session.commit()
+    assert (await client.get(CATALOG_URL, headers=headers)).status_code == 403
 
 
 @pytest.mark.asyncio
@@ -387,7 +437,7 @@ async def test_catalog_needs_no_domain_permission(client, db_session, redis):
 
 @pytest.mark.asyncio
 async def test_catalog_still_requires_authentication(client):
-    """Loosened to any authenticated caller — not to anonymous ones."""
+    """Not open to anonymous callers."""
     res = await client.get(CATALOG_URL)
     assert res.status_code == 401
 

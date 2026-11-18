@@ -9,8 +9,8 @@ import {
   Typography,
 } from '@mui/material';
 import Link from 'next/link';
+import { useQuery } from '@tanstack/react-query';
 import { useRef } from 'react';
-import { useQuery } from 'urql';
 
 import { CurrentBriefingDocument } from '@rescue-frontend/data-access';
 import {
@@ -21,15 +21,13 @@ import {
   Icons,
 } from '@rescue-frontend/ui';
 
+import { siteGraphqlQuery } from '../session/site-clients';
 import { formatTaiwanTime, timeAgo } from '../time';
 import { useBriefingChecklist } from './briefing-checklist';
 import { ChecklistTools } from './checklist-tools';
 import { BRIEFING_PRINT_SHEET, printBriefing } from './print-briefing';
 
 const { color, radius, typography } = designTokens;
-
-// The page shows its own loading line rather than suspend the frame around it.
-const BRIEFING_QUERY_CONTEXT = { suspense: false } as const;
 
 /** The class the Markdown takes, for the print styles to reach past its own font size. */
 const BRIEFING_MARKDOWN = 'briefing-markdown';
@@ -233,10 +231,12 @@ function NoBriefing() {
  * backend doesn't report.
  */
 export function SiteBriefing() {
-  const [{ data, fetching, error }, reexecute] = useQuery({
-    query: CurrentBriefingDocument,
-    context: BRIEFING_QUERY_CONTEXT,
-  });
+  const {
+    data,
+    isFetching: fetching,
+    error,
+    refetch,
+  } = useQuery(siteGraphqlQuery(CurrentBriefingDocument, {}));
   const latest = data?.briefings[0];
   const current = latest?.content.trim() ? latest : null;
 
@@ -328,10 +328,7 @@ export function SiteBriefing() {
             >
               行前資訊載入失敗，請稍後再試。
             </Typography>
-            <Button
-              variant="outlined"
-              onClick={() => reexecute({ requestPolicy: 'network-only' })}
-            >
+            <Button variant="outlined" onClick={() => void refetch()}>
               重新載入
             </Button>
           </Stack>

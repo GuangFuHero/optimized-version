@@ -1,5 +1,3 @@
-import { resolveGraphqlUrl } from '@rescue-frontend/data-access';
-
 const DEFAULT_API_BASE_URL = 'http://localhost:8000/api';
 
 function normalizeApiBaseUrl(url: string) {
@@ -14,6 +12,16 @@ export function getBackendApiBaseUrl() {
   );
 }
 
+/** Where the backend's `/api` and `/graphql` both live: the generated paths start with `/api`. */
+export function getBackendOrigin() {
+  return getBackendApiBaseUrl().replace(/\/api$/, '');
+}
+
+/** `GRAPHQL_URL`, or the backend's `/graphql` beside its `/api`. */
 export function getBackendGraphqlUrl() {
-  return resolveGraphqlUrl('server');
+  return (
+    process.env.GRAPHQL_URL ??
+    process.env.NEXT_PUBLIC_GRAPHQL_URL ??
+    `${getBackendOrigin()}/graphql`
+  );
 }

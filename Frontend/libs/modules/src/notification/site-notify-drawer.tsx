@@ -2,8 +2,8 @@
 
 import { Box, ButtonBase, Stack, Typography } from '@mui/material';
 import Link from 'next/link';
+import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState, type MouseEvent, type ReactNode } from 'react';
-import { useQuery } from 'urql';
 
 import {
   MyTaskAssignmentsDocument,
@@ -18,6 +18,7 @@ import {
 } from '@rescue-frontend/ui';
 
 import { useSiteRouteState } from '../route';
+import { siteGraphqlQuery } from '../session/site-clients';
 import { SiteActionDrawer } from '../shell/site/site-action-drawer';
 import { openMyStationReports } from '../station/suggestion/open-my-station-reports';
 import {
@@ -35,9 +36,6 @@ import { useMarkNotificationsRead } from './use-mark-notifications-read';
 import { useNotificationPages } from './use-notification-pages';
 
 const { color, radius, typography } = designTokens;
-
-// The lists' own loading line inside the drawer rather than suspending the page behind it.
-const NEED_LISTS_QUERY_CONTEXT = { suspense: false } as const;
 
 /**
  * Each kind's icon and colour (prototype `KIND_META`). An application turned down is grey, not red:
@@ -286,16 +284,8 @@ function SiteNotifyContent({
   onEmpty: (empty: boolean) => void;
 }) {
   const route = useSiteRouteState();
-  const [requests] = useQuery({
-    query: MyTicketsDocument,
-    requestPolicy: 'network-only',
-    context: NEED_LISTS_QUERY_CONTEXT,
-  });
-  const [claims] = useQuery({
-    query: MyTaskAssignmentsDocument,
-    requestPolicy: 'network-only',
-    context: NEED_LISTS_QUERY_CONTEXT,
-  });
+  const requests = useQuery(siteGraphqlQuery(MyTicketsDocument, {}));
+  const claims = useQuery(siteGraphqlQuery(MyTaskAssignmentsDocument, {}));
   const { list, notices, searching } = useNotificationPages({
     listKey: siteNotificationKeys.list,
     read: readSiteNotices,

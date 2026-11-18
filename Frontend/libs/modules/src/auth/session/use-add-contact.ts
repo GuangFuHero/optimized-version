@@ -1,6 +1,10 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
+import { useForm, useStore } from '@tanstack/react-form';
+
+import { useEventCallback } from 'usehooks-ts';
+
+import { useRef, useState } from 'react';
 
 import { ApiError } from '@rescue-frontend/data-access';
 import type { components } from '@rescue-frontend/data-access/openapi';
@@ -31,6 +35,7 @@ import {
 import type { ContactDraft } from './use-contact-draft';
 
 type StepUp = components['schemas']['StepUp'];
+const EMPTY_CONTACT: ContactDraft = { type: 'email', value: '' };
 
 /**
  * Where the new contact is in being added, the design's three steps:
@@ -78,25 +83,33 @@ export function useAddContact({
   onChanged,
   onVerified,
 }: AddContactOptions) {
-  const [type, setType] = useState<AuthIdentityType>('email');
-  const [value, setValue] = useState('');
+  const form = useForm({
+    defaultValues: EMPTY_CONTACT,
+    validators: {
+      onSubmit: ({ value }): StepUpProblem | undefined => {
+        const message = validateIdentityValue(value.type, value.value);
+        return message === true ? undefined : { message, tone: 'error' };
+      },
+    },
+    onSubmit: (): void => performSend(),
+  });
+  const { type, value } = useStore(form.store, (state) => state.values);
+  const fieldProblem = useStore(form.store, (state) => state.errorMap.onSubmit);
   const [stage, setStage] = useState<AddContactStage>({ kind: 'enter' });
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<StepUpProblem | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   // The latest, without making `request` — and `resume`, which the page runs in an effect — new on
   // every render.
-  const onReauthRef = useRef(onReauth);
-  onReauthRef.current = onReauth;
-  const stillPendingRef = useRef(stillPending);
-  stillPendingRef.current = stillPending;
+  const reauth = useEventCallback(onReauth);
+  const pendingNotice = useEventCallback(stillPending);
   // One more on every 取消 and every other 更換 or 新增: an answer that comes back after it belongs to
   // steps the person has left, and is dropped rather than put back on the page.
   const attempt = useRef(0);
 
   const fail = (message: string) => setProblem({ message, tone: 'error' });
 
-  const request = useCallback(
+  const request = useEventCallback(
     async (
       draft: ContactDraft,
       step: AddContactStep,
@@ -154,7 +167,7 @@ export function useAddContact({
             if (resending) {
               setNotice(
                 ask.kind === 'old-code' && ask.pending
-                  ? stillPendingRef.current(draft.type)
+                  ? pendingNotice(draft.type)
                   : '驗證碼已經重新寄出。',
               );
             }
@@ -177,18 +190,10 @@ export function useAddContact({
         }
       }
     },
-    [],
   );
 
   /** 寄驗證碼: a password account is asked for it first, so the code goes out in one try. */
-  const send = () => {
-    const validation = validateIdentityValue(type, value);
-
-    if (validation !== true) {
-      fail(validation);
-      return;
-    }
-
+  const performSend = (): void => {
     // Before the password or the first code: the backend would only say it is in use, after them.
     const own = sameAsCurrentContact(current(type), type, value);
 
@@ -206,6 +211,8 @@ export function useAddContact({
 
     void request({ type, value }, 'send');
   };
+
+  const send = () => void form.handleSubmit();
 
   const submitPassword = async (password: string) => {
     if (!saltIdentity) {
@@ -252,7 +259,7 @@ export function useAddContact({
   };
 
   /** 到 LINE 確認是我. */
-  const proveAtLine = () => onReauthRef.current({ type, value });
+  const proveAtLine = () => reauth({ type, value });
 
   const verify = async (code: string) => {
     if (stage.kind !== 'code') {
@@ -283,7 +290,7 @@ export function useAddContact({
       }
 
       setStage({ kind: 'enter' });
-      setValue('');
+      form.setFieldValue('value', '');
       setNotice(
         contactAddedText(stage.type, stage.value, current(stage.type) !== null),
       );
@@ -350,6 +357,7 @@ export function useAddContact({
     attempt.current += 1;
     setStage({ kind: 'enter' });
     setBusy(false);
+    form.setErrorMap({ onSubmit: undefined });
     setProblem(null);
     setNotice(null);
   };
@@ -360,7 +368,7 @@ export function useAddContact({
    */
   const change = (next: Partial<ContactDraft>) => {
     if (next.value !== undefined) {
-      setValue(next.value);
+      form.setFieldValue('value', next.value);
     }
 
     if (next.type === undefined) {
@@ -369,7 +377,7 @@ export function useAddContact({
       return;
     }
 
-    setType(next.type);
+    form.setFieldValue('type', next.type);
     cancel();
   };
 
@@ -377,10 +385,10 @@ export function useAddContact({
    * Back from LINE: the contact as it was typed, and with the proof made, the code goes out by itself
    * — the person already pressed 寄驗證碼 once.
    */
-  const resume = useCallback(
+  const resume = useEventCallback(
     (draft: ContactDraft, outcome: AccountStepUpReturn['stepUp']) => {
-      setType(draft.type);
-      setValue(draft.value);
+      form.setFieldValue('type', draft.type);
+      form.setFieldValue('value', draft.value);
 
       if (outcome === 'ok') {
         void request(draft, 'send', undefined, { backFromLine: true });
@@ -391,7 +399,6 @@ export function useAddContact({
         });
       }
     },
-    [request],
   );
 
   return {
@@ -399,7 +406,7 @@ export function useAddContact({
     value,
     stage,
     busy,
-    problem,
+    problem: fieldProblem ?? problem,
     notice,
     send,
     submitPassword,

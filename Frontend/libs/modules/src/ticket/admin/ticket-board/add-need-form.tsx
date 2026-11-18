@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useForm, useStore } from '@tanstack/react-form';
 
 import { Box, MenuItem, TextField } from '@mui/material';
 import { useCreateTicketTask } from '@rescue-frontend/data-access/admin';
@@ -15,8 +16,8 @@ import {
   validateNeedDraft,
   type DuplicateSuspect,
   type NeedDraft,
-  type NeedDraftErrors,
 } from './model/task-actions';
+import { useReportBusy } from './hooks/use-busy-keys';
 import { NEED_TYPES, needTypeLabel } from './model/ticket-row';
 
 const EMPTY_DRAFT: NeedDraft = {
@@ -48,19 +49,33 @@ export function AddNeedForm({
 }) {
   const createTask = useCreateTicketTask();
   const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState<NeedDraft>(EMPTY_DRAFT);
-  const [errors, setErrors] = useState<NeedDraftErrors>({});
+  const form = useForm({
+    defaultValues: EMPTY_DRAFT,
+    validators: {
+      onSubmit: ({ value }) => {
+        const fields = validateNeedDraft(value);
+        return Object.keys(fields).length ? { fields } : undefined;
+      },
+    },
+    onSubmit: () => create(),
+  });
+  const draft = useStore(form.store, (state) => state.values);
+  const fields = useStore(form.store, (state) => state.fieldMeta);
+  const errors = {
+    taskName: fields.taskName?.errors[0],
+    quantity: fields.quantity?.errors[0],
+  };
   const [suspects, setSuspects] = useState<DuplicateSuspect[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const submitting = createTask.isPending;
-  useEffect(() => {
-    onBusyChange?.(submitting);
-  }, [submitting, onBusyChange]);
-  useEffect(() => () => onBusyChange?.(false), [onBusyChange]);
+  useReportBusy(submitting, onBusyChange);
 
   const change = (key: keyof NeedDraft, value: string) => {
-    setDraft((current) => ({ ...current, [key]: value }));
-    setErrors((current) => ({ ...current, [key]: undefined }));
+    form.setFieldValue(key, value);
+    form.setFieldMeta(key, (meta) => ({
+      ...meta,
+      errorMap: { ...meta.errorMap, onSubmit: undefined },
+    }));
     // The notice was about the draft as sent; an edit makes it a new one to check.
     setSuspects(null);
   };
@@ -68,8 +83,7 @@ export function AddNeedForm({
   const close = () => {
     if (submitting) return;
     setOpen(false);
-    setDraft(EMPTY_DRAFT);
-    setErrors({});
+    form.reset();
     setSuspects(null);
     setError(null);
   };
@@ -89,17 +103,11 @@ export function AddNeedForm({
       }
       setSuspects(null);
       setOpen(false);
-      setDraft(EMPTY_DRAFT);
+      form.reset();
     } catch (caught) {
       setError(addError(caught));
     }
   }
-
-  const submit = () => {
-    const next = validateNeedDraft(draft);
-    setErrors(next);
-    if (Object.keys(next).length === 0) void create();
-  };
 
   if (!open) {
     return (
@@ -121,7 +129,7 @@ export function AddNeedForm({
       aria-label="再加一項需求"
       onSubmit={(event) => {
         event.preventDefault();
-        submit();
+        void form.handleSubmit();
       }}
       sx={{ display: 'flex', flexDirection: 'column', gap: '12px', mt: '8px' }}
     >

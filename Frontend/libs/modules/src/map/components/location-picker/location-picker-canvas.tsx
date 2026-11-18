@@ -1,5 +1,7 @@
 'use client';
 
+import { useEventCallback } from 'usehooks-ts';
+
 import 'leaflet/dist/leaflet.css';
 
 import L from 'leaflet';
@@ -54,11 +56,9 @@ export function LocationPickerCanvas({
   const hostRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const pinRef = useRef<L.Marker | null>(null);
-  const onPickRef = useRef(onPick);
+  const pickPoint = useEventCallback(onPick);
   const initialValueRef = useRef(value);
   const startViewRef = useRef(startView);
-
-  onPickRef.current = onPick;
 
   useEffect(() => {
     const host = hostRef.current;
@@ -83,7 +83,7 @@ export function LocationPickerCanvas({
       maxZoom: 19,
     }).addTo(map);
     map.on('click', (event) =>
-      onPickRef.current({ lat: event.latlng.lat, lng: event.latlng.lng }),
+      pickPoint({ lat: event.latlng.lat, lng: event.latlng.lng }),
     );
     mapRef.current = map;
 
@@ -127,7 +127,7 @@ export function LocationPickerCanvas({
 
       pin.on('dragend', () => {
         const point = pin.getLatLng();
-        onPickRef.current({ lat: point.lat, lng: point.lng });
+        pickPoint({ lat: point.lat, lng: point.lng });
       });
       pin.addTo(map);
       pinRef.current = pin;

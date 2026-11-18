@@ -1,7 +1,8 @@
 'use client';
 
 import type { ReactElement } from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useState } from 'react';
+import { useIsClient } from 'usehooks-ts';
 
 import {
   Box,
@@ -84,21 +85,12 @@ export function PointShareDrawer({
   const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle');
   // After mount: the server has no `navigator`, and most desktop browsers have no share sheet —
   // a button that does nothing is left out rather than shown.
-  const [canShareNatively, setCanShareNatively] = useState(false);
+  const isClient = useIsClient();
+  const canShareNatively = isClient && typeof navigator.share === 'function';
   // A finger, not a mouse: where a channel's own app may be installed and take its links.
   const touchScreen = useMediaQuery('(pointer: coarse)');
-  const links = useMemo(
-    () => (target ? createPointShareLinks(target) : []),
-    [target],
-  );
-  const qrDataUrl = useMemo(
-    () => (target ? createQrDataUrl(target.url) : ''),
-    [target],
-  );
-
-  useEffect(() => {
-    setCanShareNatively(typeof navigator.share === 'function');
-  }, []);
+  const links = target ? createPointShareLinks(target) : [];
+  const qrDataUrl = target ? createQrDataUrl(target.url) : '';
 
   const handleCopy = async () => {
     if (!target) {

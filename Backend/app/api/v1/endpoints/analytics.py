@@ -1,5 +1,7 @@
 """Analytics chart REST API for the ops dashboard: Plotly figure JSON, plain series, and KPI numbers.
 
+Every endpoint needs `analytics.view`, on top of the source module's view capability.
+
 See https://plotly.com/python/ for the underlying charting library.
 
 **X/Y model.** Pick `y` (what to measure — a metric from the catalog below) and `x`
@@ -62,7 +64,7 @@ from app.schemas.analytics import (
 from app.services import analytics_filters, chart_render, station_analytics, ticket_analytics
 from app.services.analytics_common import AnalyticsInputError
 
-router = APIRouter()
+router = APIRouter(dependencies=[security.has_permission(Perm.ANALYTICS_VIEW)])
 
 TICKET_METRIC_FNS = {
     TicketYMetric.total_tickets: partial(ticket_analytics.get_ticket_count, bucket=None),
@@ -533,7 +535,7 @@ async def get_analytics_catalog(
     chart endpoints below — build x/y dropdowns from this response instead of
     hardcoding the rules client-side.
 
-    Authentication only, no capability: the metric specs are a static description of this
+    Needs `analytics.view` alone: the metric specs are a static description of this
     API's own shape. Gating it on ticket.view (as it originally was) locked a station-only
     role out of the station catalog it is allowed to chart. The filter values that come from
     rows (areas, station types) are narrowed to the caller's own scope per domain, and left
