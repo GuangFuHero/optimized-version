@@ -42,8 +42,8 @@ spec, which looked for the metadata at the root whatever the path, are not suppo
 ## Deployment
 
 The backend is reachable only through the site. To serve MCP clients, the edge in front of the site's
-hostname (the Cloudflare tunnel on staging, `DEPLOY.md` "MCP clients") sends **only** these paths to the
-backend:
+hostname (the Cloudflare tunnel on staging, the root `DEPLOY.md` section 6, "E. MCP 用戶端") sends
+**only** these paths to the backend:
 
 ```
 /mcp   /mcp/register   /mcp/authorize   /mcp/token   /mcp/revoke
@@ -108,7 +108,7 @@ Read only is enforced, not listed:
   `mcp.unlimited_use` (see "Who may use it").
 - Every number in this list except `/graphql`'s own depth, alias and token limits is a setting
   (`MCP_EXECUTE_SECONDS`, `MCP_SANDBOX_WORKERS`, `MCP_MAX_WAITING_CLIENTS`, … in `app/core/config.py`); the
-  numbers above are their defaults, and `DEPLOY.md` lists them all.
+  numbers above are their defaults, and the root `DEPLOY.md` (section 6, "MCP 上限") lists them all.
 
 `DENIED_ROOT_FIELDS` and `EXCLUDED_REST_PREFIXES` in `tools.py` are the only lists to maintain.
 
