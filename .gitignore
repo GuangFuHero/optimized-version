@@ -50,3 +50,10 @@ Universal_Disaster_Platform_Manager_End_RBAC_v1.0_Dashboard.md
 
 .pi/
 .DS_Store
+
+# E2E & Remotion generated artifacts
+e2e/output/
+playwright-report/
+test-results/
+video/public/recordings/
+video/out/
