@@ -206,13 +206,13 @@ gcloud secrets versions access latest --project=wanguard-250923 --secret=staging
 | `MCP_EXECUTE_MEMORY_BYTES` | `100000000` | 每次 `execute` 的沙盒記憶體（bytes） |
 | `MCP_SANDBOX_WORKERS` | `2` | 沙盒 worker 行程數；每個使用者同時最多佔用一個 |
 | `MCP_SANDBOX_WAIT_SECONDS` | `10` | `execute` 等待空閒 worker 的秒數，超過就拒絕 |
-| `MCP_EXECUTES_PER_USER` / `MCP_EXECUTE_WINDOW_SECONDS` | `10` / `60` | 每個使用者每段時間（秒）可以開始的 `execute` 次數 |
-| `MCP_REGISTERS_PER_IP` / `MCP_REGISTER_WINDOW_SECONDS` | `10` / `3600` | 每個 IP 每段時間（秒）可以註冊用戶端（`/mcp/register`）的次數 |
-| `MCP_AUTHORIZES_PER_IP` / `MCP_AUTHORIZE_WINDOW_SECONDS` | `30` / `600` | 每個 IP 每段時間（秒）可以開始登入（`/mcp/authorize`）的次數 |
+| `MCP_EXECUTES_PER_USER` / `MCP_EXECUTE_WINDOW_SECONDS` | `10` / `60` | 每個使用者在一段時間內最多可以開始的 `execute` 次數；兩個值依序是次數與這段時間的秒數 |
+| `MCP_REGISTERS_PER_IP` / `MCP_REGISTER_WINDOW_SECONDS` | `10` / `3600` | 每個 IP 在一段時間內最多可以註冊用戶端（`/mcp/register`）的次數；兩個值依序是次數與秒數 |
+| `MCP_AUTHORIZES_PER_IP` / `MCP_AUTHORIZE_WINDOW_SECONDS` | `30` / `600` | 每個 IP 在一段時間內最多可以開始登入（`/mcp/authorize`）的次數；兩個值依序是次數與秒數 |
 | `MCP_MAX_WAITING_CLIENTS` | `1000` | 等待第一次登入的已註冊用戶端數；超過時最舊的會被擠掉 |
 | `MCP_MAX_TOOL_CALLS` | `50` | 一次 `execute` 可以呼叫工具的次數 |
 | `MCP_CALL_TIMEOUT_SECONDS` | `30` | 工具發出的單次後端呼叫可以花的秒數 |
-| `MCP_QUERY_MAX_CHARS` | `20000` | 工具接受的 GraphQL 文件字元數 |
+| `MCP_QUERY_MAX_CHARS` | `20000` | 工具接受的 GraphQL 查詢字串長度上限（字元數） |
 | `MCP_CLIENT_NAME_MAX_CHARS` / `MCP_MAX_REDIRECT_URIS` / `MCP_REGISTRATION_MAX_BYTES` | `100` / `5` / `8192` | 一次用戶端註冊可以帶的名稱長度、redirect URI 數與整體大小（bytes） |
 | `MCP_UNUSED_CLIENT_SECONDS` | `3600` | 已註冊的用戶端在第一次登入前保留的秒數 |
 | `MCP_AUTHORIZE_REQUEST_SECONDS` | `600` | 開始的登入在同意頁面等待的秒數 |
