@@ -45,7 +45,8 @@
   ┌─────────────────────────────── GCP VM (wanguard-test-01) ───────────────────────────────┐
   │  cloudflared 容器                                                                       │
   │    ├─ 轉發至 frontend 容器 (:3000, APP=demo)  ─┐                                         │
-  │    └─ 轉發至 admin 容器    (:3000, APP=admin) ─┤ Next.js BFF Proxy (http://backend:8000) │
+  │    ├─ 轉發至 admin 容器    (:3000, APP=admin) ─┤ Next.js BFF Proxy (http://backend:8000) │
+  │    └─ MCP 路徑 → backend 容器 (:8000)          │                                         │
   │                                                ▼                                         │
   │                                  backend 容器 (:8000, FastAPI)                          │
   │                                    ├─ db 容器    (PostGIS + H3, named volume: pgdata)   │
