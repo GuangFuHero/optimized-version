@@ -207,6 +207,18 @@ GitHub Actions 後端相關 Workflows：
 - `alembic-heads.yml`：確保 `Backend/alembic/versions/` 只有單一 head，沒有未合併的分支 migration。
 - `frontend-ci.yaml`：當 `Backend/**` 有變更時也會觸發，檢查 `pnpm schemas:generate` 是否有未同步的前端型別合約。
 
+### 新增或升級套件
+
+套件版本鎖在 `uv.lock`，CI 與 Docker image 都照它安裝；它和 `pyproject.toml` 對不上時，兩邊都會直接失敗。
+
+```bash
+cd Backend
+uv add <套件>                      # 新增套件，同時寫進 pyproject.toml 與 uv.lock
+uv lock --upgrade-package <套件>   # 在 pyproject.toml 允許的範圍內升級單一套件
+```
+
+改完把 `uv.lock` 和 `pyproject.toml` 一起 commit。
+
 ---
 
 ## 專案結構
