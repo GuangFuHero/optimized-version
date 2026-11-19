@@ -30,6 +30,7 @@ from app.core import security
 from app.core.config import settings
 from app.core.normalize import normalize_email
 from app.core.redis import create_redis_client
+from app.graphql.masking import mask_email
 from app.models.auth import UserIdentity
 from app.repositories.auth_repository import contact_repository, identity_repository
 from app.repositories.session_repository import SessionRepository
@@ -93,7 +94,7 @@ def main() -> None:
         asyncio.run(_run(args.email, password))
     except ValueError as err:
         raise SystemExit(f"{err}; nothing was changed") from err
-    print(f"Password set for {args.email}; its sessions are signed out")
+    print(f"Password set for {mask_email(args.email)}; its sessions are signed out")
 
 
 if __name__ == "__main__":
