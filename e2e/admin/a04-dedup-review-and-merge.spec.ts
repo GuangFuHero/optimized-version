@@ -1,7 +1,10 @@
 import { expect, test } from '../fixtures/tutorial-recorder';
 
 test.describe('A04：疑似重複案件審核與合併（Deduplication Review）', () => {
-  test('檢視重複審核頁面與無障礙結構', async ({ page, tutorial }) => {
+  test('檢視重複審核佇列、點開疑似重複配對進行雙欄比對並通過無障礙檢測', async ({
+    page,
+    tutorial,
+  }) => {
     tutorial.init({
       id: 'A04-admin-dedup-review',
       title: '管理後台：重複案件審核與合併',
@@ -24,7 +27,19 @@ test.describe('A04：疑似重複案件審核與合併（Deduplication Review）
       },
     });
     await expect(page).toHaveURL(/\/audit/);
-
     await tutorial.checkA11y('管理後台重複審核頁面');
+
+    const reviewBtn = page.getByRole('button', { name: /檢視|比對|審核/ }).first();
+    if ((await reviewBtn.count()) > 0) {
+      await tutorial.step({
+        title: '點開配對卡片進入雙欄比對頁',
+        subtitle: '逐欄比較 A 單與 B 單的地點、聯絡人與需求明細，決定要合併或標記為不同案件。',
+        target: reviewBtn,
+        action: async () => {
+          await reviewBtn.click();
+        },
+      });
+      await tutorial.checkA11y('重複審核雙欄比對頁面');
+    }
   });
 });

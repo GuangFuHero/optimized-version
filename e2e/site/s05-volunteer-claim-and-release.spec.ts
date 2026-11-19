@@ -1,7 +1,10 @@
 import { expect, test } from '../fixtures/tutorial-recorder';
 
-test.describe('S05：志工認領任務、查看「我的任務」與釋出名額', () => {
-  test('志工登入後於列表查看招募中需求、開啟認領確認視窗並檢視我的任務', async ({ page, tutorial }) => {
+test.describe('S05：志工認領任務、查看「我的任務」與確認視窗', () => {
+  test('志工登入後於列表切換任務單、打開案件詳情並開啟承接確認視窗', async ({
+    page,
+    tutorial,
+  }) => {
     tutorial.init({
       id: 'S05-volunteer-claim',
       title: '志工承接任務與管理「我的任務」',
@@ -24,19 +27,44 @@ test.describe('S05：志工認領任務、查看「我的任務」與釋出名�
         await listNavLink.click();
       },
     });
+    await expect(page).toHaveURL(/\/list/);
 
-    const ticketTab = page.getByRole('button', { name: /請求協助|任務/ }).first();
-    if ((await ticketTab.count()) > 0) {
+    const taskBtn = page
+      .getByRole('group', { name: '資料維度' })
+      .getByRole('button', { name: '任務' });
+    await tutorial.step({
+      title: '切換資料維度至「任務」清單',
+      subtitle: '篩選出民眾發出的求助任務單，檢視各項人力與物資缺額。',
+      target: taskBtn,
+      action: async () => {
+        await taskBtn.click();
+      },
+    });
+    await tutorial.checkA11y('志工瀏覽求助任務列表');
+
+    const claimBtn = page.getByRole('button', { name: /我要去幫忙|承接/ }).first();
+    if ((await claimBtn.count()) > 0) {
       await tutorial.step({
-        title: '篩選「請求協助」任務單',
-        subtitle: '切換資料類型至求助任務單，查看各項人力與物資缺額。',
-        target: ticketTab,
+        title: '點擊「我要去幫忙」開啟承接確認視窗',
+        subtitle: '在正式承接前，系統會再次列出案件地址、現場聯絡人與目前缺額供志工確認。',
+        target: claimBtn,
         action: async () => {
-          await ticketTab.click();
+          await claimBtn.click();
+        },
+      });
+      const dialog = page.getByRole('dialog');
+      await expect(dialog).toBeVisible();
+      await tutorial.checkA11y('承接任務確認視窗');
+
+      const cancelBtn = dialog.getByRole('button', { name: /取消|關閉/ }).first();
+      await tutorial.step({
+        title: '確認資訊後可點擊承接或取消返回',
+        subtitle: '確認可到場支援即可送出承接；此處示範取消以保留測試資料乾淨。',
+        target: cancelBtn,
+        action: async () => {
+          await cancelBtn.click();
         },
       });
     }
-
-    await tutorial.checkA11y('志工瀏覽求助任務列表');
   });
 });

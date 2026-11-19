@@ -1,11 +1,14 @@
 import { expect, test } from '../fixtures/tutorial-recorder';
 
-test.describe('A03：任務管理看板、大樓空間分區管理與批次匯出', () => {
-  test('進入「任務管理」頁面、檢視案件列表並通過無障礙檢測', async ({ page, tutorial }) => {
+test.describe('A03：任務管理看板、詳情檢視與空間分區', () => {
+  test('進入「任務管理」頁面、點開任務單詳情抽屜並通過無障礙檢測', async ({
+    page,
+    tutorial,
+  }) => {
     tutorial.init({
       id: 'A03-admin-ticket-board',
       title: '管理後台：任務管理與建築空間分區',
-      subtitle: '篩選與指派求助案件、管理集合住宅樓層戶別需求並支援批次匯入匯出',
+      subtitle: '篩選與指派求助案件、檢視完整任務詳情與時間軸，並支援批次匯入匯出',
       surface: 'admin',
     });
 
@@ -28,5 +31,19 @@ test.describe('A03：任務管理看板、大樓空間分區管理與批次匯�
     await expect(page).toHaveURL(/\/tickets/);
     await expect(page.getByRole('heading', { level: 1, name: '任務管理' })).toBeVisible();
     await tutorial.checkA11y('管理後台任務管理頁面');
+
+    const firstDataRow = page.getByRole('row').nth(1);
+    if ((await firstDataRow.count()) > 0) {
+      await tutorial.step({
+        title: '點選任一任務單展開詳情側欄',
+        subtitle: '點擊案件列即可查看完整通報地址、聯絡資訊、需求進度與歷史稽核紀錄。',
+        target: firstDataRow,
+        action: async () => {
+          await firstDataRow.click();
+        },
+      });
+      await expect(page.getByRole('button', { name: /關閉/ }).first()).toBeVisible();
+      await tutorial.checkA11y('管理後台任務詳情側欄');
+    }
   });
 });

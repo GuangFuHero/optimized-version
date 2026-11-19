@@ -2,11 +2,12 @@ import { defineConfig, devices } from '@playwright/test';
 
 const SITE_URL = process.env.SITE_APP_URL ?? 'http://localhost:3000';
 const ADMIN_URL = process.env.ADMIN_APP_URL ?? 'http://localhost:3001';
+const IS_TUTORIAL_MODE = process.env.RECORD_TUTORIAL === '1';
 
 export default defineConfig({
   testDir: '.',
   globalSetup: require.resolve('./global-setup'),
-  timeout: 90_000,
+  timeout: IS_TUTORIAL_MODE ? 120_000 : 60_000,
   expect: {
     timeout: 15_000,
   },
@@ -19,10 +20,12 @@ export default defineConfig({
     viewport: { width: 1280, height: 720 },
     locale: 'zh-TW',
     timezoneId: 'Asia/Taipei',
-    video: {
-      mode: 'on',
-      size: { width: 1280, height: 720 },
-    },
+    video: IS_TUTORIAL_MODE
+      ? {
+          mode: 'on',
+          size: { width: 1280, height: 720 },
+        }
+      : 'retain-on-failure',
     trace: 'retain-on-failure',
   },
   projects: [

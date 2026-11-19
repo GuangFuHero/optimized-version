@@ -16,6 +16,8 @@ export interface TutorialStepRecord {
   subtitle: string;
   ariaLabel?: string;
   startMs: number;
+  /** 操作觸發的時間點（用於觸發點擊波紋與聚光燈淡出） */
+  actionMs?: number;
   endMs: number;
   box: TutorialStepBox | null;
 }
@@ -49,12 +51,76 @@ interface StepOptions {
   title: string;
   subtitle: string;
   target?: Locator;
+  /** 點擊前停頓讓觀眾看清楚聚光燈位置 */
+  preActionMs?: number;
+  /** 點擊後停頓讓觀眾看清楚畫面結果 */
   holdMs?: number;
   action?: () => Promise<void>;
 }
 
-const IS_TUTORIAL_MODE = process.env.RECORD_TUTORIAL === '1';
-const DEFAULT_HOLD_MS = IS_TUTORIAL_MODE ? 1400 : 100;
+type TutorialPaceMode = 'fast' | 'normal' | 'slow';
+
+interface PaceProfile {
+  mode: TutorialPaceMode;
+  preActionMs: number;
+  minHoldMs: number;
+  maxHoldMs: number;
+  msPerChar: number;
+  hoverSettleMs: number;
+  scrollSettleMs: number;
+  typeDelayMs: number;
+  cursorMoveSteps: number;
+  smoothScroll: boolean;
+}
+
+const PACE_PROFILES: Record<TutorialPaceMode, PaceProfile> = {
+  fast: {
+    mode: 'fast',
+    preActionMs: 0,
+    minHoldMs: 0,
+    maxHoldMs: 0,
+    msPerChar: 0,
+    hoverSettleMs: 0,
+    scrollSettleMs: 0,
+    typeDelayMs: 0,
+    cursorMoveSteps: 0,
+    smoothScroll: false,
+  },
+  normal: {
+    mode: 'normal',
+    preActionMs: 750,
+    minHoldMs: 1350,
+    maxHoldMs: 2600,
+    msPerChar: 45,
+    hoverSettleMs: 220,
+    scrollSettleMs: 360,
+    typeDelayMs: 55,
+    cursorMoveSteps: 20,
+    smoothScroll: true,
+  },
+  slow: {
+    mode: 'slow',
+    preActionMs: 1100,
+    minHoldMs: 1800,
+    maxHoldMs: 3200,
+    msPerChar: 60,
+    hoverSettleMs: 280,
+    scrollSettleMs: 450,
+    typeDelayMs: 80,
+    cursorMoveSteps: 28,
+    smoothScroll: true,
+  },
+};
+
+function resolvePace(): PaceProfile {
+  const explicit = process.env.TUTORIAL_PACE;
+  if (explicit === 'fast' || explicit === 'normal' || explicit === 'slow') {
+    return PACE_PROFILES[explicit];
+  }
+  return process.env.RECORD_TUTORIAL === '1' ? PACE_PROFILES.normal : PACE_PROFILES.fast;
+}
+
+const PACE = resolvePace();
 
 function formatVttTimestamp(ms: number): string {
   const clamped = Math.max(0, Math.round(ms));
@@ -78,34 +144,85 @@ export function buildWebVtt(timeline: EpisodeTimeline): string {
 
 export class TutorialRecorder {
   private readonly page: Page;
-  private startedAt = Date.now();
+  /** Playwright 在建立 page 時即啟動 recordVideo，因此時間基準必須從 constructor 開始算 */
+  private readonly recordingStartedAt: number;
   private meta: InitEpisodeOptions | null = null;
   private readonly steps: TutorialStepRecord[] = [];
   private readonly a11yAudits: A11yAuditRecord[] = [];
 
   constructor(page: Page) {
     this.page = page;
+    this.recordingStartedAt = Date.now();
   }
 
   init(options: InitEpisodeOptions): void {
-    this.startedAt = Date.now();
     this.meta = options;
   }
 
   private nowMs(): number {
-    return Date.now() - this.startedAt;
+    return Math.max(0, Date.now() - this.recordingStartedAt);
+  }
+
+  private async scrollToTarget(targetEl: Locator): Promise<void> {
+    if (PACE.smoothScroll) {
+      await targetEl
+        .evaluate((el) => {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+        })
+        .catch(() => targetEl.scrollIntoViewIfNeeded().catch(() => {}));
+      if (PACE.scrollSettleMs > 0) {
+        await this.page.waitForTimeout(PACE.scrollSettleMs);
+      }
+      return;
+    }
+    await targetEl.scrollIntoViewIfNeeded().catch(() => {});
+  }
+
+  private async glideCursorTo(targetEl: Locator): Promise<void> {
+    if (PACE.cursorMoveSteps <= 0) {
+      return;
+    }
+    const rawBox = await targetEl.boundingBox().catch(() => null);
+    if (!rawBox) {
+      return;
+    }
+    const cx = rawBox.x + rawBox.width / 2;
+    const cy = rawBox.y + rawBox.height / 2;
+    await this.page.mouse.move(cx, cy, { steps: PACE.cursorMoveSteps }).catch(() => {});
+  }
+
+  /**
+   * 依目前節奏輸入文字：一般 E2E 使用瞬間 fill()，錄製教學模式改為平滑移動並逐字輸入。
+   */
+  async type(locator: Locator, text: string): Promise<void> {
+    const targetEl = locator.first();
+    await expect(targetEl).toBeVisible();
+    if (PACE.typeDelayMs <= 0) {
+      await targetEl.fill(text);
+      return;
+    }
+    await this.scrollToTarget(targetEl);
+    await this.glideCursorTo(targetEl);
+    await targetEl.click();
+    await targetEl.fill('');
+    await targetEl.pressSequentially(text, { delay: PACE.typeDelayMs });
   }
 
   async step(options: StepOptions): Promise<void> {
-    const startMs = this.nowMs();
     let box: TutorialStepBox | null = null;
     let ariaLabel: string | undefined;
 
+    // 先等目標出現、捲動至可視範圍並平滑移入游標（觸發 hover 展開），穩定後再開始計時與量測座標
     if (options.target) {
       const targetEl = options.target.first();
       await expect(targetEl).toBeVisible();
+      await this.scrollToTarget(targetEl);
+      await this.glideCursorTo(targetEl);
       await targetEl.hover().catch(() => {});
-      await this.page.waitForTimeout(180);
+      if (PACE.hoverSettleMs > 0) {
+        await this.page.waitForTimeout(PACE.hoverSettleMs);
+      }
+
       const rawBox = await targetEl.boundingBox();
       if (rawBox) {
         box = {
@@ -120,22 +237,37 @@ export class TutorialRecorder {
       ariaLabel = attrLabel || textContent || undefined;
     }
 
+    const startMs = this.nowMs();
+
+    // 操作前停頓，讓聚光燈與游標精準停在目標元件上（一般 E2E 模式為 0ms）
+    const preWait = PACE.mode === 'fast' ? 0 : (options.preActionMs ?? PACE.preActionMs);
+    if (preWait > 0 && options.target) {
+      await this.page.waitForTimeout(preWait);
+    }
+
+    const actionMs = this.nowMs();
     if (options.action) {
       await options.action();
     }
 
-    const hold = options.holdMs ?? DEFAULT_HOLD_MS;
+    // 錄製模式依字幕長度自動計算停頓時間，確保觀眾來得及閱讀；一般 E2E 模式為 0ms
+    const autoHold = Math.min(
+      PACE.maxHoldMs,
+      Math.max(PACE.minHoldMs, options.subtitle.length * PACE.msPerChar),
+    );
+    const hold = PACE.mode === 'fast' ? 0 : (options.holdMs ?? autoHold);
     if (hold > 0) {
       await this.page.waitForTimeout(hold);
     }
 
-    const endMs = Math.max(startMs + 500, this.nowMs());
+    const endMs = Math.max(startMs + 600, this.nowMs());
     this.steps.push({
       index: this.steps.length + 1,
       title: options.title,
       subtitle: options.subtitle,
       ariaLabel,
       startMs,
+      actionMs,
       endMs,
       box,
     });
@@ -146,6 +278,9 @@ export class TutorialRecorder {
    * 確保互動元件具備可辨識的無障礙名稱、表單標籤與語意角色。
    */
   async checkA11y(contextName: string, options?: { strict?: boolean }): Promise<void> {
+    // Wait for Next.js App Router to finish reconciling <head> metadata after client-side navigation
+    await expect(this.page).toHaveTitle(/\S/);
+
     const results = await new AxeBuilder({ page: this.page })
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
       .exclude('.leaflet-container')
@@ -203,8 +338,8 @@ export class TutorialRecorder {
       subtitle: `於「電子郵件」欄位輸入 ${email} 並填寫密碼後送出登入。`,
       target: emailInput,
       action: async () => {
-        await emailInput.fill(email);
-        await passwordInput.fill(password);
+        await this.type(emailInput, email);
+        await this.type(passwordInput, password);
         await this.page.getByRole('button', { name: '登入', exact: true }).click();
       },
     });
