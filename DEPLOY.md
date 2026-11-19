@@ -182,7 +182,7 @@ gcloud secrets versions access latest --project=wanguard-250923 --secret=staging
 
 ### 後端套件版本與升級
 
-- 後端 image 只安裝 `Backend/uv.lock` 記錄的版本，所以 CI 測過的版本就是部署上去的版本；`uv.lock` 和 `pyproject.toml` 對不上時，Step 5 會建置失敗。
+- 後端 image 只安裝 `Backend/uv.lock` 記錄的版本，所以 CI 測過的版本就是部署上去的版本；`uv.lock` 和 `pyproject.toml` 對不上時，上表的 Step 5（Build Images）會失敗。
 - 升級由 Dependabot 開 PR 更新 `uv.lock`：每週一上午 9 點（台北時間），小版本與修補版本合成一個 PR，大版本各開一個；新版本要發布滿 14 天才會被提出，安全性更新則立刻開 PR。PR 的 CI 全綠才可以合併。
 
 ---
