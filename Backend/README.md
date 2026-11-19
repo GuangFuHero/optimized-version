@@ -219,6 +219,8 @@ uv lock --upgrade-package <套件>   # 在 pyproject.toml 允許的範圍內升�
 
 改完把 `uv.lock` 和 `pyproject.toml` 一起 commit。
 
+uv 本身的版本釘在 `Dockerfile`、`backend-tests.yml` 與 `frontend-ci.yaml` 三處，Dependabot 不會更新它；要升級時三處一起手動改。
+
 ---
 
 ## 專案結構
