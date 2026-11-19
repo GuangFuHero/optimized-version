@@ -6,11 +6,14 @@
     "setup": "test -f Backend/.env || cp Backend/.env.example Backend/.env; test -f Frontend/.env || cp Frontend/.env.example Frontend/.env; pnpm --dir Frontend install && uv --directory Backend sync && docker compose --project-directory Backend up -d --wait && docker compose --project-directory Backend exec -T backend alembic upgrade head && docker compose --project-directory Backend exec -T backend python -m scripts.seed_rbac && docker compose --project-directory Backend exec -T db psql -U postgres -d postgres -v ON_ERROR_STOP=1 < Backend/scripts/seed_mock_scenarios.sql",
     "dev": "docker compose --project-directory Backend up -d && pnpm --dir Frontend dev",
     "test": "pnpm --dir Frontend test && docker compose --project-directory Backend up -d --wait db redis && uv --directory Backend run pytest -n 4",
+    "e2e:preflight": "node e2e/scripts/preflight.mjs",
     "e2e": "playwright test -c e2e/playwright.config.ts",
     "e2e:record": "RECORD_TUTORIAL=1 playwright test -c e2e/playwright.config.ts",
+    "e2e:check": "node e2e/scripts/check-timeline.mjs",
     "e2e:ui": "playwright test -c e2e/playwright.config.ts --ui",
     "video:studio": "remotion studio video/index.ts --public-dir=video/public",
-    "video:render": "node video/render-all.mjs"
+    "video:render": "node video/render-all.mjs",
+    "video:html": "node video/render-all.mjs --html-only"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.10.2",

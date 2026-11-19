@@ -34,12 +34,13 @@ test.describe('A05：資源站點管理、物資盤點與民眾修改建議審�
 
     const firstStationRow = page.getByRole('row').nth(1);
     if ((await firstStationRow.count()) > 0) {
+      const firstStationCell = firstStationRow.getByRole('cell').first();
       await tutorial.step({
         title: '點選站點列開啟物資盤點與詳情側欄',
         subtitle: '查看該站點的即時營運狀態、指派團隊、物資盤點明細與修改歷史時間軸。',
-        target: firstStationRow,
+        target: firstStationCell,
         action: async () => {
-          await firstStationRow.click();
+          await firstStationCell.click();
         },
       });
       await expect(page.getByRole('button', { name: '關閉站點詳情' })).toBeVisible();

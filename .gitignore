@@ -27,7 +27,9 @@ memory/
 .local/
 .vscode/
 .pytest_cache/
-.claude/
+# Personal Claude Code settings stay local; skills under .claude/skills/ are shared with the team.
+.claude/*
+!.claude/skills/
 .db/
 .venv/
 

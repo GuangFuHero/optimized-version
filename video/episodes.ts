@@ -1,5 +1,22 @@
 import type { EpisodeTimeline } from '../e2e/fixtures/tutorial-recorder';
 
+/**
+ * A catalog entry for an episode that has no hand-made preview: Remotion registers the composition
+ * from it, and `calculateMetadata` in `Root.tsx` swaps in the recorded timeline and video once
+ * `pnpm e2e:record` has run.
+ */
+export function recordedEpisode(
+  meta: Pick<EpisodeTimeline, 'id' | 'title' | 'subtitle' | 'surface'>,
+): EpisodeTimeline {
+  return {
+    ...meta,
+    viewport: { width: 1280, height: 720 },
+    durationMs: 3000,
+    steps: [],
+    a11yAudits: [],
+  };
+}
+
 export const EPISODE_CATALOG: readonly EpisodeTimeline[] = [
   {
     id: 'S01-map-explore',

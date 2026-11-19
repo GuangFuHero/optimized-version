@@ -15,8 +15,11 @@ export interface TutorialCompositionProps {
   videoSrc?: string;
 }
 
-const INTRO_FRAMES = 54; // 1.8s at 30fps
-const OUTRO_FRAMES = 66; // 2.2s at 30fps
+// The recording starts after the intro card, so a step at `startMs` in the timeline is at
+// INTRO_FRAMES + startMs in the rendered video. `video/render-all.mjs` shifts the captions and
+// builds the player with the same offset (INTRO_MS there).
+export const INTRO_FRAMES = 60; // 2 seconds at 30fps
+const OUTRO_FRAMES = 60; // 2 seconds at 30fps
 
 // Stage layout inside 1280x720 canvas:
 // - Top chrome bar: 32px
@@ -510,16 +513,37 @@ export const TutorialComposition: React.FC<TutorialCompositionProps> = ({
             <div style={{ flex: 1, minWidth: 0 }}>
               <div
                 style={{
-                  fontSize: 18,
-                  fontWeight: 800,
-                  color: '#FFFFFF',
-                  lineHeight: 1.3,
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  minWidth: 0,
                 }}
               >
-                {captionStep.title}
+                {captionStep.section ? (
+                  <span
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 700,
+                      color: accentColor,
+                      flexShrink: 0,
+                    }}
+                  >
+                    {captionStep.section} ·
+                  </span>
+                ) : null}
+                <div
+                  style={{
+                    fontSize: 18,
+                    fontWeight: 800,
+                    color: '#FFFFFF',
+                    lineHeight: 1.3,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  {captionStep.title}
+                </div>
               </div>
               <div
                 style={{
@@ -631,19 +655,37 @@ export const TutorialComposition: React.FC<TutorialCompositionProps> = ({
             >
               {timeline.title}
             </h1>
-            <p
-              style={{
-                fontSize: 21,
-                color: '#CBD5E1',
-                maxWidth: 780,
-                lineHeight: 1.6,
-                margin: 0,
-              }}
-            >
-              {isIntro
-                ? timeline.subtitle
-                : '本教學由 Playwright E2E 自動操作錄製，並通過 axe-core WCAG 2.1 AA 無障礙標準驗證。'}
-            </p>
+            {isOutro && timeline.summary?.length ? (
+              <ul
+                style={{
+                  fontSize: 20,
+                  color: '#E2E8F0',
+                  maxWidth: 780,
+                  lineHeight: 1.65,
+                  margin: 0,
+                  paddingLeft: 24,
+                  textAlign: 'left',
+                }}
+              >
+                {timeline.summary.map((point) => (
+                  <li key={point}>{point}</li>
+                ))}
+              </ul>
+            ) : (
+              <p
+                style={{
+                  fontSize: 21,
+                  color: '#CBD5E1',
+                  maxWidth: 780,
+                  lineHeight: 1.6,
+                  margin: 0,
+                }}
+              >
+                {isIntro
+                  ? timeline.subtitle
+                  : '本教學由 Playwright E2E 自動操作錄製，並通過 axe-core WCAG 2.1 AA 無障礙標準驗證。'}
+              </p>
+            )}
             {isOutro ? (
               <div
                 style={{

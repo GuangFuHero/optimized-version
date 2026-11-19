@@ -12,6 +12,8 @@ export interface TutorialStepBox {
 
 export interface TutorialStepRecord {
   index: number;
+  /** The chapter this step belongs to, when the story is split with `tutorial.section()`. */
+  section?: string;
   title: string;
   subtitle: string;
   ariaLabel?: string;
@@ -29,6 +31,15 @@ export interface A11yAuditRecord {
   violationIds: string[];
 }
 
+/** One chapter of a story: a short, self-contained part such as 「登入」 or 「送出求助」. */
+export interface TutorialChapterRecord {
+  title: string;
+  /** One or two sentences on what this chapter shows; shown on the chapter card. */
+  intro?: string;
+  startMs: number;
+  endMs: number;
+}
+
 export interface EpisodeTimeline {
   id: string;
   title: string;
@@ -38,6 +49,10 @@ export interface EpisodeTimeline {
   durationMs: number;
   steps: TutorialStepRecord[];
   a11yAudits: A11yAuditRecord[];
+  /** Present when the story uses `tutorial.section()`. */
+  chapters?: TutorialChapterRecord[];
+  /** Key points for the closing card, in the viewer's everyday words. */
+  summary?: string[];
 }
 
 interface InitEpisodeOptions {
@@ -45,6 +60,8 @@ interface InitEpisodeOptions {
   title: string;
   subtitle: string;
   surface: 'site' | 'admin';
+  /** Key points for the closing card. Leave out for the generic closing line. */
+  summary?: string[];
 }
 
 interface StepOptions {
@@ -142,6 +159,24 @@ export function buildWebVtt(timeline: EpisodeTimeline): string {
   return lines.join('\n');
 }
 
+/**
+ * WebVTT chapters (`<track kind="chapters">`): lets an HTML player list the story's chapters and
+ * jump between them. Null when the story has no chapters.
+ */
+export function buildChaptersVtt(timeline: EpisodeTimeline): string | null {
+  if (!timeline.chapters?.length) {
+    return null;
+  }
+  const lines = ['WEBVTT', `NOTE ${timeline.id} - ${timeline.title} chapters`, ''];
+  timeline.chapters.forEach((chapter, i) => {
+    lines.push(`${i + 1}`);
+    lines.push(`${formatVttTimestamp(chapter.startMs)} --> ${formatVttTimestamp(chapter.endMs)}`);
+    lines.push(chapter.title);
+    lines.push('');
+  });
+  return lines.join('\n');
+}
+
 export class TutorialRecorder {
   private readonly page: Page;
   /** Playwright 在建立 page 時即啟動 recordVideo，因此時間基準必須從 constructor 開始算 */
@@ -149,6 +184,7 @@ export class TutorialRecorder {
   private meta: InitEpisodeOptions | null = null;
   private readonly steps: TutorialStepRecord[] = [];
   private readonly a11yAudits: A11yAuditRecord[] = [];
+  private readonly chapters: TutorialChapterRecord[] = [];
 
   constructor(page: Page) {
     this.page = page;
@@ -208,6 +244,19 @@ export class TutorialRecorder {
     await targetEl.pressSequentially(text, { delay: PACE.typeDelayMs });
   }
 
+  /**
+   * Starts a chapter: every step after this belongs to it until the next `section()`. Optional;
+   * a story without chapters records as before.
+   */
+  section(title: string, intro?: string): void {
+    const now = this.nowMs();
+    const open = this.chapters[this.chapters.length - 1];
+    if (open && open.endMs < 0) {
+      open.endMs = now;
+    }
+    this.chapters.push({ title, intro, startMs: now, endMs: -1 });
+  }
+
   async step(options: StepOptions): Promise<void> {
     let box: TutorialStepBox | null = null;
     let ariaLabel: string | undefined;
@@ -237,7 +286,8 @@ export class TutorialRecorder {
       ariaLabel = attrLabel || textContent || undefined;
     }
 
-    const startMs = this.nowMs();
+    const prevEnd = this.steps[this.steps.length - 1]?.endMs ?? 0;
+    const startMs = Math.max(prevEnd, this.nowMs());
 
     // 操作前停頓，讓聚光燈與游標精準停在目標元件上（一般 E2E 模式為 0ms）
     const preWait = PACE.mode === 'fast' ? 0 : (options.preActionMs ?? PACE.preActionMs);
@@ -260,9 +310,11 @@ export class TutorialRecorder {
       await this.page.waitForTimeout(hold);
     }
 
-    const endMs = Math.max(startMs + 600, this.nowMs());
+    const minStepDuration = PACE.mode === 'fast' ? 1 : 600;
+    const endMs = Math.max(startMs + minStepDuration, this.nowMs());
     this.steps.push({
       index: this.steps.length + 1,
+      section: this.chapters[this.chapters.length - 1]?.title,
       title: options.title,
       subtitle: options.subtitle,
       ariaLabel,
@@ -369,15 +421,22 @@ export class TutorialRecorder {
     await fs.mkdir(outputDir, { recursive: true });
     await fs.mkdir(studioPublicDir, { recursive: true });
 
+    const durationMs = Math.max(this.nowMs(), 3000);
+    const chapters = this.chapters.map((chapter) => ({
+      ...chapter,
+      endMs: chapter.endMs < 0 ? durationMs : chapter.endMs,
+    }));
     const timeline: EpisodeTimeline = {
       id: this.meta.id,
       title: this.meta.title,
       subtitle: this.meta.subtitle,
       surface: this.meta.surface,
       viewport: this.page.viewportSize() ?? { width: 1280, height: 720 },
-      durationMs: Math.max(this.nowMs(), 3000),
+      durationMs,
       steps: this.steps,
       a11yAudits: this.a11yAudits,
+      ...(chapters.length ? { chapters } : {}),
+      ...(this.meta.summary?.length ? { summary: this.meta.summary } : {}),
     };
 
     const timelineJson = JSON.stringify(timeline, null, 2);
@@ -388,15 +447,19 @@ export class TutorialRecorder {
       'utf8',
     );
     await fs.writeFile(path.join(outputDir, 'captions.vtt'), buildWebVtt(timeline), 'utf8');
+    const chaptersVtt = buildChaptersVtt(timeline);
+    if (chaptersVtt) {
+      await fs.writeFile(path.join(outputDir, 'chapters.vtt'), chaptersVtt, 'utf8');
+    }
 
     const video = this.page.video();
     if (video) {
       await this.page.close();
-      const videoPath = await video.path().catch(() => null);
-      if (videoPath) {
-        await fs.copyFile(videoPath, path.join(outputDir, 'recording.webm'));
-        await fs.copyFile(videoPath, path.join(studioPublicDir, `${this.meta.id}.webm`));
-      }
+      // saveAs waits for Playwright to finish writing the file; video.path() can name a file that
+      // is not there yet right after the page closes.
+      const recording = path.join(outputDir, 'recording.webm');
+      await video.saveAs(recording);
+      await fs.copyFile(recording, path.join(studioPublicDir, `${this.meta.id}.webm`));
     }
   }
 }

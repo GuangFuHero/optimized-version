@@ -26,8 +26,12 @@ pnpm e2e:record
 # 5. 開啟 Remotion Studio 互動預覽 12 支教學影片分集
 pnpm video:studio
 
-# 6. 將錄製好的所有分集批次算圖為 MP4 影片與 .vtt 字幕檔（輸出至 video/out/）
+# 6. 檢查錄好的時間軸（目標有沒有框到、無障礙檢查、分集有沒有登記）
+pnpm e2e:check
+
+# 7. 將錄製好的所有分集批次算圖為 MP4 影片、.vtt 字幕檔與互動教學頁（輸出至 video/out/）
 pnpm video:render
+#    只要互動教學頁（不算影片，快很多）：pnpm video:html；只做某一集：在指令後面加分集 id
 ```
 
 ---
@@ -49,3 +53,14 @@ pnpm video:render
 - **A04** [`a04-dedup-review-and-merge.spec.ts`](admin/a04-dedup-review-and-merge.spec.ts)：疑似重複案件審核與合併
 - **A05** [`a05-station-management-and-reviews.spec.ts`](admin/a05-station-management-and-reviews.spec.ts)：資源站點管理與修改建議審查
 - **A06** [`a06-teams-announcements-briefings.spec.ts`](admin/a06-teams-announcements-briefings.spec.ts)：團隊成員審核、緊急公告與志工行前資訊發布
+
+---
+
+## 互動教學頁（`video/out/<id>.html`）
+
+同一段錄影另外產出一個互動教學頁：舞台是原始錄影，播放器（`video/scripted-demo/player.js`）負責游標、聚光燈、旁白、章節卡與總結卡。觀眾可以上一步、下一步、點章節跳段、調速度，每切到一格即播放該步驟的真實錄影片段。`.html` 要和同名的 `.webm` 放在一起。細節見 `.claude/skills/tutorial-story/SKILL.md`。
+
+## TODO
+
+- **字幕拆成獨立文字檔**：現在旁白來自劇本的 `title`／`subtitle`，錄影時寫進 `timeline.json`，改一個字就要重錄。之後改成 `e2e/stories/<id>.copy.json`，只存文字、用步驟對應（之後改用步驟 id，劇本增減步驟才不會錯位），沒寫的照用劇本的。Remotion、`.vtt`、互動教學頁都讀合併後的結果，改字只要重跑 `pnpm video:render` 或 `pnpm video:html`，不用重錄。
+- **手機尺寸**：加一個 390×844 的 Playwright project，前台的劇本在手機版面另外錄一份；互動教學頁會依錄影的寬度自動換成手機外框。
