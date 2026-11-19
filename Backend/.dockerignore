@@ -12,3 +12,4 @@ docker-compose.override.yml
 scripts/smoke_email.py
 note/
 docs/
+scripts/seed_fake_notifications.py
