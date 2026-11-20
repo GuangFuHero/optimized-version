@@ -13,3 +13,30 @@ allowBuilds:
   nx: true
   sharp: true
   unrs-resolver: true
+
+# Indirect packages with a security advisory, raised to a fixed release in the same major.
+# Each key matches the range a dependent asks for; drop an entry once its dependents ask for
+# the fixed release themselves.
+overrides:
+  '@babel/core@^7.0.0': ^7.29.6
+  '@module-federation/node@^2.0.0': ^2.7.53
+  '@tootallnate/once@^2.0.0': ^2.0.1
+  'axios@^1.0.0': ^1.20.0
+  'baseline-browser-mapping@^2.0.0': ^2.11.0
+  'brace-expansion@^5.0.0': ^5.0.12
+  'browserslist@^4.0.0': ^4.28.7
+  'compression@^1.0.0': ^1.8.2
+  'fast-uri@^3.0.0': ^3.1.9
+  'follow-redirects@^1.0.0': ^1.16.2
+  'http-proxy-middleware@^2.0.0': ^2.0.10
+  'immutable@^5.0.0': ^5.1.8
+  'launch-editor@^2.0.0': ^2.14.2
+  'postcss-selector-parser@^7.0.0': ^7.1.6
+  'qs@^6.0.0': ^6.16.1
+  'serialize-javascript@^7.0.0': ^7.1.3
+  'shell-quote@^1.0.0': ^1.8.4
+  'smol-toml@^1.0.0': ^1.9.0
+  'svgo@^4.0.0': ^4.1.0
+  'webpack-dev-server@^5.0.0': ^5.2.6
+  'websocket-driver@>=0.5.1': ^0.7.5
+  'ws@^8.0.0': ^8.21.0
