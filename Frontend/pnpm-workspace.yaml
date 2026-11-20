@@ -40,3 +40,10 @@ overrides:
   'webpack-dev-server@^5.0.0': ^5.2.6
   'websocket-driver@>=0.5.1': ^0.7.5
   'ws@^8.0.0': ^8.21.0
+  # Fixed only in a new major that the installed dependents do not ask for yet, so these cross a
+  # major on purpose.
+  # Drop an entry once its dependents ask for the fixed major themselves.
+  '@graphql-tools/utils@^11.0.0': ^12.0.2
+  'glob@>=9.0.0 <14.0.2': ^14.0.2
+  'minimatch@>=7.0.0 <11.0.1': ^11.0.1
+  'uuid@^8.0.0': ^11.1.1
