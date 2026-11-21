@@ -189,7 +189,6 @@ function LoadedStationForm(props: LoadedStationFormProps) {
     formApi.setFieldValue('addressToken', '');
   }, [formApi, pinLat, pinLng]);
 
-  // Once per pin: the query caches each position, so a lookup is never repeated.
   const lookup = useReverseGeocode(position);
   const lookupResult = lookup.data?.reverseGeocode;
   useEffect(() => {

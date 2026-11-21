@@ -327,23 +327,6 @@ query AdminTicket($uuid: UUID!) {
     }
   }
 }
-query AdminTicketTasks(
-  $ticketUuid: String!
-  $status: String
-  $q: String
-  $skip: Int = 0
-  $limit: Int = 50
-) {
-  ticketTasks(
-    ticketUuid: $ticketUuid
-    status: $status
-    q: $q
-    skip: $skip
-    limit: $limit
-  ) {
-    ...AdminTaskFields
-  }
-}
 query AdminStationFacets {
   stationFacets {
     total
@@ -431,18 +414,6 @@ query AdminStation($uuid: UUID!) {
       weightings
       createdAt
     }
-  }
-}
-query AdminReverseGeocode($lat: Float!, $lng: Float!) {
-  reverseGeocode(lat: $lat, lng: $lng) {
-    status
-    fullAddress
-    floor
-    room
-    addressToken
-    lat
-    lng
-    buildingSection
   }
 }
 query AdminStationReview($uuid: UUID!) {
@@ -647,9 +618,6 @@ mutation AdminUpdateTicket($uuid: UUID!, $input: UpdateTicketInput!) {
     ...AdminTicketFields
   }
 }
-mutation AdminDeleteTicket($uuid: UUID!) {
-  deleteTicket(uuid: $uuid)
-}
 mutation AdminSetTicketDisasterDetails(
   $uuid: UUID!
   $details: [TicketDisasterDetailInput!]!
@@ -721,9 +689,6 @@ mutation AdminStopRecruiting($taskUuid: UUID!) {
     ...AdminTaskFields
   }
 }
-mutation AdminDeleteTicketTask($uuid: UUID!) {
-  deleteTicketTask(uuid: $uuid)
-}
 mutation AdminAttachTicketPhoto($ticketUuid: UUID!, $url: String!) {
   attachTicketPhoto(ticketUuid: $ticketUuid, url: $url) {
     uuid
@@ -733,9 +698,6 @@ mutation AdminAttachTicketPhoto($ticketUuid: UUID!, $url: String!) {
 }
 mutation AdminDetachTicketPhoto($uuid: UUID!) {
   detachTicketPhoto(uuid: $uuid)
-}
-mutation AdminUnassignTaskActor($uuid: UUID!) {
-  unassignTaskActor(uuid: $uuid)
 }
 mutation AdminCreateStation(
   $input: CreateStationInput!
@@ -763,9 +725,6 @@ mutation AdminUpdateStation($uuid: UUID!, $input: UpdateStationInput!) {
   updateStation(uuid: $uuid, input: $input) {
     ...AdminStationFields
   }
-}
-mutation AdminDeleteStation($uuid: UUID!) {
-  deleteStation(uuid: $uuid)
 }
 mutation AdminMergeStationSuggestions(
   $stationUuid: UUID!
@@ -979,6 +938,7 @@ mutation AdminCreateArea($input: CreateAreaInput!) {
 mutation AdminUpdateArea($uuid: UUID!, $input: UpdateAreaInput!) {
   updateArea(uuid: $uuid, input: $input) {
     uuid
+    type
     name
     note
     isPublic
@@ -1061,18 +1021,6 @@ query AdminBuildingMap($uuid: UUID!) {
 query AdminBuildingMapTickets($buildingMapUuid: UUID!, $limit: Int! = 200) {
   buildingMapTickets(buildingMapUuid: $buildingMapUuid, limit: $limit) {
     ...AdminSpaceTicketFields
-  }
-}
-query AdminNormalizeAddress($address: String!, $lat: Float, $lng: Float) {
-  normalizeAddress(address: $address, lat: $lat, lng: $lng) {
-    status
-    fullAddress
-    addressToken
-    lat
-    lng
-    buildingSection
-    floor
-    room
   }
 }
 mutation AdminCreateBuildingMap($input: CreateBuildingMapInput!) {

@@ -1,0 +1,15 @@
+mutation DeleteTicket($uuid: UUID!) {
+  deleteTicket(uuid: $uuid)
+}
+
+mutation DeleteTicketTask($uuid: UUID!) {
+  deleteTicketTask(uuid: $uuid)
+}
+
+mutation ReleaseClaim($uuid: UUID!) {
+  unassignTaskActor(uuid: $uuid)
+}
+
+mutation DeleteStation($uuid: UUID!) {
+  deleteStation(uuid: $uuid)
+}

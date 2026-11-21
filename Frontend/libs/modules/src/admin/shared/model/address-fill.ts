@@ -1,6 +1,6 @@
-import type { AdminReverseGeocodeQuery } from '@rescue-frontend/data-access/admin';
+import type { ReverseGeocodeQuery } from '@rescue-frontend/data-access/admin';
 
-type AddressLookup = AdminReverseGeocodeQuery['reverseGeocode'];
+type AddressLookup = ReverseGeocodeQuery['reverseGeocode'];
 
 /** The address part of an admin form (station or ticket) that a pin's TGOS lookup can fill. */
 export interface AddressFillFields {

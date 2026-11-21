@@ -21,7 +21,10 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useId, useRef, useState } from 'react';
 
-import { ApiError } from '@rescue-frontend/data-access';
+import {
+  ApiError,
+  useInvalidateCurrentUser,
+} from '@rescue-frontend/data-access';
 import { designTokens, Icons } from '@rescue-frontend/ui';
 
 import {
@@ -36,7 +39,6 @@ import {
 } from '../login';
 import {
   changePasswordAsync,
-  getCurrentUserAsync,
   logoutAllAsync,
   setPasswordAsync,
 } from '../api/client';
@@ -293,6 +295,7 @@ export function AccountSecurityClient({
 }: AccountSecurityClientProps) {
   const consumeReturn = useReturnQuery();
   const router = useRouter();
+  const refreshSession = useInvalidateCurrentUser();
   const saltIdentity = saltLookupIdentity(contacts);
   const signsInWithPassword = hasPassword(loginMethods);
   // Only Google and nothing to send a code to: both sections say so before anything is pressed.
@@ -415,12 +418,7 @@ export function AccountSecurityClient({
       keepContactDraft(draft);
     }
 
-    try {
-      await getCurrentUserAsync();
-    } catch {
-      // An ended session reloads the tab as a guest by itself; anything else, LINE is tried anyway.
-    }
-
+    await refreshSession();
     window.location.assign(buildAccountStepUpHref(action));
   };
 
@@ -432,7 +430,10 @@ export function AccountSecurityClient({
       oldCodeStillPending(originalContactName(contacts, type)),
     onReauth: (draft) => void goProveAtLine('add_contact', draft),
     // The account's contacts are read again, the new one among them.
-    onChanged: () => router.refresh(),
+    onChanged: () => {
+      router.refresh();
+      void refreshSession();
+    },
     // Done: back to the list, with what was done over it (design ⑫) and no warning about it. Focus goes
     // to the row's header: the button just pressed goes away with step 3.
     onVerified: () => {
