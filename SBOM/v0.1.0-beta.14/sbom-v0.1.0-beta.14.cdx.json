@@ -1,10 +1,10 @@
 {
   "bomFormat": "CycloneDX",
   "specVersion": "1.6",
-  "serialNumber": "urn:uuid:c8311729-0df1-47ea-9942-0ee177f3d065",
+  "serialNumber": "urn:uuid:5100f996-7656-41e8-b793-0a41fa13f29a",
   "version": 1,
   "metadata": {
-    "timestamp": "2026-11-10T12:12:49Z",
+    "timestamp": "2026-11-21T17:13:34Z",
     "lifecycles": [
       {
         "phase": "pre-build"
@@ -76918,7 +76918,7 @@
       "description": "Fundamental package for array computing in Python",
       "licenses": [
         {
-          "expression": "BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0"
+          "expression": "BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 AND GPL-3.0-or-later WITH GCC-exception-3.1 AND LGPL-2.1-or-later"
         }
       ],
       "hashes": [
@@ -78022,9 +78022,7 @@
       "description": "Manipulation and analysis of geometric objects",
       "licenses": [
         {
-          "license": {
-            "id": "BSD-3-Clause"
-          }
+          "expression": "BSD-3-Clause AND LGPL-2.1-only"
         }
       ],
       "hashes": [
@@ -78626,6 +78624,99 @@
         }
       ],
       "purl": "pkg:deb/postgresql-16-h3"
+    },
+    {
+      "type": "operating-system",
+      "bom-ref": "other:build-essential@建置時由 Debian 套件庫安裝的版本（trixie 為 12.12）",
+      "name": "build-essential",
+      "version": "建置時由 Debian 套件庫安裝的版本（trixie 為 12.12）",
+      "supplier": {
+        "name": "Debian"
+      },
+      "licenses": [
+        {
+          "license": {
+            "name": "GPL-2.0-or-later"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "wanguard:group",
+          "value": "作業系統套件"
+        },
+        {
+          "name": "wanguard:source",
+          "value": "Backend/Dockerfile"
+        },
+        {
+          "name": "wanguard:note",
+          "value": "只是一份清單（metapackage），會一起裝 gcc、g++、make、libc6-dev 等編譯工具，各自照 Debian 套件的授權。用來編譯 Python 套件；後端只有一個 stage，所以會留在正式環境的映像裡。版本未固定"
+        }
+      ],
+      "purl": "pkg:deb/debian/build-essential"
+    },
+    {
+      "type": "operating-system",
+      "bom-ref": "other:libpq-dev@建置時由 Debian 套件庫安裝的版本",
+      "name": "libpq-dev",
+      "version": "建置時由 Debian 套件庫安裝的版本",
+      "supplier": {
+        "name": "Debian（PostgreSQL Global Development Group）"
+      },
+      "licenses": [
+        {
+          "license": {
+            "name": "PostgreSQL"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "wanguard:group",
+          "value": "作業系統套件"
+        },
+        {
+          "name": "wanguard:source",
+          "value": "Backend/Dockerfile"
+        },
+        {
+          "name": "wanguard:note",
+          "value": "PostgreSQL 用戶端函式庫的開發檔。後端只有一個 stage，所以會留在正式環境的映像裡。版本未固定"
+        }
+      ],
+      "purl": "pkg:deb/debian/libpq-dev"
+    },
+    {
+      "type": "operating-system",
+      "bom-ref": "other:libc6-compat@建置時由 Alpine 套件庫安裝的版本（Alpine 3.22 由 gcompat 1.1.0 提供）",
+      "name": "libc6-compat",
+      "version": "建置時由 Alpine 套件庫安裝的版本（Alpine 3.22 由 gcompat 1.1.0 提供）",
+      "supplier": {
+        "name": "Alpine Linux（gcompat：Adélie Linux）"
+      },
+      "licenses": [
+        {
+          "license": {
+            "name": "NCSA"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "wanguard:group",
+          "value": "作業系統套件"
+        },
+        {
+          "name": "wanguard:source",
+          "value": "Frontend/Dockerfile"
+        },
+        {
+          "name": "wanguard:note",
+          "value": "glibc 相容層，builder 與 runner 兩個 stage 都裝，所以會留在正式環境的映像裡。版本未固定"
+        }
+      ],
+      "purl": "pkg:apk/alpine/libc6-compat"
     },
     {
       "type": "container",
