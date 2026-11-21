@@ -2803,6 +2803,7 @@ export type AdminStationFacetsQuery = {
   stationFacets: {
     __typename?: 'StationFacetsType';
     total: number;
+    pendingReviewCount: number;
     byStatus: Array<{
       __typename?: 'StationStatusCountType';
       status: string;
@@ -6442,6 +6443,7 @@ export const AdminStationFacetsDocument = new TypedDocumentString(`
     query AdminStationFacets {
   stationFacets {
     total
+    pendingReviewCount
     byStatus {
       status
       count
