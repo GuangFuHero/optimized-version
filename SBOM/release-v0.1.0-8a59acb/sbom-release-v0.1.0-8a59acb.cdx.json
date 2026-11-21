@@ -1,10 +1,10 @@
 {
   "bomFormat": "CycloneDX",
   "specVersion": "1.6",
-  "serialNumber": "urn:uuid:12fa70b3-a766-4a08-bd3b-3fa0e60c0089",
+  "serialNumber": "urn:uuid:002c46ad-f641-4acf-bffa-aae111ad764f",
   "version": 1,
   "metadata": {
-    "timestamp": "2026-11-21T02:51:45Z",
+    "timestamp": "2026-11-21T03:09:41Z",
     "lifecycles": [
       {
         "phase": "pre-build"
@@ -78866,12 +78866,16 @@
           "value": "Frontend/libs/modules/src/map/constants.ts、Backend/app/services/tile_proxy.py"
         },
         {
-          "name": "wanguard:risk",
-          "value": "⚠️ 官方圖磚不保證服務、禁止大量使用；災害時流量暴增可能被擋。正式環境建議改用自架或付費圖磚服務"
+          "name": "wanguard:license-check",
+          "value": "✅ 合格"
+        },
+        {
+          "name": "wanguard:license-basis",
+          "value": "資料 ODbL 1.0；依 OSMF 圖磚使用規範免申請取用，須標示「© OpenStreetMap contributors」（已標示）"
         },
         {
           "name": "wanguard:note",
-          "value": "要標「© OpenStreetMap contributors」。後端轉抓已用可辨識的 User-Agent"
+          "value": "後端轉抓使用可辨識的 User-Agent"
         }
       ],
       "endpoints": [
@@ -78917,8 +78921,12 @@
           "value": "Backend/app/services/tile_proxy.py"
         },
         {
-          "name": "wanguard:risk",
-          "value": "⚠️ 沒有圖層專屬授權；條款要附來源、不得大量下載，中心可隨時限流或停止。轉抓與快取是否允許，待向中心確認"
+          "name": "wanguard:license-check",
+          "value": "⚠️ 待確認"
+        },
+        {
+          "name": "wanguard:license-basis",
+          "value": "服務使用條款允許附來源公開顯示、不得大量下載；沒有圖層專屬授權，後端轉抓與快取是否允許待向國土測繪中心確認"
         },
         {
           "name": "wanguard:note",
@@ -78968,8 +78976,12 @@
           "value": "Backend/app/services/tile_proxy.py"
         },
         {
-          "name": "wanguard:risk",
-          "value": "🔴 只准非商業用途。委託廠商部署、維運可能算商業使用，要付費授權或在正式環境拿掉"
+          "name": "wanguard:license-check",
+          "value": "⚠️ 限非商業使用"
+        },
+        {
+          "name": "wanguard:license-basis",
+          "value": "CC BY-NC-SA 4.0 只准非商業用途；商業用途須另購授權"
         },
         {
           "name": "wanguard:note",
@@ -79019,8 +79031,12 @@
           "value": "Backend/app/services/tile_proxy.py"
         },
         {
-          "name": "wanguard:risk",
-          "value": "✅"
+          "name": "wanguard:license-check",
+          "value": "✅ 合格"
+        },
+        {
+          "name": "wanguard:license-basis",
+          "value": "美國政府開放資料，無使用限制"
         },
         {
           "name": "wanguard:note",
@@ -79070,8 +79086,12 @@
           "value": "Backend/app/services/tile_proxy.py、Frontend/libs/modules/src/map/constants.ts"
         },
         {
-          "name": "wanguard:risk",
-          "value": "⚠️ 啟用前要申請金鑰並讀條款"
+          "name": "wanguard:license-check",
+          "value": "— 未使用"
+        },
+        {
+          "name": "wanguard:license-basis",
+          "value": "程式中停用，畫面上不能選"
         },
         {
           "name": "wanguard:note",
@@ -79121,8 +79141,12 @@
           "value": "Backend/app/services/tile_proxy.py"
         },
         {
-          "name": "wanguard:risk",
-          "value": "⚠️ 條款未確認，啟用前要確認"
+          "name": "wanguard:license-check",
+          "value": "— 未使用"
+        },
+        {
+          "name": "wanguard:license-basis",
+          "value": "程式中隱藏，畫面上不能選"
         },
         {
           "name": "wanguard:note",
@@ -79172,8 +79196,12 @@
           "value": "Backend/app/services/address.py"
         },
         {
-          "name": "wanguard:risk",
-          "value": "⚠️ 條款與用量限制待確認。沒設定時地址不會自動定位"
+          "name": "wanguard:license-check",
+          "value": "⚠️ 待確認"
+        },
+        {
+          "name": "wanguard:license-basis",
+          "value": "須申請 App ID 與 API Key；申請條款與用量限制尚未讀到原文"
         },
         {
           "name": "wanguard:note",
@@ -79223,8 +79251,12 @@
           "value": "Backend/app/sso/oauth.py"
         },
         {
-          "name": "wanguard:risk",
-          "value": ""
+          "name": "wanguard:license-check",
+          "value": "✅ 合格"
+        },
+        {
+          "name": "wanguard:license-basis",
+          "value": "依 Google APIs Terms of Service 與 User Data Policy，部署者自行申請 OAuth 用戶端"
         },
         {
           "name": "wanguard:note",
@@ -79275,8 +79307,12 @@
           "value": "Backend/app/sso/oauth.py、Backend/app/sso/line.py"
         },
         {
-          "name": "wanguard:risk",
-          "value": ""
+          "name": "wanguard:license-check",
+          "value": "✅ 合格"
+        },
+        {
+          "name": "wanguard:license-basis",
+          "value": "依 LINE Developers Agreement，部署者自行申請 Channel"
         },
         {
           "name": "wanguard:note",
@@ -79327,8 +79363,12 @@
           "value": "Backend/app/messaging/kotsms.py"
         },
         {
-          "name": "wanguard:risk",
-          "value": ""
+          "name": "wanguard:license-check",
+          "value": "✅ 合格"
+        },
+        {
+          "name": "wanguard:license-basis",
+          "value": "付費商業服務，依合約取用"
         },
         {
           "name": "wanguard:note",
@@ -79378,8 +79418,12 @@
           "value": "Backend/app/messaging/smtp2go.py"
         },
         {
-          "name": "wanguard:risk",
-          "value": ""
+          "name": "wanguard:license-check",
+          "value": "✅ 合格"
+        },
+        {
+          "name": "wanguard:license-basis",
+          "value": "付費商業服務，依服務條款取用"
         },
         {
           "name": "wanguard:note",
@@ -79429,8 +79473,12 @@
           "value": "Frontend/libs/modules/src/http/content-security-policy.js（允許它載入）"
         },
         {
-          "name": "wanguard:risk",
-          "value": "⚠️ 第三方會收到使用者的瀏覽紀錄；要寫進隱私說明，或在 Cloudflare 關掉"
+          "name": "wanguard:license-check",
+          "value": "✅ 合格"
+        },
+        {
+          "name": "wanguard:license-basis",
+          "value": "依 Cloudflare 服務條款，由部署者的 Cloudflare 帳號啟用"
         },
         {
           "name": "wanguard:note",
@@ -79481,8 +79529,12 @@
           "value": "Backend/docker-compose.staging.yml"
         },
         {
-          "name": "wanguard:risk",
-          "value": ""
+          "name": "wanguard:license-check",
+          "value": "✅ 合格"
+        },
+        {
+          "name": "wanguard:license-basis",
+          "value": "依 Cloudflare 服務條款，由部署者的 Cloudflare 帳號啟用"
         },
         {
           "name": "wanguard:note",
@@ -79529,8 +79581,12 @@
           "value": "Frontend/libs/modules/src/document-layout.tsx"
         },
         {
-          "name": "wanguard:risk",
-          "value": ""
+          "name": "wanguard:license-check",
+          "value": "✅ 合格"
+        },
+        {
+          "name": "wanguard:license-basis",
+          "value": "字型為 SIL OFL 1.1，可自由使用與散布"
         },
         {
           "name": "wanguard:note",
@@ -79581,8 +79637,12 @@
           "value": "Frontend/libs/modules/src/ticket/photos/photo-links.ts"
         },
         {
-          "name": "wanguard:risk",
-          "value": "⚠️ 個人經營、條款未確認；可能不保證服務或刪圖"
+          "name": "wanguard:license-check",
+          "value": "⚠️ 待確認"
+        },
+        {
+          "name": "wanguard:license-basis",
+          "value": "第三方個人經營的圖床，服務條款未確認；照片由使用者自行上傳，平台只存連結"
         },
         {
           "name": "wanguard:note",
@@ -79633,8 +79693,12 @@
           "value": "Frontend/libs/modules（分享）、Frontend/libs/ui/src/components/Icon（Facebook、Google、LINE 標誌）"
         },
         {
-          "name": "wanguard:risk",
-          "value": "⚠️ 品牌標誌要照各品牌的使用規範"
+          "name": "wanguard:license-check",
+          "value": "✅ 合格"
+        },
+        {
+          "name": "wanguard:license-basis",
+          "value": "只開啟各平台公開的分享網址；品牌標誌依各品牌使用規範"
         },
         {
           "name": "wanguard:note",

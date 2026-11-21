@@ -68,6 +68,25 @@ def write_table(ws, headers, rows, widths, wrap_cols=()):
     ws.row_dimensions[1].height = 30
 
 
+# 寬鬆授權：可以和 GPL-3.0 的程式一起散布，不用另外說明。其餘列在「說明」頁的授權確認。
+PERMISSIVE = {
+    "MIT", "MIT-0", "ISC", "Apache-2.0", "BSD", "BSD-2-Clause", "BSD-3-Clause", "0BSD", "BlueOak-1.0.0",
+    "Unlicense", "CC0-1.0", "Python-2.0", "PSF-2.0", "Zlib", "WTFPL", "OFL-1.1",
+}
+
+
+def is_permissive(expr):
+    """True when every alternative of an SPDX-ish expression is made only of permissive licenses."""
+    import re
+
+    alternatives = re.split(r"\s+OR\s+", expr.replace("(", " ").replace(")", " "))
+    for alt in alternatives:
+        ids = [x for x in re.split(r"\s+AND\s+|\s+", alt.strip()) if x and x not in ("AND", "WITH")]
+        if ids and all(i in PERMISSIVE for i in ids):
+            return True
+    return False
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--rows", required=True)
@@ -160,15 +179,15 @@ def main():
     # ------------------------------------------------------------------ 外部服務與授權
     ws_sv = wb.create_sheet(SV_SHEET)
     sv_rows = [
-        [i, sv["group"], sv["name"], sv["provider"], sv["purpose"], sv["status"], sv["auth"], sv["terms"], sv["terms_url"], "\n".join(sv["endpoints"]), sv["source"], sv["risk"], sv["note"]]
+        [i, sv["group"], sv["name"], sv["provider"], sv["purpose"], sv["status"], sv["auth"], sv["terms"], sv["terms_url"], sv["verdict"], sv["basis"], "\n".join(sv["endpoints"]), sv["source"], sv["note"]]
         for i, sv in enumerate(services, start=1)
     ]
     write_table(
         ws_sv,
-        ["項次", "類別", "名稱", "提供者", "用途", "目前狀態", "金鑰或帳號", "授權／使用條款", "條款連結", "連線位置", "程式位置", "風險與待辦", "備註"],
+        ["項次", "類別", "名稱", "提供者", "用途", "目前狀態", "取用方式（金鑰或帳號）", "授權／使用條款", "條款連結", "授權確認", "依據", "連線位置", "程式位置", "備註"],
         sv_rows,
-        [6, 12, 28, 22, 34, 24, 26, 30, 34, 34, 36, 44, 36],
-        wrap_cols=(5, 6, 7, 8, 10, 11, 12, 13),
+        [6, 12, 28, 22, 34, 24, 26, 30, 34, 16, 44, 34, 36, 30],
+        wrap_cols=(5, 6, 7, 8, 11, 12, 13, 14),
     )
     ws_sv.freeze_panes = "D2"
 
@@ -262,8 +281,31 @@ def main():
     line(FE_SHEET, "Frontend/pnpm-lock.yaml 鎖定的全部 npm 套件（前台、管理平台、共用程式庫與開發工具）。")
     line(BE_SHEET, "Backend/pyproject.toml 的執行期相依與 dev 群組，展開到所有間接相依。")
     line(OT_SHEET, "不經套件管理器的元件：容器基礎映像、作業系統套件、字型。")
-    line(SV_SHEET, "程式執行時會連到、要有帳號金鑰或要遵守對方條款的外部服務與圖資：地圖圖磚、地址定位、登入、簡訊與 Email、基礎設施、使用者內容。附目前狀態、條款連結與風險。")
+    line(SV_SHEET, "程式執行時會連到、要有帳號金鑰或要遵守對方條款的外部服務與圖資。逐項列出取用方式、授權或使用條款，以及授權確認結果：✅ 合格、⚠️ 待確認或有使用限制、— 未使用。")
     line("授權統計", "依授權與使用範圍計數，數字由公式從前兩張表算出。")
+
+    heading("授權確認")
+    missing = [r["name"] for r in fe + be if not r["license"]]
+    line("缺授權資訊", "無。" if not missing else "、".join(missing))
+    import re
+
+    platform = re.compile(r"-(darwin|linux|linuxmusl|win32|android|freebsd|wasm32)(-[a-z0-9]+)*$")
+    groups = {}  # license -> {(order, label, family): count}
+    for side, rows in (("前端", fe), ("後端", be)):
+        for r in rows:
+            if is_permissive(r["license"]):
+                continue
+            runtime = r["scope"] == "runtime"
+            scope = "執行期" if runtime else ("開發／建置" if side == "前端" else "開發／測試")
+            key = (0 if runtime else 1, f"{side}{scope}", platform.sub("", r["name"]))
+            fam = groups.setdefault(r["license"], {})
+            fam[key] = fam.get(key, 0) + 1
+    for lic, fam in sorted(groups.items()):
+        parts = [f"{label}：{name}" + (f"（{n} 個平台版本）" if n > 1 else "") for (_, label, name), n in sorted(fam.items())]
+        line(lic, "、".join(parts))
+    line("結論", "套件都有授權資訊。非寬鬆授權的套件為 LGPL-3.0、MPL-2.0（可與 GPL-3.0 併用）與 CC-BY-4.0（資料，須標示來源）。容器映像 PostGIS（GPL-2.0-or-later）與 Redis（7.4 起 RSALv2／SSPLv1）以獨立服務執行，不與本專案程式連結散布。外部服務的確認結果見「外部服務與授權」頁。")
+    for r in range(ws.max_row - len(groups) - 1, ws.max_row + 1):
+        ws.cell(row=r, column=2).alignment = Alignment(wrap_text=True, vertical="top")
 
     heading("產生方式")
     line("前端", f"讀取 Frontend/pnpm-lock.yaml（lockfile 9.0）的全部套件與相依圖。授權、作者取自套件的 package.json（pnpm {meta['pnpm_version']} `pnpm licenses list`），本機沒有安裝的平台限定套件改查 npm registry。雜湊為鎖定檔記載的 npm 套件檔 SHA-512。")
