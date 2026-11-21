@@ -49,6 +49,8 @@ GPL 授權的是程式碼，不包含名稱與 Logo 的使用權。部署自己�
 | `@img/sharp-libvips-*`（`next` 處理圖片時用到） | LGPL-3.0-or-later | |
 | `certifi`（後端，驗證 HTTPS 憑證用的憑證清單） | MPL-2.0 | 沒有修改，照原樣使用 |
 | `caniuse-lite`（前端，判斷瀏覽器支援度的資料） | CC-BY-4.0 | 沒有修改，照原樣使用 |
+| `shapely`（後端，處理地理圖形）的 Linux 安裝檔 | 內含 GEOS 函式庫，LGPL-2.1 | 沒有修改，照原樣使用 |
+| `numpy`（後端）的 Linux 安裝檔 | 內含 libgfortran（GPL-3.0-or-later WITH GCC-exception-3.1）與 libquadmath（LGPL-2.1-or-later） | 沒有修改，照原樣使用 |
 
 ### 字型
 
