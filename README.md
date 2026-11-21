@@ -14,11 +14,12 @@
 2. [主要功能](#主要功能)
 3. [角色與他們在系統裡做的事](#角色與他們在系統裡做的事)
 4. [5 分鐘跑起完整系統（Onboarding Guide）](#5-分鐘跑起完整系統onboarding-guide)
-5. [部署到伺服器](#部署到伺服器)
-6. [用在你的災害](#用在你的災害)
-7. [技術文件導覽](#技術文件導覽)
-8. [參與貢獻](#參與貢獻)
-9. [授權](#授權)
+5. [系統需求與支援版本](#系統需求與支援版本)
+6. [部署到伺服器](#部署到伺服器)
+7. [用在你的災害](#用在你的災害)
+8. [技術文件導覽](#技術文件導覽)
+9. [參與貢獻](#參與貢獻)
+10. [授權](#授權)
 
 ---
 
@@ -119,6 +120,43 @@ pnpm dev
 - 地址不會自動定位成座標，但照樣可以存。
 
 開發與測試的細節見 [`Frontend/README.md`](Frontend/README.md) 與 [`Backend/README.md`](Backend/README.md)。
+
+---
+
+## 系統需求與支援版本
+
+### 使用者的瀏覽器
+
+| 裝置 | 支援的瀏覽器 |
+| :--- | :--- |
+| 桌機 | Chrome、Edge、Firefox 111 以上；Safari 16.4 以上 |
+| 手機 | iPhone：Safari 16.4 以上；Android：Chrome 111 以上 |
+
+這是前端框架 Next.js 預設支援的範圍。手動測試涵蓋桌機 Chrome、桌機 Safari、iPhone Safari 與 Android Chrome；Edge 與 Firefox 在支援範圍內，但沒有列入手動測試。不支援 Internet Explorer。
+
+### 部署環境
+
+| 項目 | 需求 |
+| :--- | :--- |
+| 作業系統 | Ubuntu 24.04 LTS（[`DEPLOY.md`](DEPLOY.md) 的步驟以這個版本測試） |
+| 容器 | Docker Engine 與 Docker Compose 外掛 |
+| 硬體 | 最低 2 核心、4 GB 記憶體（要照 `DEPLOY.md` 設定 Swap）；建議 8 GB；可用磁碟空間至少 30 GB |
+| 對外連線 | 一個網域，以及 Cloudflare Tunnel 提供 HTTPS |
+
+### 元件版本
+
+以 Docker 映像固定，部署時不用另外安裝：
+
+| 元件 | 版本 | 映像 |
+| :--- | :--- | :--- |
+| 資料庫 | PostgreSQL 16，含 PostGIS 3.4 與 H3 擴充 | `postgis/postgis:16-3.4`，見 [`Backend/docker/postgres-h3/Dockerfile`](Backend/docker/postgres-h3/Dockerfile) |
+| 快取與 session | Redis 7 | `redis:7-alpine` |
+| 後端 | Python 3.13（FastAPI） | `python:3.13-slim`，見 [`Backend/Dockerfile`](Backend/Dockerfile) |
+| 前台與管理平台 | Node.js 22（Next.js 16） | `node:22-alpine`，見 [`Frontend/Dockerfile`](Frontend/Dockerfile) |
+
+### 支援哪些版本
+
+版本號照語意化版本（`vX.Y.Z`）。哪些版本會收到資安修正、前一版支援多久，見 [`SECURITY.md`](SECURITY.md) 的「支援的版本」；每一版改了什麼，見 [Releases](https://github.com/GuangFuHero/optimized-version/releases)。
 
 ---
 
