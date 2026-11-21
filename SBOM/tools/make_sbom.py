@@ -382,6 +382,29 @@ OTHER_COMPONENTS = [
 ]
 
 
+# 程式執行時會連到的外部服務與圖資：不是套件，但要有帳號、金鑰或要遵守對方的使用條款。
+# 寫進 CycloneDX 的 services，以及表格的「外部服務與授權」頁，逐項確認授權是否合格、取用方式。狀態照程式現在的設定：
+# 預設＝一打開就會用到；可選＝使用者或部署者選了才用；停用／隱藏＝程式還在但畫面上不能選。
+EXTERNAL_SERVICES = [
+    {"group": "地圖圖資", "name": "OpenStreetMap 標準圖磚", "provider": "OpenStreetMap Foundation", "endpoints": ["https://tile.openstreetmap.org"], "purpose": "預設底圖（瀏覽器直接連）、選點小地圖；也可經後端轉抓", "status": "預設", "auth": "不用金鑰", "terms": "資料 ODbL 1.0；OSMF Tile Usage Policy", "terms_url": "https://operations.osmfoundation.org/policies/tiles/", "source": "Frontend/libs/modules/src/map/constants.ts、Backend/app/services/tile_proxy.py", "verdict": "✅ 合格", "basis": "資料 ODbL 1.0；依 OSMF 圖磚使用規範免申請取用，須標示「© OpenStreetMap contributors」（已標示）", "note": "後端轉抓使用可辨識的 User-Agent"},
+    {"group": "地圖圖資", "name": "國土測繪中心 正射影像（PHOTO_MIX）", "provider": "內政部國土測繪中心", "endpoints": ["https://wmts.nlsc.gov.tw"], "purpose": "可選的衛星底圖，經後端轉抓、快取 7 天", "status": "可選", "auth": "不用金鑰", "terms": "國土測繪圖資服務雲服務使用條款", "terms_url": "https://maps.nlsc.gov.tw/pro/use_clause.jsp", "source": "Backend/app/services/tile_proxy.py", "verdict": "✅ 合格", "basis": "依國土測繪圖資服務雲服務使用條款：公開免費網站可公開顯示、附來源（已標示「© 內政部國土測繪中心」）、不得大量下載、不得移除版權聲明。平台只在使用者看地圖時依需求轉抓、快取 7 天，不預先抓圖；條款未禁止轉抓或短期快取", "note": "標示「© 內政部國土測繪中心」"},
+    {"group": "地圖圖資", "name": "EOX Sentinel-2 cloudless 2024", "provider": "EOX IT Services GmbH", "endpoints": ["https://tiles.maps.eox.at"], "purpose": "可選的衛星底圖，經後端轉抓", "status": "可選", "auth": "不用金鑰", "terms": "CC BY-NC-SA 4.0（只准非商業用途）", "terms_url": "https://cloudless.eox.at/license-non-commercial", "source": "Backend/app/services/tile_proxy.py", "verdict": "✅ 合格", "basis": "CC BY-NC-SA 4.0 允許非商業用途：本平台是免費、公益的救災平台，以開源釋出；已依要求標示來源。圖磚於執行時取得，不與本專案程式碼一起散布", "note": "授權限非商業使用；改作商業用途的衍生專案須自行取得授權"},
+    {"group": "地圖圖資", "name": "NASA GIBS（HLS Sentinel-2）", "provider": "NASA Earthdata", "endpoints": ["https://gibs.earthdata.nasa.gov"], "purpose": "可選的衛星底圖，經後端轉抓", "status": "可選", "auth": "不用金鑰", "terms": "美國政府開放資料（無使用限制）", "terms_url": "https://earthdata.nasa.gov/eosdis/science-system-description/eosdis-components/gibs", "source": "Backend/app/services/tile_proxy.py", "verdict": "✅ 合格", "basis": "美國政府開放資料，無使用限制", "note": "建議標出處"},
+    {"group": "地圖圖資", "name": "CARTO 街道地圖", "provider": "CARTO", "endpoints": ["https://a.basemaps.cartocdn.com"], "purpose": "街道底圖", "status": "停用（畫面顯示「需要 API 金鑰，暫不可用」）", "auth": "要申請 API 金鑰", "terms": "CARTO Basemaps 服務條款；資料 ODbL", "terms_url": "https://carto.com/basemaps", "source": "Backend/app/services/tile_proxy.py、Frontend/libs/modules/src/map/constants.ts", "verdict": "— 未使用", "basis": "程式中停用，畫面上不能選", "note": ""},
+    {"group": "地圖圖資", "name": "中研院 衛星影像", "provider": "中央研究院", "endpoints": ["https://gis.sinica.edu.tw"], "purpose": "衛星底圖", "status": "隱藏", "auth": "不用金鑰", "terms": "未確認", "terms_url": "https://gis.sinica.edu.tw/worldmap/", "source": "Backend/app/services/tile_proxy.py", "verdict": "— 未使用", "basis": "程式中隱藏，畫面上不能選", "note": ""},
+    {"group": "地址定位", "name": "TGOS 門牌地址查詢與定位", "provider": "內政部資訊中心 TGOS", "endpoints": ["https://addr.tgos.tw"], "purpose": "把地址轉成座標", "status": "部署者設定金鑰才用", "auth": "要申請 App ID 與 API Key（TGOS_ADDR_*、TGOS_GEO_*）", "terms": "TGOS 服務申請條款（申請 API 時同意）", "terms_url": "https://www.tgos.tw", "source": "Backend/app/services/address.py", "verdict": "✅ 合格", "basis": "已申請 API 金鑰，依 TGOS 申請條款取用", "note": "每個部署者要自行申請金鑰"},
+    {"group": "登入", "name": "Google 登入（OAuth 2.0／OpenID Connect）", "provider": "Google", "endpoints": ["https://accounts.google.com", "https://oauth2.googleapis.com"], "purpose": "用 Google 帳號登入", "status": "部署者設定才用", "auth": "要申請 OAuth Client ID／Secret", "terms": "Google APIs Terms of Service、Google API Services User Data Policy", "terms_url": "https://developers.google.com/terms", "source": "Backend/app/sso/oauth.py", "verdict": "✅ 合格", "basis": "依 Google APIs Terms of Service 與 User Data Policy，部署者自行申請 OAuth 用戶端", "note": "沒設定時只能用 Email／手機加密碼登入"},
+    {"group": "登入", "name": "LINE 登入（LINE Login）", "provider": "LY Corporation", "endpoints": ["https://access.line.me", "https://api.line.me"], "purpose": "用 LINE 帳號登入", "status": "部署者設定才用", "auth": "要申請 Channel ID／Secret", "terms": "LINE Developers Agreement", "terms_url": "https://terms2.line.me/LINE_Developers_Agreement", "source": "Backend/app/sso/oauth.py、Backend/app/sso/line.py", "verdict": "✅ 合格", "basis": "依 LINE Developers Agreement，部署者自行申請 Channel", "note": "只用 LINE Login，沒有用 Messaging API"},
+    {"group": "通知", "name": "簡訊王 KotSMS", "provider": "簡訊王", "endpoints": ["https://api.kotsms.com.tw"], "purpose": "寄手機驗證碼", "status": "部署者設定才用（預設 console，驗證碼印在後端紀錄）", "auth": "要有付費帳號", "terms": "商業服務合約", "terms_url": "https://www.kotsms.com.tw", "source": "Backend/app/messaging/kotsms.py", "verdict": "✅ 合格", "basis": "付費商業服務，依合約取用", "note": "付費"},
+    {"group": "通知", "name": "SMTP2GO", "provider": "SMTP2GO", "endpoints": ["https://api.smtp2go.com"], "purpose": "寄 Email 驗證碼與通知", "status": "部署者設定才用（預設 console）", "auth": "要申請 API Key", "terms": "SMTP2GO Terms of Service", "terms_url": "https://www.smtp2go.com/terms/", "source": "Backend/app/messaging/smtp2go.py", "verdict": "✅ 合格", "basis": "付費商業服務，依服務條款取用", "note": "付費"},
+    {"group": "基礎設施", "name": "Cloudflare Web Analytics", "provider": "Cloudflare", "endpoints": ["https://static.cloudflareinsights.com", "https://cloudflareinsights.com"], "purpose": "Cloudflare 在前台、管理平台的網頁自動插入的流量統計", "status": "staging 有開（由 Cloudflare 設定，不在程式裡）", "auth": "Cloudflare 帳號", "terms": "Cloudflare 服務條款與隱私政策", "terms_url": "https://www.cloudflare.com/website-terms/", "source": "Frontend/libs/modules/src/http/content-security-policy.js（允許它載入）", "verdict": "✅ 合格", "basis": "依 Cloudflare 服務條款，由部署者的 Cloudflare 帳號啟用", "note": "不用 cookie"},
+    {"group": "基礎設施", "name": "Cloudflare Tunnel", "provider": "Cloudflare", "endpoints": [], "purpose": "staging 對外公開網域", "status": "staging 部署用", "auth": "Cloudflare 帳號與 Tunnel token", "terms": "Cloudflare 服務條款", "terms_url": "https://www.cloudflare.com/website-terms/", "source": "Backend/docker-compose.staging.yml", "verdict": "✅ 合格", "basis": "依 Cloudflare 服務條款，由部署者的 Cloudflare 帳號啟用", "note": "自架部署可改用其他反向代理"},
+    {"group": "基礎設施", "name": "Google Fonts（建置時下載）", "provider": "Google", "endpoints": ["https://fonts.googleapis.com", "https://fonts.gstatic.com"], "purpose": "next/font 在建置時下載 Noto Sans TC、Nunito、Inter，網站執行時不連 Google", "status": "建置時", "auth": "不用金鑰", "terms": "字型 OFL-1.1；Google Fonts 服務條款", "terms_url": "https://developers.google.com/fonts/terms", "source": "Frontend/libs/modules/src/document-layout.tsx", "verdict": "✅ 合格", "basis": "字型為 SIL OFL 1.1，可自由使用與散布", "note": "建置環境要能連網"},
+    {"group": "使用者內容", "name": "duk.tw 圖床（建議）", "provider": "duk.tw（個人經營）", "endpoints": ["https://duk.tw", "https://i.duk.tw"], "purpose": "上傳照片的頁面建議使用者把圖放這裡，再貼網址；平台不存圖", "status": "介面上的建議連結", "auth": "不用", "terms": "duk.tw 網站服務條款（使用者上傳時同意）", "terms_url": "https://duk.tw/", "source": "Frontend/libs/modules/src/ticket/photos/photo-links.ts", "verdict": "✅ 合格", "basis": "平台只儲存使用者貼上的圖片網址（文字），不上傳、不保存圖片；圖片由使用者自行上傳至第三方圖床，屬一般網址分享與網頁顯示", "note": "使用者也可以貼其他 https 圖片網址"},
+    {"group": "使用者內容", "name": "社群分享（Facebook、X、Threads、LINE）", "provider": "Meta、X Corp.、LY Corporation", "endpoints": ["https://www.facebook.com/sharer/sharer.php", "https://twitter.com/intent/tweet", "https://www.threads.net/intent/post", "https://social-plugins.line.me/lineit/share"], "purpose": "分享按鈕開啟各平台的分享頁", "status": "預設", "auth": "不用", "terms": "各平台使用條款；品牌標誌是商標", "terms_url": "", "source": "Frontend/libs/modules（分享）、Frontend/libs/ui/src/components/Icon（Facebook、Google、LINE 標誌）", "verdict": "✅ 合格", "basis": "只開啟各平台公開的分享網址；品牌標誌依各品牌使用規範", "note": "只是連結，不會把資料送到各平台"},
+]
+
+
 # package.json 與 registry 都沒有寫授權、要看套件內 LICENSE 檔才知道的
 LICENSE_OVERRIDES = {
     "union@0.5.0": ("MIT", "package.json 未標示；依套件內 LICENSE 檔全文判定為 MIT"),
@@ -429,6 +452,33 @@ def sri_to_hash(sri):
     algo, _, b64 = sri.partition("-")
     hexd = base64.b64decode(b64).hex()
     return {"sha512": "SHA-512", "sha256": "SHA-256", "sha1": "SHA-1"}.get(algo, algo.upper()), hexd
+
+
+def service_to_cdx(sv):
+    """One EXTERNAL_SERVICES entry as a CycloneDX 1.6 service."""
+    svc = {
+        "bom-ref": f"service:{sv['name']}",
+        "provider": {"name": sv["provider"]},
+        "name": sv["name"],
+        "description": sv["purpose"],
+        "x-trust-boundary": True,
+        "properties": [
+            {"name": "wanguard:group", "value": sv["group"]},
+            {"name": "wanguard:status", "value": sv["status"]},
+            {"name": "wanguard:auth", "value": sv["auth"]},
+            {"name": "wanguard:source", "value": sv["source"]},
+            {"name": "wanguard:license-check", "value": sv["verdict"]},
+            {"name": "wanguard:license-basis", "value": sv["basis"]},
+            {"name": "wanguard:note", "value": sv["note"]},
+        ],
+    }
+    if sv["endpoints"]:
+        svc["endpoints"] = sv["endpoints"]
+    if sv["terms"]:
+        svc["licenses"] = [{"license": {"name": sv["terms"]}}]
+    if sv["terms_url"]:
+        svc["externalReferences"] = [{"type": "license", "url": sv["terms_url"]}]
+    return svc
 
 
 def main():
@@ -642,10 +692,11 @@ def main():
             },
         },
         "components": components,
+        "services": [service_to_cdx(sv) for sv in EXTERNAL_SERVICES],
         "dependencies": deps_out,
     }
     (out / f"sbom-{args.version}.cdx.json").write_text(json.dumps(bom, ensure_ascii=False, indent=2), encoding="utf-8")
-    (out / "_rows.json").write_text(json.dumps({"meta": meta_out, "frontend": fe_rows, "backend": be_rows, "other": OTHER_COMPONENTS}, ensure_ascii=False, indent=1), encoding="utf-8")
+    (out / "_rows.json").write_text(json.dumps({"meta": meta_out, "frontend": fe_rows, "backend": be_rows, "other": OTHER_COMPONENTS, "services": EXTERNAL_SERVICES}, ensure_ascii=False, indent=1), encoding="utf-8")
 
     unreached = [r for r in fe_rows if r["scope"] == "unreached"]
     print(f"frontend packages: {len(fe_rows)}  runtime {sum(r['scope']=='runtime' for r in fe_rows)}  dev {sum(r['scope']=='dev' for r in fe_rows)}  unreached {len(unreached)}", file=sys.stderr)
