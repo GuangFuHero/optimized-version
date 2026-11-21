@@ -103,7 +103,7 @@
 | 範圍 | 維護者（GitHub 帳號） |
 |---|---|
 | 專案管理、授權、行為準則 | `@carolchu1208` |
-| 後端（`Backend/`）、規格（`Spec/`、`Backend/Spec/`） | `@Taiwanchaoh`、`@jujuyuzu` |
+| 後端（`Backend/`）、規格（`Spec/`、`Backend/Spec/`） | `@Taiwanchaoh`、`@zenuie`、`@jujuyuzu` |
 | 前端（`Frontend/`） | `@jujuyuzu`、`@chingweih`、`@hanhsienlei` |
 | 設計（`Design/`、設計分支） | `@sucrelindesign` |
 | CI、部署（`.github/`、`DEPLOY.md`） | `@jujuyuzu`、`@Taiwanchaoh` |
