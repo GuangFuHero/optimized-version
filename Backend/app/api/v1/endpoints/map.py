@@ -11,8 +11,8 @@ from app.services.tile_proxy import (
 router = APIRouter()
 
 VALID_SOURCES = {
-    "satellite": {"nasa_gibs", "eox", "nlsc", "sinica"},
-    "road": {"osm", "carto"},
+    "satellite": {"nasa_gibs", "eox", "nlsc"},
+    "road": {"osm"},
 }
 
 
@@ -38,36 +38,23 @@ async def get_tile(
     x: int,
     y: int,
     request: Request,
-    layer: str | None = None,
 ):
-    """Proxy a map tile from an upstream source with 7-day Redis caching.
+    """Proxy a map tile from an upstream source with Redis caching.
 
     **type** — `satellite` or `road`
 
     **source** — one of:
-    - satellite: `nasa_gibs` (image/png), `eox` (image/jpeg), `nlsc` (image/jpeg), `sinica` (image/png)
-    - road: `osm` (image/png), `carto` (image/png)
+    - satellite: `nasa_gibs` (image/png), `eox` (image/jpeg), `nlsc` (image/jpeg)
+    - road: `osm` (image/png)
 
     **z/x/y** — Standard XYZ slippy map tile coordinates (z: 0–19)
 
-    **layer** — Required only for `source=sinica`. Pass the Sinica layer name
-    (e.g. `EARTH`, `TAIWAN_MOSAIC`). See https://gis.sinica.edu.tw/worldmap/
-    for available layers. Ignored for all other sources.
+    Tiles are cached for 7 days, `nasa_gibs` for 1 day, and `osm` for as long as its caching headers say.
 
     Returns the raw tile image bytes with the upstream Content-Type header.
     On upstream error, returns a 1×1 transparent PNG.
     """
     _validate(type_, source, z)
-
-    if source == "sinica" and not layer:
-        raise HTTPException(
-            status_code=400,
-            detail="layer is required for source=sinica",
-        )
-
-    query_params = {}
-    if layer and source == "sinica":
-        query_params["layer"] = layer
 
     redis_client = request.app.state.redis
     tile_bytes, content_type = await fetch_tile(
@@ -77,7 +64,8 @@ async def get_tile(
         z=z,
         x=x,
         y=y,
-        query_params=query_params,
+        query_params={},
+        referer=request.headers.get("referer"),
     )
 
     return Response(content=tile_bytes, media_type=content_type)
