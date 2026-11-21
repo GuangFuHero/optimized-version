@@ -43,7 +43,7 @@ function escapeHtml(value: string) {
     .replace(/'/g, '&#39;');
 }
 
-function buildAttributionMarkup(
+export function buildAttributionMarkup(
   payload: TileAttributionResponse,
   fallback: string,
 ) {
@@ -54,9 +54,13 @@ function buildAttributionMarkup(
   }
 
   const escapedText = escapeHtml(text);
+  // The credit links to the provider's own page, which the OpenStreetMap and NLSC terms ask for.
+  const credit = /^https?:\/\//.test(payload.attribution_url)
+    ? `<a href="${escapeHtml(payload.attribution_url)}" target="_blank" rel="noopener noreferrer">${escapedText}</a>`
+    : escapedText;
 
   if (!payload.requires_logo || !payload.logo_url) {
-    return escapedText;
+    return credit;
   }
 
   const escapedLogoUrl = escapeHtml(payload.logo_url);
@@ -64,7 +68,7 @@ function buildAttributionMarkup(
   return [
     '<span style="display:inline-flex;align-items:center;gap:6px;">',
     `<img src="${escapedLogoUrl}" alt="" style="height:14px;width:auto;vertical-align:middle;" />`,
-    `<span>${escapedText}</span>`,
+    `<span>${credit}</span>`,
     '</span>',
   ].join('');
 }

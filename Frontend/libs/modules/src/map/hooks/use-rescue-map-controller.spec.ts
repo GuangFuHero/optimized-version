@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  buildAttributionMarkup,
   normalizeLayerPreferences,
   readLayerPreferences,
   writeLayerPreferences,
@@ -76,5 +77,34 @@ describe('normalizeLayerPreferences', () => {
       normalizeLayerPreferences(JSON.parse(JSON.stringify(turnedOff)))
         .enabledOverlayLayers,
     ).toEqual(['closure-areas']);
+  });
+});
+
+describe('buildAttributionMarkup', () => {
+  const osm = {
+    source: 'osm',
+    type: 'road',
+    name: 'OpenStreetMap',
+    license: 'ODbL',
+    attribution_text: '© OpenStreetMap contributors',
+    attribution_url: 'https://www.openstreetmap.org/copyright',
+    image_format: 'image/png',
+    commercial_use: true,
+    requires_logo: false,
+  };
+
+  it("links the provider's credit to the page the backend names", () => {
+    expect(buildAttributionMarkup(osm, 'fallback')).toBe(
+      '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a>',
+    );
+  });
+
+  it('leaves the credit as text when the page is not a web address', () => {
+    expect(
+      buildAttributionMarkup(
+        { ...osm, attribution_url: 'javascript:alert(1)' },
+        'fallback',
+      ),
+    ).toBe('© OpenStreetMap contributors');
   });
 });
