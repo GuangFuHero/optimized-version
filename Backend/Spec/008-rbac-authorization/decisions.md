@@ -312,6 +312,8 @@
 
 > **部分被 ADR-300 取代**：`data_auditor` 不再是純唯讀，持有 `station.review` 與 `station.revoke`（`all`）；其餘寫入能力照舊沒有。
 
+> **部分被 ADR-462 取代**：Dashboard 現在有自己的權限 `analytics.view`。
+
 > **狀態:ACCEPTED 並已落地驗證（2026-07-09,`pytest` 367 passed、`ruff` 乾淨)。** 本條整合 2026-07-08/09 對照 `Docs/rbac-permissions-design.md`(v1.1)+ `Dashboard.md` §3~§7 後的修正,並取代 ADR-048 的 scope 部分。
 >
 > **落地內容**:`permissions.py` 移除 `DASHBOARD_*`;`rbac_scopes.py` 移除 `Scope.GOV`/`NGO`(留 none/own/team/zone/all,team 僅團隊管理用);`models/geo.py` + migration `2f9a1c7b6e04` drop `base_geometries.team_uuid`;`services/{station,ticket,closure_area}.py` 建立時不再寫 team_uuid;`seed_rbac.py` 角色重寫成 super_admin/data_auditor/user(平台)+ admin/member(團隊),廢除 gov_manager/ngo_manager;新增 `graphql/masking.py`(移植 PR #23 遮罩)+ `tickets/types.py` PII resolver 從 null 改遮罩(zone 判定改吃 geometry);測試:移除 `test_team_scope.py`(team-geo 已退場)、`test_rbac_scopes.py`/`test_authz.py` 的 team/gov/ngo 案例改 zone、`test_query_rbac.py` PII 斷言改遮罩、新增 `test_masking.py`。
@@ -1617,6 +1619,21 @@ ADR-048 當初拒絕資源上的 team 歸屬，理由是「gov 把東西交給 N
 - ➖ 審核者自己打的值跟某一筆差很多時，那個建議者也會收到「已參考」。要分得出來，審核畫面得記下審核者從哪一筆改起，這次不做；通知文字之後要改，只動一行。
 - ◾ 前台通知鈴鐺只顯示 `SITE_NOTICE_TYPES`（`Frontend/libs/modules/src/notification/site-notices.ts`）列出的類型。這三種要前端加進去才看得到，點下去要開哪個畫面也還沒定。
 - 測試：`tests/test_graphql/test_suggestions.py`。
+
+#### ADR-462 後台 BI 儀表板要 `analytics.view`，只授予後台角色
+
+> **狀態：ACCEPTED**
+
+**Context**：
+
+- ADR-049 定 Dashboard 沒有自己的權限，每張圖只看來源模組的 `ticket.view`／`station.view`。
+- 公開的通報看板與站點地圖要這兩個權限，所以每個角色都有，包括每個註冊帳號都拿到的平台 `user`。任何註冊帳號都能直接呼叫 analytics API，讀到全平台的數字。
+
+**Decision**：
+
+1. 新權限 `analytics.view`，`/api/v1/analytics` 底下每支 API 都在 router 層檢查它。來源模組的 view 權限與 scope 照舊另外檢查。
+2. seed 以 `all` 授予 `data_auditor`、`super_admin`、`admin`、`member`；gov 與 NGO team 的 `admin`、`member` 都有。`user` 沒有。
+3. migration 只補缺少的授予，執行期已設定的 scope 不動。
 
 ---
 

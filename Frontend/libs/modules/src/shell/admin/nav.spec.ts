@@ -18,6 +18,11 @@ describe('canOpenAdminHref', () => {
     expect(canOpenAdminHref('/users', ['rbac.assign'])).toBe(true);
   });
 
+  it('keeps 總覽儀表板 for an identity holding analytics.view', () => {
+    expect(canOpenAdminHref('/dashboard', ['ticket.view'])).toBe(false);
+    expect(canOpenAdminHref('/dashboard', ['analytics.view'])).toBe(true);
+  });
+
   it('opens a link under no sidebar item', () => {
     expect(canOpenAdminHref('/', [])).toBe(true);
   });
