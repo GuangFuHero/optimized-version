@@ -104,6 +104,7 @@
       "profile": "https://github.com/sucrelindesign",
       "contributions": [
         "design",
+        "userTesting",
         "frontend",
         "test",
         "security",
@@ -209,6 +210,15 @@
       "profile": "https://github.com/poposing",
       "contributions": [
         "review"
+      ]
+    },
+    {
+      "login": "Nunnie0602",
+      "name": "Bunnie",
+      "avatar_url": "https://avatars.githubusercontent.com/u/205031539?v=4",
+      "profile": "https://github.com/Nunnie0602",
+      "contributions": [
+        "userTesting"
       ]
     },
     {
