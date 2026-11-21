@@ -1,0 +1,26 @@
+# Both lookups share the backend's TGOS rate limit for signed-in callers.
+query ReverseGeocode($lat: Float!, $lng: Float!) {
+  reverseGeocode(lat: $lat, lng: $lng) {
+    status
+    fullAddress
+    lat
+    lng
+    buildingSection
+    floor
+    room
+    addressToken
+  }
+}
+
+query NormalizeAddress($address: String!, $lat: Float, $lng: Float) {
+  normalizeAddress(address: $address, lat: $lat, lng: $lng) {
+    status
+    fullAddress
+    lat
+    lng
+    buildingSection
+    floor
+    room
+    addressToken
+  }
+}

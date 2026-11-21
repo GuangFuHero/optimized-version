@@ -593,7 +593,7 @@ function SuperTeamsView({ siteUrl }: { siteUrl?: string }) {
   if (teamsQuery.isPending || usersQuery.isPending) {
     return <Typography sx={captionSx}>載入中…</Typography>;
   }
-  // A 403 is shown by the shell in place of the page (`isAdminPermissionError`).
+  // A 403 is shown by the shell in place of the page (`isPermissionError`).
   if (teamsQuery.isError || usersQuery.isError) {
     return (
       <Callout tone="danger">

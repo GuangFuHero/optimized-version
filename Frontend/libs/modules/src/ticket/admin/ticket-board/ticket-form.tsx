@@ -183,7 +183,6 @@ export function TicketForm(props: TicketFormProps) {
   const disasterLabel = (key: string) =>
     disasterOptions.find((d) => d.key === key)?.label ?? key;
 
-  // Once per pin, on create only: the query caches each position, so a lookup is never repeated.
   const { lat: pinLat, lng: pinLng } = values.point ?? {};
   const lookup = useReverseGeocode(
     mode === 'create' && pinLat != null && pinLng != null

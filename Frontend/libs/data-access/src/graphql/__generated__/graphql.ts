@@ -2758,44 +2758,6 @@ export type AdminTicketQuery = {
   } | null;
 };
 
-export type AdminTicketTasksQueryVariables = Exact<{
-  ticketUuid: Scalars['String']['input'];
-  status?: InputMaybe<Scalars['String']['input']>;
-  q?: InputMaybe<Scalars['String']['input']>;
-  skip?: InputMaybe<Scalars['Int']['input']>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-}>;
-
-export type AdminTicketTasksQuery = {
-  __typename?: 'Query';
-  ticketTasks: Array<{
-    __typename?: 'TicketTaskType';
-    uuid: string;
-    ticketUuid: string;
-    taskType: string;
-    taskName: string;
-    taskDescription?: string | null;
-    quantity?: number | null;
-    status: string;
-    progressNote?: string | null;
-    source: string;
-    createdAt?: string | null;
-    updatedAt?: string | null;
-    assignedCount: number;
-    recruitingStoppedAt?: string | null;
-    assignments: Array<{
-      __typename?: 'TaskAssignmentType';
-      uuid: string;
-      actorUuid: string;
-      actorName?: string | null;
-      role?: string | null;
-      status: string;
-      assignedAt?: string | null;
-      updatedAt?: string | null;
-    }>;
-  }>;
-};
-
 export type AdminStationFacetsQueryVariables = Exact<{ [key: string]: never }>;
 
 export type AdminStationFacetsQuery = {
@@ -2971,26 +2933,6 @@ export type AdminStationQuery = {
       type: string;
     } | null;
   } | null;
-};
-
-export type AdminReverseGeocodeQueryVariables = Exact<{
-  lat: Scalars['Float']['input'];
-  lng: Scalars['Float']['input'];
-}>;
-
-export type AdminReverseGeocodeQuery = {
-  __typename?: 'Query';
-  reverseGeocode: {
-    __typename?: 'AddressLookupType';
-    status: string;
-    fullAddress?: string | null;
-    floor?: string | null;
-    room?: string | null;
-    addressToken?: string | null;
-    lat?: number | null;
-    lng?: number | null;
-    buildingSection?: string | null;
-  };
 };
 
 export type AdminStationReviewQueryVariables = Exact<{
@@ -3378,15 +3320,6 @@ export type AdminUpdateTicketMutation = {
   };
 };
 
-export type AdminDeleteTicketMutationVariables = Exact<{
-  uuid: Scalars['UUID']['input'];
-}>;
-
-export type AdminDeleteTicketMutation = {
-  __typename?: 'Mutation';
-  deleteTicket: boolean;
-};
-
 export type AdminSetTicketDisasterDetailsMutationVariables = Exact<{
   uuid: Scalars['UUID']['input'];
   details: Array<TicketDisasterDetailInput> | TicketDisasterDetailInput;
@@ -3557,15 +3490,6 @@ export type AdminStopRecruitingMutation = {
   };
 };
 
-export type AdminDeleteTicketTaskMutationVariables = Exact<{
-  uuid: Scalars['UUID']['input'];
-}>;
-
-export type AdminDeleteTicketTaskMutation = {
-  __typename?: 'Mutation';
-  deleteTicketTask: boolean;
-};
-
 export type AdminAttachTicketPhotoMutationVariables = Exact<{
   ticketUuid: Scalars['UUID']['input'];
   url: Scalars['String']['input'];
@@ -3588,15 +3512,6 @@ export type AdminDetachTicketPhotoMutationVariables = Exact<{
 export type AdminDetachTicketPhotoMutation = {
   __typename?: 'Mutation';
   detachTicketPhoto: boolean;
-};
-
-export type AdminUnassignTaskActorMutationVariables = Exact<{
-  uuid: Scalars['UUID']['input'];
-}>;
-
-export type AdminUnassignTaskActorMutation = {
-  __typename?: 'Mutation';
-  unassignTaskActor: boolean;
 };
 
 export type AdminCreateStationMutationVariables = Exact<{
@@ -3707,15 +3622,6 @@ export type AdminUpdateStationMutation = {
       type: string;
     } | null;
   };
-};
-
-export type AdminDeleteStationMutationVariables = Exact<{
-  uuid: Scalars['UUID']['input'];
-}>;
-
-export type AdminDeleteStationMutation = {
-  __typename?: 'Mutation';
-  deleteStation: boolean;
 };
 
 export type AdminMergeStationSuggestionsMutationVariables = Exact<{
@@ -4270,6 +4176,7 @@ export type AdminUpdateAreaMutation = {
   updateArea: {
     __typename?: 'AreaType';
     uuid: string;
+    type: string;
     name?: string | null;
     note?: string | null;
     isPublic: boolean;
@@ -4446,27 +4353,6 @@ export type AdminBuildingMapTicketsQuery = {
   }>;
 };
 
-export type AdminNormalizeAddressQueryVariables = Exact<{
-  address: Scalars['String']['input'];
-  lat?: InputMaybe<Scalars['Float']['input']>;
-  lng?: InputMaybe<Scalars['Float']['input']>;
-}>;
-
-export type AdminNormalizeAddressQuery = {
-  __typename?: 'Query';
-  normalizeAddress: {
-    __typename?: 'AddressLookupType';
-    status: string;
-    fullAddress?: string | null;
-    addressToken?: string | null;
-    lat?: number | null;
-    lng?: number | null;
-    buildingSection?: string | null;
-    floor?: string | null;
-    room?: string | null;
-  };
-};
-
 export type AdminCreateBuildingMapMutationVariables = Exact<{
   input: CreateBuildingMapInput;
 }>;
@@ -4631,6 +4517,47 @@ export type GetBuildingMapsQuery = {
       } | null;
     }>;
     pageInfo: { __typename?: 'PageInfo'; totalCount: number };
+  };
+};
+
+export type ReverseGeocodeQueryVariables = Exact<{
+  lat: Scalars['Float']['input'];
+  lng: Scalars['Float']['input'];
+}>;
+
+export type ReverseGeocodeQuery = {
+  __typename?: 'Query';
+  reverseGeocode: {
+    __typename?: 'AddressLookupType';
+    status: string;
+    fullAddress?: string | null;
+    lat?: number | null;
+    lng?: number | null;
+    buildingSection?: string | null;
+    floor?: string | null;
+    room?: string | null;
+    addressToken?: string | null;
+  };
+};
+
+export type NormalizeAddressQueryVariables = Exact<{
+  address: Scalars['String']['input'];
+  lat?: InputMaybe<Scalars['Float']['input']>;
+  lng?: InputMaybe<Scalars['Float']['input']>;
+}>;
+
+export type NormalizeAddressQuery = {
+  __typename?: 'Query';
+  normalizeAddress: {
+    __typename?: 'AddressLookupType';
+    status: string;
+    fullAddress?: string | null;
+    lat?: number | null;
+    lng?: number | null;
+    buildingSection?: string | null;
+    floor?: string | null;
+    room?: string | null;
+    addressToken?: string | null;
   };
 };
 
@@ -4821,145 +4748,6 @@ export type GetMapAreasQuery = {
   };
 };
 
-export type GetClosureAreaQueryVariables = Exact<{
-  uuid: Scalars['UUID']['input'];
-}>;
-
-export type GetClosureAreaQuery = {
-  __typename?: 'Query';
-  hazardousZone?: {
-    __typename?: 'HazardousZoneType';
-    uuid: string;
-    propertyName: string;
-    name?: string | null;
-    geometry?: Geometry | null;
-    status: string;
-    informationSource?: string | null;
-    note?: string | null;
-    createdBy?: string | null;
-    createdAt?: string | null;
-    updatedAt?: string | null;
-  } | null;
-};
-
-export type ReverseGeocodeQueryVariables = Exact<{
-  lat: Scalars['Float']['input'];
-  lng: Scalars['Float']['input'];
-}>;
-
-export type ReverseGeocodeQuery = {
-  __typename?: 'Query';
-  reverseGeocode: {
-    __typename?: 'AddressLookupType';
-    status: string;
-    fullAddress?: string | null;
-    lat?: number | null;
-    lng?: number | null;
-    buildingSection?: string | null;
-    floor?: string | null;
-    room?: string | null;
-    addressToken?: string | null;
-  };
-};
-
-export type NormalizeAddressQueryVariables = Exact<{
-  address: Scalars['String']['input'];
-  lat?: InputMaybe<Scalars['Float']['input']>;
-  lng?: InputMaybe<Scalars['Float']['input']>;
-}>;
-
-export type NormalizeAddressQuery = {
-  __typename?: 'Query';
-  normalizeAddress: {
-    __typename?: 'AddressLookupType';
-    status: string;
-    fullAddress?: string | null;
-    lat?: number | null;
-    lng?: number | null;
-    buildingSection?: string | null;
-    floor?: string | null;
-    room?: string | null;
-    addressToken?: string | null;
-  };
-};
-
-export type UpdateStationMutationVariables = Exact<{
-  uuid: Scalars['UUID']['input'];
-  input: UpdateStationInput;
-}>;
-
-export type UpdateStationMutation = {
-  __typename?: 'Mutation';
-  updateStation: {
-    __typename?: 'StationType';
-    uuid: string;
-    propertyName: string;
-    geometry?: Geometry | null;
-    type?: string | null;
-    name?: string | null;
-    description?: string | null;
-    opHour?: string | null;
-    level: number;
-    source?: string | null;
-    visibility?: string | null;
-    verificationStatus?: string | null;
-    isDuplicate: boolean;
-    isTemporary: boolean;
-    isOfficial: boolean;
-    operationalStatus: string;
-    supplyStatus?: string | null;
-    supplyStatusUpdatedAt?: string | null;
-    createdBy?: string | null;
-    createdAt?: string | null;
-    updatedAt?: string | null;
-  };
-};
-
-export type DeleteStationMutationVariables = Exact<{
-  uuid: Scalars['UUID']['input'];
-}>;
-
-export type DeleteStationMutation = {
-  __typename?: 'Mutation';
-  deleteStation: boolean;
-};
-
-export type CreateStationPropertyMutationVariables = Exact<{
-  input: CreateStationPropertyInput;
-}>;
-
-export type CreateStationPropertyMutation = {
-  __typename?: 'Mutation';
-  createStationProperty: {
-    __typename?: 'StationPropertyType';
-    uuid: string;
-    stationUuid: string;
-    propertyType: string;
-    propertyName: string;
-    quantity?: number | null;
-    status: string;
-    weightings: number;
-    createdBy?: string | null;
-    createdAt?: string | null;
-  };
-};
-
-export type CreateCrowdSourcingMutationVariables = Exact<{
-  input: CreateCrowdSourcingInput;
-}>;
-
-export type CreateCrowdSourcingMutation = {
-  __typename?: 'Mutation';
-  createCrowdSourcing: {
-    __typename?: 'CrowdSourcingType';
-    uuid: string;
-    stationUuid: string;
-    itemUuid?: string | null;
-    rating: string;
-    createdAt?: string | null;
-  };
-};
-
 export type GetStationForSuggestionQueryVariables = Exact<{
   uuid: Scalars['UUID']['input'];
 }>;
@@ -5078,6 +4866,42 @@ export type WithdrawRoleRequestMutationVariables = Exact<{
 export type WithdrawRoleRequestMutation = {
   __typename?: 'Mutation';
   withdrawRoleRequest: { __typename?: 'RoleRequestType'; uuid: string };
+};
+
+export type DeleteTicketMutationVariables = Exact<{
+  uuid: Scalars['UUID']['input'];
+}>;
+
+export type DeleteTicketMutation = {
+  __typename?: 'Mutation';
+  deleteTicket: boolean;
+};
+
+export type DeleteTicketTaskMutationVariables = Exact<{
+  uuid: Scalars['UUID']['input'];
+}>;
+
+export type DeleteTicketTaskMutation = {
+  __typename?: 'Mutation';
+  deleteTicketTask: boolean;
+};
+
+export type ReleaseClaimMutationVariables = Exact<{
+  uuid: Scalars['UUID']['input'];
+}>;
+
+export type ReleaseClaimMutation = {
+  __typename?: 'Mutation';
+  unassignTaskActor: boolean;
+};
+
+export type DeleteStationMutationVariables = Exact<{
+  uuid: Scalars['UUID']['input'];
+}>;
+
+export type DeleteStationMutation = {
+  __typename?: 'Mutation';
+  deleteStation: boolean;
 };
 
 export type TicketFieldsFragment = {
@@ -5443,42 +5267,6 @@ export type GetLinkedTicketQuery = {
   };
 };
 
-export type GetTicketTasksQueryVariables = Exact<{
-  ticketUuid: Scalars['String']['input'];
-  status?: InputMaybe<Scalars['String']['input']>;
-  skip?: InputMaybe<Scalars['Int']['input']>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-}>;
-
-export type GetTicketTasksQuery = {
-  __typename?: 'Query';
-  ticketTasks: Array<{
-    __typename?: 'TicketTaskType';
-    uuid: string;
-    ticketUuid: string;
-    taskType: string;
-    taskName: string;
-    taskDescription?: string | null;
-    quantity?: number | null;
-    status: string;
-    source: string;
-    progressNote?: string | null;
-    createdAt?: string | null;
-    updatedAt?: string | null;
-    properties: Array<{
-      __typename?: 'TaskPropertyType';
-      uuid: string;
-      taskUuid: string;
-      propertyName: string;
-      propertyValue: string;
-      quantity?: number | null;
-      status?: string | null;
-      comment?: string | null;
-      createdAt?: string | null;
-    }>;
-  }>;
-};
-
 export type CreateHelpRequestMutationVariables = Exact<{
   input: CreateHelpRequestInput;
 }>;
@@ -5533,35 +5321,6 @@ export type CreateHelpRequestMutation = {
       };
 };
 
-export type UpdateTicketMutationVariables = Exact<{
-  uuid: Scalars['UUID']['input'];
-  input: UpdateTicketInput;
-}>;
-
-export type UpdateTicketMutation = {
-  __typename?: 'Mutation';
-  updateTicket: {
-    __typename?: 'TicketType';
-    uuid: string;
-    propertyName: string;
-    geometry?: Geometry | null;
-    locationCell?: string | null;
-    buildingMapUuid?: string | null;
-    title: string;
-    description?: string | null;
-    contactName?: string | null;
-    contactEmail?: string | null;
-    contactPhone?: string | null;
-    status: string;
-    priority: string;
-    taskType?: string | null;
-    auditStatus: string;
-    createdBy?: string | null;
-    createdAt?: string | null;
-    updatedAt?: string | null;
-  };
-};
-
 export type CreateTicketTaskMutationVariables = Exact<{
   input: CreateTicketTaskInput;
   acknowledgedDuplicateOf?: InputMaybe<Scalars['String']['input']>;
@@ -5597,29 +5356,6 @@ export type CreateTicketTaskMutation = {
       };
 };
 
-export type UpdateTicketTaskMutationVariables = Exact<{
-  uuid: Scalars['UUID']['input'];
-  input: UpdateTicketTaskInput;
-}>;
-
-export type UpdateTicketTaskMutation = {
-  __typename?: 'Mutation';
-  updateTicketTask: {
-    __typename?: 'TicketTaskType';
-    uuid: string;
-    ticketUuid: string;
-    taskType: string;
-    taskName: string;
-    taskDescription?: string | null;
-    quantity?: number | null;
-    status: string;
-    source: string;
-    progressNote?: string | null;
-    createdAt?: string | null;
-    updatedAt?: string | null;
-  };
-};
-
 export type ClaimNeedMutationVariables = Exact<{
   taskUuid: Scalars['UUID']['input'];
 }>;
@@ -5633,15 +5369,6 @@ export type ClaimNeedMutation = {
   };
 };
 
-export type ReleaseClaimMutationVariables = Exact<{
-  uuid: Scalars['UUID']['input'];
-}>;
-
-export type ReleaseClaimMutation = {
-  __typename?: 'Mutation';
-  unassignTaskActor: boolean;
-};
-
 export type StopRecruitingMutationVariables = Exact<{
   taskUuid: Scalars['UUID']['input'];
 }>;
@@ -5649,24 +5376,6 @@ export type StopRecruitingMutationVariables = Exact<{
 export type StopRecruitingMutation = {
   __typename?: 'Mutation';
   stopRecruiting: { __typename?: 'TicketTaskType'; uuid: string };
-};
-
-export type DeleteTicketTaskMutationVariables = Exact<{
-  uuid: Scalars['UUID']['input'];
-}>;
-
-export type DeleteTicketTaskMutation = {
-  __typename?: 'Mutation';
-  deleteTicketTask: boolean;
-};
-
-export type DeleteTicketMutationVariables = Exact<{
-  uuid: Scalars['UUID']['input'];
-}>;
-
-export type DeleteTicketMutation = {
-  __typename?: 'Mutation';
-  deleteTicket: boolean;
 };
 
 export type MyTaskAssignmentsQueryVariables = Exact<{ [key: string]: never }>;
@@ -5730,25 +5439,6 @@ export type MyTicketsQuery = {
       status: string;
     }>;
   }>;
-};
-
-export type CreateTaskPropertyMutationVariables = Exact<{
-  input: CreateTaskPropertyInput;
-}>;
-
-export type CreateTaskPropertyMutation = {
-  __typename?: 'Mutation';
-  createTaskProperty: {
-    __typename?: 'TaskPropertyType';
-    uuid: string;
-    taskUuid: string;
-    propertyName: string;
-    propertyValue: string;
-    quantity?: number | null;
-    status?: string | null;
-    comment?: string | null;
-    createdAt?: string | null;
-  };
 };
 
 export class TypedDocumentString<TResult, TVariables>
@@ -6399,45 +6089,6 @@ fragment AdminTaskFields on TicketTaskType {
   AdminTicketQuery,
   AdminTicketQueryVariables
 >;
-export const AdminTicketTasksDocument = new TypedDocumentString(`
-    query AdminTicketTasks($ticketUuid: String!, $status: String, $q: String, $skip: Int = 0, $limit: Int = 50) {
-  ticketTasks(
-    ticketUuid: $ticketUuid
-    status: $status
-    q: $q
-    skip: $skip
-    limit: $limit
-  ) {
-    ...AdminTaskFields
-  }
-}
-    fragment AdminTaskFields on TicketTaskType {
-  uuid
-  ticketUuid
-  taskType
-  taskName
-  taskDescription
-  quantity
-  status
-  progressNote
-  source
-  createdAt
-  updatedAt
-  assignedCount
-  recruitingStoppedAt
-  assignments {
-    uuid
-    actorUuid
-    actorName
-    role
-    status
-    assignedAt
-    updatedAt
-  }
-}`) as unknown as TypedDocumentString<
-  AdminTicketTasksQuery,
-  AdminTicketTasksQueryVariables
->;
 export const AdminStationFacetsDocument = new TypedDocumentString(`
     query AdminStationFacets {
   stationFacets {
@@ -6612,23 +6263,6 @@ export const AdminStationDocument = new TypedDocumentString(`
 }`) as unknown as TypedDocumentString<
   AdminStationQuery,
   AdminStationQueryVariables
->;
-export const AdminReverseGeocodeDocument = new TypedDocumentString(`
-    query AdminReverseGeocode($lat: Float!, $lng: Float!) {
-  reverseGeocode(lat: $lat, lng: $lng) {
-    status
-    fullAddress
-    floor
-    room
-    addressToken
-    lat
-    lng
-    buildingSection
-  }
-}
-    `) as unknown as TypedDocumentString<
-  AdminReverseGeocodeQuery,
-  AdminReverseGeocodeQueryVariables
 >;
 export const AdminStationReviewDocument = new TypedDocumentString(`
     query AdminStationReview($uuid: UUID!) {
@@ -6957,14 +6591,6 @@ export const AdminUpdateTicketDocument = new TypedDocumentString(`
   AdminUpdateTicketMutation,
   AdminUpdateTicketMutationVariables
 >;
-export const AdminDeleteTicketDocument = new TypedDocumentString(`
-    mutation AdminDeleteTicket($uuid: UUID!) {
-  deleteTicket(uuid: $uuid)
-}
-    `) as unknown as TypedDocumentString<
-  AdminDeleteTicketMutation,
-  AdminDeleteTicketMutationVariables
->;
 export const AdminSetTicketDisasterDetailsDocument = new TypedDocumentString(`
     mutation AdminSetTicketDisasterDetails($uuid: UUID!, $details: [TicketDisasterDetailInput!]!) {
   setTicketDisasterDetails(uuid: $uuid, details: $details) {
@@ -7122,14 +6748,6 @@ export const AdminStopRecruitingDocument = new TypedDocumentString(`
   AdminStopRecruitingMutation,
   AdminStopRecruitingMutationVariables
 >;
-export const AdminDeleteTicketTaskDocument = new TypedDocumentString(`
-    mutation AdminDeleteTicketTask($uuid: UUID!) {
-  deleteTicketTask(uuid: $uuid)
-}
-    `) as unknown as TypedDocumentString<
-  AdminDeleteTicketTaskMutation,
-  AdminDeleteTicketTaskMutationVariables
->;
 export const AdminAttachTicketPhotoDocument = new TypedDocumentString(`
     mutation AdminAttachTicketPhoto($ticketUuid: UUID!, $url: String!) {
   attachTicketPhoto(ticketUuid: $ticketUuid, url: $url) {
@@ -7149,14 +6767,6 @@ export const AdminDetachTicketPhotoDocument = new TypedDocumentString(`
     `) as unknown as TypedDocumentString<
   AdminDetachTicketPhotoMutation,
   AdminDetachTicketPhotoMutationVariables
->;
-export const AdminUnassignTaskActorDocument = new TypedDocumentString(`
-    mutation AdminUnassignTaskActor($uuid: UUID!) {
-  unassignTaskActor(uuid: $uuid)
-}
-    `) as unknown as TypedDocumentString<
-  AdminUnassignTaskActorMutation,
-  AdminUnassignTaskActorMutationVariables
 >;
 export const AdminCreateStationDocument = new TypedDocumentString(`
     mutation AdminCreateStation($input: CreateStationInput!, $acknowledgedDuplicateOf: String) {
@@ -7260,14 +6870,6 @@ export const AdminUpdateStationDocument = new TypedDocumentString(`
 }`) as unknown as TypedDocumentString<
   AdminUpdateStationMutation,
   AdminUpdateStationMutationVariables
->;
-export const AdminDeleteStationDocument = new TypedDocumentString(`
-    mutation AdminDeleteStation($uuid: UUID!) {
-  deleteStation(uuid: $uuid)
-}
-    `) as unknown as TypedDocumentString<
-  AdminDeleteStationMutation,
-  AdminDeleteStationMutationVariables
 >;
 export const AdminMergeStationSuggestionsDocument = new TypedDocumentString(`
     mutation AdminMergeStationSuggestions($stationUuid: UUID!, $decisions: [SuggestionDecisionInput!]!, $reviewNote: String) {
@@ -7753,6 +7355,7 @@ export const AdminUpdateAreaDocument = new TypedDocumentString(`
     mutation AdminUpdateArea($uuid: UUID!, $input: UpdateAreaInput!) {
   updateArea(uuid: $uuid, input: $input) {
     uuid
+    type
     name
     note
     isPublic
@@ -7883,23 +7486,6 @@ export const AdminBuildingMapTicketsDocument = new TypedDocumentString(`
 }`) as unknown as TypedDocumentString<
   AdminBuildingMapTicketsQuery,
   AdminBuildingMapTicketsQueryVariables
->;
-export const AdminNormalizeAddressDocument = new TypedDocumentString(`
-    query AdminNormalizeAddress($address: String!, $lat: Float, $lng: Float) {
-  normalizeAddress(address: $address, lat: $lat, lng: $lng) {
-    status
-    fullAddress
-    addressToken
-    lat
-    lng
-    buildingSection
-    floor
-    room
-  }
-}
-    `) as unknown as TypedDocumentString<
-  AdminNormalizeAddressQuery,
-  AdminNormalizeAddressQueryVariables
 >;
 export const AdminCreateBuildingMapDocument = new TypedDocumentString(`
     mutation AdminCreateBuildingMap($input: CreateBuildingMapInput!) {
@@ -8067,6 +7653,40 @@ export const GetBuildingMapsDocument = new TypedDocumentString(`
   GetBuildingMapsQuery,
   GetBuildingMapsQueryVariables
 >;
+export const ReverseGeocodeDocument = new TypedDocumentString(`
+    query ReverseGeocode($lat: Float!, $lng: Float!) {
+  reverseGeocode(lat: $lat, lng: $lng) {
+    status
+    fullAddress
+    lat
+    lng
+    buildingSection
+    floor
+    room
+    addressToken
+  }
+}
+    `) as unknown as TypedDocumentString<
+  ReverseGeocodeQuery,
+  ReverseGeocodeQueryVariables
+>;
+export const NormalizeAddressDocument = new TypedDocumentString(`
+    query NormalizeAddress($address: String!, $lat: Float, $lng: Float) {
+  normalizeAddress(address: $address, lat: $lat, lng: $lng) {
+    status
+    fullAddress
+    lat
+    lng
+    buildingSection
+    floor
+    room
+    addressToken
+  }
+}
+    `) as unknown as TypedDocumentString<
+  NormalizeAddressQuery,
+  NormalizeAddressQueryVariables
+>;
 export const GetStationsDocument = new TypedDocumentString(`
     query GetStations($bounds: BoundsInput, $stationType: String, $skip: Int = 0, $limit: Int = 50) {
   stations(bounds: $bounds, stationType: $stationType, skip: $skip, limit: $limit) {
@@ -8204,132 +7824,6 @@ export const GetMapAreasDocument = new TypedDocumentString(`
   GetMapAreasQuery,
   GetMapAreasQueryVariables
 >;
-export const GetClosureAreaDocument = new TypedDocumentString(`
-    query GetClosureArea($uuid: UUID!) {
-  hazardousZone(uuid: $uuid) {
-    ...ClosureAreaFields
-  }
-}
-    fragment ClosureAreaFields on HazardousZoneType {
-  uuid
-  propertyName
-  name
-  geometry
-  status
-  informationSource
-  note
-  createdBy
-  createdAt
-  updatedAt
-}`) as unknown as TypedDocumentString<
-  GetClosureAreaQuery,
-  GetClosureAreaQueryVariables
->;
-export const ReverseGeocodeDocument = new TypedDocumentString(`
-    query ReverseGeocode($lat: Float!, $lng: Float!) {
-  reverseGeocode(lat: $lat, lng: $lng) {
-    status
-    fullAddress
-    lat
-    lng
-    buildingSection
-    floor
-    room
-    addressToken
-  }
-}
-    `) as unknown as TypedDocumentString<
-  ReverseGeocodeQuery,
-  ReverseGeocodeQueryVariables
->;
-export const NormalizeAddressDocument = new TypedDocumentString(`
-    query NormalizeAddress($address: String!, $lat: Float, $lng: Float) {
-  normalizeAddress(address: $address, lat: $lat, lng: $lng) {
-    status
-    fullAddress
-    lat
-    lng
-    buildingSection
-    floor
-    room
-    addressToken
-  }
-}
-    `) as unknown as TypedDocumentString<
-  NormalizeAddressQuery,
-  NormalizeAddressQueryVariables
->;
-export const UpdateStationDocument = new TypedDocumentString(`
-    mutation UpdateStation($uuid: UUID!, $input: UpdateStationInput!) {
-  updateStation(uuid: $uuid, input: $input) {
-    ...StationFields
-  }
-}
-    fragment StationFields on StationType {
-  uuid
-  propertyName
-  geometry
-  type
-  name
-  description
-  opHour
-  level
-  source
-  visibility
-  verificationStatus
-  isDuplicate
-  isTemporary
-  isOfficial
-  operationalStatus
-  supplyStatus
-  supplyStatusUpdatedAt
-  createdBy
-  createdAt
-  updatedAt
-}`) as unknown as TypedDocumentString<
-  UpdateStationMutation,
-  UpdateStationMutationVariables
->;
-export const DeleteStationDocument = new TypedDocumentString(`
-    mutation DeleteStation($uuid: UUID!) {
-  deleteStation(uuid: $uuid)
-}
-    `) as unknown as TypedDocumentString<
-  DeleteStationMutation,
-  DeleteStationMutationVariables
->;
-export const CreateStationPropertyDocument = new TypedDocumentString(`
-    mutation CreateStationProperty($input: CreateStationPropertyInput!) {
-  createStationProperty(input: $input) {
-    uuid
-    stationUuid
-    propertyType
-    propertyName
-    quantity
-    status
-    weightings
-    createdBy
-    createdAt
-  }
-}
-    `) as unknown as TypedDocumentString<
-  CreateStationPropertyMutation,
-  CreateStationPropertyMutationVariables
->;
-export const CreateCrowdSourcingDocument = new TypedDocumentString(`
-    mutation CreateCrowdSourcing($input: CreateCrowdSourcingInput!) {
-  createCrowdSourcing(input: $input) {
-    uuid
-    stationUuid
-    itemUuid
-    rating
-    createdAt
-  }
-}
-    `) as unknown as TypedDocumentString<
-  CreateCrowdSourcingMutation,
-  CreateCrowdSourcingMutationVariables
->;
 export const GetStationForSuggestionDocument = new TypedDocumentString(`
     query GetStationForSuggestion($uuid: UUID!) {
   station(uuid: $uuid) {
@@ -8440,6 +7934,38 @@ export const WithdrawRoleRequestDocument = new TypedDocumentString(`
     `) as unknown as TypedDocumentString<
   WithdrawRoleRequestMutation,
   WithdrawRoleRequestMutationVariables
+>;
+export const DeleteTicketDocument = new TypedDocumentString(`
+    mutation DeleteTicket($uuid: UUID!) {
+  deleteTicket(uuid: $uuid)
+}
+    `) as unknown as TypedDocumentString<
+  DeleteTicketMutation,
+  DeleteTicketMutationVariables
+>;
+export const DeleteTicketTaskDocument = new TypedDocumentString(`
+    mutation DeleteTicketTask($uuid: UUID!) {
+  deleteTicketTask(uuid: $uuid)
+}
+    `) as unknown as TypedDocumentString<
+  DeleteTicketTaskMutation,
+  DeleteTicketTaskMutationVariables
+>;
+export const ReleaseClaimDocument = new TypedDocumentString(`
+    mutation ReleaseClaim($uuid: UUID!) {
+  unassignTaskActor(uuid: $uuid)
+}
+    `) as unknown as TypedDocumentString<
+  ReleaseClaimMutation,
+  ReleaseClaimMutationVariables
+>;
+export const DeleteStationDocument = new TypedDocumentString(`
+    mutation DeleteStation($uuid: UUID!) {
+  deleteStation(uuid: $uuid)
+}
+    `) as unknown as TypedDocumentString<
+  DeleteStationMutation,
+  DeleteStationMutationVariables
 >;
 export const GetTicketsDocument = new TypedDocumentString(`
     query GetTickets($bounds: BoundsInput, $status: String, $statuses: [TicketStatus!], $priority: String, $skip: Int = 0, $limit: Int = 50, $zoom: Float) {
@@ -8754,43 +8280,6 @@ export const GetLinkedTicketDocument = new TypedDocumentString(`
   GetLinkedTicketQuery,
   GetLinkedTicketQueryVariables
 >;
-export const GetTicketTasksDocument = new TypedDocumentString(`
-    query GetTicketTasks($ticketUuid: String!, $status: String, $skip: Int = 0, $limit: Int = 50) {
-  ticketTasks(
-    ticketUuid: $ticketUuid
-    status: $status
-    skip: $skip
-    limit: $limit
-  ) {
-    ...TicketTaskFields
-    properties {
-      uuid
-      taskUuid
-      propertyName
-      propertyValue
-      quantity
-      status
-      comment
-      createdAt
-    }
-  }
-}
-    fragment TicketTaskFields on TicketTaskType {
-  uuid
-  ticketUuid
-  taskType
-  taskName
-  taskDescription
-  quantity
-  status
-  source
-  progressNote
-  createdAt
-  updatedAt
-}`) as unknown as TypedDocumentString<
-  GetTicketTasksQuery,
-  GetTicketTasksQueryVariables
->;
 export const CreateHelpRequestDocument = new TypedDocumentString(`
     mutation CreateHelpRequest($input: CreateHelpRequestInput!) {
   createHelpRequest(input: $input) {
@@ -8845,34 +8334,6 @@ fragment TicketNeedFields on TicketTaskType {
   CreateHelpRequestMutation,
   CreateHelpRequestMutationVariables
 >;
-export const UpdateTicketDocument = new TypedDocumentString(`
-    mutation UpdateTicket($uuid: UUID!, $input: UpdateTicketInput!) {
-  updateTicket(uuid: $uuid, input: $input) {
-    ...TicketFields
-  }
-}
-    fragment TicketFields on TicketType {
-  uuid
-  propertyName
-  geometry
-  locationCell
-  buildingMapUuid
-  title
-  description
-  contactName
-  contactEmail
-  contactPhone
-  status
-  priority
-  taskType
-  auditStatus
-  createdBy
-  createdAt
-  updatedAt
-}`) as unknown as TypedDocumentString<
-  UpdateTicketMutation,
-  UpdateTicketMutationVariables
->;
 export const CreateTicketTaskDocument = new TypedDocumentString(`
     mutation CreateTicketTask($input: CreateTicketTaskInput!, $acknowledgedDuplicateOf: String) {
   createTicketTask(
@@ -8909,28 +8370,6 @@ export const CreateTicketTaskDocument = new TypedDocumentString(`
   CreateTicketTaskMutation,
   CreateTicketTaskMutationVariables
 >;
-export const UpdateTicketTaskDocument = new TypedDocumentString(`
-    mutation UpdateTicketTask($uuid: UUID!, $input: UpdateTicketTaskInput!) {
-  updateTicketTask(uuid: $uuid, input: $input) {
-    ...TicketTaskFields
-  }
-}
-    fragment TicketTaskFields on TicketTaskType {
-  uuid
-  ticketUuid
-  taskType
-  taskName
-  taskDescription
-  quantity
-  status
-  source
-  progressNote
-  createdAt
-  updatedAt
-}`) as unknown as TypedDocumentString<
-  UpdateTicketTaskMutation,
-  UpdateTicketTaskMutationVariables
->;
 export const ClaimNeedDocument = new TypedDocumentString(`
     mutation ClaimNeed($taskUuid: UUID!) {
   assignTaskActor(taskUuid: $taskUuid) {
@@ -8942,14 +8381,6 @@ export const ClaimNeedDocument = new TypedDocumentString(`
   ClaimNeedMutation,
   ClaimNeedMutationVariables
 >;
-export const ReleaseClaimDocument = new TypedDocumentString(`
-    mutation ReleaseClaim($uuid: UUID!) {
-  unassignTaskActor(uuid: $uuid)
-}
-    `) as unknown as TypedDocumentString<
-  ReleaseClaimMutation,
-  ReleaseClaimMutationVariables
->;
 export const StopRecruitingDocument = new TypedDocumentString(`
     mutation StopRecruiting($taskUuid: UUID!) {
   stopRecruiting(taskUuid: $taskUuid) {
@@ -8959,22 +8390,6 @@ export const StopRecruitingDocument = new TypedDocumentString(`
     `) as unknown as TypedDocumentString<
   StopRecruitingMutation,
   StopRecruitingMutationVariables
->;
-export const DeleteTicketTaskDocument = new TypedDocumentString(`
-    mutation DeleteTicketTask($uuid: UUID!) {
-  deleteTicketTask(uuid: $uuid)
-}
-    `) as unknown as TypedDocumentString<
-  DeleteTicketTaskMutation,
-  DeleteTicketTaskMutationVariables
->;
-export const DeleteTicketDocument = new TypedDocumentString(`
-    mutation DeleteTicket($uuid: UUID!) {
-  deleteTicket(uuid: $uuid)
-}
-    `) as unknown as TypedDocumentString<
-  DeleteTicketMutation,
-  DeleteTicketMutationVariables
 >;
 export const MyTaskAssignmentsDocument = new TypedDocumentString(`
     query MyTaskAssignments {
@@ -9033,21 +8448,4 @@ export const MyTicketsDocument = new TypedDocumentString(`
     `) as unknown as TypedDocumentString<
   MyTicketsQuery,
   MyTicketsQueryVariables
->;
-export const CreateTaskPropertyDocument = new TypedDocumentString(`
-    mutation CreateTaskProperty($input: CreateTaskPropertyInput!) {
-  createTaskProperty(input: $input) {
-    uuid
-    taskUuid
-    propertyName
-    propertyValue
-    quantity
-    status
-    comment
-    createdAt
-  }
-}
-    `) as unknown as TypedDocumentString<
-  CreateTaskPropertyMutation,
-  CreateTaskPropertyMutationVariables
 >;
