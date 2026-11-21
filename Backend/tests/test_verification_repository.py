@@ -1,4 +1,5 @@
 """Tests for the unified (email + phone) 6-digit verification store."""
+
 import asyncio
 
 import pytest
@@ -68,15 +69,17 @@ async def test_concurrent_wrong_guesses_enforce_cap(redis):
 
     async def gated_get(k):
         v = await orig_get(k)
-        key_str = k.decode() if isinstance(k, (bytes, bytearray)) else k
+        key_str = k.decode() if isinstance(k, bytes | bytearray) else k
         if key_str == pending_key.decode():
             await gate.wait()
         return v
 
     repo.redis.get = gated_get
     results = await asyncio.gather(
-        *[repo.consume_registration(type_="email", value="a@x.com", code="000000")
-          for _ in range(MAX_OTP_ATTEMPTS)]
+        *[
+            repo.consume_registration(type_="email", value="a@x.com", code="000000")
+            for _ in range(MAX_OTP_ATTEMPTS)
+        ]
     )
     repo.redis.get = orig_get
 

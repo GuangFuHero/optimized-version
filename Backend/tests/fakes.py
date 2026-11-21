@@ -1,4 +1,5 @@
 """TEST-ONLY doubles. None of these are ever wired into the running application."""
+
 import json
 
 from app.sso.google import GoogleIdentity, GoogleTokenVerificationError
@@ -40,7 +41,9 @@ class FakeLineVerifier:
         if nonce is not None and claims.get("nonce") != nonce:
             raise LineTokenVerificationError("nonce mismatch")
         return LineIdentity(
-            sub=str(claims["sub"]), name=claims.get("name"), email=claims.get("email"),
+            sub=str(claims["sub"]),
+            name=claims.get("name"),
+            email=claims.get("email"),
             auth_time=claims.get("auth_time"),
         )
 
@@ -102,4 +105,3 @@ class _EmptyResult:
     def all(self):
         """No rows."""
         return []
-

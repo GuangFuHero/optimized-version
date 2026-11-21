@@ -28,10 +28,15 @@ _BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 async def _alembic(revision: str) -> None:
     process = await asyncio.create_subprocess_exec(
-        sys.executable, "-m", "alembic", "upgrade", revision,
+        sys.executable,
+        "-m",
+        "alembic",
+        "upgrade",
+        revision,
         cwd=_BACKEND_DIR,
         env={**os.environ, "SQLALCHEMY_DATABASE_URL": _DB_URL},
-        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
     )
     stdout, stderr = await process.communicate()
     if process.returncode != 0:
@@ -76,50 +81,70 @@ async def migrated_legacy_rows():
                 ("legacy_lower_enum", "enum"),
                 ("legacy_capital_enum", "Enum"),
             ):
-                await conn.execute(text(
-                    "INSERT INTO station_property_config"
-                    " (uuid, station_type, property_name, data_type, disaster_types)"
-                    " VALUES (gen_random_uuid(), 'shelter', :name, :data_type, '{mudslide}')"
-                ), {"name": name, "data_type": data_type})
-            await conn.execute(text(
-                "INSERT INTO project_settings (uuid, name, disaster_types)"
-                " VALUES (gen_random_uuid(), '花蓮 0816', '{mudslide,flood}')"
-            ))
+                await conn.execute(
+                    text(
+                        "INSERT INTO station_property_config"
+                        " (uuid, station_type, property_name, data_type, disaster_types)"
+                        " VALUES (gen_random_uuid(), 'shelter', :name, :data_type, '{mudslide}')"
+                    ),
+                    {"name": name, "data_type": data_type},
+                )
+            await conn.execute(
+                text(
+                    "INSERT INTO project_settings (uuid, name, disaster_types)"
+                    " VALUES (gen_random_uuid(), '花蓮 0816', '{mudslide,flood}')"
+                )
+            )
             # A ticket is `base_geometries` + `tickets`; the legacy label lives on the child.
-            ticket_uuid = (await conn.execute(text(
-                "INSERT INTO base_geometries (uuid, property_name, geometry)"
-                " VALUES (gen_random_uuid(), 'request',"
-                "         ST_SetSRID(ST_MakePoint(121.42, 23.67), 4326))"
-                " RETURNING uuid"
-            ))).scalar_one()
-            await conn.execute(text(
-                "INSERT INTO tickets"
-                " (uuid, title, contact_name, status, priority, disaster_type)"
-                " VALUES (:uuid, '土石流受困', '王小明', 'pending', 'low', 'mudslide')"
-            ), {"uuid": ticket_uuid})
+            ticket_uuid = (
+                await conn.execute(
+                    text(
+                        "INSERT INTO base_geometries (uuid, property_name, geometry)"
+                        " VALUES (gen_random_uuid(), 'request',"
+                        "         ST_SetSRID(ST_MakePoint(121.42, 23.67), 4326))"
+                        " RETURNING uuid"
+                    )
+                )
+            ).scalar_one()
+            await conn.execute(
+                text(
+                    "INSERT INTO tickets"
+                    " (uuid, title, contact_name, status, priority, disaster_type)"
+                    " VALUES (:uuid, '土石流受困', '王小明', 'pending', 'low', 'mudslide')"
+                ),
+                {"uuid": ticket_uuid},
+            )
 
         await _alembic("head")
 
         async with engine.connect() as conn:
-            configs = dict((await conn.execute(text(
-                "SELECT property_name, data_type FROM station_property_config"
-                " WHERE property_name LIKE 'legacy_%'"
-            ))).all())
-            scoped = (await conn.execute(text(
-                "SELECT disaster_types FROM station_property_config"
-                " WHERE property_name = 'legacy_lower_string'"
-            ))).scalar_one()
-            settings = (await conn.execute(text(
-                "SELECT disaster_types FROM project_settings"
-            ))).scalar_one()
-            tickets = (await conn.execute(text(
-                "SELECT disaster_types FROM tickets"
-            ))).scalar_one()
+            configs = dict(
+                (
+                    await conn.execute(
+                        text(
+                            "SELECT property_name, data_type FROM station_property_config"
+                            " WHERE property_name LIKE 'legacy_%'"
+                        )
+                    )
+                ).all()
+            )
+            scoped = (
+                await conn.execute(
+                    text(
+                        "SELECT disaster_types FROM station_property_config"
+                        " WHERE property_name = 'legacy_lower_string'"
+                    )
+                )
+            ).scalar_one()
+            settings = (await conn.execute(text("SELECT disaster_types FROM project_settings"))).scalar_one()
+            tickets = (await conn.execute(text("SELECT disaster_types FROM tickets"))).scalar_one()
         await engine.dispose()
 
         yield {
-            "configs": configs, "config_scope": scoped,
-            "settings": settings, "tickets": tickets,
+            "configs": configs,
+            "config_scope": scoped,
+            "settings": settings,
+            "tickets": tickets,
         }
     finally:
         await _drop(admin)

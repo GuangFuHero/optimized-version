@@ -9,13 +9,14 @@ Revises: e8b3c5f2a1d4
 Create Date: 2026-07-04 00:00:00.000000
 
 """
+
 from collections.abc import Sequence
 
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = '1d52ab265e50'
-down_revision: str | Sequence[str] | None = 'e8b3c5f2a1d4'
+revision: str = "1d52ab265e50"
+down_revision: str | Sequence[str] | None = "e8b3c5f2a1d4"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -93,8 +94,7 @@ def upgrade() -> None:
         """
     )
     op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_role_permission_assign_role_uuid "
-        "ON role_permission_assign(role_uuid)"
+        "CREATE INDEX IF NOT EXISTS ix_role_permission_assign_role_uuid ON role_permission_assign(role_uuid)"
     )
     op.execute(
         "CREATE INDEX IF NOT EXISTS ix_role_permission_assign_permission_uuid "
@@ -125,8 +125,7 @@ def upgrade() -> None:
         """
     )
     op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_user_permission_assign_user_uuid "
-        "ON user_permission_assign(user_uuid)"
+        "CREATE INDEX IF NOT EXISTS ix_user_permission_assign_user_uuid ON user_permission_assign(user_uuid)"
     )
     op.execute(
         "CREATE INDEX IF NOT EXISTS ix_user_permission_assign_permission_uuid "
@@ -139,12 +138,8 @@ def upgrade() -> None:
 
     # Every BaseGeometry subtype (Station, ClosureArea, Tickets) inherits this column, so
     # team/gov/ngo scope works uniformly across all of them.
-    op.execute(
-        "ALTER TABLE base_geometries ADD COLUMN IF NOT EXISTS team_uuid UUID REFERENCES teams(uuid)"
-    )
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_base_geometries_team_uuid ON base_geometries(team_uuid)"
-    )
+    op.execute("ALTER TABLE base_geometries ADD COLUMN IF NOT EXISTS team_uuid UUID REFERENCES teams(uuid)")
+    op.execute("CREATE INDEX IF NOT EXISTS ix_base_geometries_team_uuid ON base_geometries(team_uuid)")
 
     # ADR-026: drop-and-replace. Junction tables first (FK dependents), then the tables
     # they reference.

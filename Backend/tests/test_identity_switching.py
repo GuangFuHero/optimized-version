@@ -39,8 +39,11 @@ async def _account_with_two_identities(db):
     Returns (user_uuid, platform_role, team_role, team) as detached references.
     """
     user = await create_account(
-        db, contact_type="email", value="switcher@x.com",
-        password_hash=get_password_hash("secret", generate_salt()), name="Switcher",
+        db,
+        contact_type="email",
+        value="switcher@x.com",
+        password_hash=get_password_hash("secret", generate_salt()),
+        name="Switcher",
     )
     platform_role = await _role(db, "user", "platform")
     team_role = Role(name="member", kind="team")
@@ -184,9 +187,7 @@ async def test_switch_to_an_identity_you_hold(client, db_session):
         headers={"Authorization": f"Bearer {tokens['access_token']}"},
     )
     assert resp.status_code == 200, resp.text
-    assert decode_act(_act_of(resp.json()["access_token"])) == (
-        str(team_role.uuid), str(team.uuid)
-    )
+    assert decode_act(_act_of(resp.json()["access_token"])) == (str(team_role.uuid), str(team.uuid))
 
 
 async def test_switch_returns_the_access_token_alone(client, db_session):
@@ -274,9 +275,7 @@ async def test_a_revoked_identity_401s_on_the_request_path(client, db_session, r
     headers = await auth_headers_for(redis, user_uuid, team_role, team)
     assert (await client.get("/api/v1/users/me", headers=headers)).status_code == 200
 
-    await db_session.execute(
-        delete(UserRoleAssign).where(UserRoleAssign.role_uuid == team_role.uuid)
-    )
+    await db_session.execute(delete(UserRoleAssign).where(UserRoleAssign.role_uuid == team_role.uuid))
     await db_session.commit()
 
     assert (await client.get("/api/v1/users/me", headers=headers)).status_code == 401
@@ -291,9 +290,7 @@ async def test_a_soft_deleted_team_takes_its_identity_with_it(client, db_session
     user_uuid, _, team_role, team = await _account_with_two_identities(db_session)
     headers = await auth_headers_for(redis, user_uuid, team_role, team)
 
-    await db_session.execute(
-        update(Team).where(Team.uuid == team.uuid).values(delete_at=datetime.now(UTC))
-    )
+    await db_session.execute(update(Team).where(Team.uuid == team.uuid).values(delete_at=datetime.now(UTC)))
     await db_session.commit()
 
     assert (await client.get("/api/v1/users/me", headers=headers)).status_code == 401
@@ -310,9 +307,7 @@ async def test_refresh_refuses_a_vanished_identity_without_burning_the_token(cli
 
     _, platform_role, team_role, team = await _account_with_two_identities(db_session)
     tokens = await _login(client)
-    await db_session.execute(
-        delete(UserRoleAssign).where(UserRoleAssign.role_uuid == team_role.uuid)
-    )
+    await db_session.execute(delete(UserRoleAssign).where(UserRoleAssign.role_uuid == team_role.uuid))
     await db_session.commit()
 
     refused = await client.post(
@@ -382,10 +377,7 @@ async def test_switch_identity_is_rate_limited(client, db_session):
     """It mints credentials, so it gets the same limiter login and refresh have."""
     from app.api.v1.endpoints.auth import session as session_module
 
-    route = next(
-        r for r in session_module.router.routes
-        if getattr(r, "path", None) == "/switch-identity"
-    )
+    route = next(r for r in session_module.router.routes if getattr(r, "path", None) == "/switch-identity")
     assert route.dependencies, "switch-identity has no dependencies at all"
 
 
@@ -413,13 +405,9 @@ async def test_a_plain_refresh_keeps_the_identity_the_caller_switched_to(client,
     assert switched.status_code == 200, switched.text
 
     # exactly what a client that does not track identity sends
-    refreshed = await client.post(
-        "/api/v1/auth/refresh", json={"refresh_token": tokens["refresh_token"]}
-    )
+    refreshed = await client.post("/api/v1/auth/refresh", json={"refresh_token": tokens["refresh_token"]})
     assert refreshed.status_code == 200, refreshed.text
-    assert decode_act(_act_of(refreshed.json()["access_token"])) == (
-        str(team_role.uuid), str(team.uuid)
-    )
+    assert decode_act(_act_of(refreshed.json()["access_token"])) == (str(team_role.uuid), str(team.uuid))
 
 
 async def test_an_explicit_identity_on_refresh_still_wins(client, db_session):
@@ -460,9 +448,7 @@ async def test_refreshing_twice_keeps_the_switched_identity(client, db_session):
         assert resp.status_code == 200, resp.text
         refresh_token = resp.json()["refresh_token"]
 
-    assert decode_act(_act_of(resp.json()["access_token"])) == (
-        str(team_role.uuid), str(team.uuid)
-    )
+    assert decode_act(_act_of(resp.json()["access_token"])) == (str(team_role.uuid), str(team.uuid))
 
 
 async def test_an_explicit_identity_on_refresh_is_remembered_too(client, db_session):
@@ -479,13 +465,9 @@ async def test_an_explicit_identity_on_refresh_is_remembered_too(client, db_sess
     )
     assert named.status_code == 200, named.text
 
-    plain = await client.post(
-        "/api/v1/auth/refresh", json={"refresh_token": named.json()["refresh_token"]}
-    )
+    plain = await client.post("/api/v1/auth/refresh", json={"refresh_token": named.json()["refresh_token"]})
     assert plain.status_code == 200, plain.text
-    assert decode_act(_act_of(plain.json()["access_token"])) == (
-        str(team_role.uuid), str(team.uuid)
-    )
+    assert decode_act(_act_of(plain.json()["access_token"])) == (str(team_role.uuid), str(team.uuid))
 
 
 # --- the response says which identity the token carries (ADR-205) -------------------------
@@ -540,9 +522,7 @@ async def test_refresh_reports_the_identity_it_carried_forward(client, db_sessio
     _, _, team_role, team = await _account_with_two_identities(db_session)
     tokens = await _login(client, scope=encode_act(str(team_role.uuid), str(team.uuid)))
 
-    resp = await client.post(
-        "/api/v1/auth/refresh", json={"refresh_token": tokens["refresh_token"]}
-    )
+    resp = await client.post("/api/v1/auth/refresh", json={"refresh_token": tokens["refresh_token"]})
 
     assert resp.status_code == 200, resp.text
     body = resp.json()["identity"]
@@ -556,7 +536,8 @@ async def test_the_reported_identity_matches_the_act_claim(client, db_session):
     tokens = await _login(client, scope=encode_act(str(team_role.uuid), str(team.uuid)))
 
     assert decode_act(_act_of(tokens["access_token"])) == (
-        tokens["identity"]["role_uuid"], tokens["identity"]["team_uuid"]
+        tokens["identity"]["role_uuid"],
+        tokens["identity"]["team_uuid"],
     )
 
 

@@ -56,7 +56,6 @@ def set_audit_session_variables(session, transaction, connection):
     client_ip = request_client_ip.get()
     identity = request_identity.get()
 
-
     if user_uuid:
         connection.execute(
             text("SELECT set_config('app.current_user_id', :user_uuid, true)"),
@@ -72,4 +71,3 @@ def set_audit_session_variables(session, transaction, connection):
             text("SELECT set_config('app.active_identity', :identity, true)"),
             {"identity": identity},
         )
-

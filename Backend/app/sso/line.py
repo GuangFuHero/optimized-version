@@ -1,4 +1,5 @@
 """LINE id_token verification: protocol + real (verify-endpoint) adapter and dependency."""
+
 import hmac
 from dataclasses import dataclass
 from typing import Protocol
@@ -58,9 +59,7 @@ class LineVerifyApiVerifier:
         except httpx.HTTPError as err:
             raise LineTokenVerificationError(f"LINE verify request failed: {err}") from err
         if resp.status_code != 200:
-            raise LineTokenVerificationError(
-                f"LINE rejected token: {resp.status_code} {resp.text[:200]}"
-            )
+            raise LineTokenVerificationError(f"LINE rejected token: {resp.status_code} {resp.text[:200]}")
         try:
             claims = resp.json()
         except ValueError as err:

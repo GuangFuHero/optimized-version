@@ -103,9 +103,7 @@ async def test_the_ceiling_does_not_outlive_the_search_window(db, monkeypatch):
     assert await _statement_timeout(db) == default
 
 
-async def test_a_statement_after_the_search_is_not_cancelled_by_the_search_ceiling(
-    db, monkeypatch
-):
+async def test_a_statement_after_the_search_is_not_cancelled_by_the_search_ceiling(db, monkeypatch):
     """The behaviour the reset exists for, not just the setting's value.
 
     Without the reset this raises a raw DBAPIError (SQLSTATE 57014) out of a caller that
@@ -120,9 +118,7 @@ async def test_a_statement_after_the_search_is_not_cancelled_by_the_search_ceili
     await db.execute(text("SELECT pg_sleep(0.3)"))  # 3x the search ceiling
 
 
-async def test_a_cancelled_search_still_reports_the_timeout_not_the_reset_failure(
-    db, monkeypatch
-):
+async def test_a_cancelled_search_still_reports_the_timeout_not_the_reset_failure(db, monkeypatch):
     """Restoring must not mask the error it is unwinding from.
 
     A cancelled statement leaves PostgreSQL refusing everything until rollback, so the
@@ -217,9 +213,7 @@ async def test_every_public_search_path_sets_the_timeout():
     """
     paths = {
         "stations(q:)": lambda db: StationRepository().list_active(db, q="光復"),
-        "tickets(q:)": lambda db: TicketRepository().list_active(
-            db, q="光復", detail_filters=[false()]
-        ),
+        "tickets(q:)": lambda db: TicketRepository().list_active(db, q="光復", detail_filters=[false()]),
         "ticketTasks(q:)": lambda db: TicketTaskRepository().list_by_ticket(
             db, "00000000-0000-0000-0000-000000000000", q="光復", public_only=True
         ),
@@ -233,9 +227,7 @@ async def test_every_public_search_path_sets_the_timeout():
 async def test_no_timeout_when_those_same_paths_are_not_searching():
     """The control: term=None must leave the plain list paths byte-for-byte as they were."""
     db = CapturingSession()
-    await TicketTaskRepository().list_by_ticket(
-        db, "00000000-0000-0000-0000-000000000000", public_only=True
-    )
+    await TicketTaskRepository().list_by_ticket(db, "00000000-0000-0000-0000-000000000000", public_only=True)
     assert "set_config" not in db.sql()
 
 

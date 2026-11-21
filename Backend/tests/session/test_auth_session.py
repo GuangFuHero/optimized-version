@@ -27,8 +27,7 @@ async def test_refresh_rotates_and_old_token_dies(fake_redis, make_user, past_th
     """Refresh 應 rotate token；寬限期內重送舊 token 拿到同一支新的（ADR-330），之後重送回傳 401。"""
     _, password, name = await make_user()
     async with _client() as c:
-        login = (await c.post("/api/v1/auth/login",
-                              data={"username": name, "password": password})).json()
+        login = (await c.post("/api/v1/auth/login", data={"username": name, "password": password})).json()
         old_rt = login["refresh_token"]
         r1 = await c.post("/api/v1/auth/refresh", json={"refresh_token": old_rt})
         assert r1.status_code == 200
@@ -58,12 +57,9 @@ async def test_logout_revokes_only_current_device(fake_redis, make_user):
     """`/logout` 只撤當前裝置的 session；其他裝置仍可 refresh。"""
     _, password, name = await make_user()
     async with _client() as c:
-        s1 = (await c.post("/api/v1/auth/login",
-                           data={"username": name, "password": password})).json()
-        s2 = (await c.post("/api/v1/auth/login",
-                           data={"username": name, "password": password})).json()
-        res = await c.post("/api/v1/auth/logout",
-                           headers={"Authorization": f"Bearer {s1['access_token']}"})
+        s1 = (await c.post("/api/v1/auth/login", data={"username": name, "password": password})).json()
+        s2 = (await c.post("/api/v1/auth/login", data={"username": name, "password": password})).json()
+        res = await c.post("/api/v1/auth/logout", headers={"Authorization": f"Bearer {s1['access_token']}"})
         assert res.status_code == 204
         # device 1 的 refresh 失效,device 2 仍可用
         r1 = await c.post("/api/v1/auth/refresh", json={"refresh_token": s1["refresh_token"]})
@@ -77,12 +73,11 @@ async def test_logout_all_revokes_every_session(fake_redis, make_user):
     """`/logout-all` 撤銷該使用者所有 session,所有裝置的 refresh 皆 401。"""
     _, password, name = await make_user()
     async with _client() as c:
-        s1 = (await c.post("/api/v1/auth/login",
-                           data={"username": name, "password": password})).json()
-        s2 = (await c.post("/api/v1/auth/login",
-                           data={"username": name, "password": password})).json()
-        res = await c.post("/api/v1/auth/logout-all",
-                           headers={"Authorization": f"Bearer {s1['access_token']}"})
+        s1 = (await c.post("/api/v1/auth/login", data={"username": name, "password": password})).json()
+        s2 = (await c.post("/api/v1/auth/login", data={"username": name, "password": password})).json()
+        res = await c.post(
+            "/api/v1/auth/logout-all", headers={"Authorization": f"Bearer {s1['access_token']}"}
+        )
         assert res.status_code == 204
         for s in (s1, s2):
             r = await c.post("/api/v1/auth/refresh", json={"refresh_token": s["refresh_token"]})
@@ -94,12 +89,14 @@ async def test_change_password_wrong_old_returns_401(fake_redis, make_user):
     """提供錯誤的舊密碼應回傳 401。"""
     _, password, name = await make_user()
     async with _client() as c:
-        access = (await c.post("/api/v1/auth/login",
-                               data={"username": name, "password": password})).json()["access_token"]
-        res = await c.post("/api/v1/auth/change-password",
-                           headers={"Authorization": f"Bearer {access}"},
-                           json={"old_password": "WRONGPW", "new_password": "newhash123",
-                                 "salt_frontend": "abc123"})
+        access = (await c.post("/api/v1/auth/login", data={"username": name, "password": password})).json()[
+            "access_token"
+        ]
+        res = await c.post(
+            "/api/v1/auth/change-password",
+            headers={"Authorization": f"Bearer {access}"},
+            json={"old_password": "WRONGPW", "new_password": "newhash123", "salt_frontend": "abc123"},
+        )
     assert res.status_code == 401
 
 
@@ -108,13 +105,13 @@ async def test_change_password_success_revokes_sessions(fake_redis, make_user):
     """成功更改密碼後撤銷所有 session，後續 refresh 應回傳 401。"""
     _, password, name = await make_user()
     async with _client() as c:
-        login = (await c.post("/api/v1/auth/login",
-                              data={"username": name, "password": password})).json()
+        login = (await c.post("/api/v1/auth/login", data={"username": name, "password": password})).json()
         access, rt = login["access_token"], login["refresh_token"]
-        res = await c.post("/api/v1/auth/change-password",
-                           headers={"Authorization": f"Bearer {access}"},
-                           json={"old_password": password, "new_password": "newhash123",
-                                 "salt_frontend": "abc123"})
+        res = await c.post(
+            "/api/v1/auth/change-password",
+            headers={"Authorization": f"Bearer {access}"},
+            json={"old_password": password, "new_password": "newhash123", "salt_frontend": "abc123"},
+        )
         assert res.status_code == 204
         r = await c.post("/api/v1/auth/refresh", json={"refresh_token": rt})
         assert r.status_code == 401
@@ -125,14 +122,15 @@ async def test_change_password_then_login_with_new_password(fake_redis, make_use
     """After changing password, the NEW password must authenticate (write-path check)."""
     _, password, name = await make_user()
     async with _client() as c:
-        access = (await c.post("/api/v1/auth/login",
-                               data={"username": name, "password": password})).json()["access_token"]
-        res = await c.post("/api/v1/auth/change-password",
-                           headers={"Authorization": f"Bearer {access}"},
-                           json={"old_password": password, "new_password": "brandnewpw1",
-                                 "salt_frontend": "deadbeef"})
+        access = (await c.post("/api/v1/auth/login", data={"username": name, "password": password})).json()[
+            "access_token"
+        ]
+        res = await c.post(
+            "/api/v1/auth/change-password",
+            headers={"Authorization": f"Bearer {access}"},
+            json={"old_password": password, "new_password": "brandnewpw1", "salt_frontend": "deadbeef"},
+        )
         assert res.status_code == 204
-        relog = await c.post("/api/v1/auth/login",
-                             data={"username": name, "password": "brandnewpw1"})
+        relog = await c.post("/api/v1/auth/login", data={"username": name, "password": "brandnewpw1"})
         assert relog.status_code == 200
         assert relog.json()["access_token"] and relog.json()["refresh_token"]

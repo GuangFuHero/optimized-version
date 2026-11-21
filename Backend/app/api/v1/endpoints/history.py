@@ -39,9 +39,7 @@ async def _timeline(
 
     return HistoryResponse(
         data=result.events,
-        meta=HistoryMeta(
-            total=result.total, truncated=result.truncated, limit=limit, offset=offset
-        ),
+        meta=HistoryMeta(total=result.total, truncated=result.truncated, limit=limit, offset=offset),
     )
 
 

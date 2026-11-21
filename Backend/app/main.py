@@ -95,10 +95,14 @@ app.add_middleware(
 
 # The 401 codes that mean the user is signed out, as opposed to needing a refresh (ADR-328).
 # `refresh_token_invalid` only comes from a refresh that failed, which leaves nothing to try next (ADR-325).
-_SIGNED_OUT = frozenset({
-    ErrorCode.SESSION_EXPIRED, ErrorCode.CREDENTIALS_INVALID,
-    ErrorCode.REFRESH_TOKEN_INVALID, ErrorCode.IDENTITY_REVOKED,
-})
+_SIGNED_OUT = frozenset(
+    {
+        ErrorCode.SESSION_EXPIRED,
+        ErrorCode.CREDENTIALS_INVALID,
+        ErrorCode.REFRESH_TOKEN_INVALID,
+        ErrorCode.IDENTITY_REVOKED,
+    }
+)
 
 
 @app.exception_handler(ApiError)
@@ -139,8 +143,8 @@ async def health_check():
 
 @app.get("/readyz")
 async def readiness_check(
-        db: AsyncSession = Depends(security.get_db),
-        redis=Depends(get_redis),
+    db: AsyncSession = Depends(security.get_db),
+    redis=Depends(get_redis),
 ):
     """Readiness probe: 200 only when DB and Redis are reachable. Used as the deploy gate."""
     try:
