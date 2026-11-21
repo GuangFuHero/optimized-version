@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="logo/island-watch-horizontal.png" alt="島嶼守望・光復超人 標誌：橘色與藍色兩個互相擁抱的人形，兩人之間的留白是台灣的輪廓" width="520">
+  <img src="logo/wan-guard-horizontal.png" alt="島嶼守望・光復超人 標誌：橘色與藍色兩個互相擁抱的人形，兩人之間的留白是台灣的輪廓" width="520">
 </p>
 
-<h1 align="center">島嶼守望 Island Watch</h1>
+<h1 align="center">Wan Guard 島嶼守望-光復超人</h1>
 
 <p align="center">災害應變共用元件庫 ・ 前身為「光復超人」</p>
 
@@ -12,7 +12,7 @@
 > 📌 **本專案持續更新中。** 想看最新的進度與資料，歡迎隨時回到這裡：
 > 版本與變更見 [Releases](https://github.com/GuangFuHero/optimized-version/releases)，問題與討論見 [Issues](https://github.com/GuangFuHero/optimized-version/issues)，光復超人的官方網站與社群見[官方連結](#官方連結)。
 
-**English summary.** *Island Watch (formerly GuangFu Hero)* is an open-source library of 12 reusable disaster-response components — a 2D map, sign-in, help-request reporting, volunteer matching, station reporting, sharing, pre-trip briefings, emergency announcements, an analytics dashboard, work-zone assignment, duplicate-report review and per-floor rescue. It is a FastAPI + PostGIS backend with a Next.js frontend, licensed under GPL-3.0. The project is pre-release (`v0.1.0-beta.x`). Documentation is in Traditional Chinese; see [Maturity](#成熟度與已知缺口) for what works today.
+**English summary.** *Wan Guard (formerly GuangFu Hero)* is an open-source library of 12 reusable disaster-response components — a 2D map, sign-in, help-request reporting, volunteer matching, station reporting, sharing, pre-trip briefings, emergency announcements, an analytics dashboard, work-zone assignment, duplicate-report review and per-floor rescue. It is a FastAPI + PostGIS backend with a Next.js frontend, licensed under GPL-3.0. The project is pre-release (`v0.1.0-beta.x`). Documentation is in Traditional Chinese; see [Maturity](#成熟度與已知缺口) for what works today.
 
 ---
 
@@ -77,14 +77,14 @@
 ### 標誌：理念不變，多了一個台灣
 
 <p align="center">
-  <img src="logo/island-watch-vertical.png" alt="島嶼守望・光復超人 直式標誌：橘色與藍色兩個互相擁抱、比出肌肉的人形，兩人之間的留白是台灣的輪廓" width="260">
+  <img src="logo/wan-guard-vertical.png" alt="島嶼守望・光復超人 直式標誌：橘色與藍色兩個互相擁抱、比出肌肉的人形，兩人之間的留白是台灣的輪廓" width="260">
 </p>
 
 標誌的設計理念沒有改變：**兩個互相擁抱的人**，呼應我們一直以來的口號「用愛行動，用擁抱連結」。
 
 新版標誌在兩人環抱之間，多了一個**台灣**的輪廓，也呼應新名字「島嶼守望」。
 
-> 標誌與「光復超人」「島嶼守望」「GuangFuHero」名稱受商標保護，**不在 GPL v3 授權範圍內**，詳見[授權](#授權)。
+> 標誌與「Wan Guard 島嶼守望-光復超人」「GuangFuHero」名稱**不在 GPL v3 或創用 CC 授權範圍內**，詳見[授權](#授權)。
 
 ---
 
@@ -295,19 +295,15 @@ GitHub Actions 會在每個 Pull Request 執行：前端型別檢查、lint、�
 
 | 內容 | 授權 |
 |---|---|
-| 程式碼（`Backend/`、`Frontend/`、腳本與工具） | **GNU General Public License v3.0**，全文見 [`LICENSE`](LICENSE) |
-| 設計素材（UI／UX 設計稿、海報、插圖、Icons、圖像、視覺模板） | 不在本 repo 釋出。依組織規範，設計類資料庫採 **CC BY-NC-SA 4.0**，目前為 [`brand-design-alignment`](https://github.com/GuangFuHero/brand-design-alignment) |
-| 「光復超人」「GuangFuHero」名稱與 Logo | **不在任何開源或 CC 授權範圍內**，受商標保護；`/logo` 資料夾的檔案未經書面授權不得使用 |
+| 程式碼與技術文件（`Backend/`、`Frontend/`、腳本與工具，以及 `Design/` 的原型程式和文字說明） | **GNU General Public License v3.0 only**，全文見 [`LICENSE`](LICENSE) |
+| 設計素材（圖和畫面：介面配置、圖示、插圖、UI 元件、設計稿） | **CC BY-SA 4.0**，作者標示「光復超人設計團隊」，見 [`Design/LICENSING.md`](Design/LICENSING.md) |
+| 「Wan Guard 島嶼守望-光復超人」「GuangFuHero」名稱與 Logo | **不在任何開源或 CC 授權範圍內**；`/logo` 資料夾的檔案未經書面同意不得使用 |
 
-本 repo 的程式碼一律為 GPL v3，每個 repo 的授權以其根目錄的 `LICENSE` 為準。程式碼不內含設計類資料庫的內容，反之亦然。
-
-> **商標聲明**：GPL v3 授權的是程式碼，並不授予「光復超人」「GuangFuHero」名稱與 Logo 的使用權。若你部署自己的版本，請換成自己的名稱與標誌。
-
-> 【待補】本 repo 目前仍含 `Design/` 目錄（互動原型與設計系統）與 Logo 檔案（`Design/前台/assets/logo/`），需依上述規範處理：移至設計類資料庫，或明確標示授權範圍。處理完成後，請更新這段說明。
+> GPL v3 授權的是程式碼，並不授予名稱與 Logo 的使用權。若你部署自己的版本，請換成自己的名稱與標誌。
 
 使用的第三方套件各有其授權。內含字型 Noto Sans TC 以 SIL Open Font License 1.1 釋出。
 
-授權或品牌使用問題，請聯繫 GuangFuHero 維護團隊。
+授權或名稱、Logo 使用的問題，請寄信到 wanguard25@gmail.com。
 
 > 【待補】軟體物料清單（SBOM）的位置或產生方式。
 
