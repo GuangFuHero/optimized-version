@@ -1822,7 +1822,7 @@ export interface paths {
      *     chart endpoints below — build x/y dropdowns from this response instead of
      *     hardcoding the rules client-side.
      *
-     *     Authentication only, no capability: the metric specs are a static description of this
+     *     Needs `analytics.view` alone: the metric specs are a static description of this
      *     API's own shape. Gating it on ticket.view (as it originally was) locked a station-only
      *     role out of the station catalog it is allowed to chart. The filter values that come from
      *     rows (areas, station types) are narrowed to the caller's own scope per domain, and left
@@ -3732,6 +3732,7 @@ export interface components {
      * @enum {string}
      */
     Perm:
+      | 'analytics.view'
       | 'ticket.view'
       | 'ticket.view_pii'
       | 'ticket.view_detail'
