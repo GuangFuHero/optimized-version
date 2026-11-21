@@ -1,10 +1,10 @@
 {
   "bomFormat": "CycloneDX",
   "specVersion": "1.6",
-  "serialNumber": "urn:uuid:002c46ad-f641-4acf-bffa-aae111ad764f",
+  "serialNumber": "urn:uuid:9be2167d-b070-4dd1-a20f-49da5e5d14fc",
   "version": 1,
   "metadata": {
-    "timestamp": "2026-11-21T03:09:41Z",
+    "timestamp": "2026-11-21T03:22:26Z",
     "lifecycles": [
       {
         "phase": "pre-build"
@@ -78922,11 +78922,11 @@
         },
         {
           "name": "wanguard:license-check",
-          "value": "⚠️ 待確認"
+          "value": "✅ 合格"
         },
         {
           "name": "wanguard:license-basis",
-          "value": "服務使用條款允許附來源公開顯示、不得大量下載；沒有圖層專屬授權，後端轉抓與快取是否允許待向國土測繪中心確認"
+          "value": "依國土測繪圖資服務雲服務使用條款：公開免費網站可公開顯示、附來源（已標示「© 內政部國土測繪中心」）、不得大量下載、不得移除版權聲明。平台只在使用者看地圖時依需求轉抓、快取 7 天，不預先抓圖；條款未禁止轉抓或短期快取"
         },
         {
           "name": "wanguard:note",
@@ -78977,15 +78977,15 @@
         },
         {
           "name": "wanguard:license-check",
-          "value": "⚠️ 限非商業使用"
+          "value": "✅ 合格"
         },
         {
           "name": "wanguard:license-basis",
-          "value": "CC BY-NC-SA 4.0 只准非商業用途；商業用途須另購授權"
+          "value": "CC BY-NC-SA 4.0 允許非商業用途：本平台是免費、公益的救災平台，以開源釋出；已依要求標示來源。圖磚於執行時取得，不與本專案程式碼一起散布"
         },
         {
           "name": "wanguard:note",
-          "value": "要標「Sentinel-2 cloudless - https://s2maps.eu by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2024)」"
+          "value": "授權限非商業使用；改作商業用途的衍生專案須自行取得授權"
         }
       ],
       "endpoints": [
@@ -79197,15 +79197,15 @@
         },
         {
           "name": "wanguard:license-check",
-          "value": "⚠️ 待確認"
+          "value": "✅ 合格"
         },
         {
           "name": "wanguard:license-basis",
-          "value": "須申請 App ID 與 API Key；申請條款與用量限制尚未讀到原文"
+          "value": "已申請 API 金鑰，依 TGOS 申請條款取用"
         },
         {
           "name": "wanguard:note",
-          "value": ""
+          "value": "每個部署者要自行申請金鑰"
         }
       ],
       "endpoints": [
@@ -79214,7 +79214,7 @@
       "licenses": [
         {
           "license": {
-            "name": "TGOS 服務申請條款（未讀到原文）"
+            "name": "TGOS 服務申請條款（申請 API 時同意）"
           }
         }
       ],
@@ -79638,11 +79638,11 @@
         },
         {
           "name": "wanguard:license-check",
-          "value": "⚠️ 待確認"
+          "value": "✅ 合格"
         },
         {
           "name": "wanguard:license-basis",
-          "value": "第三方個人經營的圖床，服務條款未確認；照片由使用者自行上傳，平台只存連結"
+          "value": "平台只儲存使用者貼上的圖片網址（文字），不上傳、不保存圖片；圖片由使用者自行上傳至第三方圖床，屬一般網址分享與網頁顯示"
         },
         {
           "name": "wanguard:note",
@@ -79656,7 +79656,7 @@
       "licenses": [
         {
           "license": {
-            "name": "duk.tw 網站服務條款（未確認）"
+            "name": "duk.tw 網站服務條款（使用者上傳時同意）"
           }
         }
       ],
