@@ -602,4 +602,5 @@ def test_nlsc_attribution_names_service_terms():
     assert attr.attribution_url == "https://maps.nlsc.gov.tw/pro/use_clause.jsp"
     assert attr.attribution_text == "© 內政部國土測繪中心"
     assert attr.image_format == "image/jpeg"
+    assert attr.commercial_use is True
     assert "bulk downloading" in attr.notes
