@@ -5,7 +5,7 @@ import {
   markSigningOutHere,
   unmarkSigningOutHere,
 } from '../../session/end-expired-session';
-import { signOutAsync } from '../api/client';
+import { logoutAllAsync, signOutAsync } from '../api/client';
 
 export type SignOutOutcome = 'signed-out' | 'still-signed-in';
 
@@ -36,5 +36,24 @@ export async function signOutHereAsync(
   }
 
   continueSignedOut();
+  return 'signed-out';
+}
+
+/**
+ * 登出所有裝置: the backend ends every session of the account, this one too, and the tab leaves for
+ * the sign-in page. When it could not, every device is still signed in, this one included: the
+ * page stays, for the person to be told (`SIGN_OUT_FAILED_MESSAGE`) rather than left believing
+ * the others were signed out.
+ */
+export async function signOutEverywhereAsync(
+  endSessions: () => Promise<void> = logoutAllAsync,
+): Promise<SignOutOutcome> {
+  try {
+    await endSessions();
+  } catch {
+    return 'still-signed-in';
+  }
+
+  continueSignedOut('/login');
   return 'signed-out';
 }

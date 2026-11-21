@@ -36,6 +36,11 @@ describe('returnHint', () => {
       LIST_HINT,
     );
   });
+
+  it('says nothing, and does not throw, for a callbackUrl that is not an address', () => {
+    expect(() => returnHint('http://[')).not.toThrow();
+    expect(returnHint('http://[')).toBeNull();
+  });
 });
 
 describe('signedInMessage', () => {
