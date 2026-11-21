@@ -39,6 +39,7 @@
 
 ### `map/`
 
+- `admin/*`
 - `components/*`
 - `hooks/*`
 - `site/*`
@@ -51,6 +52,7 @@
 
 - 地圖核心能力已集中在 `map/*`
 - site map 專屬 route / viewport / live-data hook 在 `map/site/*`
+- 後台地圖的區域讀取、即時 markers、區域編輯器與待送出的變更在 `map/admin/*`
 
 ### `point-share/`
 

@@ -1,24 +1,21 @@
 'use client';
 
-import { GetMapAreasDocument } from '@rescue-frontend/data-access';
+import { adminMapAreasQuery } from '@rescue-frontend/data-access/admin';
 import { useQuery } from '@tanstack/react-query';
-import { useCallback } from 'react';
 
-import { siteGraphql, SITE_READ_OPTIONS } from '../../session/site-clients';
 import type { RescueMapClosureArea, RescueMapPublicZone } from '../types';
-import { fetchAllAreaPages } from '../site/area-pages';
-import { mapAreasToOverlays } from '../site/markers';
+import { mapAreasToOverlays } from '../markers';
 
-const NO_AREAS = { closureAreas: [], publicZones: [], error: null };
+const NO_AREAS = { closureAreas: [], publicZones: [] };
 
 export interface AdminMapAreas {
   closureAreas: readonly RescueMapClosureArea[];
   publicZones: readonly RescueMapPublicZone[];
   isFetching: boolean;
-  error: unknown;
+  hasError: boolean;
   hasFetchedOnce: boolean;
-  /** Asks again, for after a change to an area; settles once the fresh answer is in. */
-  reload: () => Promise<void>;
+  /** True when there are more areas than the map reads, so the list is not all of them. */
+  truncated: boolean;
 }
 
 /**
@@ -34,30 +31,20 @@ export function useAdminMapAreas({
   /** Without it, only what the public map shows: for those who may not see work zones. */
   includePrivate?: boolean;
 }): AdminMapAreas {
-  const { data, isFetching, refetch } = useQuery({
-    ...SITE_READ_OPTIONS,
-    queryKey: ['admin', 'map', 'areas', { includePrivate }],
-    queryFn: async ({ signal }) => {
-      const { items, error } = await fetchAllAreaPages((skip, limit) =>
-        siteGraphql(
-          GetMapAreasDocument,
-          { includePrivate, skip, limit },
-          signal,
-        ),
-      );
-
-      return { ...mapAreasToOverlays(items), error };
-    },
+  const { data, isFetching, isError } = useQuery({
+    ...adminMapAreasQuery(includePrivate),
     enabled,
+    select: ({ items, hasError, truncated }) => ({
+      ...mapAreasToOverlays(items),
+      hasError,
+      truncated,
+    }),
   });
-  const reload = useCallback(async () => {
-    await refetch();
-  }, [refetch]);
-
   return {
     ...(data ?? NO_AREAS),
     isFetching,
     hasFetchedOnce: data !== undefined,
-    reload,
+    hasError: isError || (data?.hasError ?? false),
+    truncated: data?.truncated ?? false,
   };
 }

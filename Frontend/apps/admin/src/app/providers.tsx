@@ -8,6 +8,7 @@ import {
 } from '@rescue-frontend/data-access';
 import {
   ApplicationProviders,
+  AdminAreaChangesProvider,
   endExpiredSession,
   useAuthSession,
 } from '@rescue-frontend/modules';
@@ -26,7 +27,9 @@ function BackendProvider({ children }: { children: ReactNode }) {
     }, isPermissionError),
   );
   return (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    <QueryClientProvider client={queryClient}>
+      <AdminAreaChangesProvider>{children}</AdminAreaChangesProvider>
+    </QueryClientProvider>
   );
 }
 

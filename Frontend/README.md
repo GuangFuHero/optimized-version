@@ -136,10 +136,10 @@ Frontend/
     ui/                        # @rescue-frontend/ui：designTokens、MUI theme、icons、通用 UI primitives
     modules/                   # @rescue-frontend/modules：具備業務語意、可重用的功能模組
       src/auth/                #   登入與認證相關
-      src/admin/               #   後台業務模組（ticket-board、map、station、members、duplicate-review...）
-      src/site/                #   前台業務模組（map、list、task-match、station-report、point-share...）
-      src/ticket/              #   跨端任務單領域邏輯與表單
-      src/station/             #   站點領域邏輯
+      src/admin/               #   後台業務模組（dashboard、dedup、members、settings...）
+      src/map/                 #   地圖；前台在 map/site/，後台在 map/admin/
+      src/ticket/              #   跨端任務單領域邏輯與表單；後台任務 board 在 ticket/admin/
+      src/station/             #   站點領域邏輯；後台站點管理在 station/admin/
       src/role-request/        #   申請成為後台人員與入隊審核
       src/session/             #   前端登入階段與 token refresh 協調
     data-access/               # @rescue-frontend/data-access：GraphQL documents、codegen 產物、GraphQL / REST client、TanStack Query hooks

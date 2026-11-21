@@ -24,7 +24,7 @@ import {
   mapStationToMarker,
   mapTicketToMarker,
   withTicketStatus,
-} from './markers';
+} from '../markers';
 import { nextTicketPageSkip, ticketPageVariables } from './ticket-pages';
 
 const LIST_PAGE_SIZE = 100;

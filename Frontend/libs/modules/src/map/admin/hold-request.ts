@@ -1,12 +1,9 @@
 import { toast } from 'sonner';
 
-// How long a change to an area can still be taken back, which is how long its request is held: the
-// backend has no way to restore what was created, deleted or changed (FE-021).
+// Wait before writing so Undo can cancel the request without a restore API.
 export const UNDO_MS = 5000;
 
-// The requests still waiting. Leaving the page with any of them would lose a change the toast has
-// already reported, so the page asks first and sends them as it goes.
-const pending = new Set<() => void>();
+const pending = new Set<(keepalive?: boolean) => void>();
 let listening = false;
 
 function warnBeforeLeaving(event: BeforeUnloadEvent) {
@@ -16,7 +13,7 @@ function warnBeforeLeaving(event: BeforeUnloadEvent) {
 }
 
 function sendPending() {
-  [...pending].forEach((send) => send());
+  [...pending].forEach((send) => send(true));
 }
 
 function listen() {
@@ -31,10 +28,8 @@ function listen() {
 
 /**
  * Sends nothing while the toast with 復原 is on screen. Pressing it cancels the request and calls
- * `onUndo`; otherwise `send` runs when the toast times out, so 復原 is there exactly as long as the
- * request is held (sonner pauses the toast under the pointer or in a hidden tab, and the request
- * waits with it). A request still waiting when the page is left is sent then. Returns a function
- * that sends at once.
+ * `onUndo` before the deadline. Leaving the page sends any waiting request. The returned cancel
+ * function drops the request without undoing it when its signed-in identity is replaced.
  */
 export function holdRequest({
   message,
@@ -42,46 +37,42 @@ export function holdRequest({
   onUndo,
 }: {
   message: string;
-  send: () => Promise<void>;
+  send: (keepalive: boolean) => Promise<void>;
   onUndo: () => void;
 }): () => void {
-  const startedAt = Date.now();
+  const deadline = Date.now() + UNDO_MS;
   let settled = false;
-  const run = () => {
-    if (settled) {
-      return;
-    }
-
+  const settle = () => {
+    if (settled) return false;
     settled = true;
+    clearTimeout(timer);
     pending.delete(run);
-    void send();
+    toast.dismiss(toastId);
+    return true;
   };
+  const run = (keepalive = false) => {
+    if (settle()) void send(keepalive);
+  };
+  const timer = window.setTimeout(run, UNDO_MS);
 
   pending.add(run);
   listen();
 
-  toast(message, {
+  const toastId = toast(message, {
     duration: UNDO_MS,
-    // No × to close it by: it reads as taking the change back, which only 復原 does. A toast closed
-    // some other way (swiped away) still lets the rest of the 5 seconds pass before the send.
     closeButton: false,
-    onAutoClose: run,
+    onAutoClose: () => run(),
     onDismiss: () => {
-      window.setTimeout(run, Math.max(0, UNDO_MS - (Date.now() - startedAt)));
+      if (Date.now() >= deadline) run();
     },
     action: {
       label: '復原',
       onClick: () => {
-        if (settled) {
-          return;
-        }
-
-        settled = true;
-        pending.delete(run);
-        onUndo();
+        if (Date.now() >= deadline) run();
+        else if (settle()) onUndo();
       },
     },
   });
 
-  return run;
+  return () => void settle();
 }

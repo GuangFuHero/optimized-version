@@ -136,6 +136,8 @@ function createStationResources(marker: RescueMapMarkerItem) {
   ];
 }
 
+const NO_TICKET_ACTIONS = [] as const;
+
 function createTicketSummary(marker: RescueMapMarkerItem) {
   const [latitude, longitude] = marker.position;
   const contactSummary = [
@@ -315,6 +317,7 @@ function RescueMapDetailDrawerView({
       {marker.detailType === 'ticket' && !ticketDetailOverrides ? (
         <TicketDetailDrawer
           {...createTicketSummary(marker)}
+          footerActions={NO_TICKET_ACTIONS}
           closeAction={closeAction}
           width="100%"
           height="100%"

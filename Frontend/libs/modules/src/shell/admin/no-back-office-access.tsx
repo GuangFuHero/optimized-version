@@ -2,19 +2,16 @@
 
 import { Box, Stack, Typography } from '@mui/material';
 import { ShieldOff } from 'lucide-react';
-import { toast } from 'sonner';
 
 import { Button, designTokens } from '@rescue-frontend/ui';
 
-import {
-  SIGN_OUT_FAILED_MESSAGE,
-  signOutHereAsync,
-} from '../../auth/session/sign-out';
 import { siteMapUrl } from './site-map-url';
+import { useAdminSessionActions } from './use-admin-session-actions';
 
 const { color, typography } = designTokens;
 
 export function NoBackOfficeAccess({ siteUrl }: { siteUrl?: string }) {
+  const { signOut } = useAdminSessionActions();
   const siteMap = siteMapUrl(siteUrl);
 
   return (
@@ -50,16 +47,7 @@ export function NoBackOfficeAccess({ siteUrl }: { siteUrl?: string }) {
             回到公開地圖
           </Button>
         )}
-        <Button
-          variant="ghost"
-          onClick={() => {
-            void signOutHereAsync().then((outcome) => {
-              if (outcome === 'still-signed-in') {
-                toast.error(SIGN_OUT_FAILED_MESSAGE);
-              }
-            });
-          }}
-        >
+        <Button variant="ghost" onClick={signOut}>
           登出
         </Button>
       </Stack>

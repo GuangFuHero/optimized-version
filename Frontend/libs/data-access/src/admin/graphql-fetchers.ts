@@ -14,6 +14,8 @@ import {
   reverseGeocodeQueryOptions,
   type AddressLookupSource,
 } from '../graphql/geo/address-cache';
+import { adminMapKeys } from './map-query-keys';
+import { SILENT_ERROR_META } from '../query-client';
 import * as documents from '../graphql/__generated__/graphql';
 import {
   ticketDetailUuid,
@@ -1074,7 +1076,7 @@ export function useHazardousZoneSource(
   options: AdminQueryOptions = {},
 ) {
   return useQuery({
-    queryKey: ['admin', 'areas', 'hazardousZoneSource', variables],
+    queryKey: [...adminMapKeys.hazardSource, variables],
     queryFn: ({ signal }) =>
       adminGraphql(
         documents.AdminHazardousZoneSourceDocument,
@@ -1085,51 +1087,90 @@ export function useHazardousZoneSource(
   });
 }
 
-export function useCreateArea() {
+function refreshAreaWrite(
+  queryClient: QueryClient,
+  {
+    affectsTickets = false,
+    hazardUuid,
+  }: { affectsTickets?: boolean; hazardUuid?: string } = {},
+) {
+  const reads = [
+    queryClient.invalidateQueries({ queryKey: adminMapKeys.areas }),
+  ];
+  if (affectsTickets) {
+    reads.push(
+      queryClient.invalidateQueries({ queryKey: adminMapKeys.markers }),
+      queryClient.invalidateQueries({ queryKey: ticketKeys.lists() }),
+      queryClient.invalidateQueries({ queryKey: ticketKeys.details() }),
+      queryClient.invalidateQueries({ queryKey: SPACE_TICKETS_KEY }),
+    );
+  }
+  if (hazardUuid) {
+    reads.push(
+      queryClient.invalidateQueries({
+        queryKey: [...adminMapKeys.hazardSource, { uuid: hazardUuid }],
+      }),
+    );
+  }
+  return Promise.all(reads);
+}
+
+type AreaRefresh = NonNullable<Parameters<typeof refreshAreaWrite>[1]>;
+type AreaWrite<TVariables> = { variables: TVariables } & Pick<
+  RequestInit,
+  'keepalive'
+>;
+
+function useAreaWrite<TData, TVariables>(
+  document: documents.TypedDocumentString<TData, TVariables>,
+  refresh: (result: TData | undefined, variables: TVariables) => AreaRefresh,
+) {
+  const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (variables: documents.AdminCreateAreaMutationVariables) =>
-      adminGraphql(documents.AdminCreateAreaDocument, variables),
+    mutationFn: ({ variables, keepalive }: AreaWrite<TVariables>) =>
+      adminGraphql(document, variables, undefined, { keepalive }),
+    meta: { [SILENT_ERROR_META]: true },
+    onSettled: (result, _error, { variables }) =>
+      refreshAreaWrite(queryClient, refresh(result, variables)),
   });
+}
+
+export function useCreateArea() {
+  return useAreaWrite(
+    documents.AdminCreateAreaDocument,
+    (_result, { input }) => ({
+      affectsTickets: input.type === 'team_zone',
+    }),
+  );
 }
 
 export function useUpdateArea() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (variables: documents.AdminUpdateAreaMutationVariables) =>
-      adminGraphql(documents.AdminUpdateAreaDocument, variables),
-    onSuccess: () =>
-      queryClient.invalidateQueries({
-        queryKey: ['admin', 'areas', 'hazardousZoneSource'],
-      }),
-  });
+  return useAreaWrite(
+    documents.AdminUpdateAreaDocument,
+    (result, { input, uuid }) => ({
+      affectsTickets:
+        input.geometry != null &&
+        (!result || result.updateArea.type === 'team_zone'),
+      hazardUuid: input.informationSource !== undefined ? uuid : undefined,
+    }),
+  );
 }
 
+const refreshTeamZone = () => ({ affectsTickets: true });
+
 export function useDeleteArea() {
-  return useMutation({
-    mutationFn: (variables: documents.AdminDeleteAreaMutationVariables) =>
-      adminGraphql(documents.AdminDeleteAreaDocument, variables),
-  });
+  return useAreaWrite(documents.AdminDeleteAreaDocument, refreshTeamZone);
 }
 
 export function useAssignZoneToTeam() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (variables: documents.AdminAssignZoneToTeamMutationVariables) =>
-      adminGraphql(documents.AdminAssignZoneToTeamDocument, variables),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ['admin', 'work-zones'] }),
-  });
+  return useAreaWrite(documents.AdminAssignZoneToTeamDocument, refreshTeamZone);
 }
 
 export function useRemoveZoneFromTeam() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (
-      variables: documents.AdminRemoveZoneFromTeamMutationVariables,
-    ) => adminGraphql(documents.AdminRemoveZoneFromTeamDocument, variables),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ['admin', 'work-zones'] }),
-  });
+  return useAreaWrite(
+    documents.AdminRemoveZoneFromTeamDocument,
+    refreshTeamZone,
+  );
 }
 
 export const teamDirectoryQuery = () =>
