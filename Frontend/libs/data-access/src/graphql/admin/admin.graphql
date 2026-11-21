@@ -347,6 +347,7 @@ query AdminTicketTasks(
 query AdminStationFacets {
   stationFacets {
     total
+    pendingReviewCount
     byStatus {
       status
       count
