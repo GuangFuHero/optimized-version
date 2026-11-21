@@ -60,4 +60,4 @@
   ```
 
   可以用的類型：`backend`、`frontend`、`design`、`test`、`doc`、`infra`、`security`、`review`、`maintenance`、`projectManagement`、`tool`、`userTesting`（手動測試），其他見 [all-contributors 的類型表](https://allcontributors.org/docs/en/emoji-key)。
-- 每次發版的說明最後會列出這一版每個 PR 的作者，以及第一次貢獻的人（見 [`.github/release.yml`](.github/release.yml)）。
+- 每次發版的說明最後會列出這一版每個 PR 的作者，以及第一次貢獻的人（見 [`.github/release.yml`](.github/release.yml)）。發版的步驟和手寫部分的格式，見 [`.github/RELEASE_TEMPLATE.md`](.github/RELEASE_TEMPLATE.md)。
