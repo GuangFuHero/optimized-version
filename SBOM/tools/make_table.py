@@ -39,7 +39,7 @@ WORKSPACE = {
     "libs/data-access": "資料存取 libs/data-access",
 }
 
-FE_SHEET, BE_SHEET, OT_SHEET = "前端套件", "後端套件", "容器與其他元件"
+FE_SHEET, BE_SHEET, OT_SHEET, SV_SHEET = "前端套件", "後端套件", "容器與其他元件", "外部服務與授權"
 
 
 def ref(sheet, col):
@@ -80,6 +80,7 @@ def main():
 
     data = json.loads(Path(args.rows).read_text(encoding="utf-8"))
     meta, fe, be, other = data["meta"], data["frontend"], data["backend"], data["other"]
+    services = data.get("services", [])
 
     wb = Workbook()
 
@@ -155,6 +156,21 @@ def main():
         wrap_cols=(4, 5, 6, 7, 9),
     )
     ws_ot.freeze_panes = "D2"
+
+    # ------------------------------------------------------------------ 外部服務與授權
+    ws_sv = wb.create_sheet(SV_SHEET)
+    sv_rows = [
+        [i, sv["group"], sv["name"], sv["provider"], sv["purpose"], sv["status"], sv["auth"], sv["terms"], sv["terms_url"], "\n".join(sv["endpoints"]), sv["source"], sv["risk"], sv["note"]]
+        for i, sv in enumerate(services, start=1)
+    ]
+    write_table(
+        ws_sv,
+        ["項次", "類別", "名稱", "提供者", "用途", "目前狀態", "金鑰或帳號", "授權／使用條款", "條款連結", "連線位置", "程式位置", "風險與待辦", "備註"],
+        sv_rows,
+        [6, 12, 28, 22, 34, 24, 26, 30, 34, 34, 36, 44, 36],
+        wrap_cols=(5, 6, 7, 8, 10, 11, 12, 13),
+    )
+    ws_sv.freeze_panes = "D2"
 
     # ------------------------------------------------------------------ 授權統計（公式）
     ws_lic = wb.create_sheet("授權統計")
@@ -237,7 +253,8 @@ def main():
     line("　其中開發／測試", f'=COUNTIF({ref(BE_SHEET, "D")},"開發／測試")')
     line("　其中直接相依", f'=COUNTIF({ref(BE_SHEET, "E")},"直接")')
     line("容器映像與其他元件", f"=COUNTA({ref(OT_SHEET, 'C')})-1")
-    for r in range(ws.max_row - 9, ws.max_row + 1):
+    line("外部服務", f"=COUNTA({ref(SV_SHEET, 'C')})-1")
+    for r in range(ws.max_row - 10, ws.max_row + 1):
         ws.cell(row=r, column=2).alignment = Alignment(horizontal="left", vertical="top")
         ws.cell(row=r, column=1).font = F_BASE
 
@@ -245,6 +262,7 @@ def main():
     line(FE_SHEET, "Frontend/pnpm-lock.yaml 鎖定的全部 npm 套件（前台、管理平台、共用程式庫與開發工具）。")
     line(BE_SHEET, "Backend/pyproject.toml 的執行期相依與 dev 群組，展開到所有間接相依。")
     line(OT_SHEET, "不經套件管理器的元件：容器基礎映像、作業系統套件、字型。")
+    line(SV_SHEET, "程式執行時會連到、要有帳號金鑰或要遵守對方條款的外部服務與圖資：地圖圖磚、地址定位、登入、簡訊與 Email、基礎設施、使用者內容。附目前狀態、條款連結與風險。")
     line("授權統計", "依授權與使用範圍計數，數字由公式從前兩張表算出。")
 
     heading("產生方式")
@@ -259,7 +277,8 @@ def main():
     line("2", "後端版本是依 tag 時間解析的結果。容器建置時（Backend/Dockerfile 執行 `uv pip install .`）會取建置當天的最新版本，實際部署版本可能較新。")
     line("3", "容器映像使用浮動 tag（3.13-slim、22-alpine、7-alpine、latest），未以 digest 固定；映像內作業系統套件不在本表範圍，需另做容器映像掃描。")
     line("4", "本表不含已知漏洞（CVE）資訊，弱點請見源碼檢測（SCA）報告；也不含各元件供應者所在國別。")
-    line("5", "交付版須以修補後的最終版本重新產生本表。")
+    line("5", "外部服務的條款以各服務官方頁面為準；表中標「未確認」的，條款還沒讀到原文。")
+    line("6", "交付版須以修補後的最終版本重新產生本表。")
     ws.cell(row=1, column=1).alignment = Alignment(vertical="center")
 
     wb.calculation.fullCalcOnLoad = True
@@ -268,7 +287,7 @@ def main():
     # 給人核對用：把公式應得的數字印出來
     print("前端", len(fe), Counter(r["scope"] for r in fe), "直接", sum(r["direct"] for r in fe), "平台限定", sum(bool(r["platform"]) for r in fe))
     print("後端", len(be), Counter(r["scope"] for r in be), "直接", sum(r["direct"] for r in be))
-    print("其他", len(other), "授權種類", len(licenses))
+    print("其他", len(other), "外部服務", len(services), "授權種類", len(licenses))
 
 
 if __name__ == "__main__":
