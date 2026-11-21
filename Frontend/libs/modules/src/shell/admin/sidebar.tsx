@@ -11,7 +11,6 @@ import {
 import { Box, Divider, IconButton, Stack, Typography } from '@mui/material';
 import Link from 'next/link';
 import { Fragment } from 'react';
-import { toast } from 'sonner';
 import {
   useCapability,
   useProjectSettings,
@@ -24,15 +23,12 @@ import {
   SidebarItem,
 } from '@rescue-frontend/ui';
 
-import {
-  SIGN_OUT_FAILED_MESSAGE,
-  signOutHereAsync,
-} from '../../auth/session/sign-out';
 import { GuangFuBrandIcon } from '../../brand';
 import { siteBrandName } from '../site/event-name';
 import { eventDayNumber } from './event-day';
 import { useAdminNavSections, type AdminNavItem } from './nav';
 import { siteMapUrl } from './site-map-url';
+import { useAdminSessionActions } from './use-admin-session-actions';
 
 const { color, radius, typography, motion } = designTokens;
 
@@ -50,6 +46,7 @@ export function AdminSidebar({
   activeId,
   siteUrl,
 }: AdminSidebarProps) {
+  const { signOut } = useAdminSessionActions();
   const sections = useAdminNavSections();
   const renderItem = (item: AdminNavItem) => (
     <SidebarItem
@@ -142,13 +139,7 @@ export function AdminSidebar({
           icon={<LogOut />}
           label="登出"
           collapsed={collapsed}
-          onClick={() => {
-            void signOutHereAsync().then((outcome) => {
-              if (outcome === 'still-signed-in') {
-                toast.error(SIGN_OUT_FAILED_MESSAGE);
-              }
-            });
-          }}
+          onClick={signOut}
         />
       </Stack>
     </Box>

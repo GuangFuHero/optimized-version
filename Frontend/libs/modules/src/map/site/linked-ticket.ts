@@ -2,7 +2,7 @@ import type { GetLinkedTicketQuery } from '@rescue-frontend/data-access';
 
 import { isLocationCellId } from '../location-cells';
 import type { RescueMapGoneTicket, RescueMapMarkerItem } from '../types';
-import { mapTicketToMarker } from './markers';
+import { mapTicketToMarker } from '../markers';
 
 /**
  * What a link to a ticket no loaded page holds comes to, once the backend is asked (ADR-444):

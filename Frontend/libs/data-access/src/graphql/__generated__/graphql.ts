@@ -4411,6 +4411,51 @@ export type AdminDeleteBuildingMapMutation = {
   deleteBuildingMap: boolean;
 };
 
+export type GetAdminMapTicketsQueryVariables = Exact<{
+  bounds?: InputMaybe<BoundsInput>;
+  skip?: InputMaybe<Scalars['Int']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  zoom?: InputMaybe<Scalars['Float']['input']>;
+}>;
+
+export type GetAdminMapTicketsQuery = {
+  __typename?: 'Query';
+  tickets: {
+    __typename?: 'TicketConnection';
+    items: Array<{
+      __typename?: 'TicketType';
+      uuid: string;
+      propertyName: string;
+      geometry?: Geometry | null;
+      locationCell?: string | null;
+      buildingMapUuid?: string | null;
+      title: string;
+      description?: string | null;
+      contactName?: string | null;
+      contactEmail?: string | null;
+      contactPhone?: string | null;
+      status: string;
+      priority: string;
+      taskType?: string | null;
+      auditStatus: string;
+      createdBy?: string | null;
+      createdAt?: string | null;
+      updatedAt?: string | null;
+      responsibleTeams: Array<{
+        __typename?: 'AssignedTeamType';
+        uuid: string;
+        name: string;
+      }>;
+    }>;
+    pageInfo: {
+      __typename?: 'PageInfo';
+      totalCount: number;
+      hasNextPage: boolean;
+      hasPreviousPage: boolean;
+    };
+  };
+};
+
 export type SiteAnnouncementsQueryVariables = Exact<{ [key: string]: never }>;
 
 export type SiteAnnouncementsQuery = {
@@ -5047,50 +5092,6 @@ export type GetCellTicketsQuery = {
       updatedAt?: string | null;
     }>;
     pageInfo: { __typename?: 'PageInfo'; hasNextPage: boolean };
-  };
-};
-
-export type GetAdminMapTicketsQueryVariables = Exact<{
-  bounds?: InputMaybe<BoundsInput>;
-  skip?: InputMaybe<Scalars['Int']['input']>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  zoom?: InputMaybe<Scalars['Float']['input']>;
-}>;
-
-export type GetAdminMapTicketsQuery = {
-  __typename?: 'Query';
-  tickets: {
-    __typename?: 'TicketConnection';
-    items: Array<{
-      __typename?: 'TicketType';
-      uuid: string;
-      propertyName: string;
-      geometry?: Geometry | null;
-      locationCell?: string | null;
-      buildingMapUuid?: string | null;
-      title: string;
-      description?: string | null;
-      contactName?: string | null;
-      contactEmail?: string | null;
-      contactPhone?: string | null;
-      status: string;
-      priority: string;
-      taskType?: string | null;
-      auditStatus: string;
-      createdBy?: string | null;
-      createdAt?: string | null;
-      updatedAt?: string | null;
-      responsibleTeams: Array<{
-        __typename?: 'AssignedTeamType';
-        name: string;
-      }>;
-    }>;
-    pageInfo: {
-      __typename?: 'PageInfo';
-      totalCount: number;
-      hasNextPage: boolean;
-      hasPreviousPage: boolean;
-    };
   };
 };
 
@@ -7545,6 +7546,45 @@ export const AdminDeleteBuildingMapDocument = new TypedDocumentString(`
   AdminDeleteBuildingMapMutation,
   AdminDeleteBuildingMapMutationVariables
 >;
+export const GetAdminMapTicketsDocument = new TypedDocumentString(`
+    query GetAdminMapTickets($bounds: BoundsInput, $skip: Int = 0, $limit: Int = 50, $zoom: Float) {
+  tickets(bounds: $bounds, skip: $skip, limit: $limit, zoom: $zoom) {
+    items {
+      ...TicketFields
+      responsibleTeams {
+        uuid
+        name
+      }
+    }
+    pageInfo {
+      totalCount
+      hasNextPage
+      hasPreviousPage
+    }
+  }
+}
+    fragment TicketFields on TicketType {
+  uuid
+  propertyName
+  geometry
+  locationCell
+  buildingMapUuid
+  title
+  description
+  contactName
+  contactEmail
+  contactPhone
+  status
+  priority
+  taskType
+  auditStatus
+  createdBy
+  createdAt
+  updatedAt
+}`) as unknown as TypedDocumentString<
+  GetAdminMapTicketsQuery,
+  GetAdminMapTicketsQueryVariables
+>;
 export const SiteAnnouncementsDocument = new TypedDocumentString(`
     query SiteAnnouncements {
   announcements(filter: ACTIVE, placement: public_page) {
@@ -8063,44 +8103,6 @@ export const GetCellTicketsDocument = new TypedDocumentString(`
 }`) as unknown as TypedDocumentString<
   GetCellTicketsQuery,
   GetCellTicketsQueryVariables
->;
-export const GetAdminMapTicketsDocument = new TypedDocumentString(`
-    query GetAdminMapTickets($bounds: BoundsInput, $skip: Int = 0, $limit: Int = 50, $zoom: Float) {
-  tickets(bounds: $bounds, skip: $skip, limit: $limit, zoom: $zoom) {
-    items {
-      ...TicketFields
-      responsibleTeams {
-        name
-      }
-    }
-    pageInfo {
-      totalCount
-      hasNextPage
-      hasPreviousPage
-    }
-  }
-}
-    fragment TicketFields on TicketType {
-  uuid
-  propertyName
-  geometry
-  locationCell
-  buildingMapUuid
-  title
-  description
-  contactName
-  contactEmail
-  contactPhone
-  status
-  priority
-  taskType
-  auditStatus
-  createdBy
-  createdAt
-  updatedAt
-}`) as unknown as TypedDocumentString<
-  GetAdminMapTicketsQuery,
-  GetAdminMapTicketsQueryVariables
 >;
 export const GetTicketsWithNeedsDocument = new TypedDocumentString(`
     query GetTicketsWithNeeds($bounds: BoundsInput, $status: String, $priority: String, $q: String, $skip: Int = 0, $limit: Int = 50, $zoom: Float, $order: TicketListOrder) {

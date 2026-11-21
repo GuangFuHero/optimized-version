@@ -107,6 +107,7 @@ ui -> data-access (generated types only)
 - `shell/site/*`
 - `station/admin/*`
 - `ticket/admin/*`
+- `map/admin/*`
 - `map/site/*`
 
 這樣可以避免把「可跨 surface 重用的能力」綁死在 `site/*` 或 `admin/*`。
@@ -134,7 +135,7 @@ ui -> data-access (generated types only)
 ## State、表單與 render
 
 - Server state 由 TanStack Query 持有，讀取與失效規則見 [data-access](data-access.md)。不要把 query data 複製到 Zustand。
-- 跨元件的 client state 使用 Zustand。地圖 viewport、選取與 framing store 依畫面建立；共用 drawer 入口與偏好設定使用共用 store。只在單一元件使用的開關可保留 React state。
+- 跨元件的 client state 使用 Zustand。地圖 viewport、選取、framing 與區域編輯器 store 依畫面建立；後台地圖還能復原的區域變更跟著登入身分（`AdminAreaChangesProvider`），換頁後仍可復原；共用 drawer 入口與偏好設定使用共用 store。只在單一元件使用的開關可保留 React state。
 - 表單與 inline editor 的 draft values 使用 TanStack Form；API 欄位從 generated GraphQL / OpenAPI contracts 推導。地圖幾何、流程 stage、非同步請求與取消後的回應判斷仍由原本的 workflow 負責。
 - 表單開啟時的初值需固定，避免 refetch 覆寫尚未編輯的欄位。驗證時機、錯誤消失時機與取消後重開的內容都屬於行為契約。根層 submit errors 若需在編輯時保留，使用 `dontValidate: true`，再清除實際修改欄位的錯誤。
 - 有欄列、排序、分頁或差異篩選的資料表使用 TanStack Table。共用樣式由 `ui/DataTable` 提供；重複比對表保留自己的 merged-cell grid，由 Table 處理 rows 與差異篩選。

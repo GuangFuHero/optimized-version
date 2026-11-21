@@ -50,6 +50,7 @@ export function createGraphqlRequest({
     document: TypedDocumentString<TResult, TVariables>,
     variables: TVariables,
     signal?: AbortSignal,
+    options?: Pick<RequestInit, 'keepalive'>,
   ): Promise<TResult> {
     let response: Response;
     try {
@@ -63,6 +64,7 @@ export function createGraphqlRequest({
         credentials: 'include',
         cache,
         signal,
+        keepalive: options?.keepalive,
       });
     } catch (error) {
       if (signal?.aborted) throw error;

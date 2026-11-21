@@ -1,27 +1,26 @@
 'use client';
 
 import {
-  GetStationsDocument,
-  GetAdminMapTicketsDocument,
-} from '@rescue-frontend/data-access';
+  adminMapStationsQuery,
+  adminMapTicketsQuery,
+} from '@rescue-frontend/data-access/admin';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useStore } from 'zustand';
 
 import type { RescueMapMarkerItem } from '../types';
 import { designTokens } from '@rescue-frontend/ui';
 import { ADMIN_MAP_PRIORITIES } from './map-filter';
-import { siteGraphql, SITE_READ_OPTIONS } from '../../session/site-clients';
 import {
   dedupeMarkersById,
   mapStationToMarker,
   mapTicketToMarker,
   toBoundsInput,
-} from '../site/markers';
-import type { SiteMapViewportStore } from '../site/use-site-map-viewport-state';
+} from '../markers';
+import type { MapViewportStore } from '../viewport-store';
 
 const { color } = designTokens;
 
-export const ADMIN_MAP_LIVE_QUERY_LIMIT = 200;
+export { ADMIN_MAP_LIVE_QUERY_LIMIT } from '@rescue-frontend/data-access/admin';
 
 /**
  * How a marker is drawn on 互助地圖 (prototype `map-canvas.jsx`): a ticket is a dot in its
@@ -55,70 +54,46 @@ export function toAdminMapPin(
     tooltip: { title: marker.title, subtitle: teams || undefined },
   };
 }
-const NO_MARKERS: readonly RescueMapMarkerItem[] = [];
 
-/**
- * Tickets and stations inside the map's view, both at once: unlike the public map, which shows one
- * kind at a time, 互助地圖 lays them side by side. Read again whenever the view moves; the last view's
- * stay up meanwhile. Either kind that fails to load is left off, the other kept.
- */
-export function useAdminMapLiveMarkers(
-  viewportStore: SiteMapViewportStore,
-): readonly RescueMapMarkerItem[] {
+/** Each source can fail or refetch without hiding the other source's pins. */
+export function useAdminMapLiveMarkers(viewportStore: MapViewportStore) {
   const viewport = useStore(viewportStore);
-  // No view yet: the map reports one once it has laid itself out.
   const bounds = toBoundsInput(viewport);
-  const zoom = viewport.position?.zoom;
-  const { data } = useQuery({
-    ...SITE_READ_OPTIONS,
-    queryKey: ['admin', 'map', 'markers', { bounds, zoom }],
-    queryFn: async ({ signal }) => {
-      const [tickets, stations] = await Promise.all([
-        siteGraphql(
-          GetAdminMapTicketsDocument,
-          { bounds, skip: 0, limit: ADMIN_MAP_LIVE_QUERY_LIMIT, zoom },
-          signal,
-        ).then(
-          ({ tickets }) =>
-            tickets.items.map((ticket) => {
-              const marker = mapTicketToMarker(ticket);
-
-              return marker
-                ? toAdminMapPin({
-                    ...marker,
-                    ticketMeta: {
-                      ...marker.ticketMeta,
-                      responsibleTeams: ticket.responsibleTeams,
-                    },
-                  })
-                : null;
-            }),
-          () => [],
-        ),
-        siteGraphql(
-          GetStationsDocument,
-          { bounds, skip: 0, limit: ADMIN_MAP_LIVE_QUERY_LIMIT },
-          signal,
-        ).then(
-          ({ stations }) =>
-            stations.items.map((station) => {
-              const marker = mapStationToMarker(station);
-
-              return marker ? toAdminMapPin(marker) : null;
-            }),
-          () => [],
-        ),
-      ]);
-
-      return dedupeMarkersById(
-        [...tickets, ...stations].filter(
-          (marker): marker is RescueMapMarkerItem => Boolean(marker),
-        ),
-      );
-    },
-    enabled: Boolean(bounds),
+  const tickets = useQuery({
+    ...adminMapTicketsQuery(bounds, viewport.position?.zoom),
     placeholderData: keepPreviousData,
+    select: ({ tickets }) =>
+      tickets.items.flatMap((ticket) => {
+        const marker = mapTicketToMarker(ticket);
+        return marker
+          ? [
+              toAdminMapPin({
+                ...marker,
+                ticketMeta: {
+                  ...marker.ticketMeta,
+                  responsibleTeams: ticket.responsibleTeams,
+                },
+              }),
+            ]
+          : [];
+      }),
+  });
+  const stations = useQuery({
+    ...adminMapStationsQuery(bounds),
+    placeholderData: keepPreviousData,
+    select: ({ stations }) =>
+      stations.items.flatMap((station) => {
+        const marker = mapStationToMarker(station);
+        return marker ? [toAdminMapPin(marker)] : [];
+      }),
   });
 
-  return data ?? NO_MARKERS;
+  return {
+    markers: dedupeMarkersById([
+      ...(tickets.data ?? []),
+      ...(stations.data ?? []),
+    ]),
+    ticketReadFailed: tickets.isError,
+    stationReadFailed: stations.isError,
+  };
 }

@@ -13,7 +13,7 @@ import type {
   LocationCellMembersPage,
   RescueMapMarkerItem,
 } from '../types';
-import { mapTicketToMarker } from './markers';
+import { mapTicketToMarker } from '../markers';
 import { ticketCellStatuses } from './ticket-cells';
 
 /**

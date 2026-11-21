@@ -11,7 +11,6 @@ import {
   MenuItem,
 } from '@mui/material';
 import { useState } from 'react';
-import { toast } from 'sonner';
 import {
   useCurrentUser,
   useSwitchIdentity,
@@ -27,12 +26,9 @@ import {
   ROLE_DISPLAY_NAMES,
   TEAM_TYPE_DISPLAY_NAMES,
 } from '../../constants/roles';
-import {
-  SIGN_OUT_FAILED_MESSAGE,
-  signOutHereAsync,
-} from '../../auth/session/sign-out';
 import { useAuthSession } from '../../session/auth-session';
 import { ProfileSheet } from './profile-sheet';
+import { useAdminSessionActions } from './use-admin-session-actions';
 
 const { color, radius, shadow, typography, motion } = designTokens;
 
@@ -60,6 +56,7 @@ export function AccountMenu() {
   const identity = user?.active_identity;
   const identities = backOfficeIdentities(user?.identities ?? []);
   const switchIdentity = useSwitchIdentity();
+  const { cancelPendingWrites, signOut } = useAdminSessionActions();
   const canViewTeams = Boolean(
     identity?.team_uuid && user?.capabilities.includes('team.view'),
   );
@@ -255,6 +252,7 @@ export function AccountMenu() {
                         onClick={() => {
                           setAnchorEl(null);
                           if (active) return;
+                          cancelPendingWrites();
                           switchIdentity.mutate({
                             body: {
                               role_uuid: option.role_uuid,
@@ -330,11 +328,7 @@ export function AccountMenu() {
         <MenuItem
           onClick={() => {
             setAnchorEl(null);
-            void signOutHereAsync().then((outcome) => {
-              if (outcome === 'still-signed-in') {
-                toast.error(SIGN_OUT_FAILED_MESSAGE);
-              }
-            });
+            signOut();
           }}
           sx={{ ...itemSx, height: 38 }}
         >

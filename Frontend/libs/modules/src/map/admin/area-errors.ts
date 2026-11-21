@@ -8,7 +8,10 @@ const AREA_ERROR_MESSAGES: readonly [needle: string, message: string][] = [
   ['is always public', '危險區和責任區不能改成只給後台看'],
   ['Team is not active', '這個團隊已停用，不能指派'],
   ['Team not found', '找不到這個團隊'],
+  ['Team zone not found', '找不到這個責任區，可能已經被刪除'],
   ['Area not found', '找不到這個區域，可能已經被刪除'],
+  ['Permission Denied', '你沒有權限變更這個區域'],
+  ['Not Found', '找不到這個區域，或你沒有權限變更'],
   ['is not assigned to this team zone', '這個團隊沒有被指派到這個責任區'],
   [
     'A team zone needs at least one team',
@@ -16,9 +19,16 @@ const AREA_ERROR_MESSAGES: readonly [needle: string, message: string][] = [
   ],
 ];
 
-export function areaErrorMessage(error: unknown): string {
-  const raw = error instanceof Error ? error.message : String(error);
-  const known = AREA_ERROR_MESSAGES.find(([needle]) => raw.includes(needle));
+export function knownAreaErrorMessage(cause: unknown): string | undefined {
+  const raw = cause instanceof Error ? cause.message : String(cause);
+  return AREA_ERROR_MESSAGES.find(([needle]) => raw.includes(needle))?.[1];
+}
 
-  return known ? known[1] : raw.replace(/^\[GraphQL\]\s*/, '');
+export function areaErrorMessage(cause: unknown, fallback?: string): string {
+  const raw = cause instanceof Error ? cause.message : String(cause);
+  return (
+    knownAreaErrorMessage(cause) ??
+    fallback ??
+    raw.replace(/^\[GraphQL\]\s*/, '')
+  );
 }
