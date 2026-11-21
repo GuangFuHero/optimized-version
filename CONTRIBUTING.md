@@ -25,14 +25,7 @@
 
 送 PR 就表示你同意你的貢獻照上面的授權釋出，而且你有權利這樣釋出（是你自己寫的，或是來源的授權允許）。每一類內容的範圍，見 [`LICENSING.md`](LICENSING.md)。
 
-<!--
-待決定（Carol）：貢獻者協議。
-GuangFuHero 組織首頁寫「所有程式碼貢獻者需先簽署個人 CLA，CLA Assistant Bot 會在第一次提交 PR 時要求簽署」，
-但這個 repo 目前沒有 CLA bot 在跑。三選一，決定後改這一段，並同步組織首頁：
-  A. 裝 CLA Assistant，照組織首頁做。
-  B. 改用 DCO：每個 commit 加 `Signed-off-by:`（`git commit -s`），並加 DCO 檢查。比較輕，GPL 專案常用。
-  C. 都不要求，只靠上面這段「送 PR 即同意」，並把組織首頁的 CLA 段拿掉。
--->
+**第一次送 PR 要先簽個人 CLA（Individual Contributor License Agreement）。** PR 開出來之後，CLA Assistant 會在 PR 留言，照連結用 GitHub 帳號簽署即可，簽一次就好。沒簽的話，PR 上的 `license/cla` 檢查不會通過，不能合併。
 
 新增的原始碼檔案，第一行（有 shebang 的放在 shebang 下一行）加上授權標示：
 
@@ -83,6 +76,7 @@ GuangFuHero 組織首頁寫「所有程式碼貢獻者需先簽署個人 CLA，C
 
 - `main` 有分支保護：**至少要 1 位維護者 approve**，必過的 CI 檢查也要通過，才能合併。不能直接 push 到 `main`。
 - 改到 [`.github/CODEOWNERS`](.github/CODEOWNERS) 列的路徑時，GitHub 會自動請負責的維護者審查。
+- PR 上的 `license/cla` 檢查要通過（見上面的 CLA）。
 - CI 會跑：
   - `frontend-ci`：重新產生前端型別合約，檢查跟 commit 的一致，再跑型別檢查、lint 和測試。
   - `backend-tests`：後端 pytest。
