@@ -518,6 +518,8 @@ async def test_upstream_requests_use_the_user_agent_setting(fake_redis, monkeypa
         ({"cache-control": "max-age=259200, stale-while-revalidate=604800"}, 259200),
         # Upstream says 30 days.
         ({"cache-control": "max-age=2592000"}, 2592000),
+        # Directive names are case-insensitive, and the time a CDN already held the tile is taken off.
+        ({"cache-control": "MAX-AGE=86400", "age": "3600"}, 82800),
         # Only Expires, 2 days after Date.
         ({"date": "Sat, 21 Nov 2026 00:00:00 GMT", "expires": "Mon, 23 Nov 2026 00:00:00 GMT"}, 172800),
         # No caching headers at all: 7 days.

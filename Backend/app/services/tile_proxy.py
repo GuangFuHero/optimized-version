@@ -174,11 +174,13 @@ def upstream_headers(referer: str | None = None) -> dict[str, str]:
 def cache_ttl_from_headers(headers, default: int) -> int:
     """Seconds a response may be cached by its `Cache-Control: max-age` or `Expires`, else `default`.
 
-    An unreadable `Expires` counts as already expired, as HTTP defines it.
+    `max-age` counts from when the response was made, so the `Age` an upstream cache adds is taken off, and an
+    unreadable `Expires` counts as already expired, as HTTP defines both.
     """
-    max_age = re.search(r"\bmax-age=(\d+)", headers.get("cache-control", ""))
+    max_age = re.search(r"\bmax-age=(\d+)", headers.get("cache-control", ""), re.IGNORECASE)
     if max_age:
-        return int(max_age.group(1))
+        age = headers.get("age", "")
+        return int(max_age.group(1)) - (int(age) if age.isdigit() else 0)
     if "expires" not in headers:
         return default
     try:
