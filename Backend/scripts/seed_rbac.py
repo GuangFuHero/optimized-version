@@ -297,6 +297,13 @@ ROLES_DATA = [
     },
 ]
 
+# ADR-463: every role may connect an MCP client, and every role but `user` without the per-minute limit on
+# its tools' backend calls. Both can be changed per role at /admin/rbac.
+for _role in ROLES_DATA:
+    _role["permissions"][Perm.MCP_USE] = "all"
+    if _role["name"] != "user":
+        _role["permissions"][Perm.MCP_UNLIMITED_USE] = "all"
+
 
 async def ensure_role_grant(db: AsyncSession, *, role: Role, permission: Permission, scope: str) -> bool:
     """Insert a role→permission grant only when it is missing (ADR-055 idempotent bootstrap).

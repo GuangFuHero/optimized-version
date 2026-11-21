@@ -13,12 +13,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy dependency files first for caching
-COPY pyproject.toml README.md ./
+COPY pyproject.toml uv.lock README.md ./
 
-# Create virtual environment and install dependencies using uv
-RUN uv venv /opt/venv
+# Install exactly the versions in uv.lock (no dev tools) into /opt/venv; --frozen refuses to re-resolve.
+ENV UV_PROJECT_ENVIRONMENT=/opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
-RUN uv pip install .
+RUN uv sync --frozen --no-dev --no-install-project
 
 # Copy application code
 COPY . .

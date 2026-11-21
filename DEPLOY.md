@@ -52,7 +52,8 @@
   ┌─────────────────────────────── GCP VM (wanguard-test-01) ───────────────────────────────┐
   │  cloudflared 容器                                                                       │
   │    ├─ 轉發至 frontend 容器 (:3000, APP=demo)  ─┐                                         │
-  │    └─ 轉發至 admin 容器    (:3000, APP=admin) ─┤ Next.js BFF Proxy (http://backend:8000) │
+  │    ├─ 轉發至 admin 容器    (:3000, APP=admin) ─┤ Next.js BFF Proxy (http://backend:8000) │
+  │    └─ MCP 路徑 → backend 容器 (:8000)          │                                         │
   │                                                ▼                                         │
   │                                  backend 容器 (:8000, FastAPI)                          │
   │                                    ├─ db 容器    (PostGIS + H3, named volume: pgdata)   │
@@ -199,22 +200,47 @@ gcloud secrets versions access latest --project=wanguard-250923 --secret=staging
 | **強制 HTTPS Cookie (`AUTH_COOKIE_SECURE`)** | `true` | `true` | `false`（本機為純 HTTP） |
 | **允許寫入來源 (`AUTH_ALLOWED_ORIGINS`)** | `https://wan-guard.com,https://admin.wan-guard.com` | `https://staging.wan-guard.com,https://admin-staging.wan-guard.com` | `http://localhost:3000,http://localhost:3001` |
 | **OAuth Callback 基底 (`OAUTH_REDIRECT_BASE_URL`)** | `https://wan-guard.com` | `https://staging.wan-guard.com` | `http://localhost:3000` |
+| **MCP 對外網址 (`MCP_BASE_URL`)** | 前台網址，等 Tunnel 加上 MCP 路由後再設（尚未設定） | `https://staging.wan-guard.com`（見 [E. MCP 用戶端](#e-mcp-用戶端)） | `http://localhost:8000`（預設） |
+| **信任的 Proxy (`TRUSTED_PROXIES`)** | 預設值 | 預設值：`127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7` | 預設值 |
+| **MCP 上限（`MCP_EXECUTE_SECONDS` … `MCP_TOOL_CALLS_PER_MINUTE`）** | 預設值 | 預設值 | 預設值（見下方「MCP 上限」） |
 
 > ⚠️ 情境 B、C 自建環境請照 **Production 那一欄的格式**，換成自己的網域（填法見 [第 10 節 Step 5](#step-5僅限自建新環境在你的-fork-調整網域與-bucket-名稱)）。最右邊那欄只適用本機開發（情境 D），不是情境 C：情境 C 雖然也架在自己的電腦，網站一樣要讓別人用網址連進來。本機開發的值 `.env.example` 已經寫好，不用自己填。
 
 > 💡 **為什麼後台網址叫 `admin-staging.wan-guard.com` 而不是 `admin.staging.wan-guard.com`？**
 > 因為 Cloudflare 免費通用 SSL 憑證僅涵蓋 `*.wan-guard.com`（一層子網域），若用兩層子網域（`admin.staging.*`）會無法通過憑證驗證。也因為 Staging 與 Production 共用上層網域 `.wan-guard.com`，系統透過不同的 `AUTH_COOKIE_PREFIX`（`wgstg` vs `wg`）確保兩邊的 Cookie 不會互相干擾。
 
+**MCP 上限**：都是選填，只有要改預設值時才設，和其他非機密設定一樣寫在 `Backend/scripts/deploy-config.staging.env`。每個值都必須大於 0，設錯時後端啟動就會停下。後端只在啟動時讀取，改了要重啟後端。
+
+| 設定變數 | 預設值 | 限制的內容 |
+| :--- | :--- | :--- |
+| `MCP_EXECUTE_SECONDS` | `15` | 每次 `execute` 的沙盒執行秒數，不含等待 worker 與等待後端呼叫的時間 |
+| `MCP_EXECUTE_MEMORY_BYTES` | `100000000` | 每次 `execute` 的沙盒記憶體（bytes） |
+| `MCP_SANDBOX_WORKERS` | `2` | 沙盒 worker 行程數；每個使用者同時最多佔用一個 |
+| `MCP_SANDBOX_WAIT_SECONDS` | `10` | `execute` 等待空閒 worker 的秒數，超過就拒絕 |
+| `MCP_EXECUTES_PER_USER` / `MCP_EXECUTE_WINDOW_SECONDS` | `10` / `60` | 每個使用者在一段時間內最多可以開始的 `execute` 次數；兩個值依序是次數與這段時間的秒數 |
+| `MCP_REGISTERS_PER_IP` / `MCP_REGISTER_WINDOW_SECONDS` | `10` / `3600` | 每個 IP 在一段時間內最多可以註冊用戶端（`/mcp/register`）的次數；兩個值依序是次數與秒數 |
+| `MCP_AUTHORIZES_PER_IP` / `MCP_AUTHORIZE_WINDOW_SECONDS` | `30` / `600` | 每個 IP 在一段時間內最多可以開始登入（`/mcp/authorize`）的次數；兩個值依序是次數與秒數 |
+| `MCP_MAX_WAITING_CLIENTS` | `1000` | 等待第一次登入的已註冊用戶端數；超過時最舊的會被擠掉 |
+| `MCP_MAX_TOOL_CALLS` | `50` | 一次 `execute` 可以呼叫工具的次數 |
+| `MCP_CALL_TIMEOUT_SECONDS` | `30` | 工具發出的單次後端呼叫可以花的秒數 |
+| `MCP_QUERY_MAX_CHARS` | `20000` | 工具接受的 GraphQL 查詢字串長度上限（字元數） |
+| `MCP_CLIENT_NAME_MAX_CHARS` / `MCP_MAX_REDIRECT_URIS` / `MCP_REGISTRATION_MAX_BYTES` | `100` / `5` / `8192` | 一次用戶端註冊可以帶的名稱長度、redirect URI 數與整體大小（bytes） |
+| `MCP_UNUSED_CLIENT_SECONDS` | `3600` | 已註冊的用戶端在第一次登入前保留的秒數 |
+| `MCP_AUTHORIZE_REQUEST_SECONDS` | `600` | 開始的登入在同意頁面等待的秒數 |
+| `MCP_CODE_SECONDS` | `300` | 授權碼的有效秒數 |
+| `MCP_TOOL_CALLS_PER_MINUTE` | `10` | 帳號的 MCP 工具每分鐘可以呼叫後端的次數；帳號持有 `mcp.unlimited_use` 時不限（哪些角色持有，在 RBAC 設定調整） |
+
 ### B. Cloudflare Tunnel 公開網域路由表（Public Hostnames）
 
-在 Cloudflare Zero Trust 後台（**Networks → Tunnels → Public Hostname**）需設定以下兩條轉發規則，將外部網址導向 Docker 內部網路的對應容器：
+在 Cloudflare Zero Trust 後台（**Networks → Tunnels → Public Hostname**）需設定以下三條轉發規則，將外部網址導向 Docker 內部網路的對應容器：
 
 | 對外公開網域（Public Hostname） | 內部服務網址（Service URL） | 對應容器與功能 |
 | :--- | :--- | :--- |
 | `staging.wan-guard.com`（正式環境：`wan-guard.com`） | `http://frontend:3000` | 民眾前台（`Frontend/apps/demo`） |
 | `admin-staging.wan-guard.com`（正式環境：`admin.wan-guard.com`） | `http://admin:3000` | 管理後台（`Frontend/apps/admin`） |
+| `staging.wan-guard.com`，Path：`^/(mcp(/(register\|authorize\|token\|revoke))?\|\.well-known/oauth-(protected-resource\|authorization-server)/mcp)$` | `http://backend:8000` | 後端的 MCP 端點與它的 OAuth 路徑（見 [E. MCP 用戶端](#e-mcp-用戶端)）；**必須排在第一條之前** |
 
-> 註：瀏覽器對後端 API（`/api/v1/*` 與 `/api/graphql`）的所有請求，都會經由這兩個 Next.js 容器內建的 BFF Proxy 在 Docker 內網轉發至 `http://backend:8000`，因此**不需要**在 Cloudflare Tunnel 公開暴露 `backend:8000`。
+> 註：瀏覽器對後端 API（`/api/v1/*` 與 `/api/graphql`）的所有請求，都會經由這兩個 Next.js 容器內建的 BFF Proxy 在 Docker 內網轉發至 `http://backend:8000`，因此後端 API **不需要**經由 Cloudflare Tunnel 公開。唯一的例外是第三條規則：它只把 MCP 用的路徑公開到 `backend:8000`，後端的其他路徑仍然不對外。
 
 ### C. GCP Secret Manager 金鑰清單
 
@@ -252,6 +278,24 @@ gcloud secrets versions access latest --project=wanguard-250923 --secret=staging
 - **LINE Developers Console**（Channel ID `2010287145` → LINE Login → Callback URL）：
   - `https://staging.wan-guard.com/api/v1/auth/oauth/line/callback`（正式環境改為對應的前台網域）
   - `http://localhost:3000/api/v1/auth/oauth/line/callback`
+
+### E. MCP 用戶端
+
+後端提供唯讀的 MCP server（`Backend/mcp_server/README.md`）。MCP 用戶端（Claude、Cursor…）連的是前台網域 `https://staging.wan-guard.com/mcp`，後端沒有自己的公開網域。B 表第三條規則把以下路徑直接送到後端，不經過前台：
+
+```
+staging.wan-guard.com
+  /mcp, /mcp/register, /mcp/authorize, /mcp/token, /mcp/revoke     ─┐
+  /.well-known/oauth-protected-resource/mcp                          ├─▶ http://backend:8000
+  /.well-known/oauth-authorization-server/mcp                       ─┘
+  其他路徑（/register 是前台的註冊頁）                                 ─▶ http://frontend:3000
+```
+
+- **規則順序**：Tunnel 使用第一條符合的規則，所以 MCP 那條要排在 `staging.wan-guard.com` → `http://frontend:3000` 之前。
+- **`MCP_BASE_URL`**：已寫在 `Backend/scripts/deploy-config.staging.env`。沒有設定時，OAuth metadata 會叫用戶端去 `http://localhost:8000`，每次登入都會失敗。
+- **`TRUSTED_PROXIES`**：維持預設值。Cloudflare 會把呼叫者的 IP 附加在 `X-Forwarded-For` 的最後面，cloudflared 再從 Docker 內網把請求交給後端。
+- **檢查**：`curl https://staging.wan-guard.com/.well-known/oauth-authorization-server/mcp` 回傳 JSON，其中 `issuer` 是 `https://staging.wan-guard.com/mcp`；`https://staging.wan-guard.com/register` 仍然是前台的註冊頁。
+- 規則加上之前，前台的 `/mcp` 只會回前台的 404，其他功能不受影響。同意頁 `/api/v1/mcp/consent` 由後端提供，走前台原本的 `/api/v1` proxy，不需要新的 Tunnel 規則或前台設定；前台要部署到包含這次修改的版本，同意頁的「允許」按鈕才能用。
 
 ---
 
@@ -375,7 +419,7 @@ cd /opt/wanguard/Backend && ./scripts/deploy.sh
 | **3. SMTP2GO** | 寄送 Email 驗證碼與系統通知信 | API Key（`SMTP2GO_API_KEY`）與已驗證的寄件網域（`EMAIL_FROM`） | 需在 DNS 設定 SPF / DKIM 驗證寄件網域，線上即可完成。 |
 | **4. Google Cloud OAuth 2.0** | Google 帳號一鍵登入 | `GOOGLE_CLIENT_ID`、`GOOGLE_CLIENT_SECRET` | 在 Google Cloud Console 建立 Web 應用程式憑證，並將 `https://<前台網域>/api/v1/auth/oauth/google/callback` 加入 Authorized redirect URIs。 |
 | **5. LINE Developers** | LINE 帳號一鍵登入 | `LINE_CHANNEL_ID`、`LINE_CHANNEL_SECRET` | 建立 LINE Login Channel（狀態需設為 **Published** 才能讓一般民眾登入），Callback URL 填 `https://<前台網域>/api/v1/auth/oauth/line/callback`。 |
-| **6. Cloudflare Zero Trust** | 網站 HTTPS 憑證與免開埠安全通道 | Tunnel Token（`TUNNEL_TOKEN`） | 將網域託管至 Cloudflare，於 Zero Trust 後台（Networks → Tunnels）建立一條 Cloudflared Tunnel 並複製 Token，再照 [第 6-B 節](#b-cloudflare-tunnel-公開網域路由表public-hostnames) 設定前台與後台兩筆 Public Hostnames。 |
+| **6. Cloudflare Zero Trust** | 網站 HTTPS 憑證與免開埠安全通道 | Tunnel Token（`TUNNEL_TOKEN`） | 將網域託管至 Cloudflare，於 Zero Trust 後台（Networks → Tunnels）建立一條 Cloudflared Tunnel 並複製 Token，再照 [第 6-B 節](#b-cloudflare-tunnel-公開網域路由表public-hostnames) 設定前台與後台兩筆 Public Hostnames；第三筆 MCP 規則只有要讓 MCP 用戶端連線時才需要，沒有它 `MCP_BASE_URL` 不會有作用。 |
 
 ---
 
@@ -535,7 +579,7 @@ git clone https://github.com/<你的帳號或組織>/optimized-version.git /opt/
 1. **[`Backend/scripts/deploy.sh`](Backend/scripts/deploy.sh)**
    - 第 22 行：`GCS_BUCKET="gs://<你的備份-bucket-名稱>"`
    - 第 273 行：部署完成後檢查的兩個網址，改成你的前台與後台網址（不改的話，第 2 節驗收清單（2-C）檢查到的會是團隊 Staging 的網址）
-2. **[`Backend/scripts/deploy-config.staging.env`](Backend/scripts/deploy-config.staging.env)**：將 `SITE_APP_URL`、`ADMIN_APP_URL`、`APP_BASE_URL`、`OAUTH_REDIRECT_BASE_URL`、`AUTH_ALLOWED_ORIGINS`、`AUTH_COOKIE_DOMAIN`、`GOOGLE_CLIENT_ID`、`LINE_CHANNEL_ID` 改為你自己的網域與 Client ID，`EMAIL_FROM` 改成你在 SMTP2GO 驗證過的寄件信箱
+2. **[`Backend/scripts/deploy-config.staging.env`](Backend/scripts/deploy-config.staging.env)**：將 `SITE_APP_URL`、`ADMIN_APP_URL`、`APP_BASE_URL`、`OAUTH_REDIRECT_BASE_URL`、`MCP_BASE_URL`、`AUTH_ALLOWED_ORIGINS`、`AUTH_COOKIE_DOMAIN`、`GOOGLE_CLIENT_ID`、`LINE_CHANNEL_ID` 改為你自己的網域與 Client ID，`EMAIL_FROM` 改成你在 SMTP2GO 驗證過的寄件信箱
 
 **填好的範例**：假設你在 Step 1 買的網域是 `example.org`，前台用 `example.org`、後台用 `admin.example.org`。只改下面這幾行，檔案裡其他行不用動：
 

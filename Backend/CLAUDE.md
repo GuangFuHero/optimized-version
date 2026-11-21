@@ -21,3 +21,14 @@
   若 migration 和 model 的表名／欄位名不一致，開頭會印一段 WARNING。
 - 完整跑一次：`pytest -n 4`。review 的人只跑自己動到的部分相關的測試。
 - 測試 DB 帳號要是 superuser（event trigger 和 reset 需要）；本機 docker 與 CI 的 `postgres` 都是。
+
+## 相依套件（uv.lock）
+
+`uv.lock` 有 commit：CI（`uv sync --locked`）和 Docker image（`uv sync --frozen`）都只裝 lock 裡的版本。
+加或升級套件：改 `pyproject.toml`，跑 `uv lock`（升級單一套件用 `uv lock --upgrade-package <名稱>`），兩個檔一起 commit；lock 跟 pyproject 對不上時 CI 會失敗。
+
+## 設定（config.py）
+
+可能要依環境調整的值（網址、時間、次數或數量上限…）優先放進 `app/core/config.py` 的 `Settings`，程式用 `settings.X` 讀，不要寫成模組常數；不會變的值（路徑、協定規定的值）照樣寫在模組裡。
+- 欄位上寫預設值，環境變數可以覆蓋；數值加範圍（例如 `Field(gt=0)`），設錯時 backend 啟動就停，不會在沒有限制的情況下跑。
+- 新增設定時，在 repo 根目錄的部署文件（`DEPLOY.md`）第 6 節列出名稱、預設值，並寫明改了要重啟。
