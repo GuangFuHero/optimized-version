@@ -59,9 +59,7 @@ def device_of(request: Request) -> str:
     return request.headers.get("user-agent", "unknown")
 
 
-async def issue_token_pair(
-    redis, request: Request, user_uuid: str, *, identity=None
-) -> TokenPair:
+async def issue_token_pair(redis, request: Request, user_uuid: str, *, identity=None) -> TokenPair:
     """Create a session + access token for `user_uuid` and return the TokenPair.
 
     `identity` is the resolved `ActiveIdentity` the token acts as (ADR-069), or None for an
@@ -73,7 +71,8 @@ async def issue_token_pair(
         redis, user_uuid, identity, device_of(request)
     )
     return TokenPair(
-        access_token=access_token, refresh_token=refresh_token,
+        access_token=access_token,
+        refresh_token=refresh_token,
         expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         identity=identity.to_view() if identity else None,
     )
@@ -152,11 +151,16 @@ def get_rate_limiter(times: int, seconds: int, bucket: str | None = None):
         if os.getenv("ENV") == "testing":
             return None
         key = build_rate_limit_key(
-            times, seconds, resolve_client_ip(request), bucket or _resolve_route_path(request),
+            times,
+            seconds,
+            resolve_client_ip(request),
+            bucket or _resolve_route_path(request),
         )
         if not await consume_rate_limit(request.app.state.redis, key, times, seconds):
             raise ApiError(
-                status.HTTP_429_TOO_MANY_REQUESTS, ErrorCode.RATE_LIMITED, "Too Many Requests",
+                status.HTTP_429_TOO_MANY_REQUESTS,
+                ErrorCode.RATE_LIMITED,
+                "Too Many Requests",
             )
         return None
 

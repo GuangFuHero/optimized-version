@@ -55,6 +55,7 @@ def get_sms_sender() -> SmsSender:
     """FastAPI dependency selecting the configured SMS sender."""
     if settings.SMS_PROVIDER == "kotsms":
         from app.messaging.kotsms import KotSmsSender  # noqa: PLC0415 — optional adapter
+
         return KotSmsSender()
     return ConsoleSmsSender()
 
@@ -65,15 +66,16 @@ def build_contact_changed_sms(masked_new_value: str) -> str:
     The new value arrives masked (ADR-085): enough for the owner to recognise, not enough to
     hand the full address to whoever else reads a forwarded message.
     """
-    return (f"{_SENDER_IDENTITY_ZH} 您的聯絡方式已變更為 {masked_new_value}。"
-            "若非本人操作請立即聯繫我們。")
+    return f"{_SENDER_IDENTITY_ZH} 您的聯絡方式已變更為 {masked_new_value}。若非本人操作請立即聯繫我們。"
 
 
 def build_contact_added_sms(added_type: str, masked_value: str) -> str:
     """Return the SMS telling the existing channels a contact was added (ADR-224)."""
     label = "電子信箱" if added_type == "email" else "手機號碼"
-    return (f"{_SENDER_IDENTITY_ZH} 您的帳號新增了{label} {masked_value}，"
-            "可用於登入與重設密碼。若非本人操作請立即移除並變更密碼。")
+    return (
+        f"{_SENDER_IDENTITY_ZH} 您的帳號新增了{label} {masked_value}，"
+        "可用於登入與重設密碼。若非本人操作請立即移除並變更密碼。"
+    )
 
 
 def build_contact_removed_sms(removed_type: str, masked_value: str) -> str:
@@ -83,8 +85,7 @@ def build_contact_removed_sms(removed_type: str, masked_value: str) -> str:
     the account, so it must not happen silently. The removed value arrives masked.
     """
     label = "電子信箱" if removed_type == "email" else "手機號碼"
-    return (f"{_SENDER_IDENTITY_ZH} 您的{label} {masked_value} 已從帳號移除。"
-            "若非本人操作請立即聯繫我們。")
+    return f"{_SENDER_IDENTITY_ZH} 您的{label} {masked_value} 已從帳號移除。若非本人操作請立即聯繫我們。"
 
 
 def build_contact_replaced_sms(replaced_type: str, masked_new_value: str) -> str:
@@ -95,8 +96,11 @@ def build_contact_replaced_sms(replaced_type: str, masked_new_value: str) -> str
     that changed.
     """
     label = "電子信箱" if replaced_type == "email" else "手機號碼"
-    return (f"{_SENDER_IDENTITY_ZH} 您帳號的{label}已變更為 {masked_new_value}，"
-            "可用於登入與重設密碼。若非本人操作請立即聯繫我們。")
+    return (
+        f"{_SENDER_IDENTITY_ZH} 您帳號的{label}已變更為 {masked_new_value}，"
+        "可用於登入與重設密碼。若非本人操作請立即聯繫我們。"
+    )
+
 
 _PROVIDER_LABEL = {"google": "Google", "line": "LINE", "password": "密碼"}
 
@@ -124,8 +128,10 @@ def build_step_up_code_sms(
         zh_what = f"將此{label}更換為 {masked_target}"
     else:
         zh_what = f"將此{label}從帳號移除"
-    return (f"{_SENDER_IDENTITY_ZH} 有人正在要求{zh_what}。驗證碼 {code}，10 分鐘內有效，"
-            "僅能用於這項操作。若非本人請勿提供給任何人。")
+    return (
+        f"{_SENDER_IDENTITY_ZH} 有人正在要求{zh_what}。驗證碼 {code}，10 分鐘內有效，"
+        "僅能用於這項操作。若非本人請勿提供給任何人。"
+    )
 
 
 def build_password_set_sms(masked_value: str, *, changed: bool = False, at: datetime | None = None) -> str:
@@ -136,15 +142,18 @@ def build_password_set_sms(masked_value: str, *, changed: bool = False, at: date
     """
     if changed:
         when = (at or datetime.now(UTC)).astimezone(_TAIWAN).strftime("%m/%d %H:%M")
-        return (f"{_SENDER_IDENTITY_ZH} 你的密碼在 {when} 變更了。"
-                "如果不是你自己改的，請馬上到登入頁按「忘記密碼」重設。")
-    return (f"{_SENDER_IDENTITY_ZH} 您的帳號（{masked_value}）的登入密碼已設定，所有裝置都已登出。"
-            "若非本人操作，請立即以第三方登入進入帳號並變更密碼。")
+        return (
+            f"{_SENDER_IDENTITY_ZH} 你的密碼在 {when} 變更了。"
+            "如果不是你自己改的，請馬上到登入頁按「忘記密碼」重設。"
+        )
+    return (
+        f"{_SENDER_IDENTITY_ZH} 您的帳號（{masked_value}）的登入密碼已設定，所有裝置都已登出。"
+        "若非本人操作，請立即以第三方登入進入帳號並變更密碼。"
+    )
 
 
 def build_login_method_changed_sms(added: bool, provider: str) -> str:
     """Return the SMS telling the account a sign-in method changed (ADR-218)."""
     label = _PROVIDER_LABEL.get(provider, provider)
     verb_zh = "已新增" if added else "已移除"
-    return (f"{_SENDER_IDENTITY_ZH} 您的帳號{verb_zh} {label} 登入方式。"
-            "若非本人操作請立即移除並變更密碼。")
+    return f"{_SENDER_IDENTITY_ZH} 您的帳號{verb_zh} {label} 登入方式。若非本人操作請立即移除並變更密碼。"

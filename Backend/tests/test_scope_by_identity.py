@@ -31,16 +31,18 @@ _ZONE_POLY = Polygon([(121.0, 24.0), (121.0, 25.0), (122.0, 25.0), (122.0, 24.0)
 
 def _ticket(point: Point, creator: User) -> Tickets:
     return Tickets(
-        geometry=from_shape(point, srid=4326), created_by=str(creator.uuid),
-        title="t", contact_name="c", status="pending", priority="normal",
+        geometry=from_shape(point, srid=4326),
+        created_by=str(creator.uuid),
+        title="t",
+        contact_name="c",
+        status="pending",
+        priority="normal",
     )
 
 
 async def _permission(db, perm: Perm) -> Permission:
     """Fetch or create the Permission row for `perm`."""
-    existing = (
-        await db.execute(select(Permission).where(Permission.key == perm.value))
-    ).scalar_one_or_none()
+    existing = (await db.execute(select(Permission).where(Permission.key == perm.value))).scalar_one_or_none()
     if existing is not None:
         return existing
     permission = Permission(key=perm.value)
@@ -60,11 +62,7 @@ async def _identity(db, user: User, role_name: str, grants: dict, team=None) -> 
     await db.flush()
     for perm, scope in grants.items():
         permission = await _permission(db, perm)
-        db.add(
-            RolePermissionAssign(
-                role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope
-            )
-        )
+        db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope))
     db.add(
         UserRoleAssign(
             user_uuid=user.uuid,
@@ -82,9 +80,7 @@ async def _team_with_zone(db, name: str, polygon: Polygon, assigner: User) -> Te
     zone = TeamZone(name=f"{name} zone", geometry=from_shape(polygon, srid=4326))
     db.add_all([team, zone])
     await db.flush()
-    db.add(
-        TeamZoneAssign(team_uuid=team.uuid, zone_uuid=zone.uuid, assigned_by=str(assigner.uuid))
-    )
+    db.add(TeamZoneAssign(team_uuid=team.uuid, zone_uuid=zone.uuid, assigned_by=str(assigner.uuid)))
     await db.flush()
     return team
 
@@ -126,9 +122,7 @@ async def test_a_role_held_in_two_teams_scopes_to_the_team_being_acted_as(db):
     db.add_all([team_a, team_b])
     await db.flush()
 
-    admin_a = await _identity(
-        db, actor, "admin", {Perm.TEAM_MEMBER_MANAGE: "team"}, team=team_a
-    )
+    admin_a = await _identity(db, actor, "admin", {Perm.TEAM_MEMBER_MANAGE: "team"}, team=team_a)
     await _identity(db, actor, "member", {Perm.TEAM_MEMBER_MANAGE: "team"}, team=team_b)
 
     acting_as(actor, admin_a, team_a)
@@ -167,10 +161,10 @@ async def test_zone_scope_covers_only_the_active_identitys_zones(db):
     assert exc.value.status_code == 404
 
     rows = (
-        await db.execute(
-            select(Tickets.uuid).where(*scope_filter(Scope.ZONE, actor=actor, model=Tickets))
-        )
-    ).scalars().all()
+        (await db.execute(select(Tickets.uuid).where(*scope_filter(Scope.ZONE, actor=actor, model=Tickets))))
+        .scalars()
+        .all()
+    )
     assert {str(u) for u in rows} == {str(inside_near.uuid)}
 
 

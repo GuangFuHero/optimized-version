@@ -124,40 +124,123 @@ _DISASTER_TYPES = [
 # are the neutral wording rather than either disaster's phrasing: PM's table says
 # 「出入口被水阻斷」 under 水災 and 「出入口被堵住」 under 土石流, and one row can only carry one.
 _TICKET_FIELDS = [
-    ("access_blocked", "single_select", None, ["yes", "no", "unknown"],
-     ["flood", "landslide"], "出入口被阻斷", "明確 yes/no；不使用「有點困難」"),
-    ("contact_precaution", "single_select", None,
-     ["standard", "contactless_preferred", "contactless_required", "call_before_arrival",
-      "remote_only"],
-     ["epidemic"], "接觸方式", "記錄期待接觸類型，以協助志願者以低風險協助求救者"),
-    ("crack_width_mm", "number", "mm", None, ["earthquake"], "最大可見裂縫實測值",
-     "mm；>=0。有實測值時才填；不可為了量測靠近危險結構"),
-    ("debris_depth_cm", "number", "cm", None, ["landslide"], "土砂堆積深度（若有實際測量）",
-     "cm；>=0。可安全量測才填"),
-    ("debris_entered_space", "single_select", None, ["yes", "no", "unknown"],
-     ["landslide"], "土砂進入室內", "單一受災地點"),
-    ("debris_movement_observed", "single_select", None, ["yes", "no", "unknown"],
-     ["landslide"], "持續掉落或移動中的土砂", "可觀察事實，不是趨勢預測"),
-    ("entrance_blocked", "single_select", None, ["yes", "no", "unknown"],
-     ["fire", "earthquake"], "主要出入口被阻擋", "明確 yes/no；不代表專業安全判定"),
-    ("professional_referral_requested", "single_select", None, ["yes", "no", "unknown"],
-     ["epidemic"], "是否希望轉介專業單位", "只記求助者意願，不做檢傷診斷"),
-    ("protective_action_status", "single_select", None,
-     ["sheltering_indoors", "seeking_shelter", "evacuating_as_directed", "evacuated",
-      "outdoors", "unknown"],
-     ["radiation"], "目前所在狀態", "了解求救者的現下通報狀態"),
-    ("unusual_odor_reported", "single_select", None,
-     ["gas", "chemical", "other", "none", "unknown"],
-     ["fire"], "瓦斯／不明氣味", "不得要求接近確認"),
-    ("utility_hazards", "multi_select", None,
-     ["gas_odor", "leaking_water", "exposed_wire", "sparks", "power_out", "other", "unknown"],
-     ["earthquake"], "公共設施異常", "不要求自行檢查"),
-    ("visible_flame", "single_select", None, ["yes", "no", "unknown"], ["fire"], "可見火焰",
-     "眼前觀察"),
-    ("visible_smoke", "single_select", None, ["yes", "no", "unknown"], ["fire"], "可見煙霧",
-     "眼前觀察"),
-    ("water_depth_cm", "number", "cm", None, ["flood"], "目前水深",
-     "cm；>=0。有尺或可靠標示才填；不可為了量測進入危險區"),
+    (
+        "access_blocked",
+        "single_select",
+        None,
+        ["yes", "no", "unknown"],
+        ["flood", "landslide"],
+        "出入口被阻斷",
+        "明確 yes/no；不使用「有點困難」",
+    ),
+    (
+        "contact_precaution",
+        "single_select",
+        None,
+        ["standard", "contactless_preferred", "contactless_required", "call_before_arrival", "remote_only"],
+        ["epidemic"],
+        "接觸方式",
+        "記錄期待接觸類型，以協助志願者以低風險協助求救者",
+    ),
+    (
+        "crack_width_mm",
+        "number",
+        "mm",
+        None,
+        ["earthquake"],
+        "最大可見裂縫實測值",
+        "mm；>=0。有實測值時才填；不可為了量測靠近危險結構",
+    ),
+    (
+        "debris_depth_cm",
+        "number",
+        "cm",
+        None,
+        ["landslide"],
+        "土砂堆積深度（若有實際測量）",
+        "cm；>=0。可安全量測才填",
+    ),
+    (
+        "debris_entered_space",
+        "single_select",
+        None,
+        ["yes", "no", "unknown"],
+        ["landslide"],
+        "土砂進入室內",
+        "單一受災地點",
+    ),
+    (
+        "debris_movement_observed",
+        "single_select",
+        None,
+        ["yes", "no", "unknown"],
+        ["landslide"],
+        "持續掉落或移動中的土砂",
+        "可觀察事實，不是趨勢預測",
+    ),
+    (
+        "entrance_blocked",
+        "single_select",
+        None,
+        ["yes", "no", "unknown"],
+        ["fire", "earthquake"],
+        "主要出入口被阻擋",
+        "明確 yes/no；不代表專業安全判定",
+    ),
+    (
+        "professional_referral_requested",
+        "single_select",
+        None,
+        ["yes", "no", "unknown"],
+        ["epidemic"],
+        "是否希望轉介專業單位",
+        "只記求助者意願，不做檢傷診斷",
+    ),
+    (
+        "protective_action_status",
+        "single_select",
+        None,
+        [
+            "sheltering_indoors",
+            "seeking_shelter",
+            "evacuating_as_directed",
+            "evacuated",
+            "outdoors",
+            "unknown",
+        ],
+        ["radiation"],
+        "目前所在狀態",
+        "了解求救者的現下通報狀態",
+    ),
+    (
+        "unusual_odor_reported",
+        "single_select",
+        None,
+        ["gas", "chemical", "other", "none", "unknown"],
+        ["fire"],
+        "瓦斯／不明氣味",
+        "不得要求接近確認",
+    ),
+    (
+        "utility_hazards",
+        "multi_select",
+        None,
+        ["gas_odor", "leaking_water", "exposed_wire", "sparks", "power_out", "other", "unknown"],
+        ["earthquake"],
+        "公共設施異常",
+        "不要求自行檢查",
+    ),
+    ("visible_flame", "single_select", None, ["yes", "no", "unknown"], ["fire"], "可見火焰", "眼前觀察"),
+    ("visible_smoke", "single_select", None, ["yes", "no", "unknown"], ["fire"], "可見煙霧", "眼前觀察"),
+    (
+        "water_depth_cm",
+        "number",
+        "cm",
+        None,
+        ["flood"],
+        "目前水深",
+        "cm；>=0。有尺或可靠標示才填；不可為了量測進入危險區",
+    ),
 ]
 
 
@@ -182,12 +265,17 @@ def _create_disaster_types() -> None:
         "disaster_types",
         sa.Column("uuid", sa.UUID(), nullable=False, comment="主鍵 UUID"),
         sa.Column(
-            "key", sa.String(50), nullable=False,
+            "key",
+            sa.String(50),
+            nullable=False,
             comment="不可變更的英文小寫代碼，例如 flood；其他資料表以字串參照，無外鍵",
         ),
         sa.Column("label", sa.String(50), nullable=False, comment="顯示名稱，例如「水災」"),
         sa.Column(
-            "is_active", sa.Boolean(), server_default=sa.text("true"), nullable=False,
+            "is_active",
+            sa.Boolean(),
+            server_default=sa.text("true"),
+            nullable=False,
             comment="停用開關",
         ),
         sa.PrimaryKeyConstraint("uuid"),
@@ -206,10 +294,15 @@ def _rewrite_data_type_vocabulary() -> None:
     """
     already_new = ", ".join(f"'{token}'" for token in _FIELD_DATA_TYPES)
     for table in _CONFIG_TABLES:
-        op.add_column(table, sa.Column(
-            "unit", sa.String(20), nullable=True,
-            comment="number 欄位的單位，例如 cm、mm；其他型別為 NULL",
-        ))
+        op.add_column(
+            table,
+            sa.Column(
+                "unit",
+                sa.String(20),
+                nullable=True,
+                comment="number 欄位的單位，例如 cm、mm；其他型別為 NULL",
+            ),
+        )
         for old, new in _DATA_TYPE_MAP.items():
             op.execute(  # noqa: S608
                 f"UPDATE {table} SET data_type = '{new}'"
@@ -226,24 +319,35 @@ def _create_ticket_property_config() -> None:
         sa.Column("data_type", sa.String(50), nullable=False, comment="前端渲染的控制項型別"),
         sa.Column("enum_options", sa.JSON(), nullable=True, comment="選項清單"),
         sa.Column(
-            "unit", sa.String(20), nullable=True,
+            "unit",
+            sa.String(20),
+            nullable=True,
             comment="number 欄位的單位，例如 cm、mm；其他型別為 NULL",
         ),
         sa.Column(
-            "disaster_types", postgresql.ARRAY(sa.String()),
-            server_default=sa.text("'{}'"), nullable=False,
+            "disaster_types",
+            postgresql.ARRAY(sa.String()),
+            server_default=sa.text("'{}'"),
+            nullable=False,
             comment="啟用於哪些災害型別；空陣列代表全部",
         ),
         sa.Column(
-            "label", sa.String(100), nullable=True,
+            "label",
+            sa.String(100),
+            nullable=True,
             comment="顯示文字；NULL 時前端回退顯示 property_name",
         ),
         sa.Column(
-            "hint", sa.String(200), nullable=True,
+            "hint",
+            sa.String(200),
+            nullable=True,
             comment="欄位下方的填寫提示與安全警語，例如「不可為了量測進入危險區」",
         ),
         sa.Column(
-            "is_active", sa.Boolean(), server_default=sa.text("true"), nullable=False,
+            "is_active",
+            sa.Boolean(),
+            server_default=sa.text("true"),
+            nullable=False,
             comment="停用開關",
         ),
         sa.PrimaryKeyConstraint("uuid"),
@@ -304,39 +408,50 @@ def _create_ticket_disaster_details() -> None:
         sa.Column("uuid", sa.UUID(), nullable=False, comment="主鍵 UUID"),
         sa.Column("ticket_uuid", sa.UUID(), nullable=False, comment="所屬通報單"),
         sa.Column(
-            "property_name", sa.String(100), nullable=False,
+            "property_name",
+            sa.String(100),
+            nullable=False,
             comment="對應 ticket_property_config.property_name，以字串參照，無外鍵",
         ),
         sa.Column(
-            "value", sa.String(), nullable=False,
+            "value",
+            sa.String(),
+            nullable=False,
             comment="單一值；multi_select 欄位每個選項各一列",
         ),
         sa.Column(
-            "created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"),
-            nullable=False, comment="建立時間",
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+            comment="建立時間",
         ),
         sa.Column(
-            "updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"),
-            nullable=False, comment="最後更新時間",
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+            comment="最後更新時間",
         ),
         sa.Column("delete_at", sa.DateTime(timezone=True), nullable=True, comment="軟刪除時間"),
         sa.ForeignKeyConstraint(["ticket_uuid"], ["tickets.uuid"]),
         sa.PrimaryKeyConstraint("uuid"),
-        sa.UniqueConstraint(
-            "ticket_uuid", "property_name", "value", name="uq_ticket_disaster_detail_value"
-        ),
+        sa.UniqueConstraint("ticket_uuid", "property_name", "value", name="uq_ticket_disaster_detail_value"),
     )
-    op.create_index(
-        "ix_ticket_disaster_details_ticket_uuid", "ticket_disaster_details", ["ticket_uuid"]
-    )
+    op.create_index("ix_ticket_disaster_details_ticket_uuid", "ticket_disaster_details", ["ticket_uuid"])
 
 
 def _reshape_tickets() -> None:
-    op.add_column("tickets", sa.Column(
-        "disaster_types", postgresql.ARRAY(sa.String()),
-        server_default=sa.text("'{}'"), nullable=False,
-        comment="災害型別集合，參照 disaster_types.key；已排序去重",
-    ))
+    op.add_column(
+        "tickets",
+        sa.Column(
+            "disaster_types",
+            postgresql.ARRAY(sa.String()),
+            server_default=sa.text("'{}'"),
+            nullable=False,
+            comment="災害型別集合，參照 disaster_types.key；已排序去重",
+        ),
+    )
     # Backfill, folding the stale seed value into the real key on the way. `mudslide` was
     # never one of the six; see the module docstring.
     op.execute(
@@ -346,14 +461,24 @@ def _reshape_tickets() -> None:
     )
     op.drop_column("tickets", "disaster_type")
 
-    op.add_column("tickets", sa.Column(
-        "person_trapped_reported", sa.String(20), nullable=True,
-        comment="災民受困／無法自行離開：yes/no/unknown",
-    ))
-    op.add_column("tickets", sa.Column(
-        "immediate_danger_reported", sa.String(20), nullable=True,
-        comment="立即生命危險：yes/no/unknown",
-    ))
+    op.add_column(
+        "tickets",
+        sa.Column(
+            "person_trapped_reported",
+            sa.String(20),
+            nullable=True,
+            comment="災民受困／無法自行離開：yes/no/unknown",
+        ),
+    )
+    op.add_column(
+        "tickets",
+        sa.Column(
+            "immediate_danger_reported",
+            sa.String(20),
+            nullable=True,
+            comment="立即生命危險：yes/no/unknown",
+        ),
+    )
 
 
 def _rename_legacy_disaster_labels() -> None:
@@ -373,16 +498,16 @@ def _rename_legacy_disaster_labels() -> None:
 
 def _extend_secondary_locations() -> None:
     for column in (
-        sa.Column("building_section", sa.String(50), nullable=True,
-                  comment="樓棟／區域，例如 A棟、東翼；不知道可留空"),
-        sa.Column("space_description", sa.String(100), nullable=True,
-                  comment="空間描述，例如「三房兩廳」"),
-        sa.Column("victim_space", sa.String(100), nullable=True,
-                  comment="求救者所在空間，例如「主臥衣櫃」"),
-        sa.Column("access_status", sa.String(20), nullable=True,
-                  comment="可否進入（當下觀察，非安全鑑定）"),
-        sa.Column("landmark_note", sa.String(), nullable=True,
-                  comment="地標補充；座標不足時用來找到入口"),
+        sa.Column(
+            "building_section",
+            sa.String(50),
+            nullable=True,
+            comment="樓棟／區域，例如 A棟、東翼；不知道可留空",
+        ),
+        sa.Column("space_description", sa.String(100), nullable=True, comment="空間描述，例如「三房兩廳」"),
+        sa.Column("victim_space", sa.String(100), nullable=True, comment="求救者所在空間，例如「主臥衣櫃」"),
+        sa.Column("access_status", sa.String(20), nullable=True, comment="可否進入（當下觀察，非安全鑑定）"),
+        sa.Column("landmark_note", sa.String(), nullable=True, comment="地標補充；座標不足時用來找到入口"),
     ):
         op.add_column("secondary_locations", column)
 
@@ -398,7 +523,10 @@ def downgrade() -> None:
         op.execute(f"ALTER TABLE {table} DROP CONSTRAINT IF EXISTS ck_{table}_data_type;")
 
     for column in (
-        "landmark_note", "access_status", "victim_space", "space_description",
+        "landmark_note",
+        "access_status",
+        "victim_space",
+        "space_description",
         "building_section",
     ):
         op.drop_column("secondary_locations", column)
@@ -408,10 +536,7 @@ def downgrade() -> None:
     op.add_column("tickets", sa.Column("disaster_type", sa.String(50), nullable=True))
     # Lossy by nature: a two-disaster ticket cannot fit in a scalar, so it keeps its first
     # type. Recorded rather than hidden — the array is the reason this column went away.
-    op.execute(
-        "UPDATE tickets SET disaster_type = disaster_types[1]"
-        " WHERE cardinality(disaster_types) > 0"
-    )
+    op.execute("UPDATE tickets SET disaster_type = disaster_types[1] WHERE cardinality(disaster_types) > 0")
     op.drop_column("tickets", "disaster_types")
 
     op.drop_index("ix_ticket_disaster_details_ticket_uuid", table_name="ticket_disaster_details")

@@ -6,7 +6,7 @@ from app.graphql.masking import mask_email, mask_name, mask_phone
 def test_mask_name_cjk_fixed_width():
     """CJK name → first char + fixed ◯◯ (does not reveal real length)."""
     assert mask_name("王小明") == "王◯◯"
-    assert mask_name("陳" ) == "陳◯◯"
+    assert mask_name("陳") == "陳◯◯"
     assert mask_name("歐陽娜娜") == "歐◯◯"
 
 

@@ -33,14 +33,18 @@ def _token(sub: str, **claims) -> str:
 
 async def _sso_only_user(db, redis, email="victim@x.com"):
     """An account with one email contact and only a Google identity."""
-    user = await create_account(db, name="V", provider="google", provider_subject="victim-google",
-                                contact_type="email", value=email)
+    user = await create_account(
+        db, name="V", provider="google", provider_subject="victim-google", contact_type="email", value=email
+    )
     return str(user.uuid), await auth_headers_for(redis, user.uuid)
 
 
 async def _password_user(db, redis, email="owner@x.com"):
     user = await create_account(
-        db, contact_type="email", value=email, name="Owner",
+        db,
+        contact_type="email",
+        value=email,
+        name="Owner",
         password_hash=get_password_hash(_PASSWORD, generate_salt()),
     )
     return str(user.uuid), await auth_headers_for(redis, user.uuid)
@@ -56,9 +60,7 @@ async def _login_methods(client, headers) -> list[str]:
 # ──────────────────────────────────────────────
 
 
-async def test_a_stolen_session_cannot_link_the_attackers_provider(
-    client, db_session, redis, capture_email
-):
+async def test_a_stolen_session_cannot_link_the_attackers_provider(client, db_session, redis, capture_email):
     """The chain that worked before this feature: link, then sign in as the victim for ever.
 
     A linked provider outlives every other control — password changes, session revocation and
@@ -66,8 +68,7 @@ async def test_a_stolen_session_cannot_link_the_attackers_provider(
     """
     user_uuid, headers = await _sso_only_user(db_session, redis)
 
-    linked = await client.post(LINK_LINE, headers=headers,
-                               json={"id_token": _token("attacker-line-sub")})
+    linked = await client.post(LINK_LINE, headers=headers, json={"id_token": _token("attacker-line-sub")})
 
     assert linked.status_code == 422, linked.text
     assert "line" not in await _login_methods(client, headers)
@@ -77,7 +78,8 @@ async def test_a_stolen_session_cannot_link_the_attackers_provider(
     # and signing in with that LINE account alone still does not land on the victim's: the OAuth
     # callback signs in whoever `sign_in_with_line` finds, here a NEW account
     signed_in = await sso_login.sign_in_with_line(
-        db_session, LineIdentity(sub="attacker-line-sub", name=None, email=None))
+        db_session, LineIdentity(sub="attacker-line-sub", name=None, email=None)
+    )
     assert str(signed_in.uuid) != user_uuid
 
 
@@ -86,10 +88,14 @@ async def test_linking_succeeds_with_the_code_and_notifies(client, db_session, r
     _, headers = await _sso_only_user(db_session, redis)
     await client.post(LINK_LINE, headers=headers, json={"id_token": _token("owner-line-sub")})
 
-    res = await client.post(LINK_LINE, headers=headers, json={
-        "id_token": _token("owner-line-sub"),
-        "step_up": {"old_channel_code": capture_email.last_code},
-    })
+    res = await client.post(
+        LINK_LINE,
+        headers=headers,
+        json={
+            "id_token": _token("owner-line-sub"),
+            "step_up": {"old_channel_code": capture_email.last_code},
+        },
+    )
 
     assert res.status_code == 200, res.text
     assert "line" in await _login_methods(client, headers)
@@ -100,14 +106,18 @@ async def test_a_password_account_links_with_its_password(client, db_session, re
     """An account that has a password proves it the way it proves every other change."""
     _, headers = await _password_user(db_session, redis)
 
-    refused = await client.post(LINK_GOOGLE, headers=headers,
-                                json={"id_token": _token("owner-google-sub")})
+    refused = await client.post(LINK_GOOGLE, headers=headers, json={"id_token": _token("owner-google-sub")})
     assert refused.status_code == 422, refused.text
     assert "密碼" in refused.json()["detail"]
 
-    res = await client.post(LINK_GOOGLE, headers=headers, json={
-        "id_token": _token("owner-google-sub"), "step_up": {"password": _PASSWORD},
-    })
+    res = await client.post(
+        LINK_GOOGLE,
+        headers=headers,
+        json={
+            "id_token": _token("owner-google-sub"),
+            "step_up": {"password": _PASSWORD},
+        },
+    )
     assert res.status_code == 200, res.text
     assert "google" in await _login_methods(client, headers)
 
@@ -116,22 +126,24 @@ async def test_a_wrong_password_does_not_link(client, db_session, redis, capture
     """A wrong proof is a 401, and nothing is attached."""
     _, headers = await _password_user(db_session, redis)
 
-    res = await client.post(LINK_GOOGLE, headers=headers, json={
-        "id_token": _token("owner-google-sub"), "step_up": {"password": "wrongpw"},
-    })
+    res = await client.post(
+        LINK_GOOGLE,
+        headers=headers,
+        json={
+            "id_token": _token("owner-google-sub"),
+            "step_up": {"password": "wrongpw"},
+        },
+    )
 
     assert res.status_code == 401, res.text
     assert "google" not in await _login_methods(client, headers)
 
 
-async def test_a_conflict_is_answered_before_any_proof_is_demanded(
-    client, db_session, redis, capture_email
-):
+async def test_a_conflict_is_answered_before_any_proof_is_demanded(client, db_session, redis, capture_email):
     """Asking for proof of something that was never possible is the ADR-159 mistake."""
     _, headers = await _sso_only_user(db_session, redis)
 
-    res = await client.post(LINK_GOOGLE, headers=headers,
-                            json={"id_token": _token("someone-elses-google")})
+    res = await client.post(LINK_GOOGLE, headers=headers, json={"id_token": _token("someone-elses-google")})
 
     assert res.status_code == 409, res.text
     assert capture_email.messages == []  # no code was sent
@@ -152,9 +164,14 @@ async def test_a_freshly_added_contact_is_not_used_as_the_proof_channel(
     Before ADR-219 the proof channel was "email first", so a brand-new email won the choice
     and the next step-up code went there.
     """
-    user = await create_account(db_session, name="V2", provider="google",
-                                provider_subject="victim2-google",
-                                contact_type="phone", value="+886911111111")
+    user = await create_account(
+        db_session,
+        name="V2",
+        provider="google",
+        provider_subject="victim2-google",
+        contact_type="phone",
+        value="+886911111111",
+    )
     headers = await auth_headers_for(redis, user.uuid)
     # the account's real contact has to be settled, or nothing is
     await db_session.execute(
@@ -164,21 +181,34 @@ async def test_a_freshly_added_contact_is_not_used_as_the_proof_channel(
     )
     await db_session.commit()
 
-    await client.post("/api/v1/auth/contacts", headers=headers,
-                      json={"type": "email", "value": "second@x.com"})
-    added = await client.post("/api/v1/auth/contacts", headers=headers, json={
-        "type": "email", "value": "second@x.com",
-        "step_up": {"old_channel_code": capture_sms.last_code},
-    })
+    await client.post(
+        "/api/v1/auth/contacts", headers=headers, json={"type": "email", "value": "second@x.com"}
+    )
+    added = await client.post(
+        "/api/v1/auth/contacts",
+        headers=headers,
+        json={
+            "type": "email",
+            "value": "second@x.com",
+            "step_up": {"old_channel_code": capture_sms.last_code},
+        },
+    )
     assert added.status_code == 202, added.text
-    attached = await client.post("/api/v1/auth/contacts/verify", headers=headers, json={
-        "type": "email", "value": "second@x.com", "code": capture_email.last_code,
-    })
+    attached = await client.post(
+        "/api/v1/auth/contacts/verify",
+        headers=headers,
+        json={
+            "type": "email",
+            "value": "second@x.com",
+            "code": capture_email.last_code,
+        },
+    )
     assert attached.status_code == 200, attached.text
 
     before = len(capture_email.messages)
-    res = await client.post("/api/v1/auth/set-password", headers=headers,
-                            json={"password": "brandnew", "salt_frontend": "s"})
+    res = await client.post(
+        "/api/v1/auth/set-password", headers=headers, json={"password": "brandnew", "salt_frontend": "s"}
+    )
 
     assert res.status_code == 422, res.text
     assert len(capture_email.messages) == before, "the code went to the freshly added email"
@@ -192,8 +222,9 @@ async def test_a_brand_new_account_can_still_prove_itself(client, db_session, re
     """
     _, headers = await _sso_only_user(db_session, redis)
 
-    res = await client.post("/api/v1/auth/set-password", headers=headers,
-                            json={"password": "brandnew", "salt_frontend": "s"})
+    res = await client.post(
+        "/api/v1/auth/set-password", headers=headers, json={"password": "brandnew", "salt_frontend": "s"}
+    )
 
     assert res.status_code == 422, res.text
     assert capture_email.messages[-1][0] == "victim@x.com"
@@ -206,7 +237,9 @@ async def test_a_brand_new_account_can_still_prove_itself(client, db_session, re
 
 async def _unlink(client, headers, provider, step_up=None):
     return await client.request(
-        "DELETE", f"/api/v1/auth/link/{provider}", headers=headers,
+        "DELETE",
+        f"/api/v1/auth/link/{provider}",
+        headers=headers,
         json={"step_up": step_up} if step_up else None,
     )
 
@@ -214,9 +247,14 @@ async def _unlink(client, headers, provider, step_up=None):
 async def test_unlinking_needs_the_same_proof_and_notifies(client, db_session, redis, capture_email):
     """Without the gate, a session holder could strip the owner's provider and keep their own."""
     _, headers = await _password_user(db_session, redis)
-    await client.post(LINK_GOOGLE, headers=headers, json={
-        "id_token": _token("owner-google-sub"), "step_up": {"password": _PASSWORD},
-    })
+    await client.post(
+        LINK_GOOGLE,
+        headers=headers,
+        json={
+            "id_token": _token("owner-google-sub"),
+            "step_up": {"password": _PASSWORD},
+        },
+    )
 
     refused = await _unlink(client, headers, "google")
     assert refused.status_code == 422, refused.text
@@ -266,9 +304,15 @@ async def test_changing_a_password_notifies_the_account(client, db_session, redi
     """Least likely to be an attacker is not a reason for the owner to hear nothing."""
     _, headers = await _password_user(db_session, redis)
 
-    res = await client.post("/api/v1/auth/change-password", headers=headers, json={
-        "old_password": _PASSWORD, "new_password": "newsecret", "salt_frontend": "s",
-    })
+    res = await client.post(
+        "/api/v1/auth/change-password",
+        headers=headers,
+        json={
+            "old_password": _PASSWORD,
+            "new_password": "newsecret",
+            "salt_frontend": "s",
+        },
+    )
 
     assert res.status_code == 204, res.text
     assert "已變更" in capture_email.messages[-1][1]
@@ -290,21 +334,24 @@ async def test_a_session_cannot_attach_a_contact_and_reset_the_password_through_
     them. Verified end to end before ADR-220.
     """
     user = await create_account(
-        db_session, name="V3", contact_type="phone", value="+886922222222",
+        db_session,
+        name="V3",
+        contact_type="phone",
+        value="+886922222222",
         password_hash=get_password_hash(_PASSWORD, generate_salt()),
     )
     headers = await auth_headers_for(redis, user.uuid)
 
-    attach = await client.post("/api/v1/auth/contacts", headers=headers,
-                               json={"type": "email", "value": "attacker@evil.com"})
+    attach = await client.post(
+        "/api/v1/auth/contacts", headers=headers, json={"type": "email", "value": "attacker@evil.com"}
+    )
 
     assert attach.status_code == 422, attach.text
     assert "密碼" in attach.json()["detail"]  # the account has one, so that is the proof
     assert capture_email.messages == []  # nothing was sent to the attacker's address
 
     # and the address never became a recovery destination
-    await client.post("/api/v1/auth/forgot-password",
-                      json={"type": "email", "value": "attacker@evil.com"})
+    await client.post("/api/v1/auth/forgot-password", json={"type": "email", "value": "attacker@evil.com"})
     assert capture_email.messages == []
 
 
@@ -314,9 +361,15 @@ async def test_the_owner_can_still_add_a_second_contact_type(
     """Gating the add must not make a legitimate second channel unreachable."""
     _, headers = await _password_user(db_session, redis)
 
-    res = await client.post("/api/v1/auth/contacts", headers=headers, json={
-        "type": "phone", "value": "0933333333", "step_up": {"password": _PASSWORD},
-    })
+    res = await client.post(
+        "/api/v1/auth/contacts",
+        headers=headers,
+        json={
+            "type": "phone",
+            "value": "0933333333",
+            "step_up": {"password": _PASSWORD},
+        },
+    )
 
     assert res.status_code == 202, res.text
     assert capture_sms.last_code  # the verification code went to the new number
@@ -328,17 +381,23 @@ async def test_an_sso_only_account_proves_the_add_on_its_existing_channel(
     """No password to check, so the code goes to the contact the account already had."""
     _, headers = await _sso_only_user(db_session, redis)
 
-    asked = await client.post("/api/v1/auth/contacts", headers=headers,
-                              json={"type": "phone", "value": "0944444444"})
+    asked = await client.post(
+        "/api/v1/auth/contacts", headers=headers, json={"type": "phone", "value": "0944444444"}
+    )
 
     assert asked.status_code == 422, asked.text
     assert capture_email.messages[-1][0] == "victim@x.com"
     assert capture_sms.messages == []  # nothing reached the number being added
 
-    res = await client.post("/api/v1/auth/contacts", headers=headers, json={
-        "type": "phone", "value": "0944444444",
-        "step_up": {"old_channel_code": capture_email.last_code},
-    })
+    res = await client.post(
+        "/api/v1/auth/contacts",
+        headers=headers,
+        json={
+            "type": "phone",
+            "value": "0944444444",
+            "step_up": {"old_channel_code": capture_email.last_code},
+        },
+    )
     assert res.status_code == 202, res.text
 
 
@@ -365,30 +424,32 @@ async def test_a_provider_only_account_cannot_have_a_contact_attached_by_a_sessi
     went to the attacker, and the owner signing in with their real LINE landed on a brand-new
     empty account — the original was gone for good.
     """
-    user = await create_account(db_session, name="Bare", provider="line",
-                                provider_subject="bare-line-sub")
+    user = await create_account(db_session, name="Bare", provider="line", provider_subject="bare-line-sub")
     headers = await auth_headers_for(redis, user.uuid)
 
-    res = await client.post("/api/v1/auth/contacts", headers=headers,
-                            json={"type": "email", "value": "attacker@evil.com"})
+    res = await client.post(
+        "/api/v1/auth/contacts", headers=headers, json={"type": "email", "value": "attacker@evil.com"}
+    )
 
     assert res.status_code == 422, res.text
     assert "step_up.id_token" in res.json()["detail"]
-    assert capture_email.last_code is None    # step 1 sends nothing, so step 2 never exists
+    assert capture_email.last_code is None  # step 1 sends nothing, so step 2 never exists
 
 
-async def test_the_owners_own_provider_token_lets_the_add_through(
-    client, db_session, redis, capture_email
-):
+async def test_the_owners_own_provider_token_lets_the_add_through(client, db_session, redis, capture_email):
     """The gate is proof, not a wall: the owner re-authenticates with the LINE they hold."""
-    user = await create_account(db_session, name="Bare", provider="line",
-                                provider_subject="bare-line-sub")
+    user = await create_account(db_session, name="Bare", provider="line", provider_subject="bare-line-sub")
     headers = await auth_headers_for(redis, user.uuid)
 
-    res = await client.post("/api/v1/auth/contacts", headers=headers, json={
-        "type": "email", "value": "owner@x.com",
-        "step_up": {"id_token": _token("bare-line-sub")},
-    })
+    res = await client.post(
+        "/api/v1/auth/contacts",
+        headers=headers,
+        json={
+            "type": "email",
+            "value": "owner@x.com",
+            "step_up": {"id_token": _token("bare-line-sub")},
+        },
+    )
 
     assert res.status_code == 202, res.text
     assert capture_email.last_code
@@ -402,14 +463,18 @@ async def test_the_attackers_own_provider_token_does_not_prove_this_account(
     The attacker holds a real LINE account and can present a perfectly valid token for it.
     What it proves is that they control `attacker-line-sub`, which is not on this account.
     """
-    user = await create_account(db_session, name="Bare", provider="line",
-                                provider_subject="bare-line-sub")
+    user = await create_account(db_session, name="Bare", provider="line", provider_subject="bare-line-sub")
     headers = await auth_headers_for(redis, user.uuid)
 
-    res = await client.post("/api/v1/auth/contacts", headers=headers, json={
-        "type": "email", "value": "attacker@evil.com",
-        "step_up": {"id_token": _token("attacker-line-sub")},
-    })
+    res = await client.post(
+        "/api/v1/auth/contacts",
+        headers=headers,
+        json={
+            "type": "email",
+            "value": "attacker@evil.com",
+            "step_up": {"id_token": _token("attacker-line-sub")},
+        },
+    )
 
     assert res.status_code == 401, res.text
     assert capture_email.last_code is None
@@ -419,12 +484,12 @@ async def test_a_provider_only_account_cannot_mint_a_password_from_a_session(
     client, db_session, redis, capture_email
 ):
     """Step 3 of the chain: with no email or phone it is refused before any proof (ADR-401)."""
-    user = await create_account(db_session, name="Bare", provider="line",
-                                provider_subject="bare-line-sub")
+    user = await create_account(db_session, name="Bare", provider="line", provider_subject="bare-line-sub")
     headers = await auth_headers_for(redis, user.uuid)
 
-    res = await client.post("/api/v1/auth/set-password", headers=headers,
-                            json={"password": "attackerpw", "salt_frontend": "aa"})
+    res = await client.post(
+        "/api/v1/auth/set-password", headers=headers, json={"password": "attackerpw", "salt_frontend": "aa"}
+    )
 
     assert res.status_code == 409, res.text
     assert res.json()["code"] == "password_needs_contact"
@@ -464,8 +529,7 @@ async def test_two_concurrent_unlinks_cannot_strand_the_account(db, redis, monke
     from app.services import auth_identity
     from tests.conftest import TEST_DB_URL
 
-    user = await create_account(db, name="Racer", provider="google",
-                                provider_subject="racer-google")
+    user = await create_account(db, name="Racer", provider="google", provider_subject="racer-google")
     user_uuid = str(user.uuid)
     db.add(UserIdentity(user_uuid=user.uuid, provider="line", provider_subject="racer-line"))
     await db.commit()
@@ -479,20 +543,23 @@ async def test_two_concurrent_unlinks_cannot_strand_the_account(db, redis, monke
     monkeypatch.setattr(auth_identity, "require_channel_proof", arrive_together)
 
     engines = [create_async_engine(TEST_DB_URL) for _ in range(2)]
-    sessions = [
-        sessionmaker(engine, class_=AsyncSession, expire_on_commit=True)()
-        for engine in engines
-    ]
+    sessions = [sessionmaker(engine, class_=AsyncSession, expire_on_commit=True)() for engine in engines]
     try:
+
         async def unlink(session, provider):
             actor = await session.get(User, user_uuid)
             return await auth_identity.unlink_identity(
-                session, redis, actor=actor, provider=provider,
-                email_sender=_NullSender(), sms_sender=_NullSender(),
+                session,
+                redis,
+                actor=actor,
+                provider=provider,
+                email_sender=_NullSender(),
+                sms_sender=_NullSender(),
             )
 
         outcomes = await asyncio.gather(
-            unlink(sessions[0], "google"), unlink(sessions[1], "line"),
+            unlink(sessions[0], "google"),
+            unlink(sessions[1], "line"),
             return_exceptions=True,
         )
     finally:
@@ -503,8 +570,7 @@ async def test_two_concurrent_unlinks_cannot_strand_the_account(db, redis, monke
 
     refused = [o for o in outcomes if isinstance(o, auth_identity.LastLoginMethod)]
     assert len(refused) == 1, f"expected exactly one refusal, got {outcomes}"
-    left = list(await db.scalars(
-        select(UserIdentity).where(UserIdentity.user_uuid == user_uuid)))
+    left = list(await db.scalars(select(UserIdentity).where(UserIdentity.user_uuid == user_uuid)))
     assert len(left) == 1, "the account was left with no way to sign in"
 
 
@@ -518,15 +584,15 @@ async def test_unlinking_revokes_every_session(client, db_session, redis, captur
     from app.models.auth import UserIdentity
 
     user_uuid, headers = await _password_user(db_session, redis)
-    db_session.add(UserIdentity(user_uuid=user_uuid, provider="line",
-                                provider_subject="attacker-line"))
+    db_session.add(UserIdentity(user_uuid=user_uuid, provider="line", provider_subject="attacker-line"))
     await db_session.commit()
 
     still_valid = await client.get("/api/v1/users/me", headers=headers)
     assert still_valid.status_code == 200, still_valid.text
 
-    res = await client.request("DELETE", LINK_LINE, headers=headers,
-                               json={"step_up": {"password": _PASSWORD}})
+    res = await client.request(
+        "DELETE", LINK_LINE, headers=headers, json={"step_up": {"password": _PASSWORD}}
+    )
     assert res.status_code == 204, res.text
 
     after = await client.get("/api/v1/users/me", headers=headers)

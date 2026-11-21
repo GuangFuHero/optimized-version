@@ -29,8 +29,9 @@ from .deps import _normalize_identifier, get_rate_limiter, issue_token_pair
 router = APIRouter()
 
 
-@router.get("/salt/{value}", response_model=UserSaltResponse,
-            dependencies=[Depends(get_rate_limiter(10, 60))])
+@router.get(
+    "/salt/{value}", response_model=UserSaltResponse, dependencies=[Depends(get_rate_limiter(10, 60))]
+)
 async def get_user_salt(value: str, db: AsyncSession = Depends(security.get_db)):
     """Return the frontend salt for an identifier's password identity, or a deterministic fake salt."""
     seed = value
@@ -52,14 +53,15 @@ async def get_user_salt(value: str, db: AsyncSession = Depends(security.get_db))
     return {"salt_frontend": fake_salt}
 
 
-@router.post("/register", status_code=status.HTTP_202_ACCEPTED,
-             dependencies=[Depends(get_rate_limiter(3, 60))])
+@router.post(
+    "/register", status_code=status.HTTP_202_ACCEPTED, dependencies=[Depends(get_rate_limiter(3, 60))]
+)
 async def register(
-        body: RegisterRequest,
-        db: AsyncSession = Depends(security.get_db),
-        redis=Depends(get_redis),
-        email_sender=Depends(get_email_sender),
-        sms_sender=Depends(get_sms_sender),
+    body: RegisterRequest,
+    db: AsyncSession = Depends(security.get_db),
+    redis=Depends(get_redis),
+    email_sender=Depends(get_email_sender),
+    sms_sender=Depends(get_sms_sender),
 ):
     """Verify-then-create: store a pending registration and send a 6-digit code by email or SMS.
 
@@ -69,12 +71,15 @@ async def register(
         ident = _normalize_identifier(body.type, body.value)
     except ValueError as err:
         raise ApiError(
-            status.HTTP_422_UNPROCESSABLE_ENTITY, ErrorCode.IDENTIFIER_INVALID, detail="Invalid identifier",
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            ErrorCode.IDENTIFIER_INVALID,
+            detail="Invalid identifier",
         ) from err
 
     if await contact_repository.is_value_taken(db, type_=body.type, value=ident):
         raise ApiError(
-            status.HTTP_409_CONFLICT, ErrorCode.IDENTIFIER_TAKEN,
+            status.HTTP_409_CONFLICT,
+            ErrorCode.IDENTIFIER_TAKEN,
             detail=f"{body.type.capitalize()} already in use",
         )
 
@@ -90,34 +95,38 @@ async def register(
     return {"detail": "Verification code sent"}
 
 
-@router.post("/verify", response_model=TokenPair,
-             dependencies=[Depends(get_rate_limiter(10, 60))])
+@router.post("/verify", response_model=TokenPair, dependencies=[Depends(get_rate_limiter(10, 60))])
 async def verify(
-        body: VerifyRequest,
-        request: Request,
-        db: AsyncSession = Depends(security.get_db),
-        redis=Depends(get_redis),
+    body: VerifyRequest,
+    request: Request,
+    db: AsyncSession = Depends(security.get_db),
+    redis=Depends(get_redis),
 ):
     """Consume a 6-digit code, create the account, and issue a session (verify == login)."""
     user = await auth_session.verify_registration(db, redis, body)
     return await issue_token_pair(redis, request, str(user.uuid))
 
 
-@router.post("/resend-verification", status_code=status.HTTP_202_ACCEPTED,
-             dependencies=[Depends(get_rate_limiter(2, 60))])
+@router.post(
+    "/resend-verification",
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(get_rate_limiter(2, 60))],
+)
 async def resend_verification(
-        body: ResendVerificationRequest,
-        db: AsyncSession = Depends(security.get_db),
-        redis=Depends(get_redis),
-        email_sender=Depends(get_email_sender),
-        sms_sender=Depends(get_sms_sender),
+    body: ResendVerificationRequest,
+    db: AsyncSession = Depends(security.get_db),
+    redis=Depends(get_redis),
+    email_sender=Depends(get_email_sender),
+    sms_sender=Depends(get_sms_sender),
 ):
     """Resend the 6-digit code for a still-pending email or phone registration (rate limited)."""
     try:
         ident = _normalize_identifier(body.type, body.value)
     except ValueError as err:
         raise ApiError(
-            status.HTTP_422_UNPROCESSABLE_ENTITY, ErrorCode.IDENTIFIER_INVALID, detail="Invalid identifier",
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            ErrorCode.IDENTIFIER_INVALID,
+            detail="Invalid identifier",
         ) from err
     if await contact_repository.is_value_taken(db, type_=body.type, value=ident):
         # already a real account → nothing to resend; do not leak beyond the register 409 policy
@@ -125,7 +134,9 @@ async def resend_verification(
     code = await VerificationRepository(redis).reissue_registration(type_=body.type, value=ident)
     if code is None:
         raise ApiError(
-            status.HTTP_404_NOT_FOUND, ErrorCode.NO_PENDING_REGISTRATION, detail="No pending registration",
+            status.HTTP_404_NOT_FOUND,
+            ErrorCode.NO_PENDING_REGISTRATION,
+            detail="No pending registration",
         )
     if body.type == "email":
         subject, html, text = build_verification_email(code)

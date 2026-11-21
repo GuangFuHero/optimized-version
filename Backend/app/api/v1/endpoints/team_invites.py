@@ -29,6 +29,7 @@ from app.services.team_invite import InviteNotFoundError, TeamNotFoundError
 admin_router = APIRouter()
 router = APIRouter()
 
+
 @admin_router.post(
     "/teams/{team_uuid}/invites",
     response_model=InviteResponse,

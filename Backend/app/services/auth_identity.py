@@ -34,7 +34,6 @@ from app.services.auth_contact import (
 logger = logging.getLogger(__name__)
 
 
-
 class IdentityConflict(ContactError):
     """This provider is already attached, here or to another account (409)."""
 
@@ -48,8 +47,14 @@ class LastLoginMethod(ContactError):
 
 
 async def _notify_login_method_changed(
-    db: AsyncSession, user_uuid: str, *, added: bool, provider: str,
-    email_sender, sms_sender, dispatch=None,
+    db: AsyncSession,
+    user_uuid: str,
+    *,
+    added: bool,
+    provider: str,
+    email_sender,
+    sms_sender,
+    dispatch=None,
 ) -> None:
     """Tell every contact on the account that a sign-in method came or went (ADR-218).
 
@@ -60,11 +65,15 @@ async def _notify_login_method_changed(
     for contact in await contact_repository.list_by_user(db, user_uuid):
         if contact.type == "email":
             subject, html, text = build_login_method_changed_email(added, provider)
-            await _notify(dispatch, _send_email_or_log,
-                          email_sender, contact.value, subject, html, text)
+            await _notify(dispatch, _send_email_or_log, email_sender, contact.value, subject, html, text)
         else:
-            await _notify(dispatch, _send_sms_or_log, sms_sender, contact.value,
-                          build_login_method_changed_sms(added, provider))
+            await _notify(
+                dispatch,
+                _send_sms_or_log,
+                sms_sender,
+                contact.value,
+                build_login_method_changed_sms(added, provider),
+            )
 
 
 async def link_identity(
@@ -91,9 +100,7 @@ async def link_identity(
     that was never possible is the same mistake ADR-159 avoided on the delete path.
     """
     user_uuid = str(actor.uuid)
-    existing = await identity_repository.get_by_provider_subject(
-        db, provider=provider, subject=subject
-    )
+    existing = await identity_repository.get_by_provider_subject(db, provider=provider, subject=subject)
     if existing is not None:
         if str(existing.user_uuid) == user_uuid:
             raise IdentityConflict(f"{provider} account already linked")
@@ -102,21 +109,39 @@ async def link_identity(
         raise IdentityConflict(f"{provider} account already linked")
 
     await require_channel_proof(
-        db, redis, actor=actor, step_up=step_up, action=ACTION_LINK, target=provider,
-        email_sender=email_sender, sms_sender=sms_sender, verifiers=verifiers, proof_holder=proof_holder,
+        db,
+        redis,
+        actor=actor,
+        step_up=step_up,
+        action=ACTION_LINK,
+        target=provider,
+        email_sender=email_sender,
+        sms_sender=sms_sender,
+        verifiers=verifiers,
+        proof_holder=proof_holder,
     )
 
     try:
-        await identity_repository.create(db, obj_in={
-            "user_uuid": actor.uuid, "provider": provider, "provider_subject": subject,
-        })
+        await identity_repository.create(
+            db,
+            obj_in={
+                "user_uuid": actor.uuid,
+                "provider": provider,
+                "provider_subject": subject,
+            },
+        )
     except IntegrityError as err:  # concurrent link race
         await db.rollback()
         raise IdentityConflict("Already linked") from err
 
     await _notify_login_method_changed(
-        db, user_uuid, added=True, provider=provider,
-        email_sender=email_sender, sms_sender=sms_sender, dispatch=dispatch,
+        db,
+        user_uuid,
+        added=True,
+        provider=provider,
+        email_sender=email_sender,
+        sms_sender=sms_sender,
+        dispatch=dispatch,
     )
 
 
@@ -167,8 +192,16 @@ async def unlink_identity(
         raise LastLoginMethod("帳號至少需保留一個登入方式")
 
     await require_channel_proof(
-        db, redis, actor=actor, step_up=step_up, action=ACTION_UNLINK, target=provider,
-        email_sender=email_sender, sms_sender=sms_sender, verifiers=verifiers, proof_holder=proof_holder,
+        db,
+        redis,
+        actor=actor,
+        step_up=step_up,
+        action=ACTION_UNLINK,
+        target=provider,
+        email_sender=email_sender,
+        sms_sender=sms_sender,
+        verifiers=verifiers,
+        proof_holder=proof_holder,
     )
 
     # The `users` row, not the identity rows: the invariant is about the *set* of login
@@ -184,20 +217,24 @@ async def unlink_identity(
     await identity_repository.delete_identity(db, identity=identity)
     await SessionRepository(redis).revoke_all_for_user(user_uuid)
     await _notify_login_method_changed(
-        db, user_uuid, added=False, provider=provider,
-        email_sender=email_sender, sms_sender=sms_sender, dispatch=dispatch,
+        db,
+        user_uuid,
+        added=False,
+        provider=provider,
+        email_sender=email_sender,
+        sms_sender=sms_sender,
+        dispatch=dispatch,
     )
 
 
-async def _remaining_login_methods(
-    db: AsyncSession, user_uuid: str, doomed
-) -> list:
+async def _remaining_login_methods(db: AsyncSession, user_uuid: str, doomed) -> list:
     """The login methods that would survive removing `doomed`.
 
     A password identity counts only when it actually carries a hash: `create_account` writes a
     `provider="password"` row with a NULL hash for accounts that have never set one.
     """
     return [
-        i for i in await identity_repository.list_by_user(db, user_uuid)
+        i
+        for i in await identity_repository.list_by_user(db, user_uuid)
         if str(i.uuid) != str(doomed.uuid) and (i.provider != "password" or i.password_hash)
     ]

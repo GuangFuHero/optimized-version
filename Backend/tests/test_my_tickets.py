@@ -28,12 +28,23 @@ async def _person(db, name: str = "求助者") -> User:
 
 
 async def _ticket(
-    db, requester: User, title: str, *, status: str = "pending", filed_at: datetime = MORNING,
+    db,
+    requester: User,
+    title: str,
+    *,
+    status: str = "pending",
+    filed_at: datetime = MORNING,
     deleted: bool = False,
 ) -> str:
     ticket = Tickets(
-        uuid=uuidlib.uuid4(), property_name="request", created_by=str(requester.uuid), title=title,
-        contact_name="王阿嬤", status=status, priority="medium", created_at=filed_at,
+        uuid=uuidlib.uuid4(),
+        property_name="request",
+        created_by=str(requester.uuid),
+        title=title,
+        contact_name="王阿嬤",
+        status=status,
+        priority="medium",
+        created_at=filed_at,
         delete_at=datetime.now(UTC) if deleted else None,
     )
     db.add(ticket)

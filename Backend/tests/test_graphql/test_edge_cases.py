@@ -9,20 +9,29 @@ from tests.test_graphql.conftest import auth_header
 async def test_geojson_point_roundtrip(client, coordinator_auth):
     """Create station with Point, query back, verify coordinates match."""
     _, token = coordinator_auth
-    res = await client.post("/graphql", json={
-        "query": """mutation($input: CreateStationInput!) {
+    res = await client.post(
+        "/graphql",
+        json={
+            "query": """mutation($input: CreateStationInput!) {
             createStation(input: $input) { ... on StationCreated { station { uuid geometry } } }
         }""",
-        "variables": {"input": {
-            "geometry": {"type": "Point", "coordinates": [121.5, 25.0]},
-        }},
-    }, headers=auth_header(token))
+            "variables": {
+                "input": {
+                    "geometry": {"type": "Point", "coordinates": [121.5, 25.0]},
+                }
+            },
+        },
+        headers=auth_header(token),
+    )
     data = res.json()["data"]["createStation"]["station"]
     created_uuid = data["uuid"]
 
-    res = await client.post("/graphql", json={
-        "query": f'{{ station(uuid: "{created_uuid}") {{ geometry }} }}',
-    })
+    res = await client.post(
+        "/graphql",
+        json={
+            "query": f'{{ station(uuid: "{created_uuid}") {{ geometry }} }}',
+        },
+    )
     geom = res.json()["data"]["station"]["geometry"]
     assert geom["type"] == "Point"
     assert abs(geom["coordinates"][0] - 121.5) < 0.0001
@@ -35,27 +44,41 @@ async def test_geojson_polygon_roundtrip(client, coordinator_auth):
     _, token = coordinator_auth
     polygon = {
         "type": "Polygon",
-        "coordinates": [[
-            [121.49, 24.99], [121.51, 24.99], [121.51, 25.01],
-            [121.49, 25.01], [121.49, 24.99],
-        ]],
+        "coordinates": [
+            [
+                [121.49, 24.99],
+                [121.51, 24.99],
+                [121.51, 25.01],
+                [121.49, 25.01],
+                [121.49, 24.99],
+            ]
+        ],
     }
-    res = await client.post("/graphql", json={
-        "query": """mutation($input: CreateAreaInput!) {
+    res = await client.post(
+        "/graphql",
+        json={
+            "query": """mutation($input: CreateAreaInput!) {
             createArea(input: $input) { uuid geometry }
         }""",
-        "variables": {"input": {
-            "type": "hazardous_zone",
-            "geometry": polygon,
-            "status": "blocked",
-        }},
-    }, headers=auth_header(token))
+            "variables": {
+                "input": {
+                    "type": "hazardous_zone",
+                    "geometry": polygon,
+                    "status": "blocked",
+                }
+            },
+        },
+        headers=auth_header(token),
+    )
     data = res.json()["data"]["createArea"]
     created_uuid = data["uuid"]
 
-    res = await client.post("/graphql", json={
-        "query": f'{{ hazardousZone(uuid: "{created_uuid}") {{ geometry }} }}',
-    })
+    res = await client.post(
+        "/graphql",
+        json={
+            "query": f'{{ hazardousZone(uuid: "{created_uuid}") {{ geometry }} }}',
+        },
+    )
     geom = res.json()["data"]["hazardousZone"]["geometry"]
     assert geom["type"] == "Polygon"
     assert len(geom["coordinates"][0]) >= 4
@@ -65,14 +88,20 @@ async def test_geojson_polygon_roundtrip(client, coordinator_auth):
 async def test_invalid_geojson(client, coordinator_auth):
     """Malformed geometry type should produce an error."""
     _, token = coordinator_auth
-    res = await client.post("/graphql", json={
-        "query": """mutation($input: CreateStationInput!) {
+    res = await client.post(
+        "/graphql",
+        json={
+            "query": """mutation($input: CreateStationInput!) {
             createStation(input: $input) { ... on StationCreated { station { uuid } } }
         }""",
-        "variables": {"input": {
-            "geometry": {"type": "Invalid", "coordinates": []},
-        }},
-    }, headers=auth_header(token))
+            "variables": {
+                "input": {
+                    "geometry": {"type": "Invalid", "coordinates": []},
+                }
+            },
+        },
+        headers=auth_header(token),
+    )
     body = res.json()
     assert "errors" in body
 
@@ -80,13 +109,16 @@ async def test_invalid_geojson(client, coordinator_auth):
 @pytest.mark.asyncio
 async def test_bounds_no_results(client):
     """Query with bounds in the Pacific Ocean returns empty list, no crash."""
-    res = await client.post("/graphql", json={
-        "query": """query {
+    res = await client.post(
+        "/graphql",
+        json={
+            "query": """query {
             stations(bounds: {
                 minLat: -10, maxLat: -5, minLng: -170, maxLng: -160
             }) { items { uuid } pageInfo { totalCount } }
         }""",
-    })
+        },
+    )
     data = res.json()["data"]["stations"]
     assert data["items"] == []
     assert data["pageInfo"]["totalCount"] == 0
@@ -96,23 +128,33 @@ async def test_bounds_no_results(client):
 async def test_unicode_in_fields(client, coordinator_auth):
     """Chinese characters in comment survive roundtrip."""
     _, token = coordinator_auth
-    res = await client.post("/graphql", json={
-        "query": """mutation($input: CreateStationInput!) {
+    res = await client.post(
+        "/graphql",
+        json={
+            "query": """mutation($input: CreateStationInput!) {
             createStation(input: $input) { ... on StationCreated { station { uuid comment } } }
         }""",
-        "variables": {"input": {
-            "geometry": {"type": "Point", "coordinates": [121.5, 25.0]},
-            "comment": "\u6e2c\u8a66\u7ad9\u9ede",
-        }},
-    }, headers=auth_header(token))
+            "variables": {
+                "input": {
+                    "geometry": {"type": "Point", "coordinates": [121.5, 25.0]},
+                    "comment": "\u6e2c\u8a66\u7ad9\u9ede",
+                }
+            },
+        },
+        headers=auth_header(token),
+    )
     data = res.json()["data"]["createStation"]["station"]
     created_uuid = data["uuid"]
     assert data["comment"] == "\u6e2c\u8a66\u7ad9\u9ede"
 
     # comment is behind station.view_pii (ADR-332), so the read-back is signed in too.
-    res = await client.post("/graphql", json={
-        "query": f'{{ station(uuid: "{created_uuid}") {{ comment }} }}',
-    }, headers=auth_header(token))
+    res = await client.post(
+        "/graphql",
+        json={
+            "query": f'{{ station(uuid: "{created_uuid}") {{ comment }} }}',
+        },
+        headers=auth_header(token),
+    )
     station = res.json()["data"]["station"]
     assert station["comment"] == "\u6e2c\u8a66\u7ad9\u9ede"
 
@@ -125,16 +167,21 @@ async def test_multiple_queries_one_request(client, sample_station, sample_hazar
     the two queries as separate requests rather than combining them in a single
     GraphQL document (which would cause Strawberry to resolve them in parallel).
     """
-    res1 = await client.post("/graphql", json={
-        "query": """{ stations { items { uuid } pageInfo { totalCount } } }""",
-    })
-    res2 = await client.post("/graphql", json={
-        "query": """{ hazardousZones { items { uuid } pageInfo { totalCount } } }""",
-    })
+    res1 = await client.post(
+        "/graphql",
+        json={
+            "query": """{ stations { items { uuid } pageInfo { totalCount } } }""",
+        },
+    )
+    res2 = await client.post(
+        "/graphql",
+        json={
+            "query": """{ hazardousZones { items { uuid } pageInfo { totalCount } } }""",
+        },
+    )
     data1 = res1.json()["data"]
     data2 = res2.json()["data"]
     assert "stations" in data1
     assert "hazardousZones" in data2
     assert data1["stations"]["pageInfo"]["totalCount"] >= 1
     assert data2["hazardousZones"]["pageInfo"]["totalCount"] >= 1
-

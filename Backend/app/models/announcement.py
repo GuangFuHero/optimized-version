@@ -24,12 +24,14 @@ class Announcement(Base, UUIDPKMixin, TimestampMixin):
         # active = true, so being unique on it admits one row. A placement outside the three is
         # read as admin_page (ADR-309), so it takes the admin page here too.
         Index(
-            "uq_announcements_live_public_page", "active",
+            "uq_announcements_live_public_page",
+            "active",
             unique=True,
             postgresql_where=text("active AND delete_at IS NULL AND placement IN ('public_page', 'all')"),
         ),
         Index(
-            "uq_announcements_live_admin_page", "active",
+            "uq_announcements_live_admin_page",
+            "active",
             unique=True,
             postgresql_where=text("active AND delete_at IS NULL AND placement <> 'public_page'"),
         ),

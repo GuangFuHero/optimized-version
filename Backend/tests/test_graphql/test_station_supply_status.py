@@ -60,9 +60,13 @@ async def test_anyone_reads_the_supply_status_and_its_stamp(client, coordinator_
     stamp = datetime(2026, 10, 1, 9, 0, tzinfo=UTC)
     async with db_ctx() as db:
         station = Station(
-            geometry=from_shape(Point(121.5, 25.0), srid=4326), created_by=coord_uuid,
-            type="shelter", source="user", visibility="public",
-            supply_status="飲用水見底、尿布尚有存量", supply_status_updated_at=stamp,
+            geometry=from_shape(Point(121.5, 25.0), srid=4326),
+            created_by=coord_uuid,
+            type="shelter",
+            source="user",
+            visibility="public",
+            supply_status="飲用水見底、尿布尚有存量",
+            supply_status_updated_at=stamp,
         )
         db.add(station)
         await db.flush()

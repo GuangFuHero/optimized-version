@@ -38,7 +38,6 @@ first reader.
 """
 
 import sqlalchemy as sa
-
 from alembic import op
 
 revision = "c4a91e77b0d3"

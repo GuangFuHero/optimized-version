@@ -36,7 +36,5 @@ class AuditLog(Base, UUIDPKMixin):
         JSONB, nullable=True, comment="操作當下的身分快照 (role / team)"
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        comment="建立時間"
+        DateTime(timezone=True), server_default=func.now(), comment="建立時間"
     )

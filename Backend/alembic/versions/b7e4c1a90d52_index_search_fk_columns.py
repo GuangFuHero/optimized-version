@@ -28,8 +28,8 @@ from collections.abc import Sequence
 
 from alembic import op
 
-revision: str = 'b7e4c1a90d52'
-down_revision: str | Sequence[str] | None = 'f2b7c9d4e0a3'
+revision: str = "b7e4c1a90d52"
+down_revision: str | Sequence[str] | None = "f2b7c9d4e0a3"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

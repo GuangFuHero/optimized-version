@@ -32,18 +32,21 @@ class AreaMutation:
         Requires work_zone.add (and work_zone.assign for a team zone) on a gov team or platform role.
         """
         area = await area_service.create_area(
-            info.context["db"], actor=require_authenticated(info),
-            kind=input.type.value, geometry=input.geometry,
+            info.context["db"],
+            actor=require_authenticated(info),
+            kind=input.type.value,
+            geometry=input.geometry,
             team_uuid=str(input.team_uuid) if input.team_uuid else None,
-            name=input.name, note=input.note, is_public=input.is_public,
-            status=input.status, information_source=input.information_source,
+            name=input.name,
+            note=input.note,
+            is_public=input.is_public,
+            status=input.status,
+            information_source=input.information_source,
         )
         return AreaType.from_model(area)
 
     @strawberry.mutation
-    async def update_area(
-        self, info: strawberry.types.Info, uuid: UUID, input: UpdateAreaInput
-    ) -> AreaType:
+    async def update_area(self, info: strawberry.types.Info, uuid: UUID, input: UpdateAreaInput) -> AreaType:
         """Update a map area. UNSET fields are left unchanged, so `isPublic` alone flips the switch.
 
         Requires work_zone.edit with scope check, on a gov team or platform role.
@@ -58,8 +61,11 @@ class AreaMutation:
                 changes[field] = getattr(input, field)
 
         area = await area_service.update_area(
-            info.context["db"], actor=require_authenticated(info),
-            uuid=str(uuid), geometry=input.geometry, changes=changes,
+            info.context["db"],
+            actor=require_authenticated(info),
+            uuid=str(uuid),
+            geometry=input.geometry,
+            changes=changes,
         )
         return AreaType.from_model(area)
 
@@ -67,7 +73,9 @@ class AreaMutation:
     async def delete_area(self, info: strawberry.types.Info, uuid: UUID) -> bool:
         """Soft-delete a map area of any kind. Requires work_zone.delete. Returns True."""
         await area_service.delete_area(
-            info.context["db"], actor=require_authenticated(info), uuid=str(uuid),
+            info.context["db"],
+            actor=require_authenticated(info),
+            uuid=str(uuid),
         )
         return True
 
@@ -77,8 +85,11 @@ class AreaMutation:
     ) -> HazardousZoneType:
         """Turn a mark zone into a hazardous zone; there is no way back. Requires work_zone.edit."""
         zone = await area_service.promote_mark_zone(
-            info.context["db"], actor=require_authenticated(info), uuid=str(uuid),
-            status=input.status, information_source=input.information_source,
+            info.context["db"],
+            actor=require_authenticated(info),
+            uuid=str(uuid),
+            status=input.status,
+            information_source=input.information_source,
         )
         return HazardousZoneType.from_model(zone)
 
@@ -92,8 +103,10 @@ class AreaMutation:
         unchanged, so `assignedBy` is the original assigner, not the caller.
         """
         assignment = await area_service.assign_zone_to_team(
-            info.context["db"], actor=require_authenticated(info),
-            zone_uuid=str(input.zone_uuid), team_uuid=str(input.team_uuid),
+            info.context["db"],
+            actor=require_authenticated(info),
+            zone_uuid=str(input.zone_uuid),
+            team_uuid=str(input.team_uuid),
         )
         return ZoneAssignmentType.from_model(assignment)
 
@@ -106,7 +119,9 @@ class AreaMutation:
         Requires work_zone.assign permission. Returns True on success.
         """
         await area_service.remove_zone_from_team(
-            info.context["db"], actor=require_authenticated(info),
-            zone_uuid=str(input.zone_uuid), team_uuid=str(input.team_uuid),
+            info.context["db"],
+            actor=require_authenticated(info),
+            zone_uuid=str(input.zone_uuid),
+            team_uuid=str(input.team_uuid),
         )
         return True

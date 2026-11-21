@@ -72,9 +72,7 @@ class DisasterTypeRepository(GenericRepository[DisasterType]):
         """Initialize with DisasterType as the managed model."""
         super().__init__(DisasterType)
 
-    async def list_all(
-        self, db: AsyncSession, *, include_inactive: bool = False
-    ) -> list[DisasterType]:
+    async def list_all(self, db: AsyncSession, *, include_inactive: bool = False) -> list[DisasterType]:
         """List the vocabulary, ordered by key so the picker never reshuffles.
 
         Ordered on `key`, not `label`: the keys are ASCII and sort stably everywhere, whereas
@@ -87,7 +85,11 @@ class DisasterTypeRepository(GenericRepository[DisasterType]):
         return result.scalars().all()
 
     async def upsert(
-        self, db: AsyncSession, *, key: str, label: str | None = None,
+        self,
+        db: AsyncSession,
+        *,
+        key: str,
+        label: str | None = None,
         is_active: bool | None = None,
     ) -> DisasterType:
         """Create or update one disaster type, keyed on the normalized `key`.

@@ -259,8 +259,10 @@ async def test_attach_station_photo(client, coordinator_auth):
 
     resp = await client.post(
         "/graphql",
-        json={"query": "query($uuid: UUID!) { station(uuid: $uuid) { photos { url } } }",
-              "variables": {"uuid": station_uuid}},
+        json={
+            "query": "query($uuid: UUID!) { station(uuid: $uuid) { photos { url } } }",
+            "variables": {"uuid": station_uuid},
+        },
     )
     body = resp.json()
     assert "errors" not in body, body
@@ -340,12 +342,11 @@ async def test_update_station_can_clear_a_contact_field(client, coordinator_auth
     assert station["contactName"] == "Station Contact"
 
 
-
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "field,value",
     [
-        ("contactName", "A" * 300),   # column is String(100)
+        ("contactName", "A" * 300),  # column is String(100)
         ("contactEmail", "b" * 300),  # String(100)
         ("contactPhone", "9" * 300),  # String(50)
     ],
@@ -398,9 +399,7 @@ async def test_create_station_rejects_over_long_contact(client, coordinator_auth
         pytest.param("contactName", "  Padded Name  ", "Padded Name", id="name-both-sides"),
     ],
 )
-async def test_create_station_stores_contact_stripped(
-    client, coordinator_auth, field, value, expected
-):
+async def test_create_station_stores_contact_stripped(client, coordinator_auth, field, value, expected):
     """A contact value that only fits after stripping is stored stripped, not raw.
 
     This is the leading-whitespace case the plain `"A" * 300` parametrizations above cannot

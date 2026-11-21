@@ -6,7 +6,6 @@ AUDITED_TABLES = [
     "users",
     "user_identities",
     "user_contacts",
-
     # Geospatial and child inheritance tables
     "base_geometries",
     "stations",
@@ -15,44 +14,36 @@ AUDITED_TABLES = [
     "team_zones",
     "building_maps",
     "tickets",
-
     # Work assignment & routing
     "ticket_tasks",
     "task_assignments",
     "routes",
     "secondary_locations",
-
     # RBAC v1: teams and their zone assignments.
     "teams",
     "team_zone_assign",
-
     # RBAC v1: capability-based role/permission engine
     "roles",
     "permissions",
     "role_permission_assign",
     "user_role_assign",
     "user_permission_assign",
-
     # Feature 013: the deployment's single global project settings row (ADR-090) — changing
     # the disaster types flips a whole batch of dynamic fields, so it is audited.
     "project_settings",
-
     # Feature 015 (ADR-124): the EAV value tables, the only mutable content tables left
     # unaudited. Bulk import writes them in batches, which makes the blind spot easy to hit.
     "station_properties",
     "task_properties",
-
     # Feature 018 (ADR-251): the disaster vocabulary and the three tables that define the
     # dynamic fields keyed off it — `project_settings` is audited, so their definitions must be.
     "disaster_types",
     "station_property_config",
     "task_property_config",
     "ticket_property_config",
-
     # Feature 018: the per-ticket answers. An edit flipping "person trapped" from no to yes is
     # exactly what a timeline has to show, and ADR-124's missing trail is the mistake not to repeat.
     "ticket_disaster_details",
-
     # Feature 019: who asked to become back-office staff, and who decided. Approving one hands
     # out a role, so it gets the same trail as the role grants it produces.
     "role_requests",

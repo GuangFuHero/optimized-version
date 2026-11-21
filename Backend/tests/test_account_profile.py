@@ -37,8 +37,11 @@ async def _headers(redis, user_uuid) -> dict:
 async def _password_user(db, redis, email: str = "owner@x.com"):
     """An account with an email contact and a password identity."""
     user = await create_account(
-        db, contact_type="email", value=email,
-        password_hash=get_password_hash(_PASSWORD, generate_salt()), name="Tester",
+        db,
+        contact_type="email",
+        value=email,
+        password_hash=get_password_hash(_PASSWORD, generate_salt()),
+        name="Tester",
     )
     return str(user.uuid), await _headers(redis, user.uuid)
 
@@ -46,17 +49,19 @@ async def _password_user(db, redis, email: str = "owner@x.com"):
 async def _sso_only_user(db, redis, email: str = "sso@x.com"):
     """An account with an email contact and ONLY a Google identity (no password)."""
     user = await create_account(
-        db, contact_type="email", value=email, name="SSO",
-        provider="google", provider_subject="g-123",
+        db,
+        contact_type="email",
+        value=email,
+        name="SSO",
+        provider="google",
+        provider_subject="g-123",
     )
     return str(user.uuid), await _headers(redis, user.uuid)
 
 
 async def _contacts_of(db, user_uuid, type_: str = "email") -> list[str]:
     rows = await db.scalars(
-        select(UserContact.value).where(
-            UserContact.user_uuid == user_uuid, UserContact.type == type_
-        )
+        select(UserContact.value).where(UserContact.user_uuid == user_uuid, UserContact.type == type_)
     )
     return list(rows)
 
@@ -65,12 +70,14 @@ async def _contacts_of(db, user_uuid, type_: str = "email") -> list[str]:
 # Step-up: the core protection (ADR-085)
 # ──────────────────────────────────────────────
 
+
 async def test_replacing_a_contact_without_step_up_is_refused(client, db_session, redis, capture_email):
     """A stolen session alone must not be able to swap the recovery channel."""
     user_uuid, headers = await _password_user(db_session, redis)
 
-    res = await client.post(CONTACTS_URL, headers=headers,
-                            json={"type": "email", "value": "attacker@evil.com"})
+    res = await client.post(
+        CONTACTS_URL, headers=headers, json={"type": "email", "value": "attacker@evil.com"}
+    )
 
     assert res.status_code == 422, res.text
     assert res.json()["detail"] == "更換聯絡方式需要輸入密碼"
@@ -83,9 +90,15 @@ async def test_replacing_with_a_wrong_password_is_refused_and_burns_no_code(
     """A wrong step-up password must 401 without issuing a code to the new address."""
     _, headers = await _password_user(db_session, redis)
 
-    res = await client.post(CONTACTS_URL, headers=headers, json={
-        "type": "email", "value": "new@x.com", "step_up": {"password": "wrongpw"},
-    })
+    res = await client.post(
+        CONTACTS_URL,
+        headers=headers,
+        json={
+            "type": "email",
+            "value": "new@x.com",
+            "step_up": {"password": "wrongpw"},
+        },
+    )
 
     assert res.status_code == 401, res.text
     assert capture_email.last_code is None
@@ -100,14 +113,19 @@ async def test_first_contact_of_a_type_is_gated_too(client, db_session, redis, c
     """
     _, headers = await _password_user(db_session, redis)
 
-    refused = await client.post(CONTACTS_URL, headers=headers,
-                                json={"type": "phone", "value": "0912345678"})
+    refused = await client.post(CONTACTS_URL, headers=headers, json={"type": "phone", "value": "0912345678"})
     assert refused.status_code == 422, refused.text
     assert capture_sms.messages == []  # nothing reached the number being added
 
-    res = await client.post(CONTACTS_URL, headers=headers, json={
-        "type": "phone", "value": "0912345678", "step_up": {"password": _PASSWORD},
-    })
+    res = await client.post(
+        CONTACTS_URL,
+        headers=headers,
+        json={
+            "type": "phone",
+            "value": "0912345678",
+            "step_up": {"password": _PASSWORD},
+        },
+    )
 
     assert res.status_code == 202, res.text
     assert capture_sms.last_code
@@ -117,8 +135,7 @@ async def test_sso_only_account_gets_a_code_on_the_old_channel(client, db_sessio
     """No password to check, so the account proves it still holds the old channel."""
     _, headers = await _sso_only_user(db_session, redis)
 
-    res = await client.post(CONTACTS_URL, headers=headers,
-                            json={"type": "email", "value": "new@x.com"})
+    res = await client.post(CONTACTS_URL, headers=headers, json={"type": "email", "value": "new@x.com"})
 
     assert res.status_code == 422, res.text
     # the code went to the OLD address, not the new one
@@ -132,9 +149,15 @@ async def test_sso_only_account_replaces_with_the_old_channel_code(client, db_se
     await client.post(CONTACTS_URL, headers=headers, json={"type": "email", "value": "new@x.com"})
     old_code = capture_email.last_code
 
-    res = await client.post(CONTACTS_URL, headers=headers, json={
-        "type": "email", "value": "new@x.com", "step_up": {"old_channel_code": old_code},
-    })
+    res = await client.post(
+        CONTACTS_URL,
+        headers=headers,
+        json={
+            "type": "email",
+            "value": "new@x.com",
+            "step_up": {"old_channel_code": old_code},
+        },
+    )
 
     assert res.status_code == 202, res.text
 
@@ -143,10 +166,17 @@ async def test_sso_only_account_replaces_with_the_old_channel_code(client, db_se
 # Replacement is atomic and switches the login identifier
 # ──────────────────────────────────────────────
 
+
 async def _start_replacement(client, headers, new_value: str, capture_email):
-    res = await client.post(CONTACTS_URL, headers=headers, json={
-        "type": "email", "value": new_value, "step_up": {"password": _PASSWORD},
-    })
+    res = await client.post(
+        CONTACTS_URL,
+        headers=headers,
+        json={
+            "type": "email",
+            "value": new_value,
+            "step_up": {"password": _PASSWORD},
+        },
+    )
     assert res.status_code == 202, res.text
     return capture_email.last_code
 
@@ -156,8 +186,9 @@ async def test_replacement_swaps_the_row_atomically(client, db_session, redis, c
     user_uuid, headers = await _password_user(db_session, redis)
     code = await _start_replacement(client, headers, "new@x.com", capture_email)
 
-    res = await client.post(f"{CONTACTS_URL}/verify", headers=headers,
-                            json={"type": "email", "value": "new@x.com", "code": code})
+    res = await client.post(
+        f"{CONTACTS_URL}/verify", headers=headers, json={"type": "email", "value": "new@x.com", "code": code}
+    )
 
     assert res.status_code == 200, res.text
     assert await _contacts_of(db_session, user_uuid) == ["new@x.com"]
@@ -169,13 +200,14 @@ async def test_after_replacement_the_new_address_logs_in_and_the_old_does_not(
     """The contact IS the login identifier — the swap must move it."""
     _, headers = await _password_user(db_session, redis)
     code = await _start_replacement(client, headers, "new@x.com", capture_email)
-    await client.post(f"{CONTACTS_URL}/verify", headers=headers,
-                      json={"type": "email", "value": "new@x.com", "code": code})
+    await client.post(
+        f"{CONTACTS_URL}/verify", headers=headers, json={"type": "email", "value": "new@x.com", "code": code}
+    )
 
-    new_login = await client.post("/api/v1/auth/login",
-                                  data={"username": "new@x.com", "password": _PASSWORD})
-    old_login = await client.post("/api/v1/auth/login",
-                                  data={"username": "owner@x.com", "password": _PASSWORD})
+    new_login = await client.post("/api/v1/auth/login", data={"username": "new@x.com", "password": _PASSWORD})
+    old_login = await client.post(
+        "/api/v1/auth/login", data={"username": "owner@x.com", "password": _PASSWORD}
+    )
 
     assert new_login.status_code == 200, new_login.text
     assert old_login.status_code == 401
@@ -188,12 +220,13 @@ async def test_replacement_notifies_the_old_channel_with_a_masked_value(
     _, headers = await _password_user(db_session, redis)
     code = await _start_replacement(client, headers, "new@x.com", capture_email)
 
-    await client.post(f"{CONTACTS_URL}/verify", headers=headers,
-                      json={"type": "email", "value": "new@x.com", "code": code})
+    await client.post(
+        f"{CONTACTS_URL}/verify", headers=headers, json={"type": "email", "value": "new@x.com", "code": code}
+    )
 
     to, _subject, _html, text = capture_email.messages[-1]
-    assert to == "owner@x.com"          # the OLD address is told
-    assert "new@x.com" not in text      # ...but not shown the full new value
+    assert to == "owner@x.com"  # the OLD address is told
+    assert "new@x.com" not in text  # ...but not shown the full new value
     assert "n***@***.com" in text
 
 
@@ -211,30 +244,30 @@ async def test_replacement_also_notifies_the_surviving_channel(
     before = len(capture_sms.messages)
     code = await _start_replacement(client, headers, "new@x.com", capture_email)
 
-    res = await client.post(f"{CONTACTS_URL}/verify", headers=headers,
-                            json={"type": "email", "value": "new@x.com", "code": code})
+    res = await client.post(
+        f"{CONTACTS_URL}/verify", headers=headers, json={"type": "email", "value": "new@x.com", "code": code}
+    )
 
     assert res.status_code == 200, res.text
-    assert capture_email.messages[-1][0] == "owner@x.com"   # the old channel, as always
-    assert len(capture_sms.messages) == before + 1          # and now the survivor too
+    assert capture_email.messages[-1][0] == "owner@x.com"  # the old channel, as always
+    assert len(capture_sms.messages) == before + 1  # and now the survivor too
     to, text = capture_sms.messages[-1]
     assert to == "+886912345678"
-    assert "new@x.com" not in text        # masked, like every other notice
+    assert "new@x.com" not in text  # masked, like every other notice
     assert "n***@***.com" in text
-    assert "電子信箱" in text              # the survivor is told WHICH type changed
+    assert "電子信箱" in text  # the survivor is told WHICH type changed
 
 
-async def test_replacement_tells_a_lone_old_channel_exactly_once(
-    client, db_session, redis, capture_email
-):
+async def test_replacement_tells_a_lone_old_channel_exactly_once(client, db_session, redis, capture_email):
     """An account with nothing but the replaced contact still gets one notice, not two."""
     _, headers = await _password_user(db_session, redis)
     before = len(capture_email.messages)
     code = await _start_replacement(client, headers, "new@x.com", capture_email)
     sent_by_the_start = len(capture_email.messages) - before
 
-    await client.post(f"{CONTACTS_URL}/verify", headers=headers,
-                      json={"type": "email", "value": "new@x.com", "code": code})
+    await client.post(
+        f"{CONTACTS_URL}/verify", headers=headers, json={"type": "email", "value": "new@x.com", "code": code}
+    )
 
     assert len(capture_email.messages) == before + sent_by_the_start + 1
 
@@ -242,12 +275,12 @@ async def test_replacement_tells_a_lone_old_channel_exactly_once(
 async def test_replacement_does_not_revoke_other_sessions(client, db_session, redis, capture_email):
     """Changing a phone number is not a credential leak (ADR-085) — sessions survive."""
     _, headers = await _password_user(db_session, redis)
-    login = await client.post("/api/v1/auth/login",
-                              data={"username": "owner@x.com", "password": _PASSWORD})
+    login = await client.post("/api/v1/auth/login", data={"username": "owner@x.com", "password": _PASSWORD})
     refresh_token = login.json()["refresh_token"]
     code = await _start_replacement(client, headers, "new@x.com", capture_email)
-    await client.post(f"{CONTACTS_URL}/verify", headers=headers,
-                      json={"type": "email", "value": "new@x.com", "code": code})
+    await client.post(
+        f"{CONTACTS_URL}/verify", headers=headers, json={"type": "email", "value": "new@x.com", "code": code}
+    )
 
     still_valid = await client.post("/api/v1/auth/refresh", json={"refresh_token": refresh_token})
 
@@ -257,6 +290,7 @@ async def test_replacement_does_not_revoke_other_sessions(client, db_session, re
 # ──────────────────────────────────────────────
 # Delete: the account must keep a way back in (ADR-087)
 # ──────────────────────────────────────────────
+
 
 async def test_deleting_the_last_contact_without_sso_is_refused(client, db_session, redis):
     """Losing the last contact with no SSO identity locks the account out for good."""
@@ -281,18 +315,28 @@ async def test_deleting_the_last_contact_is_allowed_with_an_sso_identity(
     assert await _contacts_of(db_session, user_uuid) == []
 
 
-async def test_deleting_one_of_two_contacts_is_allowed(
-    client, db_session, redis, capture_sms, capture_email
-):
+async def test_deleting_one_of_two_contacts_is_allowed(client, db_session, redis, capture_sms, capture_email):
     """A second channel remains, so the guard does not apply."""
     user_uuid, headers = await _password_user(db_session, redis)
     # ADR-220 gates the add too, and this account has a password to prove it with
-    await client.post(CONTACTS_URL, headers=headers, json={
-        "type": "phone", "value": "0912345678", "step_up": {"password": _PASSWORD},
-    })
-    await client.post(f"{CONTACTS_URL}/verify", headers=headers, json={
-        "type": "phone", "value": "0912345678", "code": capture_sms.last_code,
-    })
+    await client.post(
+        CONTACTS_URL,
+        headers=headers,
+        json={
+            "type": "phone",
+            "value": "0912345678",
+            "step_up": {"password": _PASSWORD},
+        },
+    )
+    await client.post(
+        f"{CONTACTS_URL}/verify",
+        headers=headers,
+        json={
+            "type": "phone",
+            "value": "0912345678",
+            "code": capture_sms.last_code,
+        },
+    )
 
     res = await _delete(client, headers, "phone", {"password": _PASSWORD})
 
@@ -313,10 +357,13 @@ async def test_deleting_a_contact_type_the_user_does_not_have(client, db_session
 # Delete needs the same proof as replace (ADR-159)
 # ──────────────────────────────────────────────
 
+
 async def _delete(client, headers, type_="email", step_up=None):
     """DELETE carries its step-up in a body, so it needs `request()` rather than `.delete()`."""
     return await client.request(
-        "DELETE", f"{CONTACTS_URL}/{type_}", headers=headers,
+        "DELETE",
+        f"{CONTACTS_URL}/{type_}",
+        headers=headers,
         json={"step_up": step_up} if step_up else None,
     )
 
@@ -325,12 +372,24 @@ async def _with_phone(client, db, redis, capture_sms):
     """A password account holding BOTH an email and a phone."""
     user_uuid, headers = await _password_user(db, redis)
     # ADR-220 gates the add too, and this account has a password to prove it with
-    await client.post(CONTACTS_URL, headers=headers, json={
-        "type": "phone", "value": "0912345678", "step_up": {"password": _PASSWORD},
-    })
-    await client.post(f"{CONTACTS_URL}/verify", headers=headers, json={
-        "type": "phone", "value": "0912345678", "code": capture_sms.last_code,
-    })
+    await client.post(
+        CONTACTS_URL,
+        headers=headers,
+        json={
+            "type": "phone",
+            "value": "0912345678",
+            "step_up": {"password": _PASSWORD},
+        },
+    )
+    await client.post(
+        f"{CONTACTS_URL}/verify",
+        headers=headers,
+        json={
+            "type": "phone",
+            "value": "0912345678",
+            "code": capture_sms.last_code,
+        },
+    )
     return user_uuid, headers
 
 
@@ -361,9 +420,7 @@ async def test_deleting_with_a_wrong_password_is_refused(
     assert await _contacts_of(db_session, user_uuid) == ["owner@x.com"]
 
 
-async def test_deleting_with_the_password_succeeds(
-    client, db_session, redis, capture_sms, capture_email
-):
+async def test_deleting_with_the_password_succeeds(client, db_session, redis, capture_sms, capture_email):
     """The owner, who knows the password, can still remove a channel."""
     user_uuid, headers = await _with_phone(client, db_session, redis, capture_sms)
 
@@ -387,9 +444,7 @@ async def test_sso_only_delete_needs_the_old_channel_code(client, db_session, re
     assert await _contacts_of(db_session, user_uuid) == []
 
 
-async def test_deleting_notifies_the_remaining_channel(
-    client, db_session, redis, capture_sms, capture_email
-):
+async def test_deleting_notifies_the_remaining_channel(client, db_session, redis, capture_sms, capture_email):
     """Removal is as sensitive as replacement, so it is announced the same way (ADR-159)."""
     _, headers = await _with_phone(client, db_session, redis, capture_sms)
     before = len(capture_sms.messages)
@@ -399,8 +454,8 @@ async def test_deleting_notifies_the_remaining_channel(
     assert res.status_code == 204, res.text
     assert len(capture_sms.messages) == before + 1
     to, text = capture_sms.messages[-1]
-    assert to == "+886912345678"   # the channel that survives is told (stored normalized)
-    assert "owner@x.com" not in text   # ...and the removed value is masked
+    assert to == "+886912345678"  # the channel that survives is told (stored normalized)
+    assert "owner@x.com" not in text  # ...and the removed value is masked
     assert "o***@***.com" in text
 
 
@@ -414,9 +469,7 @@ async def test_the_last_channel_guard_runs_before_step_up(client, db_session, re
     assert await _contacts_of(db_session, user_uuid) == ["owner@x.com"]
 
 
-async def test_delete_then_add_still_requires_step_up(
-    client, db_session, redis, capture_sms, capture_email
-):
+async def test_delete_then_add_still_requires_step_up(client, db_session, redis, capture_sms, capture_email):
     """The bypass ADR-159 closes: deleting must not reset the replacement gate.
 
     ADR-159 closed the first half — deleting takes the same proof as replacing, so a session
@@ -428,8 +481,9 @@ async def test_delete_then_add_still_requires_step_up(
     removed = await _delete(client, headers, "email", {"password": _PASSWORD})
     assert removed.status_code == 204, removed.text
 
-    res = await client.post(CONTACTS_URL, headers=headers,
-                            json={"type": "email", "value": "attacker@evil.com"})
+    res = await client.post(
+        CONTACTS_URL, headers=headers, json={"type": "email", "value": "attacker@evil.com"}
+    )
 
     assert res.status_code == 422, res.text
     assert all(to != "attacker@evil.com" for to, *_ in capture_email.messages)
@@ -440,19 +494,18 @@ async def test_delete_then_add_still_requires_step_up(
 # A session alone cannot mint a password (ADR-160/215)
 # ──────────────────────────────────────────────
 
+
 async def _login(client, username: str, password: str):
-    return await client.post("/api/v1/auth/login",
-                             data={"username": username, "password": password})
+    return await client.post("/api/v1/auth/login", data={"username": username, "password": password})
 
 
-async def test_setting_a_first_password_needs_the_old_channel_code(
-    client, db_session, redis, capture_email
-):
+async def test_setting_a_first_password_needs_the_old_channel_code(client, db_session, redis, capture_email):
     """A session is not enough to mint a permanent credential (ADR-215)."""
     _, headers = await _sso_only_user(db_session, redis)
 
-    res = await client.post("/api/v1/auth/set-password", headers=headers,
-                            json={"password": "brandnew", "salt_frontend": "s"})
+    res = await client.post(
+        "/api/v1/auth/set-password", headers=headers, json={"password": "brandnew", "salt_frontend": "s"}
+    )
 
     assert res.status_code == 422, res.text
     # the code went to the account's own contact, which the session holder need not control
@@ -465,23 +518,27 @@ async def test_set_password_with_the_code_revokes_every_session_and_notifies(
 ):
     """The owner's path: read the code, set the password, get signed out and told (ADR-160/215)."""
     _, headers = await _sso_only_user(db_session, redis)
-    await client.post("/api/v1/auth/set-password", headers=headers,
-                      json={"password": "brandnew", "salt_frontend": "s"})
+    await client.post(
+        "/api/v1/auth/set-password", headers=headers, json={"password": "brandnew", "salt_frontend": "s"}
+    )
     code = capture_email.last_code
 
-    res = await client.post("/api/v1/auth/set-password", headers=headers, json={
-        "password": "brandnew", "salt_frontend": "s",
-        "step_up": {"old_channel_code": code},
-    })
+    res = await client.post(
+        "/api/v1/auth/set-password",
+        headers=headers,
+        json={
+            "password": "brandnew",
+            "salt_frontend": "s",
+            "step_up": {"old_channel_code": code},
+        },
+    )
 
     assert res.status_code == 204, res.text
     assert (await client.get("/api/v1/users/me", headers=headers)).status_code == 401
     assert "Password set" in capture_email.messages[-1][1]  # not "Password changed"
 
 
-async def test_the_full_takeover_chain_stops_at_the_mint(
-    client, db_session, redis, capture_email
-):
+async def test_the_full_takeover_chain_stops_at_the_mint(client, db_session, redis, capture_email):
     """The C2 chain end-to-end, with the re-authentication step the old test skipped.
 
     The previous version asserted 401 on the step-up call, but that 401 came from
@@ -491,18 +548,24 @@ async def test_the_full_takeover_chain_stops_at_the_mint(
     """
     user_uuid, headers = await _sso_only_user(db_session, redis)
 
-    minted = await client.post("/api/v1/auth/set-password", headers=headers,
-                               json={"password": "attackerpw", "salt_frontend": "s"})
+    minted = await client.post(
+        "/api/v1/auth/set-password", headers=headers, json={"password": "attackerpw", "salt_frontend": "s"}
+    )
     assert minted.status_code == 422, minted.text
 
     # the attacker cannot sign in, so there is no fresh session to spend on the step-up
     relogin = await _login(client, "sso@x.com", "attackerpw")
     assert relogin.status_code == 401, relogin.text
 
-    res = await client.post(CONTACTS_URL, headers=headers, json={
-        "type": "email", "value": "attacker@evil.com",
-        "step_up": {"password": "attackerpw"},
-    })
+    res = await client.post(
+        CONTACTS_URL,
+        headers=headers,
+        json={
+            "type": "email",
+            "value": "attacker@evil.com",
+            "step_up": {"password": "attackerpw"},
+        },
+    )
 
     assert res.status_code in (401, 422), res.text
     assert await _contacts_of(db_session, user_uuid) == ["sso@x.com"]
@@ -519,9 +582,7 @@ async def test_an_account_with_no_contact_proves_itself_with_its_provider(
     through a first contact: a first password is refused to such an account (ADR-401).
     """
     user_uuid, headers = await _sso_only_user(db_session, redis)
-    contact = (await db_session.scalars(
-        select(UserContact).where(UserContact.user_uuid == user_uuid)
-    )).one()
+    contact = (await db_session.scalars(select(UserContact).where(UserContact.user_uuid == user_uuid))).one()
     await db_session.delete(contact)
     await db_session.commit()
 
@@ -529,7 +590,7 @@ async def test_an_account_with_no_contact_proves_itself_with_its_provider(
 
     assert res.status_code == 422, res.text
     assert "step_up.id_token" in res.json()["detail"]
-    assert capture_email.last_code is None   # no code goes anywhere
+    assert capture_email.last_code is None  # no code goes anywhere
 
 
 async def test_an_account_with_genuinely_nothing_is_told_to_add_a_contact(
@@ -546,9 +607,14 @@ async def test_an_account_with_genuinely_nothing_is_told_to_add_a_contact(
 
     with pytest.raises(auth_contact.ContactNotFound) as err:
         await auth_contact.require_channel_proof(
-            db_session, redis, actor=user, step_up=None,
-            action=auth_contact.ACTION_LINK, email_sender=capture_email,
-            sms_sender=capture_sms, verifiers={},
+            db_session,
+            redis,
+            actor=user,
+            step_up=None,
+            action=auth_contact.ACTION_LINK,
+            email_sender=capture_email,
+            sms_sender=capture_sms,
+            verifiers={},
         )
 
     assert "聯絡方式" in str(err.value)
@@ -557,6 +623,7 @@ async def test_an_account_with_genuinely_nothing_is_told_to_add_a_contact(
 # ──────────────────────────────────────────────
 # GET /users/me
 # ──────────────────────────────────────────────
+
 
 async def test_users_me_returns_contacts_and_login_methods(client, db_session, redis):
     """The frontend needs both: to show current values and to pick the step-up path."""
@@ -687,14 +754,16 @@ async def test_step_up_sends_are_capped_per_account(client, db_session, redis, c
     # were it not for the cap.
     for i in range(MAX_STEPUP_SENDS_PER_WINDOW):
         res = await client.post(
-            "/api/v1/auth/contacts", headers=headers,
+            "/api/v1/auth/contacts",
+            headers=headers,
             json={"type": "email", "value": f"new{i}@x.com"},
         )
         assert res.status_code == 422, res.text
     assert len(capture_email.messages) == MAX_STEPUP_SENDS_PER_WINDOW
 
     over = await client.post(
-        "/api/v1/auth/contacts", headers=headers,
+        "/api/v1/auth/contacts",
+        headers=headers,
         json={"type": "email", "value": "onemore@x.com"},
     )
 
@@ -734,8 +803,11 @@ async def test_two_concurrent_deletes_cannot_strand_the_account(db, redis, monke
     from tests.conftest import TEST_DB_URL
 
     user = await create_account(
-        db, contact_type="email", value="owner@x.com",
-        password_hash=get_password_hash(_PASSWORD, generate_salt()), name="Racer",
+        db,
+        contact_type="email",
+        value="owner@x.com",
+        password_hash=get_password_hash(_PASSWORD, generate_salt()),
+        name="Racer",
     )
     user_uuid = str(user.uuid)
     db.add(UserContact(user_uuid=user.uuid, type="phone", value="+886912345678", verified=True))
@@ -750,20 +822,23 @@ async def test_two_concurrent_deletes_cannot_strand_the_account(db, redis, monke
     monkeypatch.setattr(contact_service, "_require_step_up", arrive_together)
 
     engines = [create_async_engine(TEST_DB_URL) for _ in range(2)]
-    sessions = [
-        sessionmaker(engine, class_=AsyncSession, expire_on_commit=True)()
-        for engine in engines
-    ]
+    sessions = [sessionmaker(engine, class_=AsyncSession, expire_on_commit=True)() for engine in engines]
     try:
+
         async def delete(session, type_):
             actor = await session.get(User, user_uuid)
             return await contact_service.delete_contact(
-                session, redis, actor=actor, type_=type_,
-                email_sender=_NullSender(), sms_sender=_NullSender(),
+                session,
+                redis,
+                actor=actor,
+                type_=type_,
+                email_sender=_NullSender(),
+                sms_sender=_NullSender(),
             )
 
         outcomes = await asyncio.gather(
-            delete(sessions[0], "email"), delete(sessions[1], "phone"),
+            delete(sessions[0], "email"),
+            delete(sessions[1], "phone"),
             return_exceptions=True,
         )
     finally:
@@ -794,13 +869,25 @@ async def test_adding_a_contact_tells_the_channels_the_account_already_had(
     _, headers = await _password_user(db_session, redis)
 
     # ADR-220 gates the add; this test is about what happens once it is allowed through
-    res = await client.post(CONTACTS_URL, headers=headers, json={
-        "type": "phone", "value": "0912345678", "step_up": {"password": _PASSWORD},
-    })
+    res = await client.post(
+        CONTACTS_URL,
+        headers=headers,
+        json={
+            "type": "phone",
+            "value": "0912345678",
+            "step_up": {"password": _PASSWORD},
+        },
+    )
     assert res.status_code == 202, res.text
-    verified = await client.post(f"{CONTACTS_URL}/verify", headers=headers, json={
-        "type": "phone", "value": "0912345678", "code": capture_sms.last_code,
-    })
+    verified = await client.post(
+        f"{CONTACTS_URL}/verify",
+        headers=headers,
+        json={
+            "type": "phone",
+            "value": "0912345678",
+            "code": capture_sms.last_code,
+        },
+    )
 
     assert verified.status_code == 200, verified.text
     # the account's existing email is told; the number that was just added is not
@@ -811,22 +898,34 @@ async def test_adding_a_contact_tells_the_channels_the_account_already_had(
 
 async def test_the_first_contact_of_all_notifies_nobody(client, db_session, redis, capture_email):
     """An account whose first contact this is has nobody to tell, and nothing to protect."""
-    user = await create_account(db_session, name="Bare", provider="line",
-                                provider_subject="bare-sub-224")
+    user = await create_account(db_session, name="Bare", provider="line", provider_subject="bare-sub-224")
     headers = await auth_headers_for(redis, user.uuid)
 
     # Adding it is gated now (ADR-234) — the account proves itself with the provider it holds.
-    await client.post(CONTACTS_URL, headers=headers, json={
-        "type": "email", "value": "first@x.com",
-        "step_up": {"id_token": json.dumps({"sub": "bare-sub-224"})},
-    })
-    res = await client.post(f"{CONTACTS_URL}/verify", headers=headers, json={
-        "type": "email", "value": "first@x.com", "code": capture_email.last_code,
-    })
+    await client.post(
+        CONTACTS_URL,
+        headers=headers,
+        json={
+            "type": "email",
+            "value": "first@x.com",
+            "step_up": {"id_token": json.dumps({"sub": "bare-sub-224"})},
+        },
+    )
+    res = await client.post(
+        f"{CONTACTS_URL}/verify",
+        headers=headers,
+        json={
+            "type": "email",
+            "value": "first@x.com",
+            "code": capture_email.last_code,
+        },
+    )
 
     assert res.status_code == 200, res.text
-    assert all("新增了聯絡方式" not in body for _, _, _, body in
-               [(t, s, h, b) for t, s, h, b in capture_email.messages])
+    assert all(
+        "新增了聯絡方式" not in body
+        for _, _, _, body in [(t, s, h, b) for t, s, h, b in capture_email.messages]
+    )
 
 
 async def test_the_step_up_send_counter_always_carries_a_ttl(redis):

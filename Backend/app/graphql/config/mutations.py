@@ -26,43 +26,61 @@ class PropertyConfigMutation:
 
     @strawberry.mutation
     async def upsert_station_property_config(
-        self, info: strawberry.types.Info, station_type: str, input: UpsertPropertyConfigInput,
+        self,
+        info: strawberry.types.Info,
+        station_type: str,
+        input: UpsertPropertyConfigInput,
     ) -> StationPropertyConfigType:
         """Create or update a station property config entry for a given station type and property name.
 
         Requires dynamic_field.edit permission. Returns the upserted StationPropertyConfigType.
         """
         cfg = await config_service.upsert_station_property_config(
-            info.context["db"], actor=require_authenticated(info),
-            station_type=station_type, property_name=input.property_name,
+            info.context["db"],
+            actor=require_authenticated(info),
+            station_type=station_type,
+            property_name=input.property_name,
             data_type=input.data_type.value if input.data_type else None,
-            enum_options=input.enum_options, unit=input.unit,
-            disaster_types=input.disaster_types, label=input.label,
-            sort_order=input.sort_order, is_active=input.is_active,
+            enum_options=input.enum_options,
+            unit=input.unit,
+            disaster_types=input.disaster_types,
+            label=input.label,
+            sort_order=input.sort_order,
+            is_active=input.is_active,
         )
         return StationPropertyConfigType.from_model(cfg)
 
     @strawberry.mutation
     async def upsert_task_property_config(
-        self, info: strawberry.types.Info, task_type: str, input: UpsertPropertyConfigInput,
+        self,
+        info: strawberry.types.Info,
+        task_type: str,
+        input: UpsertPropertyConfigInput,
     ) -> TaskPropertyConfigType:
         """Create or update a task property config entry for a given task type and property name.
 
         Requires dynamic_field.edit permission. Returns the upserted TaskPropertyConfigType.
         """
         cfg = await config_service.upsert_task_property_config(
-            info.context["db"], actor=require_authenticated(info),
-            task_type=task_type, property_name=input.property_name,
+            info.context["db"],
+            actor=require_authenticated(info),
+            task_type=task_type,
+            property_name=input.property_name,
             data_type=input.data_type.value if input.data_type else None,
-            enum_options=input.enum_options, unit=input.unit,
-            disaster_types=input.disaster_types, label=input.label,
-            sort_order=input.sort_order, is_active=input.is_active,
+            enum_options=input.enum_options,
+            unit=input.unit,
+            disaster_types=input.disaster_types,
+            label=input.label,
+            sort_order=input.sort_order,
+            is_active=input.is_active,
         )
         return TaskPropertyConfigType.from_model(cfg)
 
     @strawberry.mutation
     async def upsert_ticket_property_config(
-        self, info: strawberry.types.Info, input: UpsertTicketPropertyConfigInput,
+        self,
+        info: strawberry.types.Info,
+        input: UpsertTicketPropertyConfigInput,
     ) -> TicketPropertyConfigType:
         """Add a disaster-specific ticket field, or edit an existing one.
 
@@ -74,18 +92,24 @@ class PropertyConfigMutation:
         Requires dynamic_field.edit. Returns the upserted TicketPropertyConfigType.
         """
         cfg = await config_service.upsert_ticket_property_config(
-            info.context["db"], actor=require_authenticated(info),
+            info.context["db"],
+            actor=require_authenticated(info),
             property_name=input.property_name,
             data_type=input.data_type.value if input.data_type else None,
-            enum_options=input.enum_options, unit=input.unit,
-            disaster_types=input.disaster_types, label=input.label, hint=input.hint,
+            enum_options=input.enum_options,
+            unit=input.unit,
+            disaster_types=input.disaster_types,
+            label=input.label,
+            hint=input.hint,
             is_active=input.is_active,
         )
         return TicketPropertyConfigType.from_model(cfg)
 
     @strawberry.mutation
     async def upsert_disaster_type(
-        self, info: strawberry.types.Info, input: UpsertDisasterTypeInput,
+        self,
+        info: strawberry.types.Info,
+        input: UpsertDisasterTypeInput,
     ) -> DisasterTypeType:
         """Add a disaster type to the deployment's vocabulary, or edit one.
 
@@ -99,7 +123,10 @@ class PropertyConfigMutation:
         Requires project.edit. Returns the upserted DisasterTypeType.
         """
         disaster_type = await project_settings_service.upsert_disaster_type(
-            info.context["db"], actor=require_authenticated(info),
-            key=input.key, label=input.label, is_active=input.is_active,
+            info.context["db"],
+            actor=require_authenticated(info),
+            key=input.key,
+            label=input.label,
+            is_active=input.is_active,
         )
         return DisasterTypeType.from_model(disaster_type)

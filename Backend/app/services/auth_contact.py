@@ -108,8 +108,14 @@ async def _deliver_code(type_: str, to: str, code: str, *, email_sender, sms_sen
 
 
 async def _deliver_step_up_code(
-    type_: str, to: str, code: str, *, action: str, masked_target: str | None,
-    email_sender, sms_sender,
+    type_: str,
+    to: str,
+    code: str,
+    *,
+    action: str,
+    masked_target: str | None,
+    email_sender,
+    sms_sender,
 ) -> None:
     """Send a step-up code to the account's own channel, in a message that names the action.
 
@@ -174,8 +180,16 @@ async def _password_proof(db: AsyncSession, *, actor: User, step_up, action: str
 
 
 async def _old_channel_proof(
-    db: AsyncSession, redis, *, actor: User, existing: UserContact, step_up,
-    action: str, target: str, email_sender, sms_sender,
+    db: AsyncSession,
+    redis,
+    *,
+    actor: User,
+    existing: UserContact,
+    step_up,
+    action: str,
+    target: str,
+    email_sender,
+    sms_sender,
 ) -> None:
     """Prove the account by a code delivered to `existing`, or raise asking for one.
 
@@ -185,8 +199,13 @@ async def _old_channel_proof(
     what = _ACTION_ZH.get(action, "這項操作")
     channel = _STEP_UP_CHANNEL_ZH.get(action, _DEFAULT_STEP_UP_CHANNEL_ZH)
     verification = VerificationRepository(redis)
-    key = {"user_uuid": str(actor.uuid), "type_": existing.type, "value": existing.value,
-           "action": action, "target": target}
+    key = {
+        "user_uuid": str(actor.uuid),
+        "type_": existing.type,
+        "value": existing.value,
+        "action": action,
+        "target": target,
+    }
     if not (step_up and step_up.old_channel_code):
         code, outcome = await verification.issue_old_channel_step_up(**key)
         if outcome == "pending":
@@ -205,8 +224,13 @@ async def _old_channel_proof(
         )
         try:
             await _deliver_step_up_code(
-                existing.type, existing.value, code, action=action, masked_target=masked_target,
-                email_sender=email_sender, sms_sender=sms_sender,
+                existing.type,
+                existing.value,
+                code,
+                action=action,
+                masked_target=masked_target,
+                email_sender=email_sender,
+                sms_sender=sms_sender,
             )
         except Exception:
             # A code that was never delivered must not count as pending, or ADR-165's
@@ -244,8 +268,15 @@ async def _require_step_up(
     if await _password_proof(db, actor=actor, step_up=step_up, action=action):
         return
     await _old_channel_proof(
-        db, redis, actor=actor, existing=existing, step_up=step_up, action=action,
-        target=target, email_sender=email_sender, sms_sender=sms_sender,
+        db,
+        redis,
+        actor=actor,
+        existing=existing,
+        step_up=step_up,
+        action=action,
+        target=target,
+        email_sender=email_sender,
+        sms_sender=sms_sender,
     )
 
 
@@ -329,8 +360,15 @@ async def require_channel_proof(
     existing = await _proof_contact(db, str(actor.uuid))
     if existing is not None:
         await _old_channel_proof(
-            db, redis, actor=actor, existing=existing, step_up=step_up, action=action,
-            target=target, email_sender=email_sender, sms_sender=sms_sender,
+            db,
+            redis,
+            actor=actor,
+            existing=existing,
+            step_up=step_up,
+            action=action,
+            target=target,
+            email_sender=email_sender,
+            sms_sender=sms_sender,
         )
         return
     if await _sso_proof(
@@ -365,13 +403,25 @@ async def require_step_up_for_first_password(
     spent here and vice versa (ADR-164).
     """
     await require_channel_proof(
-        db, redis, actor=actor, step_up=step_up, action=ACTION_SET_PASSWORD,
-        email_sender=email_sender, sms_sender=sms_sender, verifiers=verifiers, proof_holder=proof_holder,
+        db,
+        redis,
+        actor=actor,
+        step_up=step_up,
+        action=ACTION_SET_PASSWORD,
+        email_sender=email_sender,
+        sms_sender=sms_sender,
+        verifiers=verifiers,
+        proof_holder=proof_holder,
     )
 
 
 async def notify_password_set(
-    db: AsyncSession, *, user_uuid: str, email_sender, sms_sender, dispatch=None,
+    db: AsyncSession,
+    *,
+    user_uuid: str,
+    email_sender,
+    sms_sender,
+    dispatch=None,
     changed: bool = False,
 ) -> None:
     """Tell every contact on the account that its password was set or changed (ADR-215/218).
@@ -388,8 +438,7 @@ async def notify_password_set(
         masked = _mask(contact.type, contact.value)
         if contact.type == "email":
             subject, html, text = build_password_set_email(masked, changed=changed, at=at)
-            await _notify(dispatch, _send_email_or_log,
-                          email_sender, contact.value, subject, html, text)
+            await _notify(dispatch, _send_email_or_log, email_sender, contact.value, subject, html, text)
         else:
             body = build_password_set_sms(masked, changed=changed, at=at)
             await _notify(dispatch, _send_sms_or_log, sms_sender, contact.value, body)
@@ -459,7 +508,8 @@ async def _sso_proof(
     through to its own answer for that case.
     """
     identities = [
-        i for i in await identity_repository.list_by_user(db, str(actor.uuid))
+        i
+        for i in await identity_repository.list_by_user(db, str(actor.uuid))
         if i.provider in SSO_PROVIDERS and i.provider_subject
     ]
     if not identities:
@@ -532,21 +582,33 @@ async def start_contact_change(
     if await contact_repository.is_value_taken(db, type_=type_, value=value):
         raise ContactConflict(f"{type_.capitalize()} already in use")
 
-    existing = await contact_repository.get_by_user_and_type(
-        db, user_uuid=str(actor.uuid), type_=type_
-    )
+    existing = await contact_repository.get_by_user_and_type(db, user_uuid=str(actor.uuid), type_=type_)
     if existing is not None:
         if existing.value == value:
             raise ContactConflict("新的聯絡方式與現有的相同")
         await _require_step_up(
-            db, redis, actor=actor, existing=existing, step_up=step_up,
-            action=ACTION_REPLACE, target=value,
-            email_sender=email_sender, sms_sender=sms_sender,
+            db,
+            redis,
+            actor=actor,
+            existing=existing,
+            step_up=step_up,
+            action=ACTION_REPLACE,
+            target=value,
+            email_sender=email_sender,
+            sms_sender=sms_sender,
         )
     elif await _has_something_to_prove_with(db, str(actor.uuid)):
         await require_channel_proof(
-            db, redis, actor=actor, step_up=step_up, action=ACTION_ADD, target=value,
-            email_sender=email_sender, sms_sender=sms_sender, verifiers=verifiers, proof_holder=proof_holder,
+            db,
+            redis,
+            actor=actor,
+            step_up=step_up,
+            action=ACTION_ADD,
+            target=value,
+            email_sender=email_sender,
+            sms_sender=sms_sender,
+            verifiers=verifiers,
+            proof_holder=proof_holder,
         )
 
     code = await VerificationRepository(redis).issue_contact_verification(
@@ -575,9 +637,7 @@ async def commit_contact_change(
     if await contact_repository.is_value_taken(db, type_=type_, value=value):
         raise ContactConflict("Already in use")
 
-    existing = await contact_repository.get_by_user_and_type(
-        db, user_uuid=str(actor.uuid), type_=type_
-    )
+    existing = await contact_repository.get_by_user_and_type(db, user_uuid=str(actor.uuid), type_=type_)
     payload = await VerificationRepository(redis).consume_contact_verification(
         user_uuid=str(actor.uuid), type_=type_, value=value, code=code
     )
@@ -587,13 +647,13 @@ async def commit_contact_change(
     if existing is None:
         # Read the survivors BEFORE the insert commits: they are who gets told, and the new
         # row must not be among them.
-        others = [(c.type, c.value) for c in await contact_repository.list_by_user(
-            db, str(actor.uuid))]
-        await contact_repository.create_verified(
-            db, user_uuid=actor.uuid, type_=type_, value=value
-        )
+        others = [(c.type, c.value) for c in await contact_repository.list_by_user(db, str(actor.uuid))]
+        await contact_repository.create_verified(db, user_uuid=actor.uuid, type_=type_, value=value)
         await _notify_contact_added(
-            (type_, value), others, email_sender=email_sender, sms_sender=sms_sender,
+            (type_, value),
+            others,
+            email_sender=email_sender,
+            sms_sender=sms_sender,
             dispatch=dispatch,
         )
         return False
@@ -604,15 +664,24 @@ async def commit_contact_change(
     survivors = await _survivors_of(db, str(actor.uuid), existing)
     await contact_repository.replace_verified(db, existing=existing, value=value)
     await _notify_contact_replaced(
-        (old_type, old_value), value, survivors,
-        email_sender=email_sender, sms_sender=sms_sender, dispatch=dispatch,
+        (old_type, old_value),
+        value,
+        survivors,
+        email_sender=email_sender,
+        sms_sender=sms_sender,
+        dispatch=dispatch,
     )
     return True
 
 
 async def _notify_contact_replaced(
-    replaced: tuple[str, str], new_value: str, survivors: list[tuple[str, str]], *,
-    email_sender, sms_sender, dispatch=None,
+    replaced: tuple[str, str],
+    new_value: str,
+    survivors: list[tuple[str, str]],
+    *,
+    email_sender,
+    sms_sender,
+    dispatch=None,
 ) -> None:
     """Announce a replacement to the old channel AND to every contact that survives it.
 
@@ -632,24 +701,32 @@ async def _notify_contact_replaced(
     masked = _mask(replaced_type, new_value)
     if replaced_type == "email":
         subject, html, text = build_contact_changed_email(masked)
-        await _notify(dispatch, _send_email_or_log, email_sender, replaced_value,
-                      subject, html, text)
+        await _notify(dispatch, _send_email_or_log, email_sender, replaced_value, subject, html, text)
     else:
-        await _notify(dispatch, _send_sms_or_log, sms_sender,
-                      replaced_value, build_contact_changed_sms(masked))
+        await _notify(
+            dispatch, _send_sms_or_log, sms_sender, replaced_value, build_contact_changed_sms(masked)
+        )
     for target_type, target_value in survivors:
         if target_type == "email":
             subject, html, text = build_contact_replaced_email(replaced_type, masked)
-            await _notify(dispatch, _send_email_or_log, email_sender, target_value,
-                          subject, html, text)
+            await _notify(dispatch, _send_email_or_log, email_sender, target_value, subject, html, text)
         else:
-            await _notify(dispatch, _send_sms_or_log, sms_sender, target_value,
-                          build_contact_replaced_sms(replaced_type, masked))
+            await _notify(
+                dispatch,
+                _send_sms_or_log,
+                sms_sender,
+                target_value,
+                build_contact_replaced_sms(replaced_type, masked),
+            )
 
 
 async def _notify_contact_added(
-    added: tuple[str, str], targets: list[tuple[str, str]], *,
-    email_sender, sms_sender, dispatch=None,
+    added: tuple[str, str],
+    targets: list[tuple[str, str]],
+    *,
+    email_sender,
+    sms_sender,
+    dispatch=None,
 ) -> None:
     """Tell the channels the account already held that it gained another one (ADR-224).
 
@@ -669,16 +746,24 @@ async def _notify_contact_added(
     for target_type, target_value in targets:
         if target_type == "email":
             subject, html, text = build_contact_added_email(added_type, masked)
-            await _notify(dispatch, _send_email_or_log,
-                          email_sender, target_value, subject, html, text)
+            await _notify(dispatch, _send_email_or_log, email_sender, target_value, subject, html, text)
         else:
-            await _notify(dispatch, _send_sms_or_log, sms_sender,
-                          target_value, build_contact_added_sms(added_type, masked))
+            await _notify(
+                dispatch,
+                _send_sms_or_log,
+                sms_sender,
+                target_value,
+                build_contact_added_sms(added_type, masked),
+            )
 
 
 async def _notify_contact_removed(
-    removed: tuple[str, str], targets: list[tuple[str, str]], *,
-    email_sender, sms_sender, dispatch=None,
+    removed: tuple[str, str],
+    targets: list[tuple[str, str]],
+    *,
+    email_sender,
+    sms_sender,
+    dispatch=None,
 ) -> None:
     """Announce a removal to every channel that survives it (ADR-159).
 
@@ -695,16 +780,18 @@ async def _notify_contact_removed(
     for target_type, target_value in targets or [removed]:
         if target_type == "email":
             subject, html, text = build_contact_removed_email(removed_type, masked)
-            await _notify(dispatch, _send_email_or_log,
-                          email_sender, target_value, subject, html, text)
+            await _notify(dispatch, _send_email_or_log, email_sender, target_value, subject, html, text)
         else:
-            await _notify(dispatch, _send_sms_or_log, sms_sender,
-                          target_value, build_contact_removed_sms(removed_type, masked))
+            await _notify(
+                dispatch,
+                _send_sms_or_log,
+                sms_sender,
+                target_value,
+                build_contact_removed_sms(removed_type, masked),
+            )
 
 
-async def _survivors_of(
-    db: AsyncSession, user_uuid: str, doomed: UserContact
-) -> list[tuple[str, str]]:
+async def _survivors_of(db: AsyncSession, user_uuid: str, doomed: UserContact) -> list[tuple[str, str]]:
     """The `(type, value)` pairs that would remain if `doomed` were removed.
 
     Plain tuples rather than ORM rows: the caller keeps them across the DELETE commit, and
@@ -755,20 +842,25 @@ async def delete_contact(
     DELETE of the *other* type can do the same and both leave one behind. The lock is taken
     after step-up so no database lock is ever held across a mail or SMS send.
     """
-    existing = await contact_repository.get_by_user_and_type(
-        db, user_uuid=str(actor.uuid), type_=type_
-    )
+    existing = await contact_repository.get_by_user_and_type(db, user_uuid=str(actor.uuid), type_=type_)
     if existing is None:
         raise ContactNotFound(f"This account has no {type_}")
 
     actor_uuid = str(actor.uuid)  # capture before any commit expires the instance
-    if not await _survivors_of(db, actor_uuid, existing) and not await \
-            identity_repository.has_sso_identity(db, actor_uuid):
+    if not await _survivors_of(db, actor_uuid, existing) and not await identity_repository.has_sso_identity(
+        db, actor_uuid
+    ):
         raise LastLoginChannel("帳號至少需保留一個登入管道")
 
     await _require_step_up(
-        db, redis, actor=actor, existing=existing, step_up=step_up, action="remove",
-        email_sender=email_sender, sms_sender=sms_sender,
+        db,
+        redis,
+        actor=actor,
+        existing=existing,
+        step_up=step_up,
+        action="remove",
+        email_sender=email_sender,
+        sms_sender=sms_sender,
     )
 
     await contact_repository.lock_owner(db, actor_uuid)

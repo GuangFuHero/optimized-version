@@ -24,23 +24,35 @@ COLUMNS = (
     ColumnSpec(header="longitude", field="longitude", data_type="Float", required_on_create=True),
     ColumnSpec(header="contact_phone", field="contact_phone", writable_on_update=False),
     ColumnSpec(
-        header="visibility", field="visibility", data_type=ENUM,
+        header="visibility",
+        field="visibility",
+        data_type=ENUM,
         enum_options=("public", "restricted", "internal"),
     ),
     ColumnSpec(
-        header=f"{DYNAMIC_PREFIX}capacity_total", field="capacity_total",
-        data_type=INTEGER, is_dynamic=True,
+        header=f"{DYNAMIC_PREFIX}capacity_total",
+        field="capacity_total",
+        data_type=INTEGER,
+        is_dynamic=True,
     ),
     ColumnSpec(
-        header=f"{DYNAMIC_PREFIX}pet_friendly", field="pet_friendly",
-        data_type=BOOLEAN, is_dynamic=True,
+        header=f"{DYNAMIC_PREFIX}pet_friendly",
+        field="pet_friendly",
+        data_type=BOOLEAN,
+        is_dynamic=True,
     ),
 )
 
 VALID = {
-    "uuid": "", "name": "光復國小", "comment": "", "latitude": "25.0", "longitude": "121.5",
-    "contact_phone": "0912345678", "visibility": "public",
-    f"{DYNAMIC_PREFIX}capacity_total": "120", f"{DYNAMIC_PREFIX}pet_friendly": "true",
+    "uuid": "",
+    "name": "光復國小",
+    "comment": "",
+    "latitude": "25.0",
+    "longitude": "121.5",
+    "contact_phone": "0912345678",
+    "visibility": "public",
+    f"{DYNAMIC_PREFIX}capacity_total": "120",
+    f"{DYNAMIC_PREFIX}pet_friendly": "true",
 }
 
 

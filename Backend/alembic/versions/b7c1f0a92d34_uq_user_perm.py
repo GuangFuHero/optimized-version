@@ -14,12 +14,13 @@ dedup any pre-existing rows, keeping the widest scope (all>zone>team>own>none, m
 app/core/rbac_scopes.py:WIDTH and the effective-permission resolver), tie-broken by the
 smallest uuid so the result is deterministic. On a fresh / user-less DB the dedup is a no-op.
 """
+
 from collections.abc import Sequence
 
 from alembic import op
 
-revision: str = 'b7c1f0a92d34'
-down_revision: str | Sequence[str] | None = 'f1a2b3c4d5e6'
+revision: str = "b7c1f0a92d34"
+down_revision: str | Sequence[str] | None = "f1a2b3c4d5e6"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

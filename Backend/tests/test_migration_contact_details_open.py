@@ -26,20 +26,25 @@ _BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Each role's ticket.view_pii grant as a live database would hold it before the migration.
 _GRANTS_BEFORE = {
-    ("user", "platform"): "own",          # the seed's default: moves to all
-    ("member", "team"): "zone",           # the seed's default: moves to all
-    ("admin", "team"): "none",            # narrowed at runtime (/api/v1/admin/rbac): left alone
+    ("user", "platform"): "own",  # the seed's default: moves to all
+    ("member", "team"): "zone",  # the seed's default: moves to all
+    ("admin", "team"): "none",  # narrowed at runtime (/api/v1/admin/rbac): left alone
     ("data_auditor", "platform"): "all",  # already all
-    ("field_lead", "team"): "own",        # a role the seed does not define: left alone
+    ("field_lead", "team"): "own",  # a role the seed does not define: left alone
 }
 
 
 async def _alembic(revision: str) -> None:
     process = await asyncio.create_subprocess_exec(
-        sys.executable, "-m", "alembic", "upgrade", revision,
+        sys.executable,
+        "-m",
+        "alembic",
+        "upgrade",
+        revision,
         cwd=_BACKEND_DIR,
         env={**os.environ, "SQLALCHEMY_DATABASE_URL": _DB_URL},
-        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
     )
     stdout, stderr = await process.communicate()
     if process.returncode != 0:
@@ -76,31 +81,49 @@ async def view_pii_after_upgrade():
 
         engine = create_async_engine(_DB_URL, isolation_level="AUTOCOMMIT")
         async with engine.connect() as conn:
-            permission = (await conn.execute(text(
-                "INSERT INTO permissions (uuid, key) VALUES (gen_random_uuid(), 'ticket.view_pii')"
-                " RETURNING uuid"
-            ))).scalar_one()
+            permission = (
+                await conn.execute(
+                    text(
+                        "INSERT INTO permissions (uuid, key) VALUES (gen_random_uuid(), 'ticket.view_pii')"
+                        " RETURNING uuid"
+                    )
+                )
+            ).scalar_one()
             for (name, kind), scope in _GRANTS_BEFORE.items():
-                role = (await conn.execute(text(
-                    "INSERT INTO roles (uuid, name, kind) VALUES (gen_random_uuid(), :name, :kind)"
-                    " RETURNING uuid"
-                ), {"name": name, "kind": kind})).scalar_one()
-                await conn.execute(text(
-                    "INSERT INTO role_permission_assign (uuid, role_uuid, permission_uuid, scope)"
-                    " VALUES (gen_random_uuid(), :role, :permission, :scope)"
-                ), {"role": role, "permission": permission, "scope": scope})
+                role = (
+                    await conn.execute(
+                        text(
+                            "INSERT INTO roles (uuid, name, kind) VALUES (gen_random_uuid(), :name, :kind)"
+                            " RETURNING uuid"
+                        ),
+                        {"name": name, "kind": kind},
+                    )
+                ).scalar_one()
+                await conn.execute(
+                    text(
+                        "INSERT INTO role_permission_assign (uuid, role_uuid, permission_uuid, scope)"
+                        " VALUES (gen_random_uuid(), :role, :permission, :scope)"
+                    ),
+                    {"role": role, "permission": permission, "scope": scope},
+                )
 
         await _alembic("head")
 
         async with engine.connect() as conn:
             # Only ticket.view_pii: later migrations grant other capabilities to these roles
             # (e.g. Spec 026's team admin grants), which would overwrite a role's entry here.
-            scopes = dict((await conn.execute(text(
-                "SELECT r.name, a.scope FROM role_permission_assign a"
-                " JOIN roles r ON r.uuid = a.role_uuid"
-                " JOIN permissions p ON p.uuid = a.permission_uuid"
-                " WHERE p.key = 'ticket.view_pii'"
-            ))).all())
+            scopes = dict(
+                (
+                    await conn.execute(
+                        text(
+                            "SELECT r.name, a.scope FROM role_permission_assign a"
+                            " JOIN roles r ON r.uuid = a.role_uuid"
+                            " JOIN permissions p ON p.uuid = a.permission_uuid"
+                            " WHERE p.key = 'ticket.view_pii'"
+                        )
+                    )
+                ).all()
+            )
         await engine.dispose()
 
         yield scopes

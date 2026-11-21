@@ -46,16 +46,13 @@ router = APIRouter()
 # through a variable defeats. The guard is right — a code assembled at runtime is exactly how a
 # typo ships as the contract — so the table holds calls it can read.
 _ERROR_MAP = {
-    ContactConflict: lambda d: ApiError(
-        status.HTTP_409_CONFLICT, ErrorCode.IDENTIFIER_TAKEN, detail=d),
-    LastLoginChannel: lambda d: ApiError(
-        status.HTTP_409_CONFLICT, ErrorCode.LAST_LOGIN_CHANNEL, detail=d),
-    ContactNotFound: lambda d: ApiError(
-        status.HTTP_404_NOT_FOUND, ErrorCode.NO_PROOF_CHANNEL, detail=d),
+    ContactConflict: lambda d: ApiError(status.HTTP_409_CONFLICT, ErrorCode.IDENTIFIER_TAKEN, detail=d),
+    LastLoginChannel: lambda d: ApiError(status.HTTP_409_CONFLICT, ErrorCode.LAST_LOGIN_CHANNEL, detail=d),
+    ContactNotFound: lambda d: ApiError(status.HTTP_404_NOT_FOUND, ErrorCode.NO_PROOF_CHANNEL, detail=d),
     StepUpRequired: lambda d: ApiError(
-        status.HTTP_422_UNPROCESSABLE_ENTITY, ErrorCode.STEP_UP_REQUIRED, detail=d),
-    StepUpFailed: lambda d: ApiError(
-        status.HTTP_401_UNAUTHORIZED, ErrorCode.STEP_UP_INVALID, detail=d),
+        status.HTTP_422_UNPROCESSABLE_ENTITY, ErrorCode.STEP_UP_REQUIRED, detail=d
+    ),
+    StepUpFailed: lambda d: ApiError(status.HTTP_401_UNAUTHORIZED, ErrorCode.STEP_UP_INVALID, detail=d),
 }
 
 
@@ -72,22 +69,24 @@ def _normalized_or_422(type_: str, value: str) -> str:
         return _normalize_identifier(type_, value)
     except ValueError as err:
         raise ApiError(
-            status.HTTP_422_UNPROCESSABLE_ENTITY, ErrorCode.IDENTIFIER_INVALID,
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            ErrorCode.IDENTIFIER_INVALID,
             detail="Invalid identifier",
         ) from err
 
 
-@router.post("/contacts", status_code=status.HTTP_202_ACCEPTED,
-             dependencies=[Depends(get_rate_limiter(3, 60))])
+@router.post(
+    "/contacts", status_code=status.HTTP_202_ACCEPTED, dependencies=[Depends(get_rate_limiter(3, 60))]
+)
 async def add_contact(
-        body: AddContactRequest,
-        current_user: User = Depends(security.get_current_user),
-        step_up_holder: ProofHolder | None = Depends(get_step_up_holder),
-        db: AsyncSession = Depends(security.get_db),
-        redis=Depends(get_redis),
-        email_sender=Depends(get_email_sender),
-        sms_sender=Depends(get_sms_sender),
-        verifiers=Depends(get_sso_verifiers),
+    body: AddContactRequest,
+    current_user: User = Depends(security.get_current_user),
+    step_up_holder: ProofHolder | None = Depends(get_step_up_holder),
+    db: AsyncSession = Depends(security.get_db),
+    redis=Depends(get_redis),
+    email_sender=Depends(get_email_sender),
+    sms_sender=Depends(get_sms_sender),
+    verifiers=Depends(get_sso_verifiers),
 ):
     """Start adding or replacing a contact: send a 6-digit code to the new value.
 
@@ -100,9 +99,16 @@ async def add_contact(
     ident = _normalized_or_422(body.type, body.value)
     try:
         await contact_service.start_contact_change(
-            db, redis, actor=current_user, type_=body.type, value=ident,
-            step_up=body.step_up, email_sender=email_sender, sms_sender=sms_sender,
-            verifiers=verifiers, proof_holder=step_up_holder,
+            db,
+            redis,
+            actor=current_user,
+            type_=body.type,
+            value=ident,
+            step_up=body.step_up,
+            email_sender=email_sender,
+            sms_sender=sms_sender,
+            verifiers=verifiers,
+            proof_holder=step_up_holder,
         )
     except (ContactConflict, StepUpRequired, StepUpFailed) as err:
         raise _as_http(err) from err
@@ -111,13 +117,13 @@ async def add_contact(
 
 @router.post("/contacts/verify", dependencies=[Depends(get_rate_limiter(10, 60))])
 async def verify_contact(
-        body: VerifyContactRequest,
-        background_tasks: BackgroundTasks,
-        current_user: User = Depends(security.get_current_user),
-        db: AsyncSession = Depends(security.get_db),
-        redis=Depends(get_redis),
-        email_sender=Depends(get_email_sender),
-        sms_sender=Depends(get_sms_sender),
+    body: VerifyContactRequest,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(security.get_current_user),
+    db: AsyncSession = Depends(security.get_db),
+    redis=Depends(get_redis),
+    email_sender=Depends(get_email_sender),
+    sms_sender=Depends(get_sms_sender),
 ):
     """Verify a 6-digit code and attach — or atomically swap in — the verified contact.
 
@@ -128,37 +134,45 @@ async def verify_contact(
     try:
         ident = _normalize_identifier(body.type, body.value)
     except ValueError as err:
-        raise ApiError(status.HTTP_400_BAD_REQUEST, ErrorCode.CODE_INVALID,
-                       detail="Invalid or expired code") from err
+        raise ApiError(
+            status.HTTP_400_BAD_REQUEST, ErrorCode.CODE_INVALID, detail="Invalid or expired code"
+        ) from err
     try:
         replaced = await contact_service.commit_contact_change(
-            db, redis, actor=current_user, type_=body.type, value=ident, code=body.code,
-            email_sender=email_sender, sms_sender=sms_sender,
+            db,
+            redis,
+            actor=current_user,
+            type_=body.type,
+            value=ident,
+            code=body.code,
+            email_sender=email_sender,
+            sms_sender=sms_sender,
             dispatch=background_tasks.add_task,
         )
     except ContactConflict as err:
         raise _as_http(err) from err
     except ContactNotFound as err:  # a bad/expired code reads as 400, not 404
-        raise ApiError(status.HTTP_400_BAD_REQUEST, ErrorCode.CODE_INVALID,
-                       detail=str(err)) from err
+        raise ApiError(status.HTTP_400_BAD_REQUEST, ErrorCode.CODE_INVALID, detail=str(err)) from err
     except IntegrityError as err:  # rare race: value claimed between the check and the insert
         await db.rollback()
-        raise ApiError(status.HTTP_409_CONFLICT, ErrorCode.IDENTIFIER_TAKEN,
-                       detail="Already in use") from err
+        raise ApiError(status.HTTP_409_CONFLICT, ErrorCode.IDENTIFIER_TAKEN, detail="Already in use") from err
     return {"detail": "Contact replaced" if replaced else "Contact added"}
 
 
-@router.delete("/contacts/{type}", status_code=status.HTTP_204_NO_CONTENT,
-               dependencies=[Depends(get_rate_limiter(5, 60))])
+@router.delete(
+    "/contacts/{type}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(get_rate_limiter(5, 60))],
+)
 async def delete_contact(
-        type: str,
-        background_tasks: BackgroundTasks,
-        body: DeleteContactRequest | None = None,
-        current_user: User = Depends(security.get_current_user),
-        db: AsyncSession = Depends(security.get_db),
-        redis=Depends(get_redis),
-        email_sender=Depends(get_email_sender),
-        sms_sender=Depends(get_sms_sender),
+    type: str,
+    background_tasks: BackgroundTasks,
+    body: DeleteContactRequest | None = None,
+    current_user: User = Depends(security.get_current_user),
+    db: AsyncSession = Depends(security.get_db),
+    redis=Depends(get_redis),
+    email_sender=Depends(get_email_sender),
+    sms_sender=Depends(get_sms_sender),
 ):
     """Remove one of the caller's contacts, refusing to leave the account unreachable.
 
@@ -167,13 +181,18 @@ async def delete_contact(
     proof was supplied and answers 422 — the failure mode is closed, not open (ADR-161).
     """
     if type not in ("email", "phone"):
-        raise ApiError(status.HTTP_422_UNPROCESSABLE_ENTITY, ErrorCode.IDENTIFIER_INVALID,
-                       detail="Invalid contact type")
+        raise ApiError(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, ErrorCode.IDENTIFIER_INVALID, detail="Invalid contact type"
+        )
     try:
         await contact_service.delete_contact(
-            db, redis, actor=current_user, type_=type,
+            db,
+            redis,
+            actor=current_user,
+            type_=type,
             step_up=body.step_up if body else None,
-            email_sender=email_sender, sms_sender=sms_sender,
+            email_sender=email_sender,
+            sms_sender=sms_sender,
             dispatch=background_tasks.add_task,
         )
     except (ContactNotFound, LastLoginChannel, StepUpRequired, StepUpFailed) as err:
@@ -181,26 +200,28 @@ async def delete_contact(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.post("/contacts/resend", status_code=status.HTTP_202_ACCEPTED,
-             dependencies=[Depends(get_rate_limiter(2, 60))])
+@router.post(
+    "/contacts/resend", status_code=status.HTTP_202_ACCEPTED, dependencies=[Depends(get_rate_limiter(2, 60))]
+)
 async def resend_contact(
-        body: AddContactRequest,
-        current_user: User = Depends(security.get_current_user),
-        db: AsyncSession = Depends(security.get_db),
-        redis=Depends(get_redis),
-        email_sender=Depends(get_email_sender),
-        sms_sender=Depends(get_sms_sender),
+    body: AddContactRequest,
+    current_user: User = Depends(security.get_current_user),
+    db: AsyncSession = Depends(security.get_db),
+    redis=Depends(get_redis),
+    email_sender=Depends(get_email_sender),
+    sms_sender=Depends(get_sms_sender),
 ):
     """Resend the contact-verification code for a still-pending add/replace (rate limited)."""
     ident = _normalized_or_422(body.type, body.value)
     if await contact_repository.is_value_taken(db, type_=body.type, value=ident):
-        raise ApiError(status.HTTP_409_CONFLICT, ErrorCode.IDENTIFIER_TAKEN,
-                       detail="Already in use")
+        raise ApiError(status.HTTP_409_CONFLICT, ErrorCode.IDENTIFIER_TAKEN, detail="Already in use")
     code = await VerificationRepository(redis).reissue_contact_verification(
-        user_uuid=str(current_user.uuid), type_=body.type, value=ident)
+        user_uuid=str(current_user.uuid), type_=body.type, value=ident
+    )
     if code is None:
-        raise ApiError(status.HTTP_404_NOT_FOUND, ErrorCode.NO_PENDING_CONTACT,
-                       detail="No pending contact verification")
+        raise ApiError(
+            status.HTTP_404_NOT_FOUND, ErrorCode.NO_PENDING_CONTACT, detail="No pending contact verification"
+        )
     if body.type == "email":
         subject, html, text = build_contact_verification_email(code)
         await email_sender.send(ident, subject, html, text)

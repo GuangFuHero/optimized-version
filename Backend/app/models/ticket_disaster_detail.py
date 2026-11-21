@@ -31,17 +31,11 @@ class TicketDisasterDetail(Base, UUIDPKMixin, TimestampMixin):
 
     __tablename__ = "ticket_disaster_details"
     __table_args__ = (
-        UniqueConstraint(
-            "ticket_uuid", "property_name", "value", name="uq_ticket_disaster_detail_value"
-        ),
+        UniqueConstraint("ticket_uuid", "property_name", "value", name="uq_ticket_disaster_detail_value"),
     )
 
-    ticket_uuid: Mapped[str] = mapped_column(
-        ForeignKey("tickets.uuid"), index=True, comment="所屬通報單"
-    )
+    ticket_uuid: Mapped[str] = mapped_column(ForeignKey("tickets.uuid"), index=True, comment="所屬通報單")
     property_name: Mapped[str] = mapped_column(
         String(100), comment="對應 ticket_property_config.property_name，以字串參照，無外鍵"
     )
-    value: Mapped[str] = mapped_column(
-        String, comment="單一值；multi_select 欄位每個選項各一列"
-    )
+    value: Mapped[str] = mapped_column(String, comment="單一值；multi_select 欄位每個選項各一列")

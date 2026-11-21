@@ -111,15 +111,32 @@ async def test_merge_suggestion_over_long_value_is_masked(client, coordinator_au
     """
     _, token = coordinator_auth
     station_uuid = await _create_station(client, token)
-    body = await _post(client, CREATE_SUGGESTION, {"input": {
-        "targetType": "station", "targetUuid": station_uuid,
-        "fieldName": "type", "newValue": "T" * 300,
-    }}, token)
+    body = await _post(
+        client,
+        CREATE_SUGGESTION,
+        {
+            "input": {
+                "targetType": "station",
+                "targetUuid": station_uuid,
+                "fieldName": "type",
+                "newValue": "T" * 300,
+            }
+        },
+        token,
+    )
     assert "errors" not in body, body
 
-    body = await _post(client, MERGE_SUGGESTIONS, {"station": station_uuid, "decisions": [
-        {"targetUuid": station_uuid, "fieldName": "type", "approve": True, "value": "T" * 300},
-    ]}, token)
+    body = await _post(
+        client,
+        MERGE_SUGGESTIONS,
+        {
+            "station": station_uuid,
+            "decisions": [
+                {"targetUuid": station_uuid, "fieldName": "type", "approve": True, "value": "T" * 300},
+            ],
+        },
+        token,
+    )
     _assert_masked(body)
 
 
@@ -127,9 +144,16 @@ async def test_merge_suggestion_over_long_value_is_masked(client, coordinator_au
 async def test_domain_value_error_is_not_masked(client, coordinator_auth):
     """A service ValueError is the API's contract and must survive verbatim (ADR-013/014)."""
     _, token = coordinator_auth
-    body = await _post(client, CREATE_STATION, {"input": {
-        "geometry": {"type": "LineString", "coordinates": [[121.5, 25.0], [121.6, 25.1]]},
-    }}, token)
+    body = await _post(
+        client,
+        CREATE_STATION,
+        {
+            "input": {
+                "geometry": {"type": "LineString", "coordinates": [[121.5, 25.0], [121.6, 25.1]]},
+            }
+        },
+        token,
+    )
     assert "errors" in body, body
     assert "Station geometry must be a Point" in body["errors"][0]["message"], body
 
