@@ -85,6 +85,12 @@ class Settings(BaseSettings):
     TGOS_GEO_APP_ID: str = os.getenv("TGOS_GEO_APP_ID", "")
     TGOS_GEO_API_KEY: str = os.getenv("TGOS_GEO_API_KEY", "")
 
+    # Sent on every upstream map tile request so tile providers can identify and contact whoever runs
+    # this deployment; a deployment of your own sets its own name and contact.
+    UPSTREAM_USER_AGENT: str = os.getenv(
+        "UPSTREAM_USER_AGENT", "GuangFuHero/1.0 (+https://github.com/GuangFuHero/optimized-version)"
+    )
+
     # Where a Google or LINE sign-in sends the browser back to: the site's or the back office's own URL,
     # by the `app` it was started for (ADR-331). Local values by default, like APP_BASE_URL.
     SITE_APP_URL: str = os.getenv("SITE_APP_URL", "http://localhost:3000")

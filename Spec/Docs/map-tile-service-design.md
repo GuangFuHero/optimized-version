@@ -8,14 +8,14 @@
 
 ## Overview
 
-A public tile proxy service that fetches map tiles from upstream sources (satellite and road), caches them in Redis for 7 days, and returns them to the frontend. An attribution endpoint returns structured metadata so the frontend can render correct attribution per source.
+A public tile proxy service that fetches map tiles from upstream sources (satellite and road), caches them in Redis (7 days by default), and returns them to the frontend. An attribution endpoint returns structured metadata so the frontend can render correct attribution per source.
 
 ---
 
 ## Routes
 
 ```
-GET /api/v1/map/tile/{type}/{source}/{z}/{x}/{y}?layer=<layer>
+GET /api/v1/map/tile/{type}/{source}/{z}/{x}/{y}
 GET /api/v1/map/attribution/{type}/{source}
 ```
 
@@ -30,28 +30,21 @@ Both endpoints are **public** (no JWT required).
 | Param | Type | Values | Notes |
 |---|---|---|---|
 | `type` | path | `satellite`, `road` | Validated via enum |
-| `source` | path | `nasa_gibs`, `eox`, `nlsc`, `sinica`, `osm`, `carto` | Must be valid for the given `type` |
+| `source` | path | `nasa_gibs`, `eox`, `nlsc`, `osm` | Must be valid for the given `type` |
 | `z` | path | int 0–19 | Standard XYZ zoom level |
 | `x` | path | int | Tile column |
 | `y` | path | int | Tile row |
-
-### Query Parameters
-
-| Param | Type | Required | Notes |
-|---|---|---|---|
-| `layer` | string | Required when `source=sinica`, ignored otherwise | Sinica layer name passed directly to upstream URL (e.g. `EARTH`, `TAIWAN_MOSAIC`). See [Sinica tileserver](https://gis.sinica.edu.tw/worldmap/) for available layer names. |
 
 **Valid type/source combinations:**
 
 | type | allowed sources |
 |---|---|
-| `satellite` | `nasa_gibs`, `eox`, `nlsc`, `sinica` |
-| `road` | `osm`, `carto` |
+| `satellite` | `nasa_gibs`, `eox`, `nlsc` |
+| `road` | `osm` |
 
 **Validation rules:**
 - Invalid `type`/`source` combo → HTTP 400
 - `z` outside 0–19 → HTTP 400
-- `source=sinica` with no `layer` query param → HTTP 400 with message: `"layer is required for source=sinica"`
 
 ---
 
@@ -64,16 +57,13 @@ Static config mapping `(type, source)` to upstream URL template:
 | `nasa_gibs` | `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/HLS_S30_Nadir_BRDF_Adjusted_Reflectance/default/{date}/GoogleMapsCompatible_Level12/{z}/{y}/{x}.png` | `image/png` | none |
 | `eox` | `https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2024_3857/default/g/{z}/{y}/{x}.jpg` | `image/jpeg` | none |
 | `nlsc` | `https://wmts.nlsc.gov.tw/wmts/PHOTO_MIX/default/EPSG:3857/{z}/{y}/{x}` | `image/jpeg` | none |
-| `sinica` | `https://gis.sinica.edu.tw/tileserver/file-exists.php?img={layer}/{z}/{x}/{y}` | `image/png` | none |
-| `osm` | `https://tile.openstreetmap.org/{z}/{x}/{y}.png` | `image/png` | none |
-| `carto` | `https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png` | `image/png` | none |
+| `osm` | `https://tile.openstreetmap.org/{z}/{x}/{y}.png` | `image/png` | `Referer` (origin only) |
 
-> Note: every upstream request (tiles and the GIBS dates lookup) sends the platform User-Agent `GuangFuHero/1.0 (+https://github.com/GuangFuHero/optimized-version)` and no other special headers.  
+> Note: every upstream request (tiles and the GIBS dates lookup) sends the User-Agent from the `UPSTREAM_USER_AGENT` setting, by default `GuangFuHero/1.0 (+https://github.com/GuangFuHero/optimized-version)`.  
+> Note: `osm` follows the OSM Foundation tile usage policy: it passes on the browser's `Referer` cut to its origin (as a browser sends it cross-origin by default), and caches each tile for the upstream `Cache-Control: max-age` or `Expires`, or 7 days when neither is sent.  
 > Note: `nlsc` is verified with Python's strict X.509 check turned off, because its TWCA root CA has no Subject Key Identifier; the chain and hostname are still verified (same approach as the address lookup).  
-> Note: `sinica` ToS is unconfirmed — confirm before production use.  
 > Note: `nasa_gibs` is HLS Sentinel-2 (30 m, native max z12). `{date}` is the second-newest date listed in GIBS's `.../GoogleMapsCompatible_Level12/all/all.xml` (the newest is often still empty, and the list has gaps that GIBS answers with 404), cached in Redis (`tile:nasa_gibs:date`) for an hour and included in the tile cache key. Each day is one satellite pass, so it can be cloudy and is blank outside the swath. Its tiles are cached for 1 day instead of 7, since the date moves daily and older copies are never read again, and requests past z12 return the blank tile without asking GIBS.  
-> Note: `carto` now needs an API key (`?key=`); without one every tile is an "API KEY REQUIRED" image, so the frontend marks it unavailable.  
-> Note: `{layer}` in the `sinica` URL template is substituted from the `?layer=` query param at request time.
+> Note: CARTO and Academia Sinica are not served: CARTO's terms forbid server-side proxying and caching, and Sinica's terms are unconfirmed.
 
 ---
 
@@ -93,11 +83,9 @@ Examples:
 ```
 tile:nasa_gibs:satellite:date=2026-10-21:10:123:456
 tile:eox:satellite:_:10:123:456
-tile:sinica:satellite:layer=EARTH:10:123:456
-tile:sinica:satellite:layer=EARTH,style=default:10:123:456
 ```
 
-Sorting params before building the key ensures `layer=EARTH,style=default` and `style=default,layer=EARTH` resolve to the same cache entry.
+Sorting params before building the key ensures the same params in any order resolve to the same cache entry.
 
 ### Cache Hit
 1. Build Redis key
@@ -105,9 +93,9 @@ Sorting params before building the key ensures `layer=EARTH,style=default` and `
 3. Return bytes with correct `Content-Type` header
 
 ### Cache Miss
-1. Look up upstream URL template, substitute `{z}`, `{x}`, `{y}` (and `{layer}` for sinica)
+1. Look up upstream URL template, substitute `{z}`, `{x}`, `{y}` (and `{date}` for nasa_gibs)
 2. Fetch upstream with `httpx` (async), timeout 10s, include any required headers
-3. On success: store in Redis hash, set the source's TTL (604800s, or 86400s for `nasa_gibs`), return tile
+3. On success: store in Redis hash, set the source's TTL (604800s, 86400s for `nasa_gibs`, the upstream caching headers for `osm`), return tile
 4. On error (timeout, 4xx, 5xx): return **blank tile** (1×1 transparent PNG)
 
 ### Redis Down
@@ -125,12 +113,12 @@ Each tile is stored as a Redis hash using the unified key format:
 
 ```
 HSET tile:{source}:{type}:{sorted_params}:{z}:{x}:{y}  data <bytes>  ct "image/jpeg"
-EXPIRE tile:{source}:{type}:{sorted_params}:{z}:{x}:{y}  604800   # 86400 for nasa_gibs
+EXPIRE tile:{source}:{type}:{sorted_params}:{z}:{x}:{y}  604800   # 86400 for nasa_gibs; upstream max-age or Expires for osm
 ```
 
 `{sorted_params}` is `_` when no query params are provided.
 
-TTL: **7 days (604800 seconds)**; `nasa_gibs` **1 day (86400 seconds)**  
+TTL: **7 days (604800 seconds)**; `nasa_gibs` **1 day (86400 seconds)**; `osm` as long as its `Cache-Control: max-age` or `Expires` says, **7 days** when neither is sent  
 Eviction policy: `allkeys-lru` (least-recently-used tiles evicted when memory cap reached)
 
 ---
@@ -166,9 +154,7 @@ Returns structured metadata for a given `type`/`source` combination. Used by the
 | `nasa_gibs` | NASA GIBS | `Imagery provided by NASA's Global Imagery Browse Services (GIBS), part of NASA's ESDIS (HLS, contains modified Copernicus Sentinel data)` | US Gov Open Data | true | false | null |
 | `eox` | Sentinel-2 Cloudless by EOX | `Sentinel-2 cloudless - https://s2maps.eu by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2024)` | CC BY-NC-SA 4.0 | false | false | null |
 | `nlsc` | 內政部國土測繪中心 | `© 內政部國土測繪中心` | 國土測繪圖資服務雲服務使用條款 | false | false | null |
-| `sinica` | 中央研究院 | `© 中央研究院` | Academic (unconfirmed) | false | false | null |
 | `osm` | OpenStreetMap | `© OpenStreetMap contributors` | ODbL | true | false | null |
-| `carto` | CARTO | `© OpenStreetMap contributors, © CARTO` | OSM ODbL + CARTO ToS | true | false | null |
 
 ---
 
@@ -217,7 +203,6 @@ environment:
 |---|---|
 | Invalid `type`/`source` combo | HTTP 400 |
 | `z` outside 0–19 | HTTP 400 |
-| `source=sinica` without `?layer=` | HTTP 400: `"layer is required for source=sinica"` |
 | Upstream timeout / 5xx | 1×1 transparent PNG, `Content-Type: image/png` |
 | Upstream 404 | 1×1 transparent PNG, `Content-Type: image/png` |
 | Redis unavailable | Bypass cache, fetch upstream directly |
@@ -226,5 +211,5 @@ environment:
 
 ## Testing
 
-- **Unit:** `tile_proxy.py` with mocked Redis + mocked `httpx` — test cache hit, cache miss, upstream error → blank tile, Redis down → passthrough, sinica layer substitution in URL and cache key
-- **Integration:** endpoint tests for valid tile request, sinica with/without `?layer=`, invalid params → 400, upstream error → blank PNG response, attribution response shape
+- **Unit:** `tile_proxy.py` with mocked Redis + mocked `httpx` — test cache hit, cache miss, upstream error → blank tile, Redis down → passthrough, `osm` TTL from upstream caching headers and `Referer` origin
+- **Integration:** endpoint tests for valid tile request, removed sources (`carto`, `sinica`) → 400, invalid params → 400, upstream error → blank PNG response, attribution response shape
