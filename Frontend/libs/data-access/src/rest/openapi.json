@@ -6206,7 +6206,7 @@
           "數據分析 API"
         ],
         "summary": "Get Analytics Catalog",
-        "description": "Machine-readable y-metric catalog: valid `x` values and chart types per metric.\n\nThe source of truth behind the \"ignore x when it doesn't apply\" behavior on both\nchart endpoints below — build x/y dropdowns from this response instead of\nhardcoding the rules client-side.\n\nAuthentication only, no capability: the metric specs are a static description of this\nAPI's own shape. Gating it on ticket.view (as it originally was) locked a station-only\nrole out of the station catalog it is allowed to chart. The filter values that come from\nrows (areas, station types) are narrowed to the caller's own scope per domain, and left\nempty for a domain they cannot chart.",
+        "description": "Machine-readable y-metric catalog: valid `x` values and chart types per metric.\n\nThe source of truth behind the \"ignore x when it doesn't apply\" behavior on both\nchart endpoints below — build x/y dropdowns from this response instead of\nhardcoding the rules client-side.\n\nNeeds `analytics.view` alone: the metric specs are a static description of this\nAPI's own shape. Gating it on ticket.view (as it originally was) locked a station-only\nrole out of the station catalog it is allowed to chart. The filter values that come from\nrows (areas, station types) are narrowed to the caller's own scope per domain, and left\nempty for a domain they cannot chart.",
         "operationId": "get_analytics_catalog_api_v1_analytics_catalog_get",
         "security": [
           {
@@ -11309,6 +11309,7 @@
       "Perm": {
         "type": "string",
         "enum": [
+          "analytics.view",
           "ticket.view",
           "ticket.view_pii",
           "ticket.view_detail",
