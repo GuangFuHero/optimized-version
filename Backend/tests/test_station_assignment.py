@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Stations are assigned to one team by hand and governed by that assignment (ADR-285).
 
 Service-level (root conftest), like tests/test_suggestion_review_scope.py: authorization lives

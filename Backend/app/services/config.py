@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Dynamic-field config write actions (station / task / ticket property config schemas).
 
 Same flat-service style as station.py. These are global schema definitions, not

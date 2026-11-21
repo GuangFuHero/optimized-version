@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Dedup table constraints, checked on both ways the schema gets built.
 
 A `TEST_SCHEMA=models` run builds the schema from the models (`create_all`), and

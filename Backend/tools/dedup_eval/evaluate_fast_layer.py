@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Replay and grid-search the fast layer's top-1 ranking on a labelled query dataset.
 
 Scores come from the engine itself: `score_candidate` turns one query/candidate pair into

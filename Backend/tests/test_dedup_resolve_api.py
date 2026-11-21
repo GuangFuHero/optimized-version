@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """POST /admin/duplicate-pairs/{uuid}/resolve is wired to the service (Spec 028 §3, ADR-365/366).
 
 Wiring only: what a resolve writes is observed at the service (tests/test_dedup_resolve.py).

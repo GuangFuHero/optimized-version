@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """contact unique user type
 
 Revision ID: fdaee08d6cd9

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """SQLAlchemy models for users, login identities, and contacts.
 
 RBAC models (Role/Permission/*) moved to app/models/rbac.py; team models to app/models/team.py

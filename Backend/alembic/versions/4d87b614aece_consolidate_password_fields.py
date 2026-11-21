@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """consolidate_password_fields
 
 Revision ID: 4d87b614aece

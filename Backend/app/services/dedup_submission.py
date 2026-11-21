@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Two-phase create for the interactive GraphQL path.
 
 The engine is asked about the whole submission. Any suspect holds all of it: nothing is

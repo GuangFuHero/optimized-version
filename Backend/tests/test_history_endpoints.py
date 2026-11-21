@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """HTTP surface of the timeline endpoints (feature 016, ADR-138/139).
 
 The service is covered directly in test_history_service.py; what only shows up here is the

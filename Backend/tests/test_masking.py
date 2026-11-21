@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Unit tests for app/graphql/masking.py (PII masking, ADR-049 / ported from PR #23)."""
 
 from app.graphql.masking import mask_email, mask_name, mask_phone

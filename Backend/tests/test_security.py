@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Unit tests for the security module: password hashing, JWT, and salt utilities."""
 
 import os

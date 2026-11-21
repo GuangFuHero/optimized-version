@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Pydantic schemas for map tile attribution responses."""
 
 from pydantic import BaseModel, model_validator

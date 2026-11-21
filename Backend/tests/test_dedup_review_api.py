@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The AI 重複審核 REST surface is wired to the service (Spec 025 §2, ADR-338).
 
 Wiring only: filtering, order and the two sides are observed at the service

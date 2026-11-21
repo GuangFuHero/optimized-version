@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The test databases: built once per run from alembic, reset between tests by truncation.
 
 The run builds one template database with `alembic upgrade head` (or `Base.metadata.create_all`

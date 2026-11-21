@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """FastEngine end to end against real PostGIS.
 
 tests/dedup_engine/test_fast.py pins the scoring formula; these cover the engine around it: the

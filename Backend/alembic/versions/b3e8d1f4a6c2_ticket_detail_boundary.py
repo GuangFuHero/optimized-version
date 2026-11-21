@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """ticket detail boundary: h3 extensions + title/task-name trigram indexes
 
 Spec/018-ticket-disaster-fields/decisions.md ADR-281~283.

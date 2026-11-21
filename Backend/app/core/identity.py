@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The identity a request is acting as (feature 010, ADR-068/069).
 
 An identity is one row of `user_role_assign`: a role, plus the team it applies to when the

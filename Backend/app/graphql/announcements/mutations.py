@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """GraphQL mutations for announcements."""
 
 from uuid import UUID

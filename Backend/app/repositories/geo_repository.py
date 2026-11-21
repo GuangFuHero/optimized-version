@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Repositories for stations, map areas, building maps, station properties, and crowd sourcing."""
 
 from sqlalchemy import and_, exists, func, or_, select

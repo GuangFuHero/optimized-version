@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Refuse a value longer than its column before the database does.
 
 Past a `varchar(n)`'s width the driver raises, and the schema's `MaskErrors` turns that into an

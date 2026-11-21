@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Signing in with LINE through the backend's own OAuth flow (ADR-331).
 
 The flow is Google's (`tests/test_oauth_google.py` covers the state, the cookie and every way back to the

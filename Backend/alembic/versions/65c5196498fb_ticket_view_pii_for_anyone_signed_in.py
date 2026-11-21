@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """ticket.view_pii: the seeded roles to `all` (ADR-286: anyone signed in may call the requester)
 
 Revision ID: 65c5196498fb

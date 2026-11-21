@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Notification params for station suggestions, and how the notifications API returns them."""
 
 import pytest

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Pending cards the 重複審核 queue leaves out because their sides leave nothing to decide (ADR-461).
 
 A pending card naming a deleted or cancelled ticket, need or station is neither listed nor counted,

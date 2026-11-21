@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Timeline aggregation, merging and derivation (feature 016, ADR-131~137).
 
 These tests clear what the audit triggers logged of their setup, then insert audit rows by

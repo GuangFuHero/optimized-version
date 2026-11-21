@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Redis-backed proofs that a signed-in browser has just checked its person at their provider (ADR-361).
 
 Key: `step_up_proof:{sid}:{action}:{browser}` -> the account's uuid, for five minutes. A proof belongs to one

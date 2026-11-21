@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The `code` field on auth error responses is the contract clients branch on.
 
 Nothing else in the suite touches it. `detail` is asserted in several places, so a reworded message

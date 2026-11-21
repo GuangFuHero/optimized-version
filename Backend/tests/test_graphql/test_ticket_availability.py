@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """ticketAvailability: what a share link finds at a ticket's uuid when `ticket` has nothing (ADR-444)."""
 
 import uuid as uuid_mod

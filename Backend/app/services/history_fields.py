@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Which audit columns a history timeline may expose, and to whom (ADR-129/130/143/144).
 
 The audit trigger stores `to_jsonb(NEW)` — the *whole row*, minus `password_hash`

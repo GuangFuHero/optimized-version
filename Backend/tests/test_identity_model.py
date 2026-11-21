@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The database-level shape of an identity (feature 010, ADR-073).
 
 Every rule here is enforced by the schema rather than by application code, which is the

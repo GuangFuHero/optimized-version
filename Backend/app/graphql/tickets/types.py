@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """GraphQL types for tickets, ticket tasks, and photos."""
 
 import asyncio

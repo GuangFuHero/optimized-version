@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Pydantic schemas for notifications API requests and responses."""
 
 from datetime import datetime

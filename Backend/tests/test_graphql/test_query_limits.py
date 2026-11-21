@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The schema refuses abusive documents and hides introspection outside development.
 
 Every limit is a validation or parse error, raised before any resolver runs, so its message

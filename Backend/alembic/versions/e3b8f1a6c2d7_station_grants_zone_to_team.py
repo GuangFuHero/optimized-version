@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """station.* grants: zone -> team (ADR-285 decision 3)
 
 Revision ID: e3b8f1a6c2d7

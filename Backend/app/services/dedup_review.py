@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The 重複審核 queue (Spec 025): read the pair cards the dedup layers leave behind, and decide them.
 
 `ai_duplicate.view` reads cards and their events; `ai_duplicate.review` confirms or rejects one and

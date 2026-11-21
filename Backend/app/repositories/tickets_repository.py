@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Repositories for tickets, ticket tasks, task properties, and disaster-field values."""
 
 from geoalchemy2 import Geography

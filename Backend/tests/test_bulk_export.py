@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Bulk export of stations and tickets (feature 015, ADR-109/119).
 
 Export is a second read path onto data the GraphQL layer already guards, so these tests are

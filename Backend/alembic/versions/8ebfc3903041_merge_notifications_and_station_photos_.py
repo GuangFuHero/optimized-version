@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """merge notifications and station photos heads
 
 Both `f3e4d5c6b7a8` (notifications table) and `b8f4d2a6e1c3` (station photos + contact

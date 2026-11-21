@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Tests for AnnouncementRepository: one live announcement per page, and publishing replaces it.
 
 Uses the function-scoped `db` fixture (tests/conftest.py), which drops/creates a fresh

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """GraphQL types for stations, hazardous zones, building maps, and station properties."""
 
 import asyncio

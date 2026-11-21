@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Tests for the /readyz readiness probe (the deploy gate)."""
 
 import pytest

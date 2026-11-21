@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The backend's guard around the pluggable dedup engine, on a real database session.
 
 The engine may query the database, so the backend runs it in a savepoint it always rolls back,

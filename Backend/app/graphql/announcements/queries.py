@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """GraphQL queries for announcements."""
 
 from uuid import UUID

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Switching between the identities a user holds (feature 010, ADR-068/069/070/096).
 
 Covers the token side of the feature end to end: what login lands on, what /auth/switch-identity

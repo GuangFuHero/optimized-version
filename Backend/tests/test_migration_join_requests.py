@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Spec 026: the join-requests migration, run against data a deployed database holds.
 
 Built like tests/test_migration_backfill_user_role.py: stop at main's head before this feature,

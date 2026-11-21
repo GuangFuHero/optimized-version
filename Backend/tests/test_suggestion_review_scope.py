@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Scope checks for merging and reading station suggestions as a `station.review=team` reviewer.
 
 Both are checked against the station, so the reviewer reaches its own team's stations only.

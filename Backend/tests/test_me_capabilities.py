@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """`/users/me` lists what the active identity passes checkpoint 1 for (PR #79).
 
 Roles come straight from `scripts/seed_rbac.py`, so the expectations are the grants production

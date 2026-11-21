@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Pydantic schemas for the 重複審核 queue in the back office (Spec 025 §2)."""
 
 from datetime import datetime

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Generic async SQLAlchemy repository providing standard CRUD operations."""
 
 from typing import Any, Generic, TypeVar

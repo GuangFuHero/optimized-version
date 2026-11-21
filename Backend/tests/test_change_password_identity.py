@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Endpoint tests for change-password against the password identity."""
 
 import pytest

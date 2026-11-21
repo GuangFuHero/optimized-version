@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """GraphQL surface of 請求協助.
 
 The rules — what is filed, what is refused — are pinned at the service layer in

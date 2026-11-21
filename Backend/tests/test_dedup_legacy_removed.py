@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Superseded dedup code stays gone.
 
 The engine boundary exists so there is one scoring path and one contract. A leftover old

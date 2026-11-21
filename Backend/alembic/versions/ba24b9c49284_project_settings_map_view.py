@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """project_settings map view: where the site's map opens for this disaster (ADR-395)
 
 Revision ID: ba24b9c49284

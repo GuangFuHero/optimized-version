@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """GraphQL queries for briefing templates and briefings."""
 
 from uuid import UUID

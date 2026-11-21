@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """End-to-End integration tests for the notification center lifecycle."""
 
 import uuid

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The fast layer's outputs on fixed data are pinned per engine version.
 
 Regenerate with `DEDUP_REGEN_GOLDEN=1 uv run pytest tests/dedup_engine/test_golden.py`; it

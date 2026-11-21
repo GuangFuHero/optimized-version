@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Shared two-checkpoint authorization helper for the use-case layer (ADR-013/022).
 
 GraphQL resolvers go through `app.graphql.context.check_permission`, which layers Guest

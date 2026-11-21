@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """GraphQL request context factory and RBAC permission helper (two-checkpoint model, ADR-022)."""
 
 from fastapi import HTTPException, status

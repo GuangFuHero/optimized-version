@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Map tile proxy service — fetches tiles from upstream sources with Redis caching."""
 
 import base64

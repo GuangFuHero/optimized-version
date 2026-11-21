@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Shared helpers for the dedup service and submission tests."""
 
 from collections.abc import Callable, Sequence

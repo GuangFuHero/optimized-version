@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """merge rbac and announcement heads
 
 Revision ID: c7d8e9f0a1b2

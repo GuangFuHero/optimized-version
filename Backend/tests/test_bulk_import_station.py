@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Station import: preview and commit (feature 015, ADR-106/112/121).
 
 The round-trip test is the important one — export, re-import, nothing changes — because it

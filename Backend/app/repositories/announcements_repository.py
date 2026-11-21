@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Repository for site-wide announcements: at most one live on each page, and publishing replaces it."""
 
 from collections.abc import Awaitable, Callable

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """create notifications table
 
 Revision ID: f3e4d5c6b7a8

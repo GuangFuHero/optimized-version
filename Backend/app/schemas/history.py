@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Response shapes for the change-timeline endpoints (feature 016)."""
 
 from datetime import datetime

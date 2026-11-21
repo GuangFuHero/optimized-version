@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Tests for account activity tracking and the three new admin user-list columns.
 
 Feature 013 (ADR-093/094): `users.last_activity_at` is written on refresh-token rotation

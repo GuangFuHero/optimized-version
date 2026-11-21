@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The public timeline of a help request (ADR-421): what happened, to anyone, with nobody's name.
 
 Audit rows are written by hand, as in test_history_endpoints.py: each case clears what the triggers

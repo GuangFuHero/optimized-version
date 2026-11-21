@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """A citizen applies to become back-office staff (Spec/019, AC-FEAT-002).
 
 Service-level (root conftest): the rules live in `app.services.role_request`, so that is where

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Trigram similarity in app/dedup_engine/text.py. Parity with pg_trgm: tests/test_dedup_trgm_parity.py."""
 
 from app.dedup_engine.text import trigram_similarity, trigrams

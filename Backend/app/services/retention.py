@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Data retention and soft-delete cleanup for notifications (PRD Section 9 / Q4 resolution)."""
 
 from datetime import UTC, datetime, timedelta

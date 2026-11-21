@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """SQLAlchemy model for site-wide announcements."""
 
 from datetime import datetime

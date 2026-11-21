@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Regression tests for the defects found reviewing feature 013.
 
 Written first as failing tests to prove each review finding was real (all 7 failed), then

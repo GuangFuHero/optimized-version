@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """add ticket_tasks.recruiting_stopped_at (a requester stopped recruiting for this need by hand)
 
 Revision ID: 6c5a9d3d3444

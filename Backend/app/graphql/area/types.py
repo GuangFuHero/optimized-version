@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """GraphQL types for map areas: 危險區, 責任區 and 標示區 (ADR-311)."""
 
 import enum

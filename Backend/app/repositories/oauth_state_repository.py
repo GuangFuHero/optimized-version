@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Redis-backed state of OAuth sign-ins in progress (ADR-331).
 
 Key: `oauth_state:{state}` -> the provider, the app, where to return to, the PKCE verifier and the nonce,

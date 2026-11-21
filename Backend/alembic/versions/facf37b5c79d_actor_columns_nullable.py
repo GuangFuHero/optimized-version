@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Who reviewed a merge, and who last changed a briefing or an announcement, may be NULL (ADR-393)
 
 station_suggestion_merges.reviewed_by, briefings.updated_by and announcements.updated_by.

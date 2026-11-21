@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Fail when `alembic/versions` has more than one head.
 
 Two PRs that add a migration on the same parent are each fine alone, but once both are merged

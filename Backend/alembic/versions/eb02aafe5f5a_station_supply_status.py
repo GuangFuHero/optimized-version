@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """station supply status: what a station is short of, and when that last changed
 
 `supply_status` is the public free-text line the site's suggest-an-edit form calls 物資狀況;

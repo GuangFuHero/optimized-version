@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The team directory the 申請成為後台人員 form picks from (Spec/026, `roleRequestTeams`).
 
 An applicant is in no team yet, and `GET /admin/teams` lists only the caller's own, so the form

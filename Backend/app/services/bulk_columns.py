@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Column model shared by bulk export and import (feature 015, ADR-118/119).
 
 One definition serves both directions: the exporter writes these headers in this order and

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """RBAC test endpoints for verifying role-based access control permissions."""
 
 from fastapi import APIRouter, Depends

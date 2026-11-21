@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """ADR-394: `stations` filters by area, official source, creation and update time, and sorts open first.
 
 The back office's station page used to read every station in scope and filter and sort in the browser

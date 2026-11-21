@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Shared SQLAlchemy mixins: UUID primary key and soft-delete timestamps."""
 
 import uuid as _uuid

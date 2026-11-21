@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Regressions from the Spec/026 code review (ADR-359 points 3-5)."""
 
 import asyncio

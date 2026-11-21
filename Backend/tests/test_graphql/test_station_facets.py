@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """ADR-394: `stationFacets` counts what `stations` would list, so a page needn't read every station.
 
 One round trip fills the back office's status strip, area options, export counts and review badge,

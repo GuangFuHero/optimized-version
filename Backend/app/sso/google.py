@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Google id_token verification: protocol + real (OIDC) adapter and dependency."""
 
 from dataclasses import dataclass

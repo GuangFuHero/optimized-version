@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Custom Strawberry scalars and GeoJSON geometry conversion utilities."""
 
 from typing import Any, NewType

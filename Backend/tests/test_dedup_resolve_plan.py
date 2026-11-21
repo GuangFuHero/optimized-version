@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The resolve plan (Spec 028 §3.3–3.4): what a request means, or why it is refused. No database."""
 
 from dataclasses import replace

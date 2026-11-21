@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Scope engine (ADR-020/021/049): fixed data-boundary scopes in place of a general ABAC engine.
 
 ADR-049 (乙, pure-geography model): a ticket's jurisdiction is decided by *where it is* (does its

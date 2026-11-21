@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Email delivery: abstract sender with a dev console impl and a SMTP2Go HTTP-API impl.
 
 GCP blocks outbound SMTP ports, so production uses an HTTP API provider (SMTP2Go), never SMTP.

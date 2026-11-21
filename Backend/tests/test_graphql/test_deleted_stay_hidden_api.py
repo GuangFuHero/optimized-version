@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """A deleted ticket or need is gone from every query.
 
 The site shows what the API returns: a deleted need that still came back would read as one to

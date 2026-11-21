@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """normalizeAddress / reverseGeocode, and a looked-up address saved through createTicket."""
 
 import pytest

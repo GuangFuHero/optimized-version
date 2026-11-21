@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Lookups over the RBAC identities a user may act as (feature 010, ADR-068/069).
 
 Named `active_identity` throughout to keep it distinct from `auth_repository`'s

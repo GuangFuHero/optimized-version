@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The user_permission_assign table enforces one row per (user, capability) (ADR-058)."""
 
 import pytest

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Repository for photos attached to geo entities (stations, tickets) or poles."""
 
 from app.infrastructure.repository.base import GenericRepository

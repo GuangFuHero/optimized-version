@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """create_audit_system
 
 Revision ID: 71bd05e07df3

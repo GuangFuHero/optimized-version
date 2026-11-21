@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Service orchestrating notification dispatch and creation."""
 
 import uuid as _uuid

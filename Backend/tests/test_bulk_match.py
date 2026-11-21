@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Matching an imported row against existing data (feature 015, ADR-107/113)."""
 
 import os

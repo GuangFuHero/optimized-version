@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Bulk import/export capability keys and seed grants (feature 015, ADR-110/111).
 
 The grant matrix lives in `scripts/seed_rbac.py`. These tests assert it directly, and then

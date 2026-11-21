@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """簡訊王 (kotsms.com.tw) SMS adapter, built against the vendor's Mitake API spec v2.14.
 
 Two prerequisites live outside this code and both fail loudly here if missing: the account needs the

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """GraphQL mutations for role requests. Thin per ADR-014; see app/services/role_request.py."""
 
 from uuid import UUID

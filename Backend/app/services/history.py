@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Read-only change timeline for a single ticket or station (feature 016).
 
 Everything here reads `audit_logs`; nothing in this module writes. The work is turning an

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """A ticket's status, worked out from its needs.
 
 Nobody sets a ticket's status by hand any more: every action that changes a need — claiming,

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Applying names a team, or a new one, and carries the applicant's details (Spec/026, Task 3).
 
 Service-level, like tests/test_role_request.py. Rules from ADR-350 point 2 (what each identity

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """A volunteer claims a need — one `ticket_tasks` row — for themselves (PUB-PS-140).
 
 Service-level (root conftest): the rules live in `assign_task_actor`, so that is where they

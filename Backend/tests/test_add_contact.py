@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Integration tests for adding a verified contact to a logged-in account."""
 
 import pytest

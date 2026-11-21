@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Reviewers hear about new pair cards (Spec 025 §3, ADR-345): one notice per submission.
 
 A stub engine suspects every draft of being `RELATED`, and each "create anyway" names it, so each

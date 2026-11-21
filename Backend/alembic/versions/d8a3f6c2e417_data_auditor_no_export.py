@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """data auditors export nothing: revoke data_auditor's ticket.export and station.export (ADR-460)
 
 Revision ID: d8a3f6c2e417

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Index the FK columns the keyword-search EXISTS subqueries correlate on.
 
 Revision ID: b7e4c1a90d52

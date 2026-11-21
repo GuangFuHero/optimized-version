@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """GraphQL integration tests for briefing templates and briefings.
 
 Tests drive the ASGI app in-process via httpx. They use the shared seeded test DB, so each

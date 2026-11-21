@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Approving a member request or a new-team application (Spec/026 Task 6b, ADR-350 point 6).
 
 Service-level, like tests/test_role_request.py; the concurrency case uses separate engines so

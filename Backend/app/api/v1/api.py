@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """API v1 router — aggregates all endpoint sub-routers under /api/v1."""
 
 from fastapi import APIRouter

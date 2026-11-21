@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """TEST-ONLY doubles. None of these are ever wired into the running application."""
 
 import json

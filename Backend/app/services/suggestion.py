@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Station-update suggestion actions (create / merge / revoke), and the submitter's own list.
 
 Same flat-service style as station.py. A merge decides every pending suggestion on the chosen

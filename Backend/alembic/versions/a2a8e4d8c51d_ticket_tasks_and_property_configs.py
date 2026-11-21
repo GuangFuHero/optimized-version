@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """ticket_tasks_and_property_configs
 
 Revision ID: a2a8e4d8c51d

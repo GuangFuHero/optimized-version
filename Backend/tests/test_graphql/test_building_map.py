@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """End-to-end tests for building maps and the tickets filed inside them."""
 
 from datetime import UTC, datetime

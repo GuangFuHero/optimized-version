@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The detail endpoint carries the card's two whole tickets (Spec 028 §2, ADR-373).
 
 Wiring only: what goes into a ticket and its version is observed at the service

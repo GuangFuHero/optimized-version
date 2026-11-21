@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """GraphQL queries for tickets and ticket tasks.
 
 Read-checked per ADR-027/028: ticket.view is public (Guest gets Scope.ALL), authenticated

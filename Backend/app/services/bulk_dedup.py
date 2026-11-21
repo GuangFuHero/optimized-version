@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The fast dedup layer for bulk import (ADR-398).
 
 An import asks the engine about every row it would create, the whole file before anything is

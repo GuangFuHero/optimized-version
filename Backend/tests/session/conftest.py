@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Fixtures for auth/session integration tests. Scoped to tests/session/ only."""
 
 import os

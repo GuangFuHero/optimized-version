@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Endpoint tests for email/phone login on the identity model."""
 
 import pytest

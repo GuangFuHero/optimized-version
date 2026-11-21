@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Existing databases gain `analytics.view` as the RBAC seed grants it.
 
 One grant already set at runtime keeps its scope, and stepping back removes the key with its grants.

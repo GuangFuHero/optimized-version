@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """SQLAlchemy models for station and task property configuration schemas.
 
 These rows are *definitions* only — they tell the frontend which fields to render. The

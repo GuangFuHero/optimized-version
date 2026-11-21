@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """add tax_id (統一編號 / UBN) to teams
 
 Revision ID: a3f8d1c9e2b5

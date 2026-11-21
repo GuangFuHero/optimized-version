@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """GraphQL integration tests for announcements (wiring, permissions, one live on each page).
 
 The GraphQL test DB is shared across tests and not reset between them, so assertions filter

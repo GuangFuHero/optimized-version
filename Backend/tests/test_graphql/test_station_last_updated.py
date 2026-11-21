@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """A station's updatedAt (「最後更新」): any change to it moves it, a suggestion only once approved."""
 
 from datetime import UTC, datetime

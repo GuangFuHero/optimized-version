@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The engine contract types: the backend sends drafts, the engine returns suspects."""
 
 import dataclasses

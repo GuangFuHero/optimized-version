@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """A ticket's data check: who gives the verdict, what voids it, and who hears about an issue.
 
 Every ticket starts at no_audit. An auditor's verdict (audited, or audit_issue with a note) holds

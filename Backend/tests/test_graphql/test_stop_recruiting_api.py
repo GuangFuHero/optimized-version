@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """GraphQL surface of 停止招募, one need at a time (ADR-292).
 
 The rules — what closes, who hears, who may — are pinned at the service layer in

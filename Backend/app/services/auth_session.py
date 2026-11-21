@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Signing in, refreshing, switching identity and finishing a registration, for Bearer and browser alike.
 
 `/auth/login`, `/auth/refresh`, `/auth/switch-identity` and `/auth/verify` answer scripts and tests with

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Tests for app/services/authz.py:require_scope.
 
 This is the checkpoint-1/checkpoint-2 gate every use-case calls directly

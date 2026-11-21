@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Unit tests for NotificationRecipientResolver and NotificationService dispatch logic."""
 
 import uuid

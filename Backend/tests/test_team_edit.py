@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Editing a team: its own admin or a super admin (Spec/026 Task 8, ADR-357 points 1, 2, 5)."""
 
 import pytest

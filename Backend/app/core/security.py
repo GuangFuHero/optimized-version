@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Authentication, password hashing, JWT token handling, and RBAC permission checking."""
 
 import hashlib

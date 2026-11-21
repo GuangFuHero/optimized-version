@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Who reads `users.real_name` (Spec/026 Task 11, ADR-355 point 5).
 
 Only those who may decide applicants' requests: super admins (role_request.review) in the user

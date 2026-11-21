@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """End-to-end keyword search tests (feature 011).
 
 Covers the main tables (`stations.name/description`, `tickets.title/description`) and the

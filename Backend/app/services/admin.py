@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Admin write actions (assign role / add & remove team member).
 
 Same flat-service style as station.py (T117). Raises AdminNotFoundError / AdminConflictError

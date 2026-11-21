@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Tests for the User / UserIdentity / UserContact ORM models and their constraints."""
 
 import os

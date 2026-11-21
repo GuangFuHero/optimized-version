@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Link / unlink SSO login methods (feature 017, ADR-217~219).
 
 A linked provider is the strongest credential this system issues: no password change, no

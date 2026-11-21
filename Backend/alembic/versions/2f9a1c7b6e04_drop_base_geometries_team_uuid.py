@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """drop base_geometries.team_uuid (ADR-049 乙: geo jurisdiction is geographic, not org-owned)
 
 Revision ID: 2f9a1c7b6e04

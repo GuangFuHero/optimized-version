@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The two whole tickets behind a duplicate pair card, for the 重複審核 page (Spec 028 §2, ADR-373/374).
 
 A fast-layer card compares one need with another (`ticket_task`), but a resolve acts on whole

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Keyword search condition builder (feature 011, ADR-078/082).
 
 Chinese text search uses pg_trgm + ILIKE rather than tsvector: PostgreSQL's built-in

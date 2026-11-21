@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """app/dedup_engine is the algorithm owner's code: it may read the database but not use the backend.
 
 The engine queries candidates itself, so SQLAlchemy and the ORM models are allowed. It must not

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """「我的任務 › 我建立的」: the tickets the caller filed.
 
 Service-level (root conftest). Sign-in is all it takes — every row is the caller's own ticket.

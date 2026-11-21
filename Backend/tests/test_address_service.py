@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """TGOS lookups and the write-path grading, against canned TGOS replies (no network, dummy keys)."""
 
 import asyncio

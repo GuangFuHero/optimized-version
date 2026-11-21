@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Building-map write actions, and the floor and area rules a ticket filed inside one follows.
 
 Each function takes `db` first and keyword-only args, and owns its own authz, validation and

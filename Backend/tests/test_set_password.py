@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Endpoint tests for SSO-only users setting a first password.
 
 Every set is a two-call flow since ADR-215: the first call delivers a step-up code to the

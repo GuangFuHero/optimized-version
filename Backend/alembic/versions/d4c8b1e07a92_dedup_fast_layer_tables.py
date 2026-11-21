@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """dedup fast layer: pair cards + dedup audit events
 
 Creates only the two tables the fast layer writes. The slow-layer tables (duplicate groups,

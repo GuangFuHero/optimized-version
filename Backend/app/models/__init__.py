@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """SQLAlchemy model registry — imports all models so Alembic and the mapper can discover them."""
 
 from app.models.announcement import Announcement  # noqa: F401

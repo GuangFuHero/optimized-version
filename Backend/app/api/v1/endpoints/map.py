@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Map tile proxy and attribution endpoints."""
 
 from fastapi import APIRouter, HTTPException, Request, Response

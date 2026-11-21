@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """add_disaster_type_to_tickets
 
 Revision ID: e8b3c5f2a1d4

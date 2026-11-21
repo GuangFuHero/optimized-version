@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """ticket audit: one data check per ticket, replacing review and need moderation
 
 A ticket's `verification_status` / `review_note` become `audit_status` / `audit_note`, with

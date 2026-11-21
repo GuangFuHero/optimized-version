@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Read-only RBAC admin surface (feature 009, Phase 1).
 
 Reads only — no RBAC checkpoints here; the router gates every route on `rbac.view`

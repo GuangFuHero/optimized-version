@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The audit-log read API (Spec/026 Task 10, ADR-358).
 
 Rows are written directly in the shape the audit trigger leaves (`to_jsonb(row)`, uuids as

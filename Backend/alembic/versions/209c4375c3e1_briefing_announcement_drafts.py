@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """briefing and announcement drafts: published_at, published_by, updated_by
 
 A NULL `published_at` marks a draft. Every existing row was live when it was written, so the

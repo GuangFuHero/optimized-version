@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """A window in which Postgres plans statements generically from their first run (ADR-437)."""
 
 from contextlib import asynccontextmanager, suppress

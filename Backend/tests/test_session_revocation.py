@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Access tokens stop working the moment their session is revoked (feature 014, ADR-099~105).
 
 Before this feature `get_current_user` never looked at the token's `sid`, so every

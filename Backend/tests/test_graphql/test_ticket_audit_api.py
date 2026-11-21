@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The audit over GraphQL: who reads what, the verdict mutation, and the list's new filters.
 
 `auditStatus` is public, so the site can leave out tickets with issues. The note, who gave the

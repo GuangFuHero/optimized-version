@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Pydantic schemas for team invite links (Spec/026, ADR-353)."""
 
 from datetime import datetime

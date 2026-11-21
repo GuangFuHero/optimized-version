@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Contract tests every dedup engine must pass, against a real database.
 
 Owned by the backend: they check what the backend relies on — shapes, determinism, read-only,

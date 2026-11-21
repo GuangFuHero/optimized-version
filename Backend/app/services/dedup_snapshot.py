@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Turn validated create input into the drafts the dedup engine is told about.
 
 No scoring and no candidates here: the engine finds those itself. Drafts carry the whitelisted

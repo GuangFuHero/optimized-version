@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """H3 hexagonal grid helpers for the coarse ticket point (ADR-281/283).
 
 A caller without `ticket.view_detail` gets the centre of the H3 cell a ticket falls in, not

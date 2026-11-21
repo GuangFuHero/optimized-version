@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """dedup_audit_events: allow event_type 'verdict_revoked' (ADR-344)
 
 Revision ID: a5e641c99923

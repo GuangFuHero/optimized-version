@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """CSV/XLSX read and write for bulk files (feature 015, ADR-115).
 
 Pure format layer: it knows a table is headers plus rows of text, and nothing about

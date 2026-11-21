@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """ADR-391: a pair card's verdict statuses say what was decided — confirmed_duplicate, not_duplicate.
 
 `confirmed` / `rejected` read like "approved" / "refused" elsewhere (station suggestions, role

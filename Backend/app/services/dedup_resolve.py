@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Resolve a duplicate pair card: keep one ticket, fold the other into it (Spec 028 §3.5, ADR-365).
 
 `ai_duplicate.review` only (ADR-366): the reviewer needs no ticket.edit or ticket.delete, since

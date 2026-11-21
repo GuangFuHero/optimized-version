@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """End-to-end coverage for AuditContextMiddleware -> audit_logs attribution (T115).
 
 tests/test_audit.py exercises the trigger/contextvar mechanism by setting the contextvars

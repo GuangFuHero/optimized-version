@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """`grant_team_role`: the add-member write, shared with join request approval (Spec/026 Task 6a)."""
 
 import pytest

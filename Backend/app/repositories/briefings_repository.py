@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Repositories for briefing templates and generated briefings."""
 
 from datetime import UTC, datetime

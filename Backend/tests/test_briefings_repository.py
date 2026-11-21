@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Tests for BriefingTemplateRepository and BriefingRepository.
 
 Uses the function-scoped `db` fixture (tests/conftest.py), which drops/creates a fresh

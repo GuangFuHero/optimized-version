@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Exporting the audit log as CSV (ADR-414): super admins only, the read API's filters, newest first.
 
 A POST, because each export is recorded (ADR-417): a write, so a browser's request needs one of our

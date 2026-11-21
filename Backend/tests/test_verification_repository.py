@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Tests for the unified (email + phone) 6-digit verification store."""
 
 import asyncio

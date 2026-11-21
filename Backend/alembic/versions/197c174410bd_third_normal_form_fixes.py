@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """third normal form: role kind, need timestamps, address line
 
 Revision ID: 197c174410bd

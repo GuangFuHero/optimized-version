@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """FastAPI application entry point — wires up middleware, routers, and startup lifecycle."""
 
 import logging

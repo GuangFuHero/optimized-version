@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """add_unique_constraint_to_user_group_assign
 
 Revision ID: ecff746c61a6

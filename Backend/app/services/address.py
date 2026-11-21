@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Address lookups against TGOS, and the address step of every write.
 
 The frontend looks an address up before saving it, and each address TGOS confirms comes back with

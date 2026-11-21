@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """GraphQL mutations for map areas and team zone assignment.
 
 Thin per ADR-014: parse input, call the area service function, map the result back to a

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """End-to-end tests for dynamic-field filtering by the deployment's disaster types.
 
 Feature 013 (ADR-091/095): `stationPropertyConfigs` / `taskPropertyConfigs` return only the

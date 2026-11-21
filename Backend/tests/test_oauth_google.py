@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Signing in with Google through the backend's own OAuth flow (ADR-331).
 
 `start` sends the browser to Google with a state bound to it by the `{p}_oauth` cookie, a nonce and a PKCE

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Moving a session off an identity that was taken away (Spec 029, ADR-402–404).
 
 The request path (`security.get_current_user`) and the refresh (`auth_session.refresh_session`) both

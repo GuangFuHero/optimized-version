@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Migration 197c174410bd: role kind, need timestamps and the address line stored once.
 
 Databases built to the revision before: one whose rows the upgrade repairs and rebuilds, one holding an

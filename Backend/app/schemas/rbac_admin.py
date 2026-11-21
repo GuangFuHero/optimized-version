@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Pydantic schemas for the RBAC admin read surface (feature 009, Phase 1)."""
 
 from typing import Annotated, Literal

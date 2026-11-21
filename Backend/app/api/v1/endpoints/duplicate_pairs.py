@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Back-office 重複審核: list the duplicate pair cards, read, decide, revoke or resolve one.
 
 Also the fast layer's hint rates (提示率, 誤報率) the review page shows (ADR-458).

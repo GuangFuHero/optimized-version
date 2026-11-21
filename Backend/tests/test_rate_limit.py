@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Rate-limit window behaviour.
 
 The previous pyrate_limiter-based implementation computed a per-caller key and then threw it away

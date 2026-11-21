@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Read-only RBAC admin REST endpoints (feature 009, Phase 1).
 
 Every route is gated by `rbac.view` (super_admin only) via the router-level dependency —

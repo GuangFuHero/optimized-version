@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """GraphQL integration tests for the station-update suggestion workflow."""
 
 from datetime import UTC, datetime

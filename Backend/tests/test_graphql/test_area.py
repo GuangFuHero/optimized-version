@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """GraphQL integration tests for map areas (危險區, 責任區, 標示區) and team zone assignment.
 
 Covers the gov gate on drawing, the always-public hazard and team zone, the team zone kept from guests,

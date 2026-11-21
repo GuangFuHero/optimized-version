@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """ADR-393: who reviewed a station merge, and who last changed a briefing or an announcement, may be NULL.
 
 The mock seed's section 0 removes the mock accounts on every SEED_MOCK run. A real person's merge,

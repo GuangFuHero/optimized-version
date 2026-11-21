@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Drive the backend's OAuth sign-in from a test, for any provider (ADR-331).
 
 A test starts a sign-in, reads off the query the browser is sent to the provider with, has the (faked)

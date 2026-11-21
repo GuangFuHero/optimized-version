@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Application configuration loaded from environment variables and .env file."""
 
 import os

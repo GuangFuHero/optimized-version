@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """A ticket's data check: the auditor's verdict, the scan's flag, and what voids a verdict.
 
 - no_audit: nobody has checked the ticket as it now stands. Every ticket starts here.

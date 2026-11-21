@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """search_text generated columns + trigram GIN indexes (feature 011)
 
 Adds a PostgreSQL-generated `search_text` column to every searchable table, indexed with

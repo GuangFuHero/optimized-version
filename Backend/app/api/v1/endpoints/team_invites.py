@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Team invite links over REST (Spec/026, ADR-353).
 
 REST rather than GraphQL so "an expired link returns 404" is a real HTTP status (BE-038 step 1).

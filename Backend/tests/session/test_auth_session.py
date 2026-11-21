@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Integration tests for the session-based auth flow."""
 
 import pytest

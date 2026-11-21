@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Guard that `alembic upgrade head` and `Base.metadata` describe the same tables and columns.
 
 The rest of the suite runs on the migrated schema, where a column the models lack is invisible

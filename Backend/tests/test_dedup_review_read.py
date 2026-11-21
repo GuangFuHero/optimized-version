@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Reading the AI 重複審核 queue (Spec 025 §2.1–2.2, ADR-339/340): the service layer.
 
 The REST layer on top is tested in test_dedup_review_api.py.

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The scope engine resolves team and zone from the ACTIVE identity (feature 010, ADR-074).
 
 The distinction these tests exist to pin: a user's grants are no longer the union of every

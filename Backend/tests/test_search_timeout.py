@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Guards for the per-statement search timeout (ADR-152).
 
 `stations(q:)` / `tickets(q:)` are reachable by an anonymous Guest (ADR-025/027) on an

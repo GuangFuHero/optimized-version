@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Repositories for the deployment's project settings row (ADR-090) and its disaster vocabulary."""
 
 from sqlalchemy import select

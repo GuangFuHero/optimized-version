@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """building maps: building_maps subtype, building_map_ticket_map link, audit trigger
 
 A building map is a building pinned once on the map, with floor counts and an optional list of

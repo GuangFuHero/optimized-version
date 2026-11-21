@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The offline evaluation tool scores pairs the way the engine does and counts query-level metrics."""
 
 import pytest

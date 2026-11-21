@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """End-to-end tests for the ticket disaster-field mechanism.
 
 Feature 018 (Spec/018-ticket-disaster-fields/decisions.md ADR-244~251): a ticket carries a

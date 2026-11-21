@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Whether 重複審核 still waits on a ticket, read from its cards.
 
 TicketType.verificationStatus tells anyone the state and the tickets (ADR-443, ADR-455);

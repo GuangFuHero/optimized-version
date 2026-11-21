@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The fast layer's formula: parameters, `combine`, and the hint boundary.
 
 Expected numbers are the offline tuning harness's output for the same inputs; a failure here

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """GraphQL schema definition — composes Query and Mutation types from sub-modules."""
 
 import logging

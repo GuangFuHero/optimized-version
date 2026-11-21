@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Unit tests for the verify-then-create auth request schemas."""
 
 import pytest

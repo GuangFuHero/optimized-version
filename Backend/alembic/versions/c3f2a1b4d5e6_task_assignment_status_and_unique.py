@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """add status, updated_at, and uniqueness to task_assignments
 
 Revision ID: c3f2a1b4d5e6

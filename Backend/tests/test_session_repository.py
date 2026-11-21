@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Tests for the Redis-backed SessionRepository."""
 
 import asyncio

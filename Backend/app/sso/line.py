@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """LINE id_token verification: protocol + real (verify-endpoint) adapter and dependency."""
 
 import hmac

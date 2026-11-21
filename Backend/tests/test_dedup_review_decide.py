@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Confirming or rejecting a pair card (Spec 025 §2.3, ADR-341/343): the service layer.
 
 The REST layer on top is tested in test_dedup_review_api.py.

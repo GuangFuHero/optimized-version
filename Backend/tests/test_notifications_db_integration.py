@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Database-backed integration tests for notification resolver and persistence.
 
 Validates that SQL queries (Role matching, PostGIS spatial ST_Contains, permission lookups)

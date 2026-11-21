@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The one place the backend gets its dedup engine from.
 
 To swap the algorithm, register a different engine here; tests replace it with monkeypatch.

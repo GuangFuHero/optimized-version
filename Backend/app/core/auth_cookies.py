@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The browser's sign-in cookies: their names, their attributes, and reading them back (ADR-326).
 
 Four cookies, all named with `AUTH_COOKIE_PREFIX` so production, staging and a developer's machine

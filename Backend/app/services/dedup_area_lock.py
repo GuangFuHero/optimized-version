@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Queue submissions in one area so the later one sees the earlier one (ADR-396).
 
 The two-phase create asks the engine, then inserts, then commits. Two submissions at the same

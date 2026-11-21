@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """station operational status and task completed_at/canceled_at
 
 Adds ``stations.operational_status`` (active/temporarily_closed/permanently_closed,

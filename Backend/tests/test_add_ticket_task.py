@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Adding a need to a ticket that already exists.
 
 Service-level (root conftest). `create_ticket_task` is what createTicketTask calls — the site's

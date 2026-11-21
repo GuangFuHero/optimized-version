@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Audit-log read API (Spec/026, ADR-358). Thin per ADR-014; see app/services/audit_log.py."""
 
 from datetime import datetime

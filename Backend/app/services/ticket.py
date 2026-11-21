@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Ticket write actions (ticket / task / task-property / assignment).
 
 Same flat-service style as station.py: `db` first, keyword-only args, each function owns

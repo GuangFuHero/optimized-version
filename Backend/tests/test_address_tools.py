@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The address line is a generated column, and the tools that keep the parts honest.
 
 `full_address` is the parts and the remainder joined by the database; the parts come from

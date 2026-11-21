@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Unit tests for refresh-token helpers and access-token claims."""
 
 import uuid

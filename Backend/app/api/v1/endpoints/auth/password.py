@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Password endpoints: change, first-set, forgot, and logged-out reset."""
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Request, Response, status

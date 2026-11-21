@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Tests for the single-row project settings table and the dynamic-field config columns.
 
 Feature 013 (Spec/013-project-settings-activity/decisions.md ADR-090/091/095).

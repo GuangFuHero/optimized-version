@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Pydantic schemas for the analytics chart REST API (Plotly figure and series JSON).
 
 See app/services/chart_render.py for the full x/y model this API exposes, and

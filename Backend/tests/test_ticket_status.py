@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """A ticket's status follows its needs.
 
 Service-level (root conftest): every action that changes a need calls `recompute_ticket_status` —

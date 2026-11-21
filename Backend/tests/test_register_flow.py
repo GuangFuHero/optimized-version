@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Endpoint tests for unified code-based registration, verification, and resend (email + phone)."""
 
 import pytest

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """project_settings.short_name: the disaster's short name for the public site's top bar (ADR-392)
 
 Revision ID: 50e667b42105

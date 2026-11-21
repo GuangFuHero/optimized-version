@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Ticket import: one row is one ticket plus one task (feature 015, ADR-120/122).
 
 The status column is export-only: a ticket's status is worked out from its needs, so the file

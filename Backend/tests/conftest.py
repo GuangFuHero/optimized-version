@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Shared pytest fixtures for the auth test suite (db, seeded db, HTTP client, email capture)."""
 
 import os

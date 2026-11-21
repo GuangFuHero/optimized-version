@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """initial schema
 
 Revision ID: 60fa7227481a

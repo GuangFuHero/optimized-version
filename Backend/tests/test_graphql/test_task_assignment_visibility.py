@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Who sees who claimed a need (ADR-286).
 
 `assignedCount` stays public — it is what a volunteer decides "is there room?" on. The list

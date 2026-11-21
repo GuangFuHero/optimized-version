@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Tests for scripts/set_password.py: a password set on the command line signs in from the login page.
 
 The back-office test accounts in the mock seed carry no password in the repo (their mock password

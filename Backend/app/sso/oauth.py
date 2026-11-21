@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The backend's side of an OAuth sign-in: providers, PKCE, the authorize URL, the code exchange (ADR-331).
 
 The browser is sent to the provider with a `state` (bound to this browser by the `{p}_oauth` cookie), a

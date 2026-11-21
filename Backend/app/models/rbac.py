@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """SQLAlchemy models for the capability-based RBAC engine (Spec/008-rbac-authorization/decisions.md §2B).
 
 Replaces the old Group/Policy/PolicyGroupAssign/PolicyUserAssign/UserGroupAssign engine

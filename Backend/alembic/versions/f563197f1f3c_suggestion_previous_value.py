@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """station_update_suggestions.previous_value: the field's value when the suggestion was sent (ADR-420)
 
 Revision ID: f563197f1f3c

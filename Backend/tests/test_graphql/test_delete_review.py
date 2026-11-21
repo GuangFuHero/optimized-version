@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Coverage for the parity-gap mutations added in the ADR-049 catalog audit.
 
 - delete_ticket / delete_area: SOFT delete (sets delete_at; row hidden from active

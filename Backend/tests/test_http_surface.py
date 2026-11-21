@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Headers and routes every HTTP response shares, independent of any endpoint's logic."""
 
 import pytest

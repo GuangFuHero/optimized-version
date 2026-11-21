@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Team invite links: create, open and request through them (Spec/026 Task 4, ADR-353).
 
 REST, so "an expired link returns 404" is a real HTTP status (BE-038 step 1). Expiry is judged by

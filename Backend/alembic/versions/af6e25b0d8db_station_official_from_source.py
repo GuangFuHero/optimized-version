@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """stations: `source` says whether a station is official, and `is_official` follows it
 
 Revision ID: af6e25b0d8db

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """scripts/seed_mock_scenarios.sql runs again after testers have used the mock accounts.
 
 Section 0 of the seed deletes the previous seed and whatever testers did with the mock accounts, so

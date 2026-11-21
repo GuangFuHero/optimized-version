@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """A citizen asks for help from the public site: one ticket and its needs, filed at once.
 
 Service-level (root conftest), through `submit_help_request`, the only way a help request is

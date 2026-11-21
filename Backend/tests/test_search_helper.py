@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Unit tests for the search condition builder (feature 011, ADR-082)."""
 
 import pytest

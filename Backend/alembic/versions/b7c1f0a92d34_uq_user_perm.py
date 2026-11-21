@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """add uq_user_perm to user_permission_assign (ADR-058)
 
 Revision ID: b7c1f0a92d34

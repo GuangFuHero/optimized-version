@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Unit tests for seed_rbac idempotent-bootstrap behavior (feature 009, ADR-055)."""
 
 import pytest

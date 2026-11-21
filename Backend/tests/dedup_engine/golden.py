@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Fixed database contents and submissions whose fast-layer outputs are pinned in golden/fast.json.
 
 Everything is deterministic: fixed uuids, fixed timestamps relative to NOW. Add cases freely;

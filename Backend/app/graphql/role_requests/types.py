@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """GraphQL types for role requests: a citizen applying to become back-office staff (Spec/019)."""
 
 import enum

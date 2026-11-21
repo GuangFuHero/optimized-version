@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """audit triggers for the dynamic-field value tables
 
 Backfills the audit triggers for `station_properties` and `task_properties`. Both tables

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """End-to-end tests for adding and removing station photos.
 
 Two properties are pinned here, both easy to regress because neither is enforced by a type

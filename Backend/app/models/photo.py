@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """SQLAlchemy model for photos attached to geo entities or tickets."""
 
 from sqlalchemy import UUID, ForeignKey, String

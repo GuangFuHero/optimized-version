@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Endpoint tests for the salt lookup over the identity model (email + phone)."""
 
 import pytest

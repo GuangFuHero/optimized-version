@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """add role_requests (feature 019: a citizen applies to become back-office staff)
 
 Revision ID: 666b59ab2581

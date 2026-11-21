@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """join requests: applications name a team, invite links, team housekeeping (Spec 026)
 
 Revision ID: 11f0025d521b

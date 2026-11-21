@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Coverage for the GraphQL query read-checks (Spec/008-rbac-authorization/decisions.md ADR-027/028/049).
 
 Covers PII masking on Ticket contact fields (out-of-scope → masked value, not null —

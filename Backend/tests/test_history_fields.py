@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The timeline's field classification, and the guard that keeps it honest (ADR-144).
 
 The whitelist is only worth anything if it cannot silently rot. These tests walk the real

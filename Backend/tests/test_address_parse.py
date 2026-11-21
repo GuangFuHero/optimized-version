@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The address parser: official TGOS lines split exactly, typed lines split as far as they go."""
 
 import ast

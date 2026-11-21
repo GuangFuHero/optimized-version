@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The guest boundary on tickets: a region to the anonymous caller, the exact place once signed in.
 
 ADR-281/282/283, after the team's rule (Discord 2026-06-30〜07-03, 訪客看區域、登入看精確) and
