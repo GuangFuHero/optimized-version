@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The requester deletes one need of their ticket.
 
 Service-level (root conftest). A deleted need is canceled and soft-deleted in one go: nobody sees

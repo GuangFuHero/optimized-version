@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """SQLAlchemy models for briefing templates and generated briefings."""
 
 import uuid as _uuid

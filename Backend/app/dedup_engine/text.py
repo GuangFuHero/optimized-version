@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Trigram similarity in Python, giving the same result as pg_trgm.
 
 It follows the same steps as pg_trgm's `similarity()`:

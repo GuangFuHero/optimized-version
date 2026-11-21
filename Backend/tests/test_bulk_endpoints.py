@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """HTTP surface of the bulk endpoints (feature 015, ADR-114).
 
 The services are covered directly elsewhere; what only shows up here is the transport: the

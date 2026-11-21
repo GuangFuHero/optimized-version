@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Re-parse every stored address line into its parts: `python -m scripts.resplit_addresses [--apply]`.
 
 The parts of `secondary_locations` come from `user_input_address` through `parse_tw_address`, and a

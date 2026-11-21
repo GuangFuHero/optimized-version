@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """GraphQL queries for stations, hazardous zones, and building maps.
 
 Read-checked per ADR-027/028: station.view/map.view are public (Guest gets Scope.ALL),

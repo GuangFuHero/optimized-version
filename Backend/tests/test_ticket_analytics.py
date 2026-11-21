@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Unit tests for ticket/task analytics aggregation and the chart_render x resolution.
 
 Covers the trickiest pieces: the four-way bucket classification by ticket status (exposed as

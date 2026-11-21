@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Ticket counts per H3 cell, and one cell's tickets, for a caller shown cells (ADR-387).
 
 The guest map draws tickets as the cells they fall in (ADR-281/283). It used to count each cell from the

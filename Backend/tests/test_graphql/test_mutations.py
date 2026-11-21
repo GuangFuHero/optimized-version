@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """GraphQL mutation integration tests for stations, tickets, tasks, and properties."""
 
 import uuid

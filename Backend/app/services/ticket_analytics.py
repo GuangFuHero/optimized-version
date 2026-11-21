@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Ticket/task analytics aggregation queries backing the Plotly chart endpoints.
 
 Read-only reporting queries spanning tickets + ticket_tasks + task_assignments — they

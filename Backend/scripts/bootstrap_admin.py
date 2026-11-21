@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Bootstrap script: grant the super_admin platform role to a user by verified contact (T116).
 
 Run once per environment after `scripts/seed_rbac.py`. Refuses to create a second

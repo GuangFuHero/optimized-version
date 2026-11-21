@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """SQLAlchemy models for the dedup fast layer: pair cards and dedup audit events.
 
 Both tables are shared across entity kinds: `entity_kind` says what the paired uuids point

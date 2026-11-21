@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Index audit_logs for read access (feature 016, ADR-133)
 
 Revision ID: c4a91e77b0d3

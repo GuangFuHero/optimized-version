@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """add description and category to policies
 
 Revision ID: b5d1c8e9f3a2

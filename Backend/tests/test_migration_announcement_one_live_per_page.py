@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Guard the ADR-363 migration: existing live announcements are cut down to one per page.
 
 Before it, any number of announcements could be live at once. The upgrade takes down every live one

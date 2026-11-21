@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """create announcements
 
 Revision ID: a7c9e1f4b2d8

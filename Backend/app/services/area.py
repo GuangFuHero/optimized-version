@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Map area write actions for all three kinds: 危險區, 責任區 and 標示區 (ADR-311).
 
 Same flat-service style as station.py (ADR-013/022): `db` first, keyword-only args, each

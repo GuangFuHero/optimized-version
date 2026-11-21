@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """station suggestion merges: merge table, merge link, audit triggers, pending indexes
 
 A reviewer decides every pending suggestion on a field at once and applies the result to the

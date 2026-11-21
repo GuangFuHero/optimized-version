@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """SQLAlchemy model for the per-ticket values of disaster-specific dynamic fields (feature 018).
 
 The values half of the mechanism `ticket_property_config` defines. Same EAV shape as

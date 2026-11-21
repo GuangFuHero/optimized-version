@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Tests for account profile: replacing/deleting contacts and reading one's own profile.
 
 Feature 012 (Spec/012-account-profile/decisions.md ADR-085~089, 098).

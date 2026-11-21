@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Unit tests for app.services.station_analytics.
 
 The module had no coverage at all before the PR #32 review; these pin the three

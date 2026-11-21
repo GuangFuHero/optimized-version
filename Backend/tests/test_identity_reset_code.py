@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The code Spec 029 adds, and that it does not sign a browser out (ADR-402, ADR-404)."""
 
 from app.core.api_errors import ErrorCode

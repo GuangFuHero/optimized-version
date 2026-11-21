@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Async SQLAlchemy engine, session factory, and declarative base."""
 
 from sqlalchemy import event, text

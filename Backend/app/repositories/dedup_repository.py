@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Repositories for the dedup tables: pair cards and audit events.
 
 Candidate retrieval belongs to the engine (`app/dedup_engine/candidates.py`).

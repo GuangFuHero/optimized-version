@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Helpers shared by ticket_analytics.py and station_analytics.py.
 
 Both modules answer the same shape of question (bucket rows by calendar day/week or by

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """secondary_locations: split the address into its official parts
 
 Revision ID: 7370daf4c8f7

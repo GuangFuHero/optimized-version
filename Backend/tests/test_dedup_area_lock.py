@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Submissions in one area queue, so the later one sees the earlier one (ADR-396, PR #132).
 
 ADR-433 adds the site's help request, ADR-434 caps the whole wait, ADR-435 rounds the logged

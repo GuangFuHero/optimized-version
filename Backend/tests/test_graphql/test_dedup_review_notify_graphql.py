@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """createTicket over GraphQL when the reviewer notice fails (Spec 025 §3, ADR-345).
 
 A failing notice must not change what the submitter gets back. Its error path rolls the

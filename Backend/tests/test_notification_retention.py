@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Unit tests for the notification data retention policy service."""
 
 from unittest.mock import AsyncMock, MagicMock

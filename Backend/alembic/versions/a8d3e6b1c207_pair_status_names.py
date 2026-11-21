@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """duplicate_pairs.status: confirmed -> confirmed_duplicate, rejected -> not_duplicate (ADR-391)
 
 Revision ID: a8d3e6b1c207

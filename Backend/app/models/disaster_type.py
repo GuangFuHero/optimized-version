@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """SQLAlchemy model for the deployment's disaster-type vocabulary (feature 018).
 
 Feature 013 deliberately left this vocabulary open (ADR-091): the real set of disaster types

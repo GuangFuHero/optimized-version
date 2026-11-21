@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Identifier normalization.
 
 Email/phone MUST be normalized before storage or UNIQUE dedupe fails (design H3).

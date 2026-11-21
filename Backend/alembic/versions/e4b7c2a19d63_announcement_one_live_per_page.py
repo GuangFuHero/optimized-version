@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """announcements: one live per page, and publishing replaces it (ADR-363)
 
 Revision ID: e4b7c2a19d63

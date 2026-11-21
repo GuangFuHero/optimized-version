@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """SMTP2Go transactional-email adapter (HTTP API; works on GCP where SMTP ports are blocked)."""
 
 import base64

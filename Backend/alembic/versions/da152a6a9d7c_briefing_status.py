@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """briefings: a status column, and at most one live version per state
 
 Revision ID: da152a6a9d7c

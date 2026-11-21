@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The generic-plan window the guest map's reads open (ADR-437).
 
 asyncpg prepares every statement, and Postgres plans a prepared statement's first five runs on each

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """組織分配: which team's 責任區 a ticket lies in, as `responsibleTeams` reads it (ADR-422).
 
 Tickets carry no team of their own; a ticket is a team's when its point lies in a live zone of that

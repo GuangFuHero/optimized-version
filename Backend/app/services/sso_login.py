@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Who a verified Google or LINE identity signs in as, creating the account on a first sign-in.
 
 Called by the backend's OAuth callback once the provider's `id_token` has been verified (ADR-331). The

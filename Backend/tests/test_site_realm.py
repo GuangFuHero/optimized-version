@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The site acts as the caller's own `user` grant, marked by X-WG-Realm: site (ADR-289, ADR-290).
 
 The team decided on 2026-09-28 that everyone signed in has the same permissions on the site —

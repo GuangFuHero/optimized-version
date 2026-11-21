@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Migration d8a3f6c2e417: existing databases take the data auditor's two exports away (ADR-460).
 
 Built like tests/test_migration_audit_export_grant.py: a deployed database where the auditor holds

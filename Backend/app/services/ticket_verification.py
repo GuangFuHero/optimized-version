@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Which tickets 重複審核 still waits on, read from the duplicate pair cards (ADR-443).
 
 A ticket is disputed while a live card on it, or on one of its needs, still has a merge to decide

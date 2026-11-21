@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """identity switching: grants carry their team, users no longer do
 
 Feature 010 (ADR-068/073/076). An identity is one row of user_role_assign — a role plus,

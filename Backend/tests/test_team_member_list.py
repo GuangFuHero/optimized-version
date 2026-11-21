@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """A team's member list, and the user directory it shares a base with (Spec/026).
 
 `GET /admin/teams/{uuid}/members` is `TeamMemberDirectory`; `GET /admin/users` is

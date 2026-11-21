@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """create station_update_suggestions table
 
 Revision ID: d7e4f1a9c2b8

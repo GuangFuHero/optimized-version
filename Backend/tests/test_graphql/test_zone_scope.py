@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """End-to-end coverage for `zone` scope through a real GraphQL mutation call (Phase 4/T120).
 
 Mirrors test_team_scope.py's pattern for `team` scope. own/team/gov/ngo all got a GraphQL

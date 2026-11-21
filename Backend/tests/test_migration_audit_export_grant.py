@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Migration b5d8e2a41c07: existing databases gain `audit.export` for super_admin (ADR-414).
 
 Built like tests/test_migration_team_admin_grants.py, twice: a database that never heard of the

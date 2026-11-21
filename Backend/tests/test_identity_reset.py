@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """A revoked identity moves the session to the default identity instead of signing out (Spec 029).
 
 ADR-402/404 on the request path, ADR-403 on the refresh. The account here is `user` plus `member` of

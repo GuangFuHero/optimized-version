@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """add_salt_fields_to_user
 
 Revision ID: 5c6103762349

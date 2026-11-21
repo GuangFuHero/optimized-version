@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Bulk import of stations and tickets (feature 015, ADR-106/112/114).
 
 Nothing here writes to the database directly. Every row goes through the same services a

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Role requests: applying to become back-office staff (Spec/019, AC-FEAT-002; Spec/026)."""
 
 import uuid

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """super admins export the audit log: register audit.export and grant it (ADR-414)
 
 Revision ID: b5d8e2a41c07

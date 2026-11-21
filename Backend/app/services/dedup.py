@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Dedup fast-layer service: calls the engine (`app.dedup_engine`) safely and writes what it decided.
 
 - `check_submission`: ask the engine about a submission, guarded — savepoint always rolled

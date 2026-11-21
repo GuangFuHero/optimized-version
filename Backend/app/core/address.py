@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Taiwanese address parsing: one address line split into its 縣市 … 號 parts.
 
 Pure functions that never raise on content: whatever is not recognized stays in `remainder`, so that

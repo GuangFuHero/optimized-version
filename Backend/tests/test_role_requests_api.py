@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The role request review REST surface is wired to the role request service (Spec/019).
 
 Wiring only: the rules themselves are observed at the service (tests/test_role_request.py).

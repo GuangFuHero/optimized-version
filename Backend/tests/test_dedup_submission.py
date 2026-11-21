@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Two-phase create: any suspected duplicate holds the whole submission, otherwise all is created.
 
 A stub engine decides what is suspected, so these test the backend's flow — validation first,

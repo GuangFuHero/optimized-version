@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """GraphQL types, inputs, and enums for briefing templates and briefings."""
 
 from datetime import datetime

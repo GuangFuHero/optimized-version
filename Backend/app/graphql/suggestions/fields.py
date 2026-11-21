@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Code-derived schema of which station/property fields users may suggest changes to.
 
 The frontend reads this (via the ``suggestableFields`` query) to render the right input

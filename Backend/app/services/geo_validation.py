@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Input validation shared by the geo use-cases (ADR-013).
 
 This used to be private helpers inside app/graphql/geo/mutations.py; validation is

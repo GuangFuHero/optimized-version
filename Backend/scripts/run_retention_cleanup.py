@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Standalone CLI runner for notification data retention cleanup (PRD Section 9 / Q4 resolution).
 
 Usage:

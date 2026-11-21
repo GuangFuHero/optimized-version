@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Resolving a duplicate pair card (Spec 028 §3.5, ADR-365–375): the service, on a real database.
 
 What a request means is tested without a database in test_dedup_resolve_plan.py; this checks that

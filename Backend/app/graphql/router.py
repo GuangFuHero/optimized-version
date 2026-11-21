@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """GraphQL router — builds the Strawberry GraphQLRouter for mounting in main.py."""
 
 from strawberry.fastapi import GraphQLRouter

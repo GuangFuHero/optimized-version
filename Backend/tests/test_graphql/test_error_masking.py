@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The schema masks unexpected errors but not domain ones (app/graphql/schema.py).
 
 Every short column reachable from a Strawberry input used to leak. asyncpg's truncation error

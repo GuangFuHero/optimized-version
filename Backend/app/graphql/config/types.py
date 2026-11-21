@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """GraphQL types for the disaster vocabulary and the three property configuration schemas.
 
 `property_name` is the immutable key rows are stored against; `label` is the mutable display

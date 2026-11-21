@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Claims, releases and edits that start while a resolve holds the tickets (PR #113 review, ADR-388).
 
 A resolve moves needs to the primary ticket, and the claims on folded needs to the need they fold

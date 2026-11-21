@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """GraphQL surface of station assignment (ADR-285).
 
 The authorization and notification rules are pinned at the service layer in

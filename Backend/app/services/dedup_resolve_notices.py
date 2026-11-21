@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The notices a dedup resolve sends once it has committed (Spec 028 §6, ADR-379).
 
 Four kinds, each pointing at the primary ticket (`ref_type = "ticket"`), which is how everyone gets

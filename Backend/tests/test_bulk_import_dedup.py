@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """A bulk import asks the fast dedup layer about every row it would create (ADR-398).
 
 A stub engine decides what is suspected, so these test the import's side: which rows are asked

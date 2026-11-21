@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Tests for the SMTP2Go HTTP-API email adapter."""
 
 import httpx

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Migration 9dd1f61063fe: a notification is read exactly when it has a read time.
 
 Two databases: one whose rows agree, and one holding a row that does not, which the upgrade refuses

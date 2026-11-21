@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """A ticket names the teams of the 責任區 it lies in, to callers who see its detail (ADR-422)."""
 
 import random

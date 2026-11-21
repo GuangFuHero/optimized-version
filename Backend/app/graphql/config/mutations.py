@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """GraphQL mutations for station and task property configuration schemas.
 
 Thin per ADR-014: parse input, call the config service function, map the result back to a

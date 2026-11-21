@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """GraphQL queries for station update suggestions."""
 
 from datetime import datetime

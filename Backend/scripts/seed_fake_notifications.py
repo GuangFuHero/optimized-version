@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Seed fake notifications, users, and teams for manual verification."""
 
 import asyncio

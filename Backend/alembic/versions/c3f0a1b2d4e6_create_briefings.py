@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """create briefing templates and briefings; drop unused columns
 
 Revision ID: c3f0a1b2d4e6

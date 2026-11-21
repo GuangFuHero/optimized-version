@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Guard the ADR-420 migration: suggestions get the field's value before, empty on existing rows.
 
 Nothing is backfilled, since the value at the time of an old submit was never recorded. Downgrade drops

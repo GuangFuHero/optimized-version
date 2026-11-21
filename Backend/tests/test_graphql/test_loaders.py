@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Verify DataLoaders collapse nested-field N+1 into single batched queries."""
 
 import re

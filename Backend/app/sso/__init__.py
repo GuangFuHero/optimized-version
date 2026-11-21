@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Identity-provider (SSO) verifier adapters."""
 
 from fastapi import Depends

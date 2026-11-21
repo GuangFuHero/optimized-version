@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """SQLAlchemy models for teams and team zones (RBAC v1, Spec/008-rbac-authorization/decisions.md §2B)."""
 
 from datetime import datetime

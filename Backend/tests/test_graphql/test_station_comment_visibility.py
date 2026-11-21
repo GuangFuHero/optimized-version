@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Who reads a station's internal comment (Spec/008-rbac-authorization/decisions.md ADR-332).
 
 `comment` is the back office's own note on a station ("水退後已撤站", "與 b…07 疑似重複"). It used to

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """rbac_v1: teams, work zones, and capability-based role/permission engine
 
 Drop-and-replace of the old Group/Policy/PolicyGroupAssign/PolicyUserAssign/UserGroupAssign

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """analytics.view: lock the BI dashboard to the back-office roles
 
 Revision ID: 162b65c8ff5f

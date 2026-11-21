@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """A station's public supply status and when it last changed (Spec/024-station-supply-status ADR-333).
 
 Merging and revoking a suggested supply status is covered beside the other suggestion tests, in

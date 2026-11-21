@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Searching and filtering `GET /admin/users` (ADR-412, ADR-413, ADR-432).
 
 `q` matches the nickname only, never a phone, email or real name. `platform_role` is one of the five

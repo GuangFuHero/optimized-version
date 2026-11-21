@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Analytics chart REST API for the ops dashboard: Plotly figure JSON, plain series, and KPI numbers.
 
 Every endpoint needs `analytics.view`, on top of the source module's view capability.

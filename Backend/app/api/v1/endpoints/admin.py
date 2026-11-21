@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Minimal admin REST API: list users, assign roles, manage team members (ADR-013/022, T117).
 
 Read-only listing is gated declaratively at the route (checkpoint 1 only, like Phase 2's

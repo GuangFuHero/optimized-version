@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """SQLAlchemy model for role requests: applying to become back-office staff (Spec/019, Spec/026)."""
 
 from datetime import datetime

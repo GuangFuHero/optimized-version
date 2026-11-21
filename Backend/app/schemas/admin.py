@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Pydantic schemas for the minimal admin API (list users, assign role, manage team members)."""
 
 from dataclasses import dataclass

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """announcement placement: which page shows an announcement
 
 `placement` is "admin_page", "public_page" or "all" (both pages). Existing rows become "all",

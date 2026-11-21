@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """identity contacts expand
 
 Revision ID: d19cda4d9871

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The engine's candidate queries (which tasks and stations count, and how far) against real PostGIS."""
 
 import os

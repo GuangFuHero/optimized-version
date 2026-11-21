@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Capability-key catalog (ADR-012).
 
 Single source of truth for permission keys — seed data and every RBAC check must use

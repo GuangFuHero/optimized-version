@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Tests for the EmailSender protocol, console impl, and sender selection."""
 
 import logging

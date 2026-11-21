@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The GraphQL suite's dedup engine switch: a stub by default, the real engine under `real_dedup`.
 
 If the autouse stub leaked into the real-engine tests, they would pass by never suspecting

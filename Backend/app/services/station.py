@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Station write actions (create/update/delete/property/rating).
 
 Same service layer as auth_account.py: flat functions, `db` first then keyword-only args,

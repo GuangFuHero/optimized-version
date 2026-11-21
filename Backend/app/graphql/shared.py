@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Shared GraphQL types reused across domains.
 
 `SecondaryLocationInput`, its output type and their mapper live here rather than in

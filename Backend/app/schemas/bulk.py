@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Response shapes for the bulk export/import endpoints (feature 015)."""
 
 from datetime import datetime

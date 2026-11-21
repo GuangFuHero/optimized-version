@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Who sees and decides which request (Spec/026 Task 5, ADR-354).
 
 A team admin reviews the member requests for their own team through team.member.manage; a

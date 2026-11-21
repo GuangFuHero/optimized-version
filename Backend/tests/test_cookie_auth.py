@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """A browser signs in with the access cookie alone (ADR-325, ADR-327, ADR-328).
 
 Scripts and tests keep sending a Bearer token, and it wins whenever both arrive. Without one, the

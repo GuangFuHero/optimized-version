@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The engine's Python trigram similarity equals pg_trgm's `similarity()`.
 
 The engine scores text in Python so its owner can change the method without touching the

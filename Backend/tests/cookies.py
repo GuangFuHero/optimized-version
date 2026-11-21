@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Read the cookies a response sets, and send cookies the way a browser would (ADR-326).
 
 Tests go through these rather than through httpx's cookie jar. The test client talks to

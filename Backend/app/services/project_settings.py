@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Read/write use-cases for the deployment's single project settings row (ADR-090).
 
 Flat-service style, same as config.py: these are global settings, not user-owned resources,

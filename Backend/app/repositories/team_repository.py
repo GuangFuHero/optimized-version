@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Repositories for Team, TeamZone, and TeamZoneAssign (RBAC v1 §2B, Phase 4/T119)."""
 
 from dataclasses import dataclass

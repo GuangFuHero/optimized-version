@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Session endpoints: password login, refresh-token rotation, and logout."""
 
 import logging

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Export the backend contracts used by frontend code generation."""
 
 import json

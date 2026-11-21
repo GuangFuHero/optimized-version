@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Repositories for User, Role, and Permission models with RBAC query helpers."""
 
 import logging

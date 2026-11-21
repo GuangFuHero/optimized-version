@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """notifications: `read` is true exactly when `read_at` is set
 
 Revision ID: 9dd1f61063fe

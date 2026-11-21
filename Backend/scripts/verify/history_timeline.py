@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """End-to-end verification against a real database with the audit triggers installed.
 
 The unit tests build their schema from Base.metadata, which carries no triggers, so every

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """PII masking helpers for ticket contact fields (ADR-049, ported from PR #23).
 
 Used by the `ticket.view_pii` field resolvers: when the caller's scope does NOT cover a

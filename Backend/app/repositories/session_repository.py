@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Redis-backed session + refresh-token store with rotation and reuse detection."""
 
 import base64

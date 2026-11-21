@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Thread-safe context variable stores for request auditing and context tracking."""
 
 from contextvars import ContextVar

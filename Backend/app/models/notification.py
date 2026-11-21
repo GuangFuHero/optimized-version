@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """SQLAlchemy ORM model for user notifications."""
 
 import uuid as _uuid

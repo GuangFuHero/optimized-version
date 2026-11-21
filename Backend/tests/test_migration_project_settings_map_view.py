@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Guard the ADR-395 migration: the settings row gets the map's opening view, set whole or not at all.
 
 The three columns arrive empty, so a deployment keeps opening the site's map where the frontend's

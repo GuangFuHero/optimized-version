@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The sign-in cookies the backend sets for the browser (ADR-326).
 
 One sign-in has to reach both the site and the back office, which sit on sibling hosts, while

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Every 401 a token earns says why (ADR-328): refresh and try again, or you are signed out.
 
 The browser cannot tell the two apart from the status alone, and they need opposite handling: an

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Per-row validation for bulk import (feature 015, ADR-117/123).
 
 This is the one write path with no form in front of it and nobody reading the rows one by

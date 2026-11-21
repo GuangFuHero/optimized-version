@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """A ticket's updatedAt (「最後更新」): any visible change to it moves it; sign-ups and verdicts don't."""
 
 from datetime import UTC, datetime

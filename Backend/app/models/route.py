@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """SQLAlchemy model for routes between stations."""
 
 from sqlalchemy import ForeignKey

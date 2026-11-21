@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """SQLAlchemy model for the deployment's single global project settings row (ADR-090).
 
 One deployment = one (possibly mixed-type) disaster. There is no project / disaster_event

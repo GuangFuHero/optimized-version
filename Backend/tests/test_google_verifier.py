@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Tests for the Google id_token verifier adapters and the dependency selector."""
 
 import json

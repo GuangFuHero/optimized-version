@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """GraphQL queries for the station, task and ticket dynamic-field schemas.
 
 Checkpoint 1 only: these are global schema definitions, not user-owned rows. The station and

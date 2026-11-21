@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """audit triggers for RBAC v1 tables
 
 Backfills the audit triggers for the RBAC v1 tables (teams / work zones / role-permission

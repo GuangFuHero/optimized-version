@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Ticket export by 組織分配, every kind of need in one file, and two header rows (#285).
 
 組織分配 is the board's (`tickets`' `responsibleTeamUuid` / `unassignedOnly`): a ticket is a team's when

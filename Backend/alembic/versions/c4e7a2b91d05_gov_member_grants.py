@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """gov members import, export, review station suggestions, draw zones and open spaces: grant member (BE-RBAC-3 B3)
 
 Revision ID: c4e7a2b91d05

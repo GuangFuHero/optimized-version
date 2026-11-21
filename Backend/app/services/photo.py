@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Attaching and removing photos.
 
 Follows the same shape as station.py and ticket.py: plain module-level functions taking the

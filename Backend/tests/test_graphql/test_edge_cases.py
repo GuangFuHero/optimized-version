@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """GraphQL edge-case integration tests covering geometry roundtrips and boundary conditions."""
 
 import pytest

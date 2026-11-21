@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """A need's `completed_at` and `canceled_at` agree with its `status` (ck_ticket_tasks_stamps_match_status).
 
 The database refuses a row where they disagree, and every action that moves a need's status leaves a row

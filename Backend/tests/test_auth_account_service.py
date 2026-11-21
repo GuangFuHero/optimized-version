@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Tests for the create_account service (atomic user + identity + contact + group)."""
 
 import os

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """A malformed UUID in a create input is refused as bad input, not reported as a server fault.
 
 Typed as `str`, these fields passed any text through to asyncpg, whose error was masked to

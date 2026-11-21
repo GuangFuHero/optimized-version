@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The `tickets` list's NEEDS_FIRST order (ADR-419).
 
 Tickets still short of people come first, one with an open rescue need ahead of the rest, finished

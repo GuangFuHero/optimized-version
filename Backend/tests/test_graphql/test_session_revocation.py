@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The GraphQL path enforces the session check too (feature 014, ADR-102).
 
 `app/graphql/context.py` calls `get_current_user` directly rather than through FastAPI's

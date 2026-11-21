@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """SQLAlchemy models for geospatial entities: BaseGeometry, Station, the map areas, and BuildingMap."""
 
 from datetime import datetime

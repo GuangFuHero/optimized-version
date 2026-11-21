@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """add stations.team_uuid (ADR-285: a station is assigned by hand to the one team that runs it)
 
 Revision ID: d4a7e2c9b1f5

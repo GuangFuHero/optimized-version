@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Validated create input → the drafts the dedup engine receives.
 
 The drafts are all the engine learns about what is being submitted, so these pin that the facts

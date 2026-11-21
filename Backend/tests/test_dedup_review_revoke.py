@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Undoing a verdict on a pair card (Spec 025 §2.4, ADR-342/343/344): the service layer.
 
 The REST layer on top is tested in test_dedup_review_api.py.

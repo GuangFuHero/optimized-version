@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The browser's session endpoints: sign in, refresh, switch identity, sign out, finish a registration.
 
 They answer with the sign-in cookies (ADR-326) and never put a token in the body, so a script on the page

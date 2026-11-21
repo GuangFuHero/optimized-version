@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Where a station or a task came from, as the identity that made it says."""
 
 from app.models.auth import User

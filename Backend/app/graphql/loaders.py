@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Per-request Strawberry DataLoaders that batch nested-field DB lookups.
 
 Each loader collapses an N+1 access pattern into a single

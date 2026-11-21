@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """GraphQL queries for map areas and team zones.
 
 `areas` serves the public map (map.view) with every hazardous zone and the public mark zones, plus

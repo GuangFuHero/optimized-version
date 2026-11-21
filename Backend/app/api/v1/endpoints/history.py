@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Change-timeline REST endpoints (feature 016, ADR-138).
 
 REST rather than a GraphQL field on the ticket/station type. Nested, `tickets(limit: 50) {

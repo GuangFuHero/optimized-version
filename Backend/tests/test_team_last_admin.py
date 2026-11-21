@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """A team keeps at least one admin (Spec/026 Task 7, ADR-356; ADMIN-027 Story 4 step 3)."""
 
 import asyncio

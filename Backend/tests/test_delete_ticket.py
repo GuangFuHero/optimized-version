@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The requester deletes a whole ticket.
 
 Service-level (root conftest). The ticket is cancelled and soft-deleted, and every need on it that

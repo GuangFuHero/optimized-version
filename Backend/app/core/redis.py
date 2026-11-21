@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Redis client construction and the dependency that hands it to endpoints."""
 
 import redis.asyncio as aioredis

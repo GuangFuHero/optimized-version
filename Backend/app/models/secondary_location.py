@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """SQLAlchemy model for secondary address and pole location details linked to a geometry."""
 
 from sqlalchemy import Computed, ForeignKey, String

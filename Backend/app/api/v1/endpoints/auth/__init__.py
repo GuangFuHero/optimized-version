@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Authentication endpoints package: assembles the sub-routers into one auth router."""
 
 from fastapi import APIRouter

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Contact add / replace / delete use-cases (feature 012, ADR-085~089, 098).
 
 Extracted out of `app/api/v1/endpoints/auth/contacts.py` because this is where the

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Repositories for station, task and ticket property configuration schemas.
 
 `list_by_type` answers "which fields should the form show right now": the requested target

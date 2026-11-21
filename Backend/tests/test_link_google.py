@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Endpoint tests for linking a Google identity to the current (logged-in) account."""
 
 import json

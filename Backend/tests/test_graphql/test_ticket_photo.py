@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """End-to-end tests for ticket photo links: filing them with a ticket, attaching, detaching.
 
 Photos are links only (the platform keeps no image). Three properties are pinned:

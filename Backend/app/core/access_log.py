@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Keep the secrets in an OAuth URL out of uvicorn's access log (ADR-331).
 
 uvicorn writes every request line in full, query string included. For the OAuth endpoints that query

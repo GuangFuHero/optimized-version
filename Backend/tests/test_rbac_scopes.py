@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Unit tests for the scope engine (app/core/rbac_scopes.py).
 
 Covers widest() merge and every in_scope() branch, including the team/gov/ngo/zone

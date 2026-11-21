@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Tests for scripts/check_alembic_heads.py: more than one Alembic head fails and names the files."""
 
 from pathlib import Path

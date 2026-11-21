@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The optional filters of the analytics endpoints, and the values the catalog publishes for them.
 
 A filter is a WHERE clause list against `Tickets` or `Station`, the same shape as the caller's RBAC

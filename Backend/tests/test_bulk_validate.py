@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Per-row validation for bulk import (feature 015, ADR-117/121/123)."""
 
 import os

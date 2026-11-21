@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Centralized account creation — the single entry point all register/SSO flows funnel through (design §2)."""
 
 from datetime import UTC, datetime

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Tests for scripts/bootstrap_admin.py (T116).
 
 Exercises the real DB-backed contact/role lookups, not mocks — the "refuse a second

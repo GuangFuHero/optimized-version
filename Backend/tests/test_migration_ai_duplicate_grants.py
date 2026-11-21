@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Guard the ADR-337/342 grant migration against the grants a deployed database already holds.
 
 The RBAC seed never overwrites a grant (ADR-055), so an existing deployment opens the AI 重複審核

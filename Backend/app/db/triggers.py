@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """SQL definitions and configuration for database-level triggers."""
 
 # List of all database tables that should have mutation auditing enabled

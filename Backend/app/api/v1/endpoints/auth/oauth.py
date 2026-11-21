@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Sign in with Google or LINE through the backend's own OAuth flow (ADR-331).
 
 `start` sends the browser to the provider; `callback` is where the provider sends it back. Both are

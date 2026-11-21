@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """GraphQL surface of 刪除這筆需求.
 
 The rules — what a deleted need becomes, who hears, who may — are pinned at the service layer in

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Migration 79a19cabc98a: existing databases gain the team admin's new grants (Spec/026).
 
 Built like tests/test_migration_join_requests.py: stop before it, write the roles a deployed

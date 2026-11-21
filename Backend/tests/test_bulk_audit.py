@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Dynamic-field values join the audit trail (feature 015, ADR-124).
 
 `station_properties` and `task_properties` were the only mutable content tables outside

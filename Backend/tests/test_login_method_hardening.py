@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Linking and unlinking SSO login methods (feature 017, ADR-217~219).
 
 The load-bearing tests are the two attack chains. Both were verified end to end against the

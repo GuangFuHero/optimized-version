@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """「我的任務 › 我承接的」: every need the caller claimed, with where to go.
 
 One row per claim, carrying the claim, the need and its ticket, so the drawer can show

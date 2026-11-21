@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """add GIST spatial index on work_zones.geometry (PR #24 [15])
 
 work_zones was created via raw SQL (1d52ab265e50) with no spatial index, so every zone-scope

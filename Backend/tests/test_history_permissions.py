@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Timeline capability keys and seed grants (feature 016, ADR-127/128).
 
 The grant matrix lives in `scripts/seed_rbac.py`. These tests assert it directly, then

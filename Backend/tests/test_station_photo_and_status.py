@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Service-level tests for the PR #32 review's M3 finding.
 
 M2 (photo url validation) lived here too until the merge with main, which landed the same

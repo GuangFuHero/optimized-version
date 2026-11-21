@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """team_zone_assign assigner columns
 
 Adds created_at + assigned_by so the API can display "who assigned this zone, and when"

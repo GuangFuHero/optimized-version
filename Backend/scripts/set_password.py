@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 r"""Set an account's password from the command line, for an account nobody can reset by mail.
 
 The mock seed's back-office test accounts, asuper01 (super_admin) and aaudit01 (data_auditor), carry

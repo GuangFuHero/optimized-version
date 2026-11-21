@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """SSO endpoints: linking and unlinking Google/LINE login methods. Signing in with them is `oauth.py`."""
 
 from fastapi import (

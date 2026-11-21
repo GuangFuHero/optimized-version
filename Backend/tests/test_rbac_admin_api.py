@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Integration tests for the read-only RBAC admin surface (feature 009, Phase 1)."""
 
 from uuid import uuid4

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """SQLAlchemy models for ticket tasks, task properties, and task assignments."""
 
 from datetime import datetime

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Proving a LINE-only account at LINE before it gains a new way in (ADR-361).
 
 An account with no password and no contact can prove itself only with the provider it holds (ADR-234), and

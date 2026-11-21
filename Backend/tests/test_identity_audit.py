@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """audit_logs.context records the identity a change was made under (feature 010, ADR-076).
 
 The point of the column is attribution that survives: "who did this" is no longer enough

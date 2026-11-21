@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """A ticket's timeline as anyone may read it: what happened, never who (feature 016, ADR-421).
 
 `history.py` tells the requester and the coordinators who did what, and is closed to everyone else:

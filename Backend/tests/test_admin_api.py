@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Integration tests for the minimal admin REST API (T117, ADR-031/032).
 
 Covers: role assignment (platform + team kind), the last-super_admin lockout guard, and

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Unit tests for map tile proxy service: cache key generation and attribution lookup."""
 
 import os

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Endpoints for querying, counting, and marking notifications as read."""
 
 from uuid import UUID

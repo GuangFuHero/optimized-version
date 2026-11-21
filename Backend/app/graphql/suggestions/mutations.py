@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """GraphQL mutations for the station-update suggestion workflow.
 
 Thin per ADR-014: parse input, call the suggestion service function, map the result back

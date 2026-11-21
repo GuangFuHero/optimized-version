@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Shared fixtures and helpers for GraphQL integration tests."""
 
 import uuid as uuid_mod

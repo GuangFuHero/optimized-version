@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """List rows whose stored address parts differ from a re-parse: `python -m scripts.check_address_drift`.
 
 The parts of `secondary_locations` are derived from `user_input_address` by the parser, and the database

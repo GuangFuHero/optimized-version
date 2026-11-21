@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The two whole tickets behind a pair card (Spec 028 §2, ADR-373/374): the service layer.
 
 `dedup_review.get_pair` carries them; the REST shape is checked in test_dedup_review_tickets_api.py.

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """backfill the `user` platform grant (ADR-290: the site acts as `user`)
 
 Revision ID: 15370be54155

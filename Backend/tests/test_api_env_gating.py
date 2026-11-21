@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Which environments get the development-only routes.
 
 It is an allowlist that fails closed: staging is a real deployed environment, and an unset or

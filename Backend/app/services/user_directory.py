@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Listing accounts for the back office (Spec/026): one base, one subclass per audience.
 
 `UserDirectory` holds what every list shares — which accounts, in what order, and whether the

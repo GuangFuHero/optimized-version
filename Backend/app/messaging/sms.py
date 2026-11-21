@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """SMS delivery: abstract sender + dev console impl. Real delivery goes through 簡訊王 (kotsms)."""
 
 import logging

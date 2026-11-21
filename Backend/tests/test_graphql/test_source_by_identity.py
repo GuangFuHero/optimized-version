@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Where a station or a task came from is the backend's call, by the identity that made it.
 
 Made in the back office, it is `official`; made on the site, `user`. What the form sends is not read:

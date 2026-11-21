@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Turns pre-aggregated analytics rows into chart series, and those into Plotly figure JSON.
 
 This is the only module that imports `plotly` (https://plotly.com/python/), so everything

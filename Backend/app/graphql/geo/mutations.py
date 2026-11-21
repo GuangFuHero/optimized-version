@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """GraphQL mutations for stations, building maps, and station properties.
 
 Thin per ADR-014: parse input, call the service function (which owns authz, validation,

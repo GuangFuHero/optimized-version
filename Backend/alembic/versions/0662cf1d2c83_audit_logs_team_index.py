@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """audit_logs: index the team a row names, for the team view of the audit-log API (Spec 026)
 
 Revision ID: 0662cf1d2c83

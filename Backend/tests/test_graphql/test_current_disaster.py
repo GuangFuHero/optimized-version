@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """`currentDisaster`: the deployment's disaster as the public site names it (ADR-392).
 
 The site's top bar shows the disaster's name before anyone signs in, while the settings it comes from

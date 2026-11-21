@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Guard the feature-018 migration against data that predates it.
 
 `test_migrations_match_models.py` proves the migrations build the right *shape*; this proves

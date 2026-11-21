@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Which access token a request carries, and whether a cookie may carry it into a write (ADR-327).
 
 A request authenticates with a Bearer token when it sends one — scripts, tests and the HTTP

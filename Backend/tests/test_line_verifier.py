@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Tests for the LINE verifier dependency selector and (relocated) fake double."""
 
 import json

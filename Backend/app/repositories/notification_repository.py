@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Repository for Notification CRUD, unread counting, and bulk read updates."""
 
 from datetime import UTC, datetime

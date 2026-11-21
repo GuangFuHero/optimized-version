@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """project settings and config fields
 
 Feature 013 (Spec/013-project-settings-activity/decisions.md ADR-090~095):

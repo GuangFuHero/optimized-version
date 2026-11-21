@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The back office acts as a back-office identity, marked by X-WG-Realm: admin (ADR-329).
 
 A login lands on `user` (ADR-290), which is the site's identity. The back office marks its requests so the

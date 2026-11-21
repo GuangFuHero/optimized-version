@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The contract between the backend and the dedup engine.
 
 The backend sends a validated submission (new ticket, new task or new station) and gets back

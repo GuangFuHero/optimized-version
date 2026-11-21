@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Schema-level tests for the search_text generated columns and their GIN indexes (feature 011).
 
 These guard the two things that are invisible at the API layer: what actually feeds the

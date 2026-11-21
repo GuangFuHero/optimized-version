@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The ticket board's server side: per-ticket viewerCan* flags, the disaster filter, ticketStats."""
 
 import uuid as uuid_mod

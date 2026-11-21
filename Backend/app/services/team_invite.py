@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Team invite links: a team admin shares one, anyone signed in asks to join through it (Spec/026).
 
 A link lives exactly 24 hours, has no usage cap, and cannot be revoked or extended (BE-038

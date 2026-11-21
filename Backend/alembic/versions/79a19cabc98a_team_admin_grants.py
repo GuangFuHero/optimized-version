@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """team admins edit their team, list its members, read its audit log: grant the new capabilities (Spec 026)
 
 Revision ID: 79a19cabc98a

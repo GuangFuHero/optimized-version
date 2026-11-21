@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Station analytics aggregation queries backing the Plotly chart endpoints.
 
 Same rationale as ticket_analytics.py: read-only reporting queries, plain SQLAlchemy

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """area polygons: closure_areas -> hazardous_zones, work_zones -> team_zones, mark zones (ADR-311)
 
 The three map areas (危險區, 責任區, 標示區) become joined-table children of one

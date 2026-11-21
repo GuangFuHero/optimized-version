@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """提示率 and 誤報率 of the dedup fast layer, for the back office (Spec 025, ADR-458).
 
 Read-only. Everything comes from what the fast layer already records: a `hint_shown` event when a

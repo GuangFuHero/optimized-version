@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Machine-readable error codes for API failures.
 
 `detail` stays a human-readable English string for logs and API consumers, but clients must branch

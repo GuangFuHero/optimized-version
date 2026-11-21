@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """HTTP-level tests for the /api/v1/analytics chart, data and value endpoints.
 
 The PR #32 review found both handlers effectively uncovered — the live sweep in its test

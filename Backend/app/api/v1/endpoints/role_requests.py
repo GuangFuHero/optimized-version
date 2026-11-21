@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Back-office review of role requests: list the applications, approve or turn one down (Spec/019).
 
 Mounted under /admin like the rest of the back office. Since Spec 026 a team admin reviews the

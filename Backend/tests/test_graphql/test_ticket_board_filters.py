@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The ticket board's 行政區域, 組織分配 and 時間 filters, and the facets its chips list.
 
 組織分配 is the 責任區 a ticket lies in, as `responsibleTeams` names it (ADR-422): tickets carry no

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Script to seed initial RBAC v1 permissions, roles, and role-permission grants.
 
 ADR-026 drop-and-replace: platform roles (kind="platform", one per account, ADR-019) and

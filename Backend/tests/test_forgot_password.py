@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Integration tests for logged-out forgot/reset password."""
 
 import asyncio

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Contact endpoints: verify-then-attach add/replace, verify, resend and delete.
 
 Thin per ADR-014/089: parse input, call `app.services.auth_contact`, map its errors onto

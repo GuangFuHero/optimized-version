@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """ADR-290: the backfill gives every account the `user` grant the site acts as.
 
 Built the way tests/test_migration_legacy_disaster_data.py is: stop before the backfill, write

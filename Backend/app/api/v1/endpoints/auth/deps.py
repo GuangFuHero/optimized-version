@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Shared auth-endpoint helpers: identifier normalization, token issuance, sign-in cookies, rate limiting."""
 
 import os

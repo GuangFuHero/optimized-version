@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The notices a resolve sends after it commits (Spec 028 §6, ADR-379).
 
 Built on the world of test_dedup_resolve.py: v1 and v2 on a1, v2 and v3 on b1, v4 on b3.

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Inside one building, requests on different floors are not duplicates (ADR-451), on the real engine."""
 
 import random

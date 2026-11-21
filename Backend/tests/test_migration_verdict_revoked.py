@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Guard the ADR-344 migration's downgrade: it must not silently drop verdict_revoked events.
 
 test_dedup_schema covers the upgraded constraint on both schemas. This covers the way back:

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Registration endpoints: salt retrieval, verify-then-create register, and resend."""
 
 from fastapi import APIRouter, Depends, Request, status

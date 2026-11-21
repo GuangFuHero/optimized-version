@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Bulk export/import REST endpoints (feature 015, ADR-114).
 
 REST rather than GraphQL: this is file upload and file download, which GraphQL has no good

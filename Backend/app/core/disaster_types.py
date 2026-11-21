@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Disaster-type label handling (feature 013 ADR-090/091, closed by feature 018 ADR-244).
 
 A disaster type is matched by exact string equality on both sides — a config row says which

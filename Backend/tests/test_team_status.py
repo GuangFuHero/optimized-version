@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Suspending and restoring a team (Spec/026 Task 9, ADR-357 points 3-4). There is no disbanding.
 
 Suspension switches the team's identities off at the one place every request resolves them

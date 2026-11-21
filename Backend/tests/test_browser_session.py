@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The browser signs in, refreshes, switches identity and signs out through cookies (ADR-325).
 
 `/auth/session*` are the browser's endpoints. They answer with `Set-Cookie` and never put a token in

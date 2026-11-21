@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The search/list ORDER BY must be a *total* order (ADR-153).
 
 This is a structural test on purpose. The behavioural version — insert rows that tie on

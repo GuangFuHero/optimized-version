@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """ai_duplicate.*: grant the review queue to super_admin and data_auditor (ADR-337, ADR-342)
 
 Revision ID: 1649d30b0122

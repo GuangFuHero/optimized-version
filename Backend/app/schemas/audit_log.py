@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Pydantic schemas for the audit-log read API (Spec/026, ADR-358)."""
 
 from datetime import datetime

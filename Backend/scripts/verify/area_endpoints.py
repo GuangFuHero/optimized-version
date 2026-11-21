@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """End-to-end check of every map-area GraphQL endpoint against a live server (ADR-311).
 
 Unit tests build their schema from Base.metadata and mint tokens by hand. This script logs in

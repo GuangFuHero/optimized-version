@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Whom to call on a ticket (ADR-286 points 1 and 6).
 
 A requester's name, phone and email read in full to the requester, the coordinators — whoever

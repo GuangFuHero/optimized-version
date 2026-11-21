@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """station photos and contact fields
 
 Generalizes photo attachment beyond tickets: ``photos.ref_type='ticket'`` becomes

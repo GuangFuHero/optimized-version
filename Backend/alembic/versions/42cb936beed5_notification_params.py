@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """notifications.params: the values a client needs to write each notice's sentence itself
 
 Revision ID: 42cb936beed5

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Redis-backed 6-digit OTP store, shared by registration and contact-verification.
 
 Keys:

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """User profile endpoints for reading and updating the current user's account."""
 
 from fastapi import APIRouter, Depends

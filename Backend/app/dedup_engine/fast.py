@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """The fast layer: finds likely duplicates with fixed rules, one task draft at a time.
 
 Each signal becomes a score from 0 to 1, and the similarity is the weighted average of the

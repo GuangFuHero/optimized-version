@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Turn a reviewer's resolve request into what to write, or refuse it (Spec 028 §3.3–3.4).
 
 Pure: given the request, the card's kind, both whole tickets as the reviewer saw them and who is

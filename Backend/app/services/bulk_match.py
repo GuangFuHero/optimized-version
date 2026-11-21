@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Match an imported row against existing data (feature 015, ADR-107/113).
 
 Matching is on natural columns, not uuid: an external roster never carries one. The cost is

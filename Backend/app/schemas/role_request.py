@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Pydantic schemas for reviewing role requests in the back office (Spec/019)."""
 
 from datetime import datetime

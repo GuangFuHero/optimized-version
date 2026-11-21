@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Resolution logic mapping notification event scopes to concrete recipient user UUIDs."""
 
 import uuid as _uuid

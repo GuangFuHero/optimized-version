@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """ticket disaster fields
 
 Chained after **PR #48**'s head (`c3f0a1b2d4e6`, briefings), because this branch stacks on

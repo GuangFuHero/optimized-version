@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Ticket, station and ticket-task creation split into validate → insert → commit.
 
 A deduplicated create must validate before the dedup check and insert without committing, so the

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Tests for the database trigger-based auditing system."""
 
 import uuid

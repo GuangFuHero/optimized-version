@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Reading the audit log (Spec/026, ADR-358).
 
 The platform view (audit.view at `all`) reads every row. The team view (team.audit.view at

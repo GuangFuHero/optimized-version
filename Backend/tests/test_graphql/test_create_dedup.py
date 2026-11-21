@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Two-phase createTicket / createTicketTask / createStation over GraphQL, on the real engine.
 
 End to end: resolver, union results, the backend's engine guard, the engine's own queries and

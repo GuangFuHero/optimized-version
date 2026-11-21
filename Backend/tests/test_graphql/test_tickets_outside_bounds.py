@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """`tickets(outsideBounds:)`: the tickets a box leaves out, matched as `bounds` matches them (ADR-452)."""
 
 import pytest
