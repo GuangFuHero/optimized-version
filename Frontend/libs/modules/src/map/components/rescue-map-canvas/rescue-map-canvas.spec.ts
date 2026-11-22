@@ -10,6 +10,7 @@ import {
   describe,
   expect,
   it,
+  vi,
 } from 'vitest';
 
 import { designTokens } from '@rescue-frontend/ui';
@@ -485,14 +486,32 @@ describe('drawing an area', () => {
   ];
   const FIRST_THREE: [number, number][] = [...FIRST_TWO, [23.88, 121.01]];
 
-  it('finishes a valid outline when the repeat click lands a pixel away', async () => {
+  it.each([
+    {
+      title:
+        'finishes a valid outline when the repeat click lands a pixel away',
+      offset: 1,
+      delay: 100,
+      shouldFinish: true,
+    },
+    {
+      title: 'adds a vertex when the next click lands seven pixels away',
+      offset: 7,
+      delay: 100,
+      shouldFinish: false,
+    },
+    {
+      title: 'adds a nearby vertex when the next click arrives after 500 ms',
+      offset: 1,
+      delay: 500,
+      shouldFinish: false,
+    },
+  ])('$title', async ({ offset, delay, shouldFinish }) => {
     const changes: [number, number][][] = [];
-    let finishes = 0;
+    const onFinish = vi.fn();
     const drawing = {
       onChange: (points: [number, number][]) => changes.push(points),
-      onFinish: () => {
-        finishes += 1;
-      },
+      onFinish,
     };
     const controller = createController({ reported });
     await render({
@@ -502,18 +521,29 @@ describe('drawing an area', () => {
 
     const map = maps[0];
     const last = L.latLng(FIRST_THREE[2]);
-    map.fire('click', { latlng: last });
-    await rerender({
-      controller,
-      draftArea: { points: changes[0], invalid: false, drawing },
-    });
     const nearLast = map.containerPointToLatLng(
-      map.latLngToContainerPoint(last).add([1, 1]),
+      map.latLngToContainerPoint(last).add([offset, 0]),
     );
-    map.fire('click', { latlng: nearLast });
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const firstClickAt = Date.now();
+      map.fire('click', { latlng: last });
+      await rerender({
+        controller,
+        draftArea: { points: changes[0], invalid: false, drawing },
+      });
+      vi.setSystemTime(firstClickAt + delay);
+      map.fire('click', { latlng: nearLast });
+    } finally {
+      vi.useRealTimers();
+    }
 
-    expect(changes).toEqual([FIRST_THREE]);
-    expect(finishes).toBe(1);
+    expect(changes).toEqual(
+      shouldFinish
+        ? [FIRST_THREE]
+        : [FIRST_THREE, [...FIRST_THREE, [nearLast.lat, nearLast.lng]]],
+    );
+    expect(onFinish).toHaveBeenCalledTimes(shouldFinish ? 1 : 0);
   });
 
   /** Everything drawn for the area being drawn: the line through the corners, and the corners. */

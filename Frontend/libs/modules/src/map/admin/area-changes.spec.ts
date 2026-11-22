@@ -439,6 +439,51 @@ describe('a new area held with the identity', () => {
     expect(view.restoreDraft).not.toHaveBeenCalled();
   });
 
+  it.each([
+    { outcome: 'the identity remains active', sessionEnds: false },
+    { outcome: 'the session ends', sessionEnds: true },
+  ])('handles a sent draft failing when $outcome', async ({ sessionEnds }) => {
+    const held = draft();
+    let rejectSave: () => void = () => {
+      throw new Error('The draft was not sent.');
+    };
+    const send = vi.fn(
+      () =>
+        new Promise<string>((_, reject) => {
+          rejectSave = () => reject(new TypeError('Failed to fetch'));
+        }),
+    );
+    await act(async () => {
+      latest.holdDraft(held, { message: '已建立區域', send });
+    });
+    await pastDeadline();
+    expect(send).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      expect(cancelForSignOut()).toBe(false);
+    });
+    expect(latest.heldDraft).toEqual(held);
+    if (sessionEnds) {
+      await act(async () => {
+        window.dispatchEvent(new Event(SESSION_ENDING_EVENT));
+      });
+      expect(latest.heldDraft).toBeNull();
+    }
+    await act(async () => rejectSave());
+
+    expect(latest.heldDraft).toBeNull();
+    expect(latest.recoverableDraft).toEqual(sessionEnds ? null : held);
+    expect(
+      toast
+        .getToasts()
+        .some(
+          (event) =>
+            'title' in event &&
+            event.title === '無法確認區域是否已儲存，請先查看區域清單。',
+        ),
+    ).toBe(!sessionEnds);
+  });
+
   it('keeps a draft the map could not take back across an unmount, and resets it with the identity', async () => {
     const held = draft();
 

@@ -36,6 +36,8 @@ export interface EditSync<Edit> {
     edit: Edit,
     write: EditWrite<Result>,
   ) => HeldEdit | null;
+  /** Cancel waiting edits and keep tracking requests that have already started. */
+  cancelWaiting: () => boolean;
   /** Drop queued edits and disregard in-flight results when the save scope ends. */
   reset: () => boolean;
 }
@@ -117,19 +119,24 @@ function createEditStore<Edit>(undoMs: number) {
     };
   };
 
-  const reset = () => {
-    if (entries.size === 0) return false;
-
-    const waiting = [...entries.values()].filter((entry) => entry.waiting);
-    entries.clear();
+  const discard = (includeInFlight: boolean) => {
+    const waiting = [...entries].filter(([, entry]) => entry.waiting);
+    if (includeInFlight) {
+      if (entries.size === 0) return false;
+      entries.clear();
+    } else {
+      if (waiting.length === 0) return false;
+      for (const [key] of waiting) entries.delete(key);
+    }
     publish();
-    for (const entry of waiting) entry.cancel();
+    for (const [, entry] of waiting) entry.cancel();
     return waiting.length > 0;
   };
 
   return {
     save,
-    reset,
+    cancelWaiting: () => discard(false),
+    reset: () => discard(true),
     subscribe(listener: () => void) {
       listeners.add(listener);
       return () => {
@@ -171,5 +178,10 @@ export function useEditSync<Edit>({
     };
   }, [store]);
 
-  return { pending, save: store.save, reset: store.reset };
+  return {
+    pending,
+    save: store.save,
+    cancelWaiting: store.cancelWaiting,
+    reset: store.reset,
+  };
 }

@@ -32,10 +32,14 @@ function deferred<Result>() {
   let settle: (result: Result) => void = () => {
     throw new Error('The test request has no resolver.');
   };
-  const promise = new Promise<Result>((resolve) => {
+  let fail: (cause: Error) => void = () => {
+    throw new Error('The test request has no rejecter.');
+  };
+  const promise = new Promise<Result>((resolve, reject) => {
     settle = resolve;
+    fail = reject;
   });
-  return { promise, settle };
+  return { promise, settle, fail };
 }
 
 /** Saves an edit on the hook's queue and lets React paint its pending state. */
@@ -106,36 +110,43 @@ describe('useEditSync', () => {
     expect(sync.pending).toEqual({ area: 'newer' });
   });
 
-  it('lets a reset key be saved again and ignores the dropped request when it settles', async () => {
-    const staleRequest = deferred<string>();
-    const onSuccess = vi.fn();
-    const onError = vi.fn();
-    const stale = await save(
-      'area',
-      'old',
-      write(staleRequest.promise, { onSuccess, onError }),
-    );
-    if (!stale) throw new Error('The old identity should be able to save.');
-    stale.commit();
-    await act(async () => {
-      expect(sync.reset()).toBe(false);
-    });
-    expect(sync.pending).toEqual({});
+  it.each(['succeeds', 'fails'])(
+    'lets a reset key be saved again and ignores the dropped request when it %s',
+    async (outcome) => {
+      const staleRequest = deferred<string>();
+      const onSuccess = vi.fn();
+      const onError = vi.fn();
+      const stale = await save(
+        'area',
+        'old',
+        write(staleRequest.promise, { onSuccess, onError }),
+      );
+      if (!stale) throw new Error('The old identity should be able to save.');
+      stale.commit();
+      await act(async () => {
+        expect(sync.reset()).toBe(false);
+      });
+      expect(sync.pending).toEqual({});
 
-    const newerRequest = deferred<string>();
-    const newer = await save('area', 'new', write(newerRequest.promise));
-    expect(newer).not.toBeNull();
-    expect(sync.pending).toEqual({ area: 'new' });
+      const newerRequest = deferred<string>();
+      const newer = await save('area', 'new', write(newerRequest.promise));
+      expect(newer).not.toBeNull();
+      expect(sync.pending).toEqual({ area: 'new' });
 
-    await act(async () => staleRequest.settle('old result'));
-    expect(onSuccess).not.toHaveBeenCalled();
-    expect(onError).not.toHaveBeenCalled();
-    expect(sync.pending).toEqual({ area: 'new' });
+      await act(async () => {
+        if (outcome === 'fails')
+          staleRequest.fail(new Error('Old request failed'));
+        else staleRequest.settle('old result');
+      });
+      expect(onSuccess).not.toHaveBeenCalled();
+      expect(onError).not.toHaveBeenCalled();
+      expect(sync.pending).toEqual({ area: 'new' });
 
-    if (!newer) throw new Error('The new identity should be able to save.');
-    newer.commit();
-    expect(sync.pending).toEqual({ area: 'new' });
-    await act(async () => newerRequest.settle('new result'));
-    expect(sync.pending).toEqual({});
-  });
+      if (!newer) throw new Error('The new identity should be able to save.');
+      newer.commit();
+      expect(sync.pending).toEqual({ area: 'new' });
+      await act(async () => newerRequest.settle('new result'));
+      expect(sync.pending).toEqual({});
+    },
+  );
 });

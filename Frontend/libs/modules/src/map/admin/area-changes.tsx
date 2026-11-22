@@ -75,11 +75,13 @@ export function AdminAreaChangesProvider({
   const {
     pending,
     save: saveArea,
+    cancelWaiting: cancelWaitingAreas,
     reset: resetAreas,
   } = useEditSync<HeldAreaChange>();
   const {
     pending: drafts,
     save: saveDraft,
+    cancelWaiting: cancelWaitingDrafts,
     reset: resetDrafts,
   } = useEditSync<DrawEditor>();
   const [recoverableDraft, recoverDraft] = useState<DrawEditor | null>(null);
@@ -92,17 +94,21 @@ export function AdminAreaChangesProvider({
     };
   }, []);
   const cancelHolds = useCallback(() => {
-    const cancelledAreas = resetAreas();
-    const cancelledDrafts = resetDrafts();
+    const cancelledAreas = cancelWaitingAreas();
+    const cancelledDrafts = cancelWaitingDrafts();
     return cancelledAreas || cancelledDrafts;
-  }, [resetAreas, resetDrafts]);
+  }, [cancelWaitingAreas, cancelWaitingDrafts]);
 
   useEffect(() => {
-    window.addEventListener(SESSION_ENDING_EVENT, cancelHolds);
+    function endSession() {
+      resetAreas();
+      resetDrafts();
+    }
+    window.addEventListener(SESSION_ENDING_EVENT, endSession);
     return () => {
-      window.removeEventListener(SESSION_ENDING_EVENT, cancelHolds);
+      window.removeEventListener(SESSION_ENDING_EVENT, endSession);
     };
-  }, [cancelHolds]);
+  }, [resetAreas, resetDrafts]);
 
   const changes = useMemo<AreaChanges>(
     () => ({

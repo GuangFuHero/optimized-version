@@ -164,7 +164,7 @@ function SaveBoundary({ id, points }: { id: string; points: PolygonVertex[] }) {
 }
 ```
 
-Use one queue per save scope. Mount it above a map route to keep pending writes through navigation inside the app. Ordinary page exit attempts to send waiting writes with `keepalive`. Call `reset()` before switching accounts to drop waiting writes and ignore the results of writes already sent. Keep cache refresh inside `persist` if the pending edit should stay on screen until fresh server data arrives.
+Use one queue per save scope. Mount it above a map route to keep pending writes through navigation inside the app. Ordinary page exit attempts to send waiting writes with `keepalive`. Call `cancelWaiting()` when starting an account switch so requests already sent can still report their results. Call `reset()` when the old account's save scope ends to discard its queued edits and ignore late results. Keep cache refresh inside `persist` if the pending edit should stay on screen until fresh server data arrives.
 
 The queue reads `undoMs` when it first mounts. Supply your own endpoint for the example's PUT request.
 
