@@ -330,6 +330,7 @@ query AdminTicket($uuid: UUID!) {
 query AdminStationFacets {
   stationFacets {
     total
+    pendingReviewCount
     byStatus {
       status
       count
