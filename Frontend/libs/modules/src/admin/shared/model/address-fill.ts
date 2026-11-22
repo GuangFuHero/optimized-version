@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import type { AdminReverseGeocodeQuery } from '@rescue-frontend/data-access/admin';
 
 type AddressLookup = AdminReverseGeocodeQuery['reverseGeocode'];

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * The board's create and edit form for a ticket: what it holds, what it refuses, and the inputs it
  * sends. A coordinator types in a request taken by phone; the backend marks its needs official, as

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * What the board's drawer offers on a ticket's needs, and how it reads what the backend says
  * back: the ⋯ of each need, the dedup answer of 再加一項需求, and a refusal's 403.

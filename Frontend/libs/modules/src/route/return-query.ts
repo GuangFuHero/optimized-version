@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * What the site's ways back share (`ticket/help-request/help-return.ts`, `ticket/needs/claim-return.ts`,
  * `station/suggestion/suggestion-return.ts`, `role-request/apply-return.ts`): a button that needs the

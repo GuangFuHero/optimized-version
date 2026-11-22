@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * What a coordinator reads when opening, editing or deleting a space is refused, in place of the
  * backend's English. The refusals are `services/building_map.py`'s, word for word; a 403 is the

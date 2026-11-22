@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { timeAgo } from '../../../time';
 
 export type FreshnessLevel = 'fresh' | 'stale' | 'expired' | 'unknown';

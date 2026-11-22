@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 export { clearAllHelpRequestDrafts } from './help-request-draft';
 export { HelpRequestHost } from './help-request-host';
 export { MapRequestHelpBar, MobileRequestHelpFab } from './mobile-request-help';

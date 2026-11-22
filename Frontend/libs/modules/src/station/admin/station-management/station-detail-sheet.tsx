@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { useEffect, useState, type ReactNode } from 'react';

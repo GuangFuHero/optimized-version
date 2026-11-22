@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { differenceInCalendarDays, parseISO } from 'date-fns';
 
 import { getFreshness } from '../../../../admin/shared/model/freshness';

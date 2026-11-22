@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import nx from '@nx/eslint-plugin';
 
 // A hex, rgb() or rgba() colour anywhere in a string.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 export { pinnedBesideBuildings } from './building-markers';
 export { readLinkedSelection } from './linked-ticket';
 export { MapCellsNotice } from './map-cells-notice';

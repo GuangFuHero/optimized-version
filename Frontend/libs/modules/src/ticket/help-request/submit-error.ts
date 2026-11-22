@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * What a requester reads when 請求協助 is not filed. The backend's own refusals are English and
  * mostly about fields the form already keeps right, so a sign-in that ran out and a dropped

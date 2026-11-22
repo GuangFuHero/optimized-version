@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { Box, Stack, Typography } from '@mui/material';
 import { Package } from 'lucide-react';
 

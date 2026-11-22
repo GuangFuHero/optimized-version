@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { BellOff, Inbox, SearchX } from 'lucide-react';
 import { Button } from '@mui/material';
 import type { Meta, StoryObj } from '@storybook/react-vite';

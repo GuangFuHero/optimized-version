@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * Which of the two back-office entries the site shows (prototype `SitePortalSwitch`,
  * `Design/前台/js/site/site-shell.jsx:163-172`): 前往管理平台 for anyone holding a back-office identity,

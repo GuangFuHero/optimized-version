@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { refreshBeforeRenderAsync } from '@rescue-frontend/modules/server';
 import type { NextRequest } from 'next/server';
 

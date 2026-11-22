@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import type { RescueMapMarkerItem } from '../map/types';
 import { resolveNeedClaim, type TicketNeed } from '../ticket/needs/need-claim';
 import { normalizeTicketStatusSelection } from '../ticket/status';

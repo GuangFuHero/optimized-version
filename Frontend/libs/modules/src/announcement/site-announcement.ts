@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /** What the banner needs of a live announcement (`SiteAnnouncements`). */
 export interface LiveAnnouncement {
   uuid: string;

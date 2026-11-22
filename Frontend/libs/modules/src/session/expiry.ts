@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * When a signed-in session has ended without the person signing out: revoked elsewhere (另一台裝置
  * 「登出所有裝置」, an admin's sign-out, an identity removed — backend ADR-096) or past its refresh.

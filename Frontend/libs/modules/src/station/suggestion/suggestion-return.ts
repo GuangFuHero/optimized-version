@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * The way back for a guest who pressed 修改建議: to sign in, then to the page they were on with the
  * station's suggestion drawer open again (`suggest=<station uuid>`). Built as the claim's and the help

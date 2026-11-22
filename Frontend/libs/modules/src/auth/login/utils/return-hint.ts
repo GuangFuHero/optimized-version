@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * What the sign-in pages say about where signing in leads (design `site-auth.jsx`). The page to come
  * back to is `?callbackUrl=`; the map and the list keep their place and filters in it, so those two

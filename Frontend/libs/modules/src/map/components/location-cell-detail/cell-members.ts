@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import type { LocationCellMembersPage, RescueMapMarkerItem } from '../../types';
 
 /** A counted cell's tickets as listed so far, read a page at a time. */

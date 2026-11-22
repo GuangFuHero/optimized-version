@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { useCurrentUser } from '@rescue-frontend/data-access/admin';

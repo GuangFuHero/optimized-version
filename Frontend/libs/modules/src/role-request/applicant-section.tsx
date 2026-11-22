@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { Box, Button, Stack, TextField, Typography } from '@mui/material';

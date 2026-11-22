@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { CombinedError } from 'urql';
 import { describe, expect, it, vi } from 'vitest';
 

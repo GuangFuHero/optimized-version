@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import API_ENDPOINTS from '../../../endpoints';
 import { requestFormAsync } from '../../../request-async';
 import type { ITokenPair } from '../../../types';

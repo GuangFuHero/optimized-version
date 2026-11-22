@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * Opens 請求協助 from anywhere: the top bar's button, and later the sidebar, the phone's buttons and
  * the map's crosshair. The drawer is kept once, in the site shell (`HelpRequestHost`), so

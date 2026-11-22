@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import loginAsync from './v1/auth/login/post';
 import registerAsync from './v1/auth/register/post';
 import getUserSaltAsync from './v1/auth/salt/[username]/get';

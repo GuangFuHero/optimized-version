@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { createUrqlClient } from '@rescue-frontend/data-access';
 import { fetchExchange } from 'urql';
 

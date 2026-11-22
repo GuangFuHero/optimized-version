@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { toast } from 'sonner';
 
 // How long a change to an area can still be taken back, which is how long its request is held: the

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import type { AuthIdentityType } from './identity-validation';
 
 /** The pages a sign-in can pass through on its way back to where it started. */

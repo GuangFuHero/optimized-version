@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * The site's inbox (prototype `site-notify.jsx`): only what is about the viewer — someone coming to
  * a need they filed, a change to a need they said they would go to, a duplicate review folding their

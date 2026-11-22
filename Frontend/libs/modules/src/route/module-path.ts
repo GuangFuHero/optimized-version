@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { SITE_MODULES } from './constants';
 import type { SiteModule } from './types';
 
