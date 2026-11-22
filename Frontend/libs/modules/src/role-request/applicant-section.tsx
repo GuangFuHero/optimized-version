@@ -1,11 +1,11 @@
 'use client';
 
-import { Box, Button, Stack, TextField, Typography } from '@mui/material';
+import { Box, Stack, TextField, Typography } from '@mui/material';
 import type { ReactNode } from 'react';
 import { useForm, useStore } from '@tanstack/react-form';
 import type { components } from '@rescue-frontend/data-access/openapi';
 
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import { Button, designTokens, displayTextSize } from '@rescue-frontend/ui';
 
 import { SiteBadge } from '../shell/site/site-badge';
 import { displayPhone, type ApplicantAccount } from './applicant';
@@ -174,7 +174,7 @@ function PhoneSteps({
         {/* Away while a proof is asked for: that step has a button of its own. */}
         {proving ? null : (
           <Button
-            variant="outlined"
+            variant="outline"
             onClick={() =>
               codeSent ? void verification.resend() : verification.send()
             }
@@ -283,7 +283,7 @@ function StepRow({
       <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
         {input}
         <Button
-          variant="contained"
+          variant="primary"
           onClick={onAction}
           disabled={disabled}
           sx={{ flexShrink: 0, height: 56 }}

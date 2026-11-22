@@ -1,15 +1,13 @@
 'use client';
 
-import {
-  Box,
-  Button,
-  MenuItem,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material';
+import { Box, MenuItem, Stack, TextField, Typography } from '@mui/material';
 
-import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
+import {
+  Button,
+  designTokens,
+  displayTextSize,
+  Icons,
+} from '@rescue-frontend/ui';
 
 import { floorName } from '../../building/floors';
 import type { BuildingMap } from '../../building/use-building';
@@ -164,8 +162,8 @@ export function BuildingPlace({
       {roomField}
 
       <Button
-        variant="text"
-        size="small"
+        variant="ghost"
+        size="sm"
         onClick={onLeave}
         sx={{ alignSelf: 'flex-start', minHeight: 44 }}
       >

@@ -9,7 +9,7 @@ import {
   useQueryClient,
   type InfiniteData,
 } from '@tanstack/react-query';
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { useDebounceValue } from 'usehooks-ts';
 
 import type { RescueMapMarkerItem } from '../types';
@@ -74,12 +74,16 @@ export function usePaginatedRescueMapMarkers(state?: SiteRouteState) {
   );
   // Tickets only: stations are still filtered on the page, so a search must not reload them.
   const ticketQuery = activeDataType === 'ticket' ? settledQuery : undefined;
-  const queryKey = [
-    'site-list',
-    'markers',
-    activeDataType,
-    { ticketStatus, ticketQuery },
-  ] as const;
+  const queryKey = useMemo(
+    () =>
+      [
+        'site-list',
+        'markers',
+        activeDataType,
+        { ticketStatus, ticketQuery },
+      ] as const,
+    [activeDataType, ticketStatus, ticketQuery],
+  );
 
   const list = useInfiniteQuery({
     ...SITE_READ_OPTIONS,

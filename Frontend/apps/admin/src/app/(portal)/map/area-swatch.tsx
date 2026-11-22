@@ -30,7 +30,7 @@ export function AreaSwatch({
           width: size,
           height: size,
           flexShrink: 0,
-          borderRadius: '3px',
+          borderRadius: `${designTokens.radius[3]}px`,
           ...(kind === 'hazardous_zone'
             ? {
                 // The map's own stripes: 45°, 4px a stripe, and the outline of a 危險區 there.

@@ -43,7 +43,7 @@ function DetailLine({ icon, children }: { icon: ReactNode; children: ReactNode }
           placeItems: 'center',
           height: '1.6em',
           fontSize: displayTextSize[13],
-          '& svg': { fontSize: 14 },
+          '& svg': { fontSize: designTokens.iconSize.sm },
         }}
       >
         {icon}

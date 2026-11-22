@@ -94,6 +94,8 @@ export type {
 } from './components/MetadataTable';
 export { RowAction } from './components/RowAction';
 export type { RowActionProps, RowActionTone } from './components/RowAction';
+export { SegmentedControl } from './components/segmented-control';
+export type { SegmentedControlProps } from './components/segmented-control';
 export { SegmentedTabs } from './components/segmented-tabs';
 export type { SegmentedTabsProps } from './components/segmented-tabs';
 export { Tabs } from './components/tabs';

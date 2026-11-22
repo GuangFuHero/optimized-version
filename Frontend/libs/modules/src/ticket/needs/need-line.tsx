@@ -66,7 +66,11 @@ export function NeedLine({
     >
       <NeedTypeIcon
         taskType={need.taskType}
-        sx={{ fontSize: 16, color: color.fg.neutral.muted, flexShrink: 0 }}
+        sx={{
+          fontSize: designTokens.iconSize[16],
+          color: color.fg.neutral.muted,
+          flexShrink: 0,
+        }}
       />
 
       {/* At most 460px from the tablet up: across a full-width card the count drifts away from the

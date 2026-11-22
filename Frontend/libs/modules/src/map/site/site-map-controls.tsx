@@ -42,7 +42,7 @@ function SiteLayerButton({ controller }: SiteMapControlsProps) {
         sx={{
           width: '100%',
           height: '100%',
-          borderRadius: 999,
+          borderRadius: `${designTokens.radius.full}px`,
           color: controller.layerPanelOpen
             ? color.fg.neutral.default
             : color.fg.neutral.subtle,

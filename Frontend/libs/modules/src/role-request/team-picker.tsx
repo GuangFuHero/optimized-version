@@ -1,9 +1,10 @@
 'use client';
 
-import { Alert, Button, Stack, TextField } from '@mui/material';
+import { Alert, Stack, TextField } from '@mui/material';
 import { useState } from 'react';
 
 import type { RoleRequestRole } from '@rescue-frontend/data-access';
+import { Button, designTokens } from '@rescue-frontend/ui';
 
 import { NEW_TEAM, teamNoun, teamPickerOptions, type TeamOption } from './team';
 
@@ -57,7 +58,7 @@ export function TeamPicker({
       <Alert
         severity="error"
         action={
-          <Button color="inherit" size="small" onClick={onReload}>
+          <Button variant="ghost" size="sm" onClick={onReload}>
             再試一次
           </Button>
         }
@@ -101,7 +102,9 @@ export function TeamPicker({
         helperText={teamError ?? undefined}
         slotProps={{ select: { native: true }, inputLabel: { shrink: true } }}
         // 16px at least: iOS zooms the page into a smaller field (prototype note).
-        sx={{ '& select': { fontSize: 16 } }}
+        sx={{
+          '& select': { fontSize: designTokens.typography.body[400].fontSize },
+        }}
       >
         <option value="" disabled>
           {teams ? `請選擇${noun}` : '讀取中…'}

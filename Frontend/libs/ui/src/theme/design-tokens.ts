@@ -67,11 +67,13 @@ export const primitives = {
 
   /** Raw px scale backing spacing, radius and sizing. */
   scale: {
-    4: 4, 6: 6, 8: 8, 12: 12, 16: 16, 20: 20, 24: 24, 32: 32, 48: 48, 64: 64, 80: 80, 96: 96,
+    2: 2, 3: 3, 4: 4, 6: 6, 7: 7, 8: 8, 10: 10, 12: 12, 14: 14, 16: 16, 20: 20,
+    24: 24, 30: 30, 32: 32, 36: 36, 48: 48, 64: 64, 80: 80, 96: 96,
     full: 9999,
   },
 
   fontSize: {
+    10: 10, 11: 11, 13: 13, 15: 15, 17: 17, 19: 19, 22: 22, 28: 28, 32: 32, 40: 40, 108: 108,
     xs: 12, sm: 14, base: 16, lg: 18, xl: 20, '2xl': 24, '3xl': 30, '4xl': 36, '5xl': 48,
   },
 
@@ -96,7 +98,7 @@ export const primitives = {
   duration: { fast: '150ms', base: '250ms', slow: '400ms', spring: '350ms' },
 
 
-  /** Shadows carry a warm orange tint (orange-400 at three alphas), not neutral black. */
+  /** The standard shadow scale uses orange-400 at three alphas. */
   shadow: {
     sm: '0px 1px 4px 0px rgba(227, 121, 30, 0.10)',
     md: '0px 4px 16px 0px rgba(227, 121, 30, 0.15)',
@@ -203,6 +205,17 @@ export const semanticColor = {
      * `subtle` — close enough to erase the distinction that makes `muted` worth having.
      */
     neutral: { default: c.neutral[900], subtle: c.neutral[700], muted: c.neutral[500] },
+    fieldPlaceholder: '#6B7280',
+    accountSecurity: { text: '#241B19', secondaryText: '#6A5F5B' },
+    inviteQrInk: '#151C22',
+    print: { ink: '#000000', mutedInk: '#444444' },
+    ticketDetail: {
+      heading: '#BA1A1A',
+      body: '#151C22',
+      label: '#564337',
+      activeTab: '#954900',
+      badgeAccent: '#954900',
+    },
   },
 
   /**
@@ -219,6 +232,11 @@ export const semanticColor = {
     info: { default: c.blue[400], hover: c.blue[300], subtle: c.blue[50] },
     disable: c.neutral[200],
     neutral: { default: c.neutral.white, subtle: c.neutral[50], sunken: c.neutral[100] },
+    authProviderHover: '#DCE8F2',
+    inviteActionHover: '#EDF4FD',
+    map: { teamZone: '#4338CA', markZone: '#15803D', shelterStation: '#7B5EA7' },
+    printPaper: c.neutral.white,
+    ticketDetail: { surface: '#E7EFF7', activeTab: '#DBE3EC' },
   },
 
   /**
@@ -231,6 +249,9 @@ export const semanticColor = {
     default: c.neutral[300],
     subtle: c.neutral[200],
     accent: c.orange[200],
+    authProviderHover: '#C9AC99',
+    accountSecurity: '#E5DDD8',
+    ticketDetail: '#DCC1B1',
   },
 } as const;
 
@@ -257,6 +278,17 @@ export const semanticFocusRing = {
 } as const;
 
 export const semanticRadius = {
+  2: primitives.scale[2],
+  3: primitives.scale[3],
+  4: primitives.scale[4],
+  7: primitives.scale[7],
+  8: primitives.scale[8],
+  10: primitives.scale[10],
+  14: primitives.scale[14],
+  16: primitives.scale[16],
+  24: primitives.scale[24],
+  30: primitives.scale[30],
+  36: primitives.scale[36],
   sm: primitives.scale[6],
   md: primitives.scale[12],
   lg: primitives.scale[20],
@@ -291,6 +323,14 @@ export const semanticSpacing = {
  * Plain numbers, not `displayTextSize` steps: an icon does not ride the text scale (see there).
  */
 export const semanticIconSize = {
+  12: 12,
+  13: 13,
+  15: 15,
+  16: 16,
+  17: 17,
+  24: 24,
+  26: 26,
+  28: 28,
   sm: 14,
   md: 18,
   lg: 20,
@@ -503,14 +543,7 @@ export const semanticElevation = {
   toast: 2000,
 } as const;
 
-/**
- * Shadow expected at each z rung. `base` is none, confirmed by the designer 2026-09-17: z-base is
- * ordinary in-flow content, not a raised layer.
- *
- * A card's `shadow.md` travels with the CARD, not with the z rung — a card that happens to sit at
- * base still casts it. Read this table as "what a layer at this depth gets", not as a lookup that
- * overrides a component's own elevation.
- */
+/** Shadows by layer or component. A card keeps its shadow even when it sits at the base layer. */
 export const elevationShadow = {
   base: 'none',
   card: semanticShadow.md,
@@ -518,6 +551,9 @@ export const elevationShadow = {
   drawer: semanticShadow.lg,
   modal: semanticShadow.lg,
   toast: semanticShadow.lg,
+  authAudienceSelection: '0 1px 2px rgba(18, 24, 36, 0.08)',
+  locationPin: '0 4px 12px rgba(0,0,0,.28)',
+  stationDetailCard: '0px 1px 1px rgba(0, 0, 0, 0.05)',
 } as const;
 
 export const semanticMotion = {
@@ -580,7 +616,7 @@ export const designTokens = {
   radius: semanticRadius,
   spacing: semanticSpacing,
   iconSize: semanticIconSize,
-  typography: semanticTypography,
+  typography: { ...semanticTypography, fontSize: fs },
   typographyMobile: semanticTypographyMobile,
   /** The public site's text scale. Not the same ladder as `typographyMobile` — see its docstring. */
   textSize: displayTextSize,

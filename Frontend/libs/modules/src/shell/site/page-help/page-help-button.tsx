@@ -19,7 +19,7 @@ const panelSurface = {
   bgcolor: color.bg.neutral.default,
   backdropFilter: 'none',
   border: `1px solid ${color.border.default}`,
-  borderRadius: '12px',
+  borderRadius: `${designTokens.radius.md}px`,
   px: 2.25,
   py: 2,
 } as const;
@@ -66,7 +66,11 @@ export function PageHelpButton({ ringColor }: { ringColor: string }) {
             },
           }}
         >
-          <Icons.support sx={{ fontSize: 26 }} />
+          <Icons.support
+            sx={{
+              fontSize: designTokens.iconSize[26],
+            }}
+          />
           {page.fresh ? <FreshDot ringColor={ringColor} /> : null}
         </ButtonBase>
       </Tooltip>

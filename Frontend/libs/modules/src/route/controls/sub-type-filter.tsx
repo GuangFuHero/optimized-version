@@ -100,7 +100,11 @@ export function SiteSubTypeFilter({
             whiteSpace: 'nowrap',
           }}
         >
-          <Icons.sliders sx={{ fontSize: 16 }} />
+          <Icons.sliders
+            sx={{
+              fontSize: designTokens.iconSize[16],
+            }}
+          />
           <Box component="span" sx={{ display: phone('none', 'inline') }}>
             篩選
           </Box>
@@ -204,7 +208,13 @@ export function SiteSubTypeFilter({
                     color: color.fg.onPrimary,
                   }}
                 >
-                  {checked ? <Icons.check sx={{ fontSize: 13 }} /> : null}
+                  {checked ? (
+                    <Icons.check
+                      sx={{
+                        fontSize: designTokens.iconSize[13],
+                      }}
+                    />
+                  ) : null}
                 </Box>
                 <Box
                   component="span"
@@ -249,7 +259,11 @@ export function SiteSubTypeFilter({
                       : 'transparent',
                   }}
                 >
-                  <Icons.pushPin sx={{ fontSize: 16 }} />
+                  <Icons.pushPin
+                    sx={{
+                      fontSize: designTokens.iconSize[16],
+                    }}
+                  />
                 </ButtonBase>
               ) : null}
             </MenuItem>

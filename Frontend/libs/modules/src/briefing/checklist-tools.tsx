@@ -42,7 +42,9 @@ function Pill({
           outline: `${focusRing.width}px solid ${focusRing.color}`,
           outlineOffset: `${focusRing.offset}px`,
         },
-        '& .MuiSvgIcon-root': { fontSize: 16 },
+        '& .MuiSvgIcon-root': {
+          fontSize: designTokens.iconSize[16],
+        },
       }}
     >
       {children}
@@ -95,7 +97,13 @@ export function ChecklistTools({
             color: color.fg.info,
           }}
         >
-          <Icons.refresh sx={{ fontSize: 16, mt: '4px', flexShrink: 0 }} />
+          <Icons.refresh
+            sx={{
+              fontSize: designTokens.iconSize[16],
+              mt: '4px',
+              flexShrink: 0,
+            }}
+          />
           <Typography
             sx={{
               flex: '1 1 220px',
@@ -132,7 +140,10 @@ export function ChecklistTools({
         }}
       >
         <Icons.listChecks
-          sx={{ fontSize: 16, color: color.fg.neutral.subtle }}
+          sx={{
+            fontSize: designTokens.iconSize[16],
+            color: color.fg.neutral.subtle,
+          }}
         />
         <Typography
           sx={{

@@ -313,6 +313,8 @@ function useFitStations(
     restoredRef,
     arrivedWithNewFilters,
     pointCount,
+    getMarkers,
+    getSelected,
   ]);
 }
 
@@ -331,7 +333,7 @@ function useFlyToSelected(
     map.flyTo(marker.position, Math.max(map.getZoom(), FOCUS_ZOOM), {
       duration: 0.6,
     });
-  }, [map, selectedUuid]);
+  }, [map, selectedUuid, getMarkers]);
 }
 
 const OVERLAY_SX = {
@@ -377,7 +379,7 @@ function SelectedStationCard({
         <Typography
           sx={{
             ...typography.label[500],
-            fontSize: 15,
+            fontSize: designTokens.typography.fontSize[15],
             flex: 1,
             minWidth: 0,
             color: color.fg.neutral.default,

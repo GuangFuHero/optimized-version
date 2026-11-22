@@ -51,7 +51,7 @@ export function SpaceMapCard({
           <Typography
             sx={{
               ...typography.label[500],
-              fontSize: 15,
+              fontSize: designTokens.typography.fontSize[15],
               color: color.fg.neutral.default,
               mt: '3px',
             }}

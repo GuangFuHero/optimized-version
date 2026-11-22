@@ -32,7 +32,7 @@ interface LocationPickerCanvasProps {
 }
 
 // A teardrop in the ticket's own orange, with room around it to grab (prototype `pinHtml`).
-const PIN_HTML = `<div style="padding:8px;line-height:0;cursor:grab"><span style="display:block;width:24px;height:24px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:${color.bg.primary.default};border:2px solid ${color.bg.neutral.default};box-shadow:0 4px 12px rgba(0,0,0,.28)"></span></div>`;
+const PIN_HTML = `<div style="padding:8px;line-height:0;cursor:grab"><span style="display:block;width:24px;height:24px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:${color.bg.primary.default};border:2px solid ${color.bg.neutral.default};box-shadow:${designTokens.elevationShadow.locationPin}"></span></div>`;
 
 function createPinIcon() {
   return L.divIcon({
@@ -97,7 +97,7 @@ export function LocationPickerCanvas({
       mapRef.current = null;
       pinRef.current = null;
     };
-  }, []);
+  }, [pickPoint]);
 
   const lat = value?.lat;
   const lng = value?.lng;
@@ -136,7 +136,7 @@ export function LocationPickerCanvas({
     if (source !== 'manual') {
       map.setView([lat, lng], Math.max(map.getZoom(), PICKED_ZOOM));
     }
-  }, [lat, lng, source]);
+  }, [lat, lng, source, pickPoint]);
 
   return (
     <div

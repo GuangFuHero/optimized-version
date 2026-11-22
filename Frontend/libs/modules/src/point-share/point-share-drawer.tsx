@@ -6,7 +6,6 @@ import { useIsClient } from 'usehooks-ts';
 
 import {
   Box,
-  Button,
   ButtonBase,
   Drawer,
   IconButton,
@@ -26,6 +25,7 @@ import {
 import type { PointShareChannel, PointShareTarget } from './types';
 
 import {
+  Button,
   designTokens,
   displayTextSize,
   safeAreaBottom,
@@ -67,7 +67,10 @@ const tileSx = {
   fontSize: displayTextSize[10],
   fontWeight: 500,
   whiteSpace: 'nowrap',
-  '& .MuiSvgIcon-root': { fontSize: 20, color: color.fg.neutral.subtle },
+  '& .MuiSvgIcon-root': {
+    fontSize: designTokens.iconSize.lg,
+    color: color.fg.neutral.subtle,
+  },
 } as const;
 
 /**
@@ -153,7 +156,7 @@ export function PointShareDrawer({
               sx={{
                 width: 36,
                 height: 4,
-                borderRadius: '999px',
+                borderRadius: `${radius.full}px`,
                 bgcolor: color.border.default,
               }}
             />
@@ -235,7 +238,8 @@ export function PointShareDrawer({
                 給現場的人掃，或長按另存後列印張貼。
               </Typography>
               <Button
-                size="small"
+                variant="ghost"
+                size="sm"
                 startIcon={<Icons.download />}
                 onClick={() => downloadQrSvg(target.url, `${target.title}.svg`)}
                 sx={{ textTransform: 'none' }}
@@ -246,7 +250,7 @@ export function PointShareDrawer({
 
             {canShareNatively ? (
               <Button
-                variant="contained"
+                variant="primary"
                 startIcon={<Icons.share />}
                 onClick={() => handleNativeShare()}
                 sx={{ textTransform: 'none', fontWeight: 700 }}

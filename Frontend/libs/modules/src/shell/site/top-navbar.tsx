@@ -47,7 +47,7 @@ function SiteRealmBadge() {
         height: 22,
         px: '9px',
         flexShrink: 0,
-        borderRadius: 999,
+        borderRadius: `${designTokens.radius.full}px`,
         bgcolor: color.bg.neutral.sunken,
         color: color.fg.neutral.subtle,
         fontFamily: typography.label[400].fontFamily,
@@ -57,7 +57,12 @@ function SiteRealmBadge() {
         whiteSpace: 'nowrap',
       }}
     >
-      <Icons.globe sx={{ fontSize: 12, color: color.fg.neutral.muted }} />
+      <Icons.globe
+        sx={{
+          fontSize: designTokens.iconSize[12],
+          color: color.fg.neutral.muted,
+        }}
+      />
       公開地圖
     </Box>
   );

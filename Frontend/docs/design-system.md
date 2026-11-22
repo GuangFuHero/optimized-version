@@ -52,6 +52,8 @@ main: Frontend/
 | 圖示大小             | `iconSize.{sm 14, md 18, lg 20}`；圖示不走 `textSize`                                                                         |
 | 陰影、層級           | `shadow.{sm,md,lg}`、`elevation`、`elevationShadow`                                                                           |
 
+只需要固定字級時，使用 `typography.fontSize[15]` 這類尺寸 token。`iconSize[16]`、`radius[8]` 等以像素為 key 的項目沿用既有畫面的尺寸，供設計師審查；新增尺寸前先跟設計師確認。
+
 字型：`fontStack` 已接上 `next/font` 載入的字型；家族名稱以 `fonts.css` 為準，不用 `primitives.css` 的那一組（設計師裁示）。
 
 ## `libs/ui` 元件
@@ -89,6 +91,8 @@ main: Frontend/
 「第 N 節」指設計分支的 `Design/後台/元件 Components.html`；表中其他原型路徑也都在設計分支的 `Design/` 底下。缺 variant 時擴充這裡的元件，不要在頁面裡改 MUI 元件的樣子。
 
 ## 按鈕規則（BTN）
+
+登入的 Email／手機號碼切換使用共用 `SegmentedControl`，保留原型的內嵌按鈕樣式。
 
 摘自設計師的按鈕（設計分支的 `Design/後台/js/shared/wg-button.css` 與 handoff 的 `Button/index.tsx`，同編號）。
 handoff 版已搬進 `libs/ui`（`Button`、`SplitButton`）；標「未實作」的是還沒有的。

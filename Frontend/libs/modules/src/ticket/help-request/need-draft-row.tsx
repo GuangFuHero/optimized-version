@@ -97,7 +97,7 @@ export function NeedDraftRow({
                 fontSize: displayTextSize[12],
               }}
             >
-              <Icons.trash sx={{ fontSize: 14 }} />
+              <Icons.trash sx={{ fontSize: designTokens.iconSize.sm }} />
               移除
             </ButtonBase>
           ) : null}

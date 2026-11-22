@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 
 import { countDetailOpenings } from '../detail-openings';
 
@@ -19,7 +19,7 @@ export function useMarkerDetail<T>(marker: T | null, selected: boolean) {
       displayMarker: marker ?? state.displayMarker,
     });
   }
-  const setDetailOpen = (open: boolean) =>
+  const setDetailOpen = useCallback((open: boolean) => {
     setState((current) =>
       current.open === open
         ? current
@@ -28,6 +28,7 @@ export function useMarkerDetail<T>(marker: T | null, selected: boolean) {
             ...countDetailOpenings(current, open),
           },
     );
+  }, []);
   const setDisplayMarker = (displayMarker: T | null) =>
     setState((current) => ({ ...current, displayMarker }));
   return {

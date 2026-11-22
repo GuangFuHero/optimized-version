@@ -70,7 +70,7 @@ function DetailLine({
           height: '1.6em',
           fontSize: displayTextSize[13],
           color: color.fg.neutral.muted,
-          '& svg': { fontSize: 14 },
+          '& svg': { fontSize: designTokens.iconSize.sm },
         }}
       >
         {icon}
@@ -113,7 +113,10 @@ function BriefingDepartureBar({ onLeave }: Pick<MyClaimsListProps, 'onLeave'>) {
       }}
     >
       <Icons.bookOpen
-        sx={{ fontSize: 20, color: color.brand.secondary.subtle }}
+        sx={{
+          fontSize: designTokens.iconSize.lg,
+          color: color.brand.secondary.subtle,
+        }}
       />
       <Box sx={{ flex: 1, minWidth: 0 }}>
         <Typography
@@ -138,7 +141,10 @@ function BriefingDepartureBar({ onLeave }: Pick<MyClaimsListProps, 'onLeave'>) {
         </Typography>
       </Box>
       <Icons.chevronRight
-        sx={{ fontSize: 18, color: color.brand.secondary.subtle }}
+        sx={{
+          fontSize: designTokens.iconSize.md,
+          color: color.brand.secondary.subtle,
+        }}
       />
     </ButtonBase>
   );
@@ -202,7 +208,7 @@ function MyClaimRow({
           color: color.brand.secondary.subtle,
         }}
       >
-        <Icons.heartHandshake sx={{ fontSize: 14 }} />
+        <Icons.heartHandshake sx={{ fontSize: designTokens.iconSize.sm }} />
         <Typography
           sx={{
             fontSize: displayTextSize[13],
@@ -242,14 +248,16 @@ function MyClaimRow({
               color: color.fg.neutral.muted,
             }}
           >
-            <Icons.lock sx={{ fontSize: 14 }} />
+            <Icons.lock sx={{ fontSize: designTokens.iconSize.sm }} />
             <Typography sx={{ fontSize: displayTextSize[12], lineHeight: 1.5 }}>
               建單者已停止招募，名單已固定
             </Typography>
           </Stack>
         ) : (
           <RowAction
-            icon={<Icons.userMinus sx={{ fontSize: 14 }} />}
+            icon={
+              <Icons.userMinus sx={{ fontSize: designTokens.iconSize.sm }} />
+            }
             label="釋出名額"
             onClick={onRelease}
             aria-label={`釋出名額：${claim.needName}・${claim.ticketTitle}`}
@@ -383,7 +391,10 @@ export function MyClaimsList({
         <Notice
           icon={
             <Icons.heartHandshake
-              sx={{ fontSize: 28, color: color.fg.neutral.muted }}
+              sx={{
+                fontSize: designTokens.iconSize[28],
+                color: color.fg.neutral.muted,
+              }}
             />
           }
         >

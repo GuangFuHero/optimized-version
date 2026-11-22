@@ -126,7 +126,7 @@ function TicketRow({
           sx={{
             width: 3,
             flexShrink: 0,
-            borderRadius: '2px',
+            borderRadius: `${designTokens.radius[2]}px`,
             bgcolor: priorityStripe(ticket),
           }}
         />
@@ -136,7 +136,7 @@ function TicketRow({
             sx={{
               flexShrink: 0,
               mt: '2px',
-              fontSize: 16,
+              fontSize: designTokens.iconSize[16],
               color: summary.closed
                 ? color.fg.neutral.muted
                 : color.fg.neutral.subtle,
@@ -383,7 +383,12 @@ export function FloorSection({
         }}
       >
         {onToggle ? (
-          <ChevronIcon sx={{ fontSize: 18, color: color.fg.neutral.muted }} />
+          <ChevronIcon
+            sx={{
+              fontSize: designTokens.iconSize.md,
+              color: color.fg.neutral.muted,
+            }}
+          />
         ) : (
           <Box component="span" sx={{ width: 18, flexShrink: 0 }} />
         )}

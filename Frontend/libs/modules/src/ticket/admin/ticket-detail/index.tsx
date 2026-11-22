@@ -13,20 +13,7 @@ import {
 
 import { AdminDetailModalFrame } from '../../../admin/shared/detail-modal-frame';
 
-const ticketDetailPalette = {
-  frame: '#F6FAFF',
-  frameBorder: '#DCC1B1',
-  surface: '#E7EFF7',
-  heading: '#BA1A1A',
-  summary: '#151C22',
-  label: '#564337',
-  body: '#151C22',
-  tabActiveSurface: '#DBE3EC',
-  tabActiveText: '#954900',
-  tabInactiveText: '#564337',
-  badgeIconSurface: '#E3791E',
-  badgeAccent: '#954900',
-} as const;
+const { bg, border, fg } = designTokens.color;
 
 const CloseIcon = Icons.close;
 const DetailsIcon = Icons.details;
@@ -262,7 +249,7 @@ export function TicketDetailHeader({
   return (
     <Stack
       sx={{
-        borderBottom: `1px solid ${ticketDetailPalette.frameBorder}`,
+        borderBottom: `1px solid ${border.ticketDetail}`,
         px: 2.5,
         // A title that wraps leaves no room for badges in the fixed height: with them, it grows.
         ...(badges ? { minHeight: 75, py: 1.5 } : { height: 75 }),
@@ -283,7 +270,7 @@ export function TicketDetailHeader({
           title={title}
           sx={{
             minWidth: 0,
-            color: ticketDetailPalette.heading,
+            color: fg.ticketDetail.heading,
             fontSize: displayTextSize[18],
             lineHeight: '24px',
             fontWeight: 600,
@@ -309,8 +296,8 @@ export function TicketDetailHeader({
               width: 40,
               height: 40,
               mt: -1,
-              borderRadius: '999px',
-              color: ticketDetailPalette.summary,
+              borderRadius: `${designTokens.radius.full}px`,
+              color: fg.ticketDetail.body,
               display: 'inline-flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -320,7 +307,7 @@ export function TicketDetailHeader({
               icon={closeAction.icon}
               width={16}
               height={16}
-              color={ticketDetailPalette.summary}
+              color={fg.ticketDetail.body}
             />
           </ButtonBase>
         </Stack>
@@ -334,7 +321,7 @@ export function TicketDetailHeader({
         <Typography
           sx={{
             mt: 0.75,
-            color: ticketDetailPalette.summary,
+            color: fg.ticketDetail.body,
             fontSize: displayTextSize[13],
             lineHeight: 1.23,
             fontWeight: 600,
@@ -359,16 +346,16 @@ export function TicketDetailTabs({
           display: 'grid',
           gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))`,
           height: 76,
-          bgcolor: ticketDetailPalette.surface,
-          borderTop: `1px solid ${ticketDetailPalette.frameBorder}`,
-          borderBottom: `1px solid ${ticketDetailPalette.frameBorder}`,
+          bgcolor: bg.ticketDetail.surface,
+          borderTop: `1px solid ${border.ticketDetail}`,
+          borderBottom: `1px solid ${border.ticketDetail}`,
         }}
       >
         {items.map((item) => {
           const active = Boolean(item.selected);
           const color = active
-            ? ticketDetailPalette.tabActiveText
-            : ticketDetailPalette.tabInactiveText;
+            ? fg.ticketDetail.activeTab
+            : fg.ticketDetail.label;
 
           return (
             <ButtonBase
@@ -381,16 +368,14 @@ export function TicketDetailTabs({
                 px: 1.5,
                 pt: 1.25,
                 pb: 1.75,
-                bgcolor: active
-                  ? ticketDetailPalette.tabActiveSurface
-                  : 'transparent',
+                bgcolor: active ? bg.ticketDetail.activeTab : 'transparent',
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: '4px',
                 boxShadow: active
-                  ? `inset 0 -3px 0 0 ${ticketDetailPalette.tabActiveText}`
+                  ? `inset 0 -3px 0 0 ${fg.ticketDetail.activeTab}`
                   : 'none',
               }}
             >
@@ -425,13 +410,13 @@ export function TicketDetailTabs({
       sx={{
         display: 'flex',
         alignItems: 'stretch',
-        borderBottom: `1px solid ${ticketDetailPalette.frameBorder}`,
+        borderBottom: `1px solid ${border.ticketDetail}`,
       }}
     >
       {items.map((item) => {
         const color = item.selected
-          ? ticketDetailPalette.tabActiveText
-          : ticketDetailPalette.tabInactiveText;
+          ? fg.ticketDetail.activeTab
+          : fg.ticketDetail.label;
 
         return (
           <ButtonBase
@@ -450,10 +435,10 @@ export function TicketDetailTabs({
               pt: 2,
               pb: '18px',
               bgcolor: item.selected
-                ? ticketDetailPalette.tabActiveSurface
+                ? bg.ticketDetail.activeTab
                 : 'transparent',
               borderBottom: item.selected
-                ? `2px solid ${ticketDetailPalette.tabActiveText}`
+                ? `2px solid ${fg.ticketDetail.activeTab}`
                 : '2px solid transparent',
             }}
           >
@@ -486,9 +471,9 @@ export function TicketDetailStatusBadge({
   eyebrow = '當前狀態',
   label,
   icon = <WarningIcon />,
-  accentColor = ticketDetailPalette.badgeAccent,
-  iconBackgroundColor = ticketDetailPalette.badgeIconSurface,
-  iconColor = '#FFFFFF',
+  accentColor = fg.ticketDetail.badgeAccent,
+  iconBackgroundColor = bg.primary.default,
+  iconColor = designTokens.color.fg.inverse,
 }: TicketDetailStatusBadgeProps) {
   return (
     <Box
@@ -498,16 +483,16 @@ export function TicketDetailStatusBadge({
         gap: 2,
         px: '17px',
         py: '17px',
-        border: `1px solid ${ticketDetailPalette.frameBorder}`,
-        borderRadius: '32px',
-        bgcolor: ticketDetailPalette.surface,
+        border: `1px solid ${border.ticketDetail}`,
+        borderRadius: `${designTokens.radius.xl}px`,
+        bgcolor: bg.ticketDetail.surface,
       }}
     >
       <Box
         sx={{
           width: 38,
           height: 35,
-          borderRadius: '999px',
+          borderRadius: `${designTokens.radius.full}px`,
           bgcolor: iconBackgroundColor,
           display: 'inline-flex',
           alignItems: 'center',
@@ -525,7 +510,7 @@ export function TicketDetailStatusBadge({
       <Stack spacing={0}>
         <Typography
           sx={{
-            color: ticketDetailPalette.label,
+            color: fg.ticketDetail.label,
             fontSize: displayTextSize[10],
             lineHeight: 1.2,
             fontWeight: 700,
@@ -554,21 +539,19 @@ export function TicketDetailFieldRow({
   value,
   icon,
   showDivider = true,
-  valueColor = ticketDetailPalette.body,
+  valueColor = fg.ticketDetail.body,
 }: TicketDetailFieldRowProps) {
   return (
     <Stack
       spacing={'4px'}
       sx={{
         pb: showDivider ? '9px' : 0,
-        borderBottom: showDivider
-          ? `1px solid ${ticketDetailPalette.frameBorder}`
-          : 'none',
+        borderBottom: showDivider ? `1px solid ${border.ticketDetail}` : 'none',
       }}
     >
       <Typography
         sx={{
-          color: ticketDetailPalette.label,
+          color: fg.ticketDetail.label,
           fontSize: displayTextSize[10],
           lineHeight: 1.2,
           fontWeight: 700,
@@ -613,7 +596,7 @@ export function TicketDetailNotesCard({
     <Stack spacing={'4px'}>
       <Typography
         sx={{
-          color: ticketDetailPalette.label,
+          color: fg.ticketDetail.label,
           fontSize: displayTextSize[10],
           lineHeight: 1.2,
           fontWeight: 700,
@@ -626,14 +609,14 @@ export function TicketDetailNotesCard({
         sx={{
           px: '9px',
           py: '9px',
-          bgcolor: ticketDetailPalette.surface,
-          border: `1px solid ${ticketDetailPalette.frameBorder}`,
+          bgcolor: bg.ticketDetail.surface,
+          border: `1px solid ${border.ticketDetail}`,
         }}
       >
         {typeof value === 'string' ? (
           <Typography
             sx={{
-              color: ticketDetailPalette.label,
+              color: fg.ticketDetail.label,
               fontSize: displayTextSize[14],
               lineHeight: '20px',
               fontWeight: 400,
@@ -675,7 +658,7 @@ export function TicketDetailDetailsPane({
                 <Typography
                   key={line}
                   sx={{
-                    color: ticketDetailPalette.body,
+                    color: fg.ticketDetail.body,
                     fontSize: displayTextSize[16],
                     lineHeight: '24px',
                     fontWeight: 400,
@@ -750,11 +733,11 @@ export function TicketDetailFooterActions({
     <Stack
       spacing={2}
       sx={{
-        borderTop: `1px solid ${ticketDetailPalette.frameBorder}`,
+        borderTop: `1px solid ${border.ticketDetail}`,
         px: 2.5,
         pt: 2,
         pb: 2.25,
-        bgcolor: ticketDetailPalette.frame,
+        bgcolor: bg.neutral.subtle,
       }}
     >
       {lead || inlineItems.length > 0 ? (
@@ -794,8 +777,8 @@ export function TicketDetailDrawer({
         width,
         height,
         minHeight,
-        bgcolor: ticketDetailPalette.frame,
-        borderLeft: `1px solid ${ticketDetailPalette.frameBorder}`,
+        bgcolor: bg.neutral.subtle,
+        borderLeft: `1px solid ${border.ticketDetail}`,
       }}
       header={
         <TicketDetailHeader

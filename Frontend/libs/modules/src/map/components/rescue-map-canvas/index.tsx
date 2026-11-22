@@ -1334,7 +1334,7 @@ export function RescueMapCanvas({
 
       map.remove();
     };
-  }, [syncPins]);
+  }, [changeDraftPoint, changeView, clickMap, getController, syncPins]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1368,6 +1368,7 @@ export function RescueMapCanvas({
     controller.initialView.center,
     controller.initialView.zoom,
     externalViewportState.position,
+    getController,
   ]);
 
   useEffect(() => {
@@ -1505,7 +1506,7 @@ export function RescueMapCanvas({
       clickCell: clickCell,
     });
     queueAreaLabelsRef.current?.();
-  }, [locationCells, controller.selectedMarkerId]);
+  }, [locationCells, controller.selectedMarkerId, clickCell]);
 
   useEffect(() => {
     const overlayLayer = overlayLayerRef.current;
@@ -1789,7 +1790,7 @@ export function RescueMapCanvas({
     bubble.addTo(map);
     draftMarkerRef.current = crosshair;
     draftBubbleRef.current = bubble;
-  }, [draftLat, draftLng]);
+  }, [draftLat, draftLng, changeDraftPoint]);
 
   return (
     <>

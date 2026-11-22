@@ -158,6 +158,7 @@ export function useSiteMapLiveData(
   // the rest, which goes up without waiting for it: near the backend's time limit it takes seconds.
   // Refused (its time limit, zoomed far out) or failed, the cells last counted stay, rather than an
   // empty map that reads as no requests, and the notice says why.
+  // eslint-disable-next-line @tanstack/query/exhaustive-deps -- The serialized cellsFilter includes dataType and statuses.
   const cellsQuery = useQuery({
     ...SITE_READ_OPTIONS,
     queryKey: ['site-map', 'cells', cellsFilter, { bounds, zoom }],

@@ -8,7 +8,13 @@ import {
 import { Button, Callout, designTokens, Tag } from '@rescue-frontend/ui';
 import { Building2, ChevronRight, MapPinOff, X } from 'lucide-react';
 import type { Map as LeafletMap } from 'leaflet';
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type RefObject,
+} from 'react';
 import { useDebounceCallback, useEventCallback } from 'usehooks-ts';
 import { createStore, useStore } from 'zustand';
 
@@ -369,6 +375,9 @@ function useFrameMatching(
     filtersKey,
     restoredRef,
     arrivedWithNewFilters,
+    frame,
+    getHome,
+    getSelected,
   ]);
 
   return {
@@ -419,7 +428,7 @@ function useFocusSelected(
     if (step.point) {
       map.setView(latLng(step.point), Math.max(map.getZoom(), FOCUS_ZOOM));
     }
-  }, [map, selectedUuid, detailLoaded, ticket]);
+  }, [map, selectedUuid, detailLoaded, ticket, getMarkers]);
 }
 
 /**
@@ -496,7 +505,10 @@ function SelectionSync({
     >(() => ({ kind: 'none' })),
   );
   const picked = useStore(store);
-  const clear = () => store.setState({ kind: 'none' }, true);
+  const clear = useCallback(
+    () => store.setState({ kind: 'none' }, true),
+    [store],
+  );
   useEffect(() => {
     if (!selectedMarkerId) return;
     const pickedSpace = spaceIdOfMarker(selectedMarkerId);
@@ -513,7 +525,7 @@ function SelectionSync({
       store.setState({ kind: 'cell', uuids: selection.uuids }, true);
     }
     setSelectedMarkerId(undefined);
-  }, [selectedMarkerId, rows, onOpen, setSelectedMarkerId]);
+  }, [selectedMarkerId, rows, onOpen, setSelectedMarkerId, clear, store]);
 
   const space =
     picked.kind === 'space'

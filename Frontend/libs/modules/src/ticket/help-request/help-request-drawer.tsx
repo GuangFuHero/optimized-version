@@ -6,7 +6,6 @@ import {
   Alert,
   AlertTitle,
   Box,
-  Button,
   ButtonBase,
   CircularProgress,
   Stack,
@@ -15,6 +14,7 @@ import {
 } from '@mui/material';
 import {
   Fragment,
+  useCallback,
   useEffect,
   useId,
   useRef,
@@ -25,7 +25,12 @@ import {
 } from 'react';
 
 import type { AddressLookupSource } from '@rescue-frontend/data-access';
-import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
+import {
+  Button,
+  designTokens,
+  displayTextSize,
+  Icons,
+} from '@rescue-frontend/ui';
 
 import { useBuilding } from '../../building/use-building';
 import { LocationPicker } from '../../map/components/location-picker';
@@ -172,11 +177,11 @@ function GuestHelpRequestDrawer({
       onClose={onClose}
       footer={
         <>
-          <Button variant="outlined" onClick={onClose} sx={{ flex: 1 }}>
+          <Button variant="outline" onClick={onClose} sx={{ flex: 1 }}>
             取消
           </Button>
           <Button
-            variant="contained"
+            variant="primary"
             startIcon={<Icons.logIn />}
             onClick={onSignIn}
             sx={{ flex: 2 }}
@@ -298,17 +303,20 @@ function NoteOffer({
 }) {
   return (
     <Button
-      size="small"
-      variant="outlined"
+      size="sm"
+      variant="outline"
       onClick={onClick}
       // A click or a tap leaves the focus in the address field: leaving it would check the line
       // about to be replaced. A Tab here is not leaving it either (`leaveAddress`).
       onMouseDown={(event) => event.preventDefault()}
       sx={{
+        height: 'auto',
         py: 0.25,
         fontSize: displayTextSize[12],
         lineHeight: 1.5,
         textAlign: 'left',
+        whiteSpace: 'normal',
+        overflowWrap: 'anywhere',
       }}
     >
       {children}
@@ -430,8 +438,10 @@ function HelpRequestFormDrawer({
     formApi.store,
     (state) => state.submissionAttempts > 0,
   );
-  const setForm = (next: Updater<HelpRequestForm>) =>
-    formApi.setFieldValue('draft', next);
+  const setForm = useCallback(
+    (next: Updater<HelpRequestForm>) => formApi.setFieldValue('draft', next),
+    [formApi],
+  );
   const notesLabelId = useId();
   const addressId = useId();
   const addressNoteId = useId();
@@ -451,7 +461,7 @@ function HelpRequestFormDrawer({
   // The pin's 門牌 into the line. Again on 清空重填, whose blank line the same answer is for.
   useEffect(() => {
     setForm((current) => applyPinLookup(current, pinLookup));
-  }, [pinLookup, round]);
+  }, [pinLookup, round, setForm]);
 
   useEffect(() => {
     if (check) {
@@ -459,7 +469,7 @@ function HelpRequestFormDrawer({
         applyTypedLookup(current, check.address, typedLookup),
       );
     }
-  }, [check, typedLookup]);
+  }, [check, typedLookup, setForm]);
 
   // Not once closed: what is left of the form then was sent, or let go of on 取消.
   useEffect(() => {
@@ -618,11 +628,11 @@ function HelpRequestFormDrawer({
       onClose={onClose}
       footer={
         <>
-          <Button variant="outlined" onClick={cancel} sx={{ flex: 1 }}>
+          <Button variant="outline" onClick={cancel} sx={{ flex: 1 }}>
             取消
           </Button>
           <Button
-            variant="contained"
+            variant="primary"
             onClick={() => void formApi.handleSubmit()}
             disabled={submitting}
             sx={{ flex: 2 }}
@@ -646,8 +656,8 @@ function HelpRequestFormDrawer({
             severity="info"
             action={
               <Button
-                color="inherit"
-                size="small"
+                variant="ghost"
+                size="sm"
                 onClick={startOver}
                 // On a phone the words wrap instead: a button broken over two lines reads as two.
                 sx={{ whiteSpace: 'nowrap' }}
@@ -922,7 +932,11 @@ function HelpRequestFormDrawer({
                 fontWeight: 500,
               }}
             >
-              <Icons.plus sx={{ fontSize: 16 }} />
+              <Icons.plus
+                sx={{
+                  fontSize: designTokens.iconSize[16],
+                }}
+              />
               還需要別的嗎？
             </ButtonBase>
           ) : null}

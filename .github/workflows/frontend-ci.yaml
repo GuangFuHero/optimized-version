@@ -41,5 +41,5 @@ jobs:
           UV_LOCKED: "1"
       - run: git diff --exit-code
       - run: pnpm typecheck
-      - run: pnpm lint
+      - run: pnpm lint --max-warnings=0
       - run: pnpm test

@@ -497,7 +497,11 @@ function TeamDetail({
         >
           <Typography
             component="h3"
-            sx={{ ...typography.heading[600], fontSize: 17, flex: 1 }}
+            sx={{
+              ...typography.heading[600],
+              fontSize: designTokens.typography.fontSize[17],
+              flex: 1,
+            }}
           >
             成員名單
           </Typography>

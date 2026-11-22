@@ -455,7 +455,13 @@ function PublishAnnouncementDialog({
           >
             <Icon size={19} />
             {label}
-            <Box component="span" sx={{ fontSize: 11, opacity: 0.8 }}>
+            <Box
+              component="span"
+              sx={{
+                fontSize: designTokens.typography.fontSize[11],
+                opacity: 0.8,
+              }}
+            >
               {hint}
             </Box>
           </ToggleButton>

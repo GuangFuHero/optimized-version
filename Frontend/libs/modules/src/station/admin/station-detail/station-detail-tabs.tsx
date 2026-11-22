@@ -2,7 +2,7 @@
 
 import { Box, ButtonBase, Typography } from '@mui/material';
 
-import { displayTextSize } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
 import {
   stationDetailDimensions,
@@ -83,7 +83,7 @@ export function StationDetailTabs({
                     minWidth: 16,
                     height: 17,
                     px: '3px',
-                    borderRadius: '999px',
+                    borderRadius: `${designTokens.radius.full}px`,
                     bgcolor: stationDetailPalette.pendingBadgeBackground,
                     border: `1px solid ${stationDetailPalette.pendingBadgeBorder}`,
                     display: 'inline-flex',

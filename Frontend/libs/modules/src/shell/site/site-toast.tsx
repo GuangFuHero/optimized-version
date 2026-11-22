@@ -85,7 +85,7 @@ export function SiteToast({
         >
           <ToneIcon
             sx={{
-              fontSize: 20,
+              fontSize: designTokens.iconSize.lg,
               mt: '1px',
               color: tone === 'info' ? color.fg.info : color.fg.success,
             }}
@@ -130,7 +130,9 @@ export function SiteToast({
                   label={
                     <>
                       {action.label}
-                      <Icons.chevronRight sx={{ fontSize: 14 }} />
+                      <Icons.chevronRight
+                        sx={{ fontSize: designTokens.iconSize.sm }}
+                      />
                     </>
                   }
                   sx={{ minHeight: 44 }}
@@ -159,7 +161,11 @@ export function SiteToast({
               color: color.fg.neutral.subtle,
             }}
           >
-            <Icons.close sx={{ fontSize: 16 }} />
+            <Icons.close
+              sx={{
+                fontSize: designTokens.iconSize[16],
+              }}
+            />
           </ButtonBase>
         </Box>
       </Snackbar>

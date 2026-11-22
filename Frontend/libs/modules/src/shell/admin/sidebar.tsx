@@ -233,7 +233,7 @@ function EventHeader({
             flex: 1,
             minWidth: 0,
             ...typography.label[500],
-            fontSize: 18,
+            fontSize: typography.fontSize.lg,
             color: color.fg.neutral.default,
           }}
         >

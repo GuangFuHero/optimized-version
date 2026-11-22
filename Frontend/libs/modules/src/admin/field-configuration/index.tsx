@@ -5,7 +5,7 @@ import type { ReactNode } from 'react';
 import { Box, ButtonBase, Stack, Typography } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 
-import { getRescueColorScheme, Icons } from '@rescue-frontend/ui';
+import { designTokens, getRescueColorScheme, Icons } from '@rescue-frontend/ui';
 
 const CloseIcon = Icons.close;
 const CheckIcon = Icons.check;
@@ -336,7 +336,7 @@ export function AdminFieldConfigurationToggle({
           width: 32,
           height: 16,
           position: 'relative',
-          borderRadius: '999px',
+          borderRadius: `${designTokens.radius.full}px`,
           bgcolor: checked
             ? fieldConfigurationPalette.trackOn
             : fieldConfigurationPalette.trackOff,
@@ -350,7 +350,7 @@ export function AdminFieldConfigurationToggle({
             right: checked ? knobOffset : 'auto',
             width: knobSize,
             height: knobSize,
-            borderRadius: '999px',
+            borderRadius: `${designTokens.radius.full}px`,
             bgcolor: checked
               ? fieldConfigurationPalette.knobOn
               : fieldConfigurationPalette.knobOff,
@@ -368,7 +368,7 @@ export function AdminFieldConfigurationToggle({
               icon={<CheckIcon />}
               width={16}
               height={16}
-              color="#FFFFFF"
+              color={designTokens.color.fg.inverse}
             />
           ) : null}
         </Box>
@@ -399,7 +399,7 @@ export function AdminFieldConfigurationFieldRow({
         <Typography
           sx={{
             color: resolveFieldColor(tone, fieldConfigurationPalette),
-            fontSize: 14,
+            fontSize: designTokens.typography.body[300].fontSize,
             lineHeight: '20px',
             fontWeight: 500,
             whiteSpace: 'nowrap',
@@ -412,7 +412,7 @@ export function AdminFieldConfigurationFieldRow({
           <Typography
             sx={{
               color: fieldConfigurationPalette.metadataText,
-              fontSize: 10,
+              fontSize: designTokens.typography.fontSize[10],
               lineHeight: '20px',
               ml: '4px',
               whiteSpace: 'nowrap',
@@ -445,7 +445,7 @@ export function AdminFieldConfigurationSection({
         <Typography
           sx={{
             color: fieldConfigurationPalette.heading,
-            fontSize: 14,
+            fontSize: designTokens.typography.body[300].fontSize,
             lineHeight: '16px',
             fontWeight: 600,
             letterSpacing: '0.7px',
@@ -477,7 +477,7 @@ export function AdminFieldConfigurationExtensionCard({
     ? fieldConfigurationPalette.actionSurface
     : fieldConfigurationPalette.neutralBadgeSurface;
   const badgeTextColor = highlighted
-    ? '#FFFFFF'
+    ? designTokens.color.fg.inverse
     : fieldConfigurationPalette.neutralBadgeText;
 
   return (
@@ -494,7 +494,7 @@ export function AdminFieldConfigurationExtensionCard({
             ? fieldConfigurationPalette.extensionHighlightBorder
             : fieldConfigurationPalette.sectionBorder
         }`,
-        borderRadius: '12px',
+        borderRadius: `${designTokens.radius.md}px`,
       }}
     >
       <Box
@@ -528,7 +528,7 @@ export function AdminFieldConfigurationExtensionCard({
               key={line}
               sx={{
                 color: fieldConfigurationPalette.mutedBodyText,
-                fontSize: 12,
+                fontSize: designTokens.typography.label[300].fontSize,
                 lineHeight: '16px',
                 fontWeight: 400,
               }}
@@ -543,7 +543,7 @@ export function AdminFieldConfigurationExtensionCard({
             sx={{
               px: '8px',
               py: '4px',
-              borderRadius: '999px',
+              borderRadius: `${designTokens.radius.full}px`,
               bgcolor: badgeSurface,
               alignSelf: highlighted ? 'flex-start' : 'center',
             }}
@@ -551,7 +551,7 @@ export function AdminFieldConfigurationExtensionCard({
             <Typography
               sx={{
                 color: badgeTextColor,
-                fontSize: 10,
+                fontSize: designTokens.typography.fontSize[10],
                 lineHeight: '15px',
                 fontWeight: 500,
                 whiteSpace: 'nowrap',
@@ -575,7 +575,7 @@ export function AdminFieldConfigurationExtensionCard({
             color: highlighted
               ? fieldConfigurationPalette.helperText
               : fieldConfigurationPalette.helperTextMuted,
-            fontSize: 10,
+            fontSize: designTokens.typography.fontSize[10],
             lineHeight: '12px',
             fontWeight: 500,
           }}
@@ -604,7 +604,7 @@ export function AdminFieldConfigurationTaskTypeSection({
         <Typography
           sx={{
             color: fieldConfigurationPalette.heading,
-            fontSize: 14,
+            fontSize: designTokens.typography.body[300].fontSize,
             lineHeight: '16px',
             fontWeight: 600,
             letterSpacing: '0.7px',
@@ -656,7 +656,7 @@ export function AdminFieldConfigurationHeader({
           <Typography
             sx={{
               color: fieldConfigurationPalette.headerText,
-              fontSize: 20,
+              fontSize: designTokens.typography.heading[600].fontSize,
               lineHeight: '28px',
               fontWeight: 700,
             }}
@@ -682,7 +682,7 @@ export function AdminFieldConfigurationHeader({
         <Typography
           sx={{
             color: fieldConfigurationPalette.contextText,
-            fontSize: 14,
+            fontSize: designTokens.typography.body[300].fontSize,
             lineHeight: '20px',
             fontWeight: 400,
           }}
@@ -726,7 +726,7 @@ export function AdminFieldConfigurationFooter({
                   minWidth: 0,
                   py: isContained ? '8.5px' : '9px',
                   px: 1,
-                  borderRadius: '999px',
+                  borderRadius: `${designTokens.radius.full}px`,
                   border: isContained
                     ? '1px solid transparent'
                     : `1px solid ${fieldConfigurationPalette.sectionBorder}`,
@@ -734,7 +734,7 @@ export function AdminFieldConfigurationFooter({
                     ? fieldConfigurationPalette.actionSurface
                     : fieldConfigurationPalette.surface,
                   color: isContained
-                    ? '#FFFFFF'
+                    ? designTokens.color.fg.inverse
                     : fieldConfigurationPalette.heading,
                   '&:hover': {
                     bgcolor: isContained
@@ -746,9 +746,9 @@ export function AdminFieldConfigurationFooter({
                 <Typography
                   sx={{
                     color: isContained
-                      ? '#FFFFFF'
+                      ? designTokens.color.fg.inverse
                       : fieldConfigurationPalette.heading,
-                    fontSize: 12,
+                    fontSize: designTokens.typography.label[300].fontSize,
                     lineHeight: '16px',
                     fontWeight: 600,
                     letterSpacing: '0.6px',
@@ -766,7 +766,7 @@ export function AdminFieldConfigurationFooter({
           <Typography
             sx={{
               color: fieldConfigurationPalette.helperText,
-              fontSize: 10,
+              fontSize: designTokens.typography.fontSize[10],
               lineHeight: '12px',
               fontWeight: 500,
               textAlign: 'center',

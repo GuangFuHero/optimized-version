@@ -145,7 +145,12 @@ export function ReviewQueueDialog({
           <GitPullRequestArrow size={20} />
         </Box>
         <Box sx={{ flex: 1 }}>
-          <Typography sx={{ ...typography.heading[600], fontSize: 19 }}>
+          <Typography
+            sx={{
+              ...typography.heading[600],
+              fontSize: designTokens.typography.fontSize[19],
+            }}
+          >
             前台修改建議審查
           </Typography>
           <Typography

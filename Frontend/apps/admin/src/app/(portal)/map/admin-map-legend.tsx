@@ -63,7 +63,7 @@ export function AdminMapLegend() {
           sx={{
             width: 14,
             height: 14,
-            borderRadius: '4px',
+            borderRadius: `${designTokens.radius[4]}px`,
             bgcolor: color.fg.neutral.default,
             display: 'inline-flex',
             alignItems: 'center',

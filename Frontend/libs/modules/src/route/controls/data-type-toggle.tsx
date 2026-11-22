@@ -74,7 +74,7 @@ export function SiteDataTypeToggle({
               onClick={() => onChange(dataType)}
               sx={segmentSx(active)}
             >
-              <Icon sx={{ fontSize: 14 }} />
+              <Icon sx={{ fontSize: designTokens.iconSize.sm }} />
               {SITE_DATA_TYPE_LABELS[dataType]}
             </ButtonBase>
           );
