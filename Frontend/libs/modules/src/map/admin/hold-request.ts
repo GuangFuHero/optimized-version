@@ -1,78 +1,63 @@
+import {
+  type EditSync,
+  type EditWrite,
+} from '@rescue-frontend/leaflet/edit-sync';
 import { toast } from 'sonner';
 
-// Wait before writing so Undo can cancel the request without a restore API.
-export const UNDO_MS = 5000;
+export { DEFAULT_UNDO_MS as UNDO_MS } from '@rescue-frontend/leaflet/edit-sync';
 
-const pending = new Set<(keepalive?: boolean) => void>();
-let listening = false;
-
-function warnBeforeLeaving(event: BeforeUnloadEvent) {
-  if (pending.size > 0) {
-    event.preventDefault();
-  }
-}
-
-function sendPending() {
-  [...pending].forEach((send) => send(true));
-}
-
-function listen() {
-  if (listening) {
-    return;
-  }
-
-  listening = true;
-  window.addEventListener('beforeunload', warnBeforeLeaving);
-  window.addEventListener('pagehide', sendPending);
-}
-
-/**
- * Sends nothing while the toast with 復原 is on screen. Pressing it cancels the request and calls
- * `onUndo` before the deadline. Leaving the page sends any waiting request. The returned cancel
- * function drops the request without undoing it when its signed-in identity is replaced.
- */
-export function holdRequest({
+export function holdRequest<Edit, Result>({
+  save,
+  key,
+  edit,
   message,
-  send,
   onUndo,
-}: {
+  persist,
+  onCancel,
+  onError,
+  onSuccess,
+}: EditWrite<Result> & {
+  save: EditSync<Edit>['save'];
+  key: string;
+  edit: Edit;
   message: string;
-  send: (keepalive: boolean) => Promise<void>;
-  onUndo: () => void;
-}): () => void {
-  const deadline = Date.now() + UNDO_MS;
-  let settled = false;
-  const settle = () => {
-    if (settled) return false;
-    settled = true;
-    clearTimeout(timer);
-    pending.delete(run);
-    toast.dismiss(toastId);
-    return true;
+  onUndo?: () => void;
+}) {
+  let toastId: ReturnType<typeof toast> | null = null;
+  const dismiss = () => {
+    if (toastId !== null) toast.dismiss(toastId);
   };
-  const run = (keepalive = false) => {
-    if (settle()) void send(keepalive);
-  };
-  const timer = window.setTimeout(run, UNDO_MS);
+  const held = save(key, edit, {
+    persist: (context) => {
+      dismiss();
+      return persist(context);
+    },
+    onCancel: () => {
+      dismiss();
+      onCancel?.();
+    },
+    onError,
+    onSuccess,
+  });
+  if (!held) return null;
 
-  pending.add(run);
-  listen();
-
-  const toastId = toast(message, {
-    duration: UNDO_MS,
+  toastId = toast(message, {
+    duration: Math.max(0, held.deadline - Date.now()),
     closeButton: false,
-    onAutoClose: () => run(),
+    onAutoClose: () => held.commit(),
     onDismiss: () => {
-      if (Date.now() >= deadline) run();
+      if (Date.now() >= held.deadline) held.commit();
     },
     action: {
       label: '復原',
       onClick: () => {
-        if (Date.now() >= deadline) run();
-        else if (settle()) onUndo();
+        if (held.undo()) {
+          dismiss();
+          onUndo?.();
+        }
       },
     },
   });
 
-  return () => void settle();
+  return held;
 }

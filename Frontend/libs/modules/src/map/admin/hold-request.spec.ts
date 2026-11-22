@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { act, createElement } from 'react';
+import { act, createElement, useEffect } from 'react';
+import { useEditSync, type EditSync } from '@rescue-frontend/leaflet/edit-sync';
 import { createRoot, type Root } from 'react-dom/client';
 import { Toaster, toast } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -8,6 +9,16 @@ import { holdRequest, UNDO_MS } from './hold-request';
 
 let container: HTMLDivElement;
 let root: Root;
+let sync: EditSync<string>;
+let key: number;
+
+function TestQueue() {
+  const queue = useEditSync<string>();
+  useEffect(() => {
+    sync = queue;
+  }, [queue]);
+  return createElement(Toaster);
+}
 
 /** Lets the clock move, and the timers it holds with it. */
 async function wait(ms: number) {
@@ -17,12 +28,31 @@ async function wait(ms: number) {
 }
 
 /** Holds a request the way the map does, and lets its toast reach the screen. */
-async function hold(options: Parameters<typeof holdRequest>[0]) {
-  const cancel = holdRequest(options);
+async function hold({
+  message,
+  send,
+  onUndo,
+}: {
+  message: string;
+  send: (keepalive: boolean) => Promise<void>;
+  onUndo: () => void;
+}) {
+  await act(async () => {
+    holdRequest({
+      save: sync.save,
+      key: String(key++),
+      edit: message,
+      message,
+      persist: ({ keepalive }) => send(keepalive),
+      onError: (cause) => {
+        throw cause;
+      },
+      onUndo,
+    });
+  });
   // Sonner adds a toast on a zero-delay timer.
   await wait(0);
-
-  return cancel;
+  return sync.reset;
 }
 
 /** Presses 復原, the toast's one button. */
@@ -54,11 +84,12 @@ async function dismiss() {
 beforeEach(async () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   vi.useFakeTimers();
+  key = 0;
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
   await act(async () => {
-    root.render(createElement(Toaster));
+    root.render(createElement(TestQueue));
   });
 });
 
@@ -126,7 +157,9 @@ describe('holdRequest', () => {
 
     await hold({ message: 'a', send: first, onUndo: vi.fn() });
     await hold({ message: 'b', send: second, onUndo: vi.fn() });
-    window.dispatchEvent(new Event('pagehide'));
+    await act(async () => {
+      window.dispatchEvent(new Event('pagehide'));
+    });
 
     expect(first).toHaveBeenCalledWith(true);
     expect(second).toHaveBeenCalledWith(true);

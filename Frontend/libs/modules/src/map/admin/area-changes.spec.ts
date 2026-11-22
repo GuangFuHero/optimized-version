@@ -31,7 +31,7 @@ let cancelForSignOut: () => boolean;
 
 /** The map view, which is the only reader of the identity-held draft and writes. */
 function MapView() {
-  const changes = useAdminAreaChanges((state) => state);
+  const changes = useAdminAreaChanges();
   const { bindView } = changes;
   useEffect(() => bindView(view), [bindView]);
   useEffect(() => {

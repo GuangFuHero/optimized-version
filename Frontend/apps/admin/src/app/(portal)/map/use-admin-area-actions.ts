@@ -53,15 +53,12 @@ export function useAdminAreaActions({
   const deleteArea = useDeleteArea();
   const assignZoneToTeam = useAssignZoneToTeam();
   const removeZoneFromTeam = useRemoveZoneFromTeam();
-  const hold = useAdminAreaChanges((state) => state.hold);
-  const hasPendingChange = useAdminAreaChanges((state) =>
-    area ? state.pending[area.id] !== undefined : false,
-  );
+  const { hold, pending } = useAdminAreaChanges();
   if (!area || (!canEdit && !canDelete && !canAssign)) return undefined;
 
   const label = `${AREA_KIND_LABELS[area.kind]}「${area.name ?? ''}」`;
   const outline = polygons ? editableOutline(polygons) : null;
-  const isPending = hasPendingChange || updateArea.isPending;
+  const isPending = pending[area.id] !== undefined || updateArea.isPending;
   const update = async (input: UpdateAreaInput) => {
     if (isPending) return false;
     try {

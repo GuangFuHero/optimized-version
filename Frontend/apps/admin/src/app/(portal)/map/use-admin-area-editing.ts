@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { useEventCallback } from 'usehooks-ts';
 import {
   useCreateArea,
@@ -31,7 +31,6 @@ import type {
 } from './admin-map-area-projection';
 
 const DEFAULT_HAZARD_STATUS = 'dangerous';
-const DOUBLE_CLICK_MS = 500;
 
 type EditorStore = ReturnType<typeof createAdminAreaEditorStore>;
 type Coordinates = RescueMapArea['polygons'][number][number][number];
@@ -87,13 +86,9 @@ export function useAdminAreaEditing({
   const { setEditor, highlightArea } = editorStore.getState();
   const draw = editor?.kind === 'draw' ? editor : null;
   const editing = editor?.kind === 'bounds' ? editor : null;
-  const lastCornerAt = useRef(0);
 
   const outline = draw?.points ?? heldDraft?.points ?? [];
   const crosses = draw !== null && polygonSelfIntersects(draw.points);
-  const draftArea = (
-    outline.length > 0 ? { points: outline, invalid: crosses } : null
-  ) satisfies RescueMapDraftArea | null;
   const draftGeometry =
     draw && draw.points.length >= 3 ? { polygons: [[draw.points]] } : null;
   const draftContents = countContents(draftGeometry);
@@ -113,7 +108,6 @@ export function useAdminAreaEditing({
 
   const startDrawing = () => {
     returnToList();
-    lastCornerAt.current = 0;
     setEditor(
       recoverableDraft ?? {
         kind: 'draw',
@@ -132,20 +126,21 @@ export function useAdminAreaEditing({
   };
   const returnToOutline = (values: AreaFormValues) => {
     if (!draw) return;
-    lastCornerAt.current = 0;
     setEditor({ ...draw, step: 'drawing', values });
   };
-  const addCorner = (position: Coordinates) => {
-    if (draw?.step !== 'drawing') return;
-    const last = draw.points.at(-1);
-    const now = Date.now();
-    if (last && last[0] === position[0] && last[1] === position[1]) {
-      if (now - lastCornerAt.current < DOUBLE_CLICK_MS) finishOutline();
-      return;
-    }
-    lastCornerAt.current = now;
-    setEditor({ ...draw, points: [...draw.points, position] });
+  const changeDrawPoints = (points: Coordinates[]) => {
+    if (draw?.step === 'drawing') setEditor({ ...draw, points });
   };
+  const draftArea: RescueMapDraftArea | null =
+    draw?.step === 'drawing'
+      ? {
+          points: outline,
+          invalid: crosses,
+          drawing: { onChange: changeDrawPoints, onFinish: finishOutline },
+        }
+      : outline.length > 0
+        ? { points: outline, invalid: crosses }
+        : null;
 
   const canRestoreDraft = useEventCallback(() => {
     const { editor, selectedAreaId } = editorStore.getState();
@@ -287,7 +282,6 @@ export function useAdminAreaEditing({
       canStart: heldDraft === null,
       hasRecoverable: recoverableDraft !== null,
       start: startDrawing,
-      addCorner,
       undoCorner,
       finish: finishOutline,
       back: returnToOutline,

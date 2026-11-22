@@ -11,8 +11,8 @@
     "@rescue-frontend/modules": "workspace:*",
     "@rescue-frontend/ui": "workspace:*",
     "next": "~16.4.6",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
   },
   "scripts": {
     "typecheck": "next typegen && tsc --noEmit -p tsconfig.json"

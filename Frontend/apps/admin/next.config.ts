@@ -25,6 +25,7 @@ const nextConfig = {
   transpilePackages: [
     '@rescue-frontend/ui',
     '@rescue-frontend/modules',
+    '@rescue-frontend/leaflet',
     '@rescue-frontend/data-access',
   ],
   output: 'standalone',

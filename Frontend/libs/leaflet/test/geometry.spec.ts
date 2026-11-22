@@ -5,7 +5,7 @@ import {
   polygonAreaKm2,
   polygonSelfIntersects,
   toGeoJsonPolygon,
-} from './polygon';
+} from '../src/geometry.ts';
 
 const SQUARE: [number, number][] = [
   [0, 0],

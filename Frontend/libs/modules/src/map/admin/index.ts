@@ -28,7 +28,7 @@ export {
   polygonAreaKm2,
   polygonSelfIntersects,
   toGeoJsonPolygon,
-} from './polygon';
+} from '@rescue-frontend/leaflet/geometry';
 export { AdminMapPinPanel } from './admin-map-pin-panel';
 export { holdRequest, UNDO_MS } from './hold-request';
 export {

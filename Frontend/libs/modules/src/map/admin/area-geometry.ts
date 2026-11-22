@@ -1,36 +1,10 @@
+import {
+  boundsOfPolygons,
+  pointInPolygon,
+} from '@rescue-frontend/leaflet/geometry';
 import type { RescueMapArea, RescueMapMarkerItem } from '../types';
 
 type LatLng = [number, number];
-
-/** Whether a point lies in a ring, by the ray-casting rule. Points are [lat, lng]. */
-function isInRing([lat, lng]: LatLng, ring: readonly LatLng[]): boolean {
-  let inside = false;
-
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const [latI, lngI] = ring[i];
-    const [latJ, lngJ] = ring[j];
-
-    if (
-      lngI > lng !== lngJ > lng &&
-      lat < ((latJ - latI) * (lng - lngI)) / (lngJ - lngI) + latI
-    ) {
-      inside = !inside;
-    }
-  }
-
-  return inside;
-}
-
-/** A polygon is its outer ring less its holes: the first ring, then the rings cut out of it. */
-function isInPolygon(point: LatLng, rings: readonly (readonly LatLng[])[]) {
-  const [outer, ...holes] = rings;
-
-  return (
-    outer !== undefined &&
-    isInRing(point, outer) &&
-    !holes.some((hole) => isInRing(point, hole))
-  );
-}
 
 /** Whether a point is inside the map's view, `[minLng, minLat, maxLng, maxLat]`. No view yet: no. */
 export function isInView(
@@ -50,7 +24,7 @@ export function isInArea(
   point: LatLng,
   area: Pick<RescueMapArea, 'polygons'>,
 ): boolean {
-  return area.polygons.some((rings) => isInPolygon(point, rings));
+  return area.polygons.some((rings) => pointInPolygon(point, rings));
 }
 
 export interface AreaContents {
@@ -127,19 +101,7 @@ export function viewOfArea(
 export function boundsOfArea(
   area: Pick<RescueMapArea, 'polygons'>,
 ): AreaView['bbox'] | null {
-  const points = area.polygons.flat(2);
-
-  if (points.length === 0) {
-    return null;
-  }
-
-  const lats = points.map(([lat]) => lat);
-  const lngs = points.map(([, lng]) => lng);
-  const minLat = Math.min(...lats);
-  const maxLat = Math.max(...lats);
-  const minLng = Math.min(...lngs);
-  const maxLng = Math.max(...lngs);
-  return [minLng, minLat, maxLng, maxLat];
+  return boundsOfPolygons(area.polygons);
 }
 
 export interface BoundaryChange {

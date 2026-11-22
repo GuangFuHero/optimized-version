@@ -148,6 +148,10 @@ export interface RescueMapArea {
 export interface RescueMapDraftArea {
   points: [number, number][];
   invalid: boolean;
+  drawing?: {
+    onChange: (points: [number, number][]) => void;
+    onFinish: () => void;
+  };
 }
 
 /**
