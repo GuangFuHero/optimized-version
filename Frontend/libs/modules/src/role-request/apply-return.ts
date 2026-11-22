@@ -8,6 +8,12 @@
  */
 
 import {
+  OAUTH_START_PATHS,
+  SITE_PATHS,
+  withQuery,
+  type SiteHref,
+} from '../route/paths';
+import {
   stripQueryKeys,
   type ReturnLocation,
   type ReturnQuery,
@@ -17,6 +23,9 @@ const APPLY_KEY = 'apply';
 const STEP_UP_KEY = 'step_up';
 const STEP_UP_ERROR_KEY = 'step_up_error';
 const RETURN_KEYS = [APPLY_KEY, STEP_UP_KEY, STEP_UP_ERROR_KEY];
+
+/** The map with 申請管理權限 open on it. */
+export const APPLY_HREF = withQuery(SITE_PATHS.map, { [APPLY_KEY]: '1' });
 
 /** Back from LINE: whether the proof was made, or the code of what went wrong there. */
 export interface ApplyReturn {
@@ -47,7 +56,7 @@ export function stripApplyReturn(href: string): string {
  * not the router: the map rewrites its address in place. `return_to` keeps the rest of the address
  * — the map's view, the list's filters — so the person comes back to what they were looking at.
  */
-export function buildPhoneStepUpHref(location: ReturnLocation): string {
+export function buildPhoneStepUpHref(location: ReturnLocation): SiteHref {
   const back = new URLSearchParams(location.search);
 
   for (const key of RETURN_KEYS) {
@@ -56,12 +65,10 @@ export function buildPhoneStepUpHref(location: ReturnLocation): string {
 
   back.set(APPLY_KEY, '1');
 
-  const start = new URLSearchParams({
+  return withQuery(OAUTH_START_PATHS.line, {
     purpose: 'step_up',
     action: 'add_contact',
     app: 'site',
     return_to: `${location.pathname}?${back}`,
   });
-
-  return `/api/v1/auth/oauth/line/start?${start}`;
 }

@@ -3,6 +3,7 @@ import nx from '@nx/eslint-plugin';
 import query from '@tanstack/eslint-plugin-query';
 import react from 'eslint-plugin-react';
 import reactHooks from 'eslint-plugin-react-hooks';
+import { builtinRules } from 'eslint/use-at-your-own-risk';
 
 // A hex, rgb() or rgba() colour anywhere in a string.
 const COLOUR = String.raw`/(^|[^\w&])#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\b|\brgba?\(/`;
@@ -53,6 +54,68 @@ export function designSystemGuardrail(files) {
         {
           selector: `Property[key.name='fontSize'] > Literal[raw=${LENGTH}]`,
           message: message.fontSize,
+        },
+      ],
+    },
+  };
+}
+
+// The page's own location, as `window.location` or bare `location` — not a field named `location`.
+const LOCATION = `:matches(Identifier[name='location'], MemberExpression[object.name=/^(window|document|self|top|parent|globalThis)$/][property.name='location'])`;
+// A destination written out: a string, a template, or strings joined with `+`.
+const WRITTEN_OUT = `:matches(Literal, TemplateLiteral, BinaryExpression[operator='+'])`;
+const navigationMessage = {
+  loadPage:
+    'Navigation: leave the page with loadPage (libs/modules/src/route/navigate.ts), which keeps the destination on this site.',
+  paths:
+    'Navigation: build the destination from the path constants in libs/modules/src/route/paths.ts, or a helper that does.',
+};
+
+/**
+ * Navigation lint: a whole-page navigation goes through `loadPage`, the one place that sets the
+ * page's location, and a destination is built from the path constants rather than written out.
+ * `no-restricted-syntax` under its own name, so the design-system guardrail's options for that rule,
+ * set later for the same files, do not replace these. Opening another site in a new window
+ * (`window.open`) is not covered.
+ */
+function navigationGuardrail() {
+  return {
+    files: ['**/*.ts', '**/*.tsx'],
+    ignores: [
+      '**/*.spec.*',
+      '**/*.test.*',
+      '**/*.stories.*',
+      '**/route/navigate.ts',
+    ],
+    plugins: {
+      navigation: {
+        rules: {
+          'no-restricted-syntax': builtinRules.get('no-restricted-syntax'),
+        },
+      },
+    },
+    rules: {
+      'navigation/no-restricted-syntax': [
+        'error',
+        {
+          selector: `CallExpression > MemberExpression.callee[property.name=/^(assign|replace)$/] > ${LOCATION}.object`,
+          message: navigationMessage.loadPage,
+        },
+        {
+          selector: `AssignmentExpression > ${LOCATION}.left`,
+          message: navigationMessage.loadPage,
+        },
+        {
+          selector: `AssignmentExpression > MemberExpression.left[property.name='href'] > ${LOCATION}.object`,
+          message: navigationMessage.loadPage,
+        },
+        {
+          selector: `CallExpression[callee.object.name='router'][callee.property.name=/^(push|replace)$/] > ${WRITTEN_OUT}.arguments:first-child`,
+          message: navigationMessage.paths,
+        },
+        {
+          selector: `CallExpression[callee.name=/^(redirect|permanentRedirect|loadPage|continueSignedIn|continueSignedOut)$/] > ${WRITTEN_OUT}.arguments:first-child`,
+          message: navigationMessage.paths,
         },
       ],
     },
@@ -131,6 +194,7 @@ export default [
       'react/jsx-key': ['error', { checkFragmentShorthand: true }],
     },
   },
+  navigationGuardrail(),
   // libs/modules has no config of its own and lints with this file; apps add their own copy.
   designSystemGuardrail(['libs/modules/**/*.ts', 'libs/modules/**/*.tsx']),
   {

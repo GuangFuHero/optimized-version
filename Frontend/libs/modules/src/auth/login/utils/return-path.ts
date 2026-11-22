@@ -1,4 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
+import {
+  OAUTH_START_PATHS,
+  sameSiteHref,
+  withQuery,
+  type PageHref,
+  type SiteHref,
+} from '../../../route/paths';
+
 /**
  * Where a sign-in may send the person afterwards, from the `?callbackUrl=` it was given. Anyone
  * can write that parameter into a link, so only a path on this site is kept; next-auth's redirect
@@ -7,9 +15,9 @@
  */
 export function safeReturnPath(
   callbackUrl: string | null,
-  fallback: string,
-): string {
-  return acceptedReturnPath(callbackUrl) ?? fallback;
+  fallback: PageHref,
+): PageHref {
+  return sameSiteHref(callbackUrl, fallback);
 }
 
 /**
@@ -34,14 +42,12 @@ export function oauthStartHref(
     app,
     callbackUrl,
     fallback,
-  }: { app: 'site' | 'admin'; callbackUrl: string | null; fallback: string },
-): string {
-  const query = new URLSearchParams({
+  }: { app: 'site' | 'admin'; callbackUrl: string | null; fallback: PageHref },
+): SiteHref {
+  return withQuery(OAUTH_START_PATHS[provider], {
     app,
     return_to: safeReturnPath(callbackUrl, fallback),
   });
-
-  return `/api/v1/auth/oauth/${provider}/start?${query}`;
 }
 
 const THIS_SITE = 'http://this-site.invalid';

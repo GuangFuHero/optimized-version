@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
+import { loadPage } from '../../route/navigate';
+import { SITE_PATHS } from '../../route/paths';
 import { useReturnQuery } from '../../route/use-return-query';
 
 import { useMutation } from '@tanstack/react-query';
@@ -55,7 +57,6 @@ import {
   type LoginMethod,
 } from './account-security-view';
 import {
-  ACCOUNT_SECURITY_PATH,
   addContactSteps,
   buildAccountStepUpHref,
   cannotProveHere,
@@ -96,7 +97,7 @@ interface AccountSecurityClientProps {
  * again.
  */
 function signInAgain() {
-  continueSignedOut('/login');
+  continueSignedOut(SITE_PATHS.login);
 }
 
 /** Where a first password is: typed, or waiting on the code the backend sent to a contact first. */
@@ -438,7 +439,7 @@ export function AccountSecurityClient({
     }
 
     await refreshSession();
-    window.location.assign(buildAccountStepUpHref(action));
+    loadPage(buildAccountStepUpHref(action));
   };
 
   const contact = useAddContact({
@@ -1024,7 +1025,7 @@ export function AccountSecurityClient({
             <Button
               component={Link}
               href={authHref('/forgot-password', {
-                callbackUrl: ACCOUNT_SECURITY_PATH,
+                callbackUrl: SITE_PATHS.accountSecurity,
               })}
               variant="ghost"
               sx={BIG_BUTTON}

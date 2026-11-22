@@ -23,6 +23,7 @@ import {
 } from '@rescue-frontend/data-access';
 import { Button, designTokens, displayTextSize } from '@rescue-frontend/ui';
 
+import { loadPage } from '../route/navigate';
 import { useAuthSession } from '../session/auth-session';
 import { siteGraphqlMutation } from '../session/site-clients';
 import { SiteActionDrawer } from '../shell/site/site-action-drawer';
@@ -148,7 +149,7 @@ export function RoleRequestDrawer({
     keepDraft({ ...values, phone });
 
     await refreshSession();
-    window.location.assign(buildPhoneStepUpHref(window.location));
+    loadPage(buildPhoneStepUpHref(window.location));
   };
 
   const verification = usePhoneVerification({

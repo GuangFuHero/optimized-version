@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
+import { loadPage } from '../route/navigate';
+import type { PageHref } from '../route/paths';
 import { broadcastAuthChange } from './auth-broadcast';
 import { isSessionExpiredResponse, markSessionExpired } from './expiry';
 
@@ -43,13 +45,13 @@ export function sessionStorageOrNull(): Storage | null {
  * navigation: the query cache lives in the page and must not go on showing what the signed-in person
  * could see.
  */
-export function continueSignedOut(href?: string): void {
+export function continueSignedOut(href?: PageHref): void {
   markSigningOutHere();
   window.dispatchEvent(new Event(SESSION_ENDING_EVENT));
   broadcastAuthChange('signed-out');
 
   if (href) {
-    window.location.assign(href);
+    loadPage(href);
   } else {
     window.location.reload();
   }

@@ -6,6 +6,8 @@
  * the marker and takes it off. Each way back keeps its own keys and how it reads them.
  */
 
+import { SITE_PATHS } from './paths';
+
 /** What reading a query needs: `URLSearchParams`, or Next's read-only one. */
 export type ReturnQuery = Pick<URLSearchParams, 'get'>;
 
@@ -45,5 +47,5 @@ export function buildSignInHref(
     query.set(key, value);
   }
 
-  return `/login?callbackUrl=${encodeURIComponent(`${location.pathname}?${query}`)}`;
+  return `${SITE_PATHS.login}?callbackUrl=${encodeURIComponent(`${location.pathname}?${query}`)}`;
 }
