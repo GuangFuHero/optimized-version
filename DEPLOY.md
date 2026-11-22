@@ -608,6 +608,7 @@ AUTH_ALLOWED_ORIGINS=https://example.org,https://admin.example.org
 SITE_APP_URL=https://example.org
 ADMIN_APP_URL=https://admin.example.org
 OAUTH_REDIRECT_BASE_URL=https://example.org
+MCP_BASE_URL=https://example.org
 ```
 
 每一行是什麼：
@@ -621,6 +622,7 @@ OAUTH_REDIRECT_BASE_URL=https://example.org
 | `AUTH_ALLOWED_ORIGINS` | 哪些網址可以送出資料（擋掉別的網站假冒） | 前台和後台網址，中間用逗號，**不要空格** |
 | `SITE_APP_URL`、`ADMIN_APP_URL` | 前台、後台的網址（兩邊互相連結、邀請 QR Code 會用到） | 前台網址、後台網址 |
 | `OAUTH_REDIRECT_BASE_URL` | Google／LINE 登入完要回到哪裡 | 前台網址 |
+| `MCP_BASE_URL` | MCP 用戶端（Claude、Cursor…）連線用的對外網址 | 前台網址 |
 
 > 網址結尾不要加 `/`。說明請不要寫進檔案裡，檔案每一行只放 `名稱=值`。
 
