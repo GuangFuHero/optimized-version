@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * 我回報的站點: the suggestions the viewer sent, as the drawer shows them (prototype
  * `Design/前台/js/site/site-actions.jsx`, `StationReportsDrawer`).

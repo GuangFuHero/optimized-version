@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 // The server layout renders this client component so the shared Button can use Link.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import type { RescueMapArea, RescueMapPublicZone } from './types';
 
 /** What each kind of area is called (prototype back office `ZONE_KINDS`, `map-data.js:108-112`). */

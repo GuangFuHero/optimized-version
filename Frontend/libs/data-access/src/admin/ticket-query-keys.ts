@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * Query keys for ticket data. Everything sits under ['admin', 'tickets'], so the key families
  * below can be invalidated one by one instead of the whole board at once.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { ShieldCheck } from 'lucide-react';
 
 import { Stack } from '@mui/material';

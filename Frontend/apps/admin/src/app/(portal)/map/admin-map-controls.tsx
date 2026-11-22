@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { Box, Stack } from '@mui/material';
 import type { ReactNode } from 'react';
 import { designTokens } from '@rescue-frontend/ui';

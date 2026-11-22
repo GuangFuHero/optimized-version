@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { MAP_VIEW_TAIWAN } from './constants';
 import type { RescueMapView } from './types';
 

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 export { AnnouncementBanner } from './components/AnnouncementBanner';
 export { Avatar, nameInitials } from './components/Avatar';
 export type { AvatarProps, AvatarTone } from './components/Avatar';

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * A space's floors (BE-036, 開啟空間). The backend derives them from the floor counts — RF, nF…1F,
  * B1…Bn, roof first — and a ticket's floor is free text, so the screen orders the labels itself and

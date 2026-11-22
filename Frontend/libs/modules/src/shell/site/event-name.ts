@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /** What the site was called before it named the event, and still is until one is set. */
 export const PLATFORM_NAME = '島嶼守望';
 

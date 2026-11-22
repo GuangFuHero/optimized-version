@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 export * from './graphql';
 export { default as ApiError } from './rest/api-error';
 export { createRestClient, responseData } from './rest/openapi-client';

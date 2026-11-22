@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 export { darkTheme, getRescueColorScheme, lightTheme, theme } from './theme';
 export { designExtensions, designToM3Light } from './bridge';
 export type { DesignExtensions, StatusColor } from './bridge';

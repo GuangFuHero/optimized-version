@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * The way back for a guest who pressed 「登入後接」: to sign in, then to the page they were on with
  * the ticket open and the need they pressed it on offered to claim (`claim=`).

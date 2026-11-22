@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { Box, Typography } from '@mui/material';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';

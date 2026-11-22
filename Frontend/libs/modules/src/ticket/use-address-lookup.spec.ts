@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, createElement } from 'react';

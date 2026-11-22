@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * 「再加一件需要的幫忙」: a requester adding one more need to their request, from its detail drawer.
  * The backend's `createTicketTask` holds the same rule — ticket.edit on the ticket — this only

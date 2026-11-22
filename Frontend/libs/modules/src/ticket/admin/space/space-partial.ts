@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * A space's tickets as far as they loaded. `buildingMapTickets` stops at its limit and says
  * nothing past it, so a full page means there may be more: counts read 「至少」 then. (It also

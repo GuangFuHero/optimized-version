@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * 重複審核 (DEDUP-008): the pure part of the page. Which side is A, which fields a pair lists, what
  * the merged ticket ends up as, and the `resolve` request that says so (Spec 028 §3).

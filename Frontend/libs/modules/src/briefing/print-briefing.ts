@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { formatTaiwanTime } from '../time';
 
 /** The class of the sheet that alone is printed; `BriefingPrintStyles` shows it only on paper. */

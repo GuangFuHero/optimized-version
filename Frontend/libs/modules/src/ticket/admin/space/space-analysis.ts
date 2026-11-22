@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * How a space is doing, worked out from its tickets: the backend keeps no status for a building
  * (BE-036 point 4). Rules are the designer's (`Design/後台/js/admin/ticket/tk-space.jsx`

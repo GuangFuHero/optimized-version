@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import type { BadgeTone, BadgeVariant } from '@rescue-frontend/ui';
 
 export const TICKET_STATUS_OPTIONS = [

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 export * from './__generated__/graphql';
 export { createGraphqlRequest, GraphqlError } from './request';
 export { fetchAllAreaPages } from './read-map-areas';

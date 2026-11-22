@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import nx from '@nx/eslint-plugin';
 import baseConfig from '../../eslint.config.mjs';
 

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * 請求協助 as it is being filled in, kept in this tab for the person filling it: the
  * form is long, and is lost whole when the site reloads as a guest on a sign-in that ran out, or

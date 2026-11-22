@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * Error carrying the upstream HTTP status and the backend's stable error code.
  *

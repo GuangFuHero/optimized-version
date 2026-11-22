@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { createGraphqlRequest } from '../graphql/request';
 import { createRestClient } from '../rest/openapi-client';
 

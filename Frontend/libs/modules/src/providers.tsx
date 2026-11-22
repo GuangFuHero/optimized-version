@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { AppRouterCacheProvider } from '@mui/material-nextjs/v13-appRouter';

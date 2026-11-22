@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import type { TileLayerOptions } from 'leaflet';
 import { useEffect, useEffectEvent } from 'react';
 import { useMapRuntime } from './map-container.tsx';

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { SiteBriefing } from '@rescue-frontend/modules/briefing';
 import type { Metadata } from 'next';
 

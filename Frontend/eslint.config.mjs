@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import nx from '@nx/eslint-plugin';
 import query from '@tanstack/eslint-plugin-query';
 import react from 'eslint-plugin-react';

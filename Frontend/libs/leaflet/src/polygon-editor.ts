@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import type { DivIconOptions, Map, PathOptions } from 'leaflet';
 import { useEffect, useEffectEvent, useRef } from 'react';
 import type { PolygonVertex } from './geometry.ts';

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 // @vitest-environment jsdom
 import { act, createElement, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { ApiError, createRestClient } from '@rescue-frontend/data-access';
 import { currentClientIp } from '@rescue-frontend/data-access/server';
 

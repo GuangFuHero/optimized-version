@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /// <reference types="leaflet.markercluster" preserve="true" />
 import type {
   DivIconOptions,

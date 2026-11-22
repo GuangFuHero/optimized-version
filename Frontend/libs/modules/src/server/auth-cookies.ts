@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * The login cookies the backend sets and reads (ADR-326): `{prefix}_at` holds the
  * access token, `{prefix}_rt` the refresh token. The prefix tells environments apart — production

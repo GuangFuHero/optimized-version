@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import InitColorSchemeScript from '@mui/material/InitColorSchemeScript';
 import { Inter, Noto_Sans_TC, Nunito } from 'next/font/google';
 import type { ReactNode } from 'react';

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { Box } from '@mui/material';
 import { Trash2, Pencil } from 'lucide-react';
 import { Stack } from '@mui/material';

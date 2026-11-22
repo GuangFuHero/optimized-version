@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { signedInLandingAsync } from '@rescue-frontend/modules/server';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { Tab } from '@mui/material';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useArgs } from 'storybook/preview-api';

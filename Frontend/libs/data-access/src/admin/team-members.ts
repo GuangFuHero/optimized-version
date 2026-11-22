@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * Read every page: a roster or its last-administrator check, and the review queue, whose badge and
  * kind chips would otherwise stop at the backend's first page.

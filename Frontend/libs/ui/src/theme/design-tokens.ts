@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * Design system tokens — TypeScript mirror of `Design/前台/_ds/wan-guard-design-system-.../tokens/`.
  *

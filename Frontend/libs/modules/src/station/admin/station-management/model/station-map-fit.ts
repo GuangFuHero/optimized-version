@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 export interface StationFitInput {
   /** The filters the shown stations were picked by, as one string. */
   filtersKey: string;

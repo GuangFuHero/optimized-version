@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
 import {
