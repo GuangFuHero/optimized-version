@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { Building2 } from 'lucide-react';
 import { Box, Stack } from '@mui/material';
 import type { ReactNode } from 'react';

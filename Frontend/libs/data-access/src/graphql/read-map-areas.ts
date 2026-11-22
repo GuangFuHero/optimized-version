@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import type { GetMapAreasQuery } from './__generated__/graphql';
 
 type MapArea = GetMapAreasQuery['areas']['items'][number];

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only AND CC-BY-SA-4.0
 'use client';
 
 import { useState, type CSSProperties } from 'react';

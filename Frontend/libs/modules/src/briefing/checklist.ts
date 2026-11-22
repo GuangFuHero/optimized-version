@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * 行前資訊's packing list: which items this device has ticked, and which items changed since it last
  * looked (prototype `vb-data.js` `vbChecklistLoad` / `vbChecklistSave`, VB-BR-193 and H-1 of

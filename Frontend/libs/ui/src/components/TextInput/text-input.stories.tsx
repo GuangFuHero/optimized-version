@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { Phone } from 'lucide-react';
 
 import type { Meta, StoryObj } from '@storybook/react-vite';

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 // What the backend says when it refuses an area (Backend/app/services/area.py, authz.py), in the words
 // an admin reads. A message not listed here is shown as the backend gave it.
 const AREA_ERROR_MESSAGES: readonly [needle: string, message: string][] = [

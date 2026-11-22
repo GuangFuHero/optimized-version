@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { z } from 'zod';
 
 // The Content-Security-Policy refuses eval, so zod's probe for it (`new Function("")`, run when

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 // @vitest-environment jsdom
 import L from 'leaflet';
 import { act, createElement, type ReactElement } from 'react';

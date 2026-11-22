@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { MenuItem, TextField } from '@mui/material';
 import type { ComponentProps } from 'react';
 

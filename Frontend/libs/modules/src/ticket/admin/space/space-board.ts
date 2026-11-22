@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * Spaces on the 任務管理 board (designer, `Design/後台/docs/任務管理.md` §開啟空間 3): which show under
  * the board's filters, and in what order. The board's tickets come paged and sorted from the

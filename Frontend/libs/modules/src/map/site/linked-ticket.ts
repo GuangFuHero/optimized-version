@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import type { GetLinkedTicketQuery } from '@rescue-frontend/data-access';
 
 import { isLocationCellId } from '../location-cells';

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { QueryClient, type QueryMeta } from '@tanstack/react-query';
 import { describe, expect, it } from 'vitest';
 

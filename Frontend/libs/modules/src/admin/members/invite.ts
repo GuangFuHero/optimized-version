@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import type { components } from '@rescue-frontend/data-access/openapi';
 
 /** Fixed by the backend (BE-038 step 1): no settings, no head count, no extension. */

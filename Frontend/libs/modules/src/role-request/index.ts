@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 export { BackOfficePlaceholder } from './back-office-placeholder';
 export { BACK_OFFICE_HREF, sitePortalEntry } from './portal-entry';
 export type { SitePortalEntry, SitePortalState } from './portal-entry';

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * Where a sign-in may send the person afterwards, from the `?callbackUrl=` it was given. Anyone
  * can write that parameter into a link, so only a path on this site is kept; next-auth's redirect

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * Which team a 政府單位人員 or 社福團體人員 applicant names (prototype `TeamPicker`,
  * `Design/前台/js/site/site-actions.jsx:160-233`; backend Spec/026, ADR-350 point 2): one of the

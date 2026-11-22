@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { polygonsLargestFirst as largestAreasFirst } from '@rescue-frontend/leaflet/geometry';
 import { describe, expect, it } from 'vitest';
 

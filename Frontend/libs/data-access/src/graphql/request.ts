@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import type { GraphQLFormattedError } from 'graphql';
 
 import type { TypedDocumentString } from './__generated__/graphql';

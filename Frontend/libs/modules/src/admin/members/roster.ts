@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * Rosters, platform roles and the last-admin rule. A super admin's pages work them out from
  * `/admin/users` and `/admin/teams` — membership is a team-scoped role grant (ADR-072), so a

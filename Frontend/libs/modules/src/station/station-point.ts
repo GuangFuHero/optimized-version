@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * A station's GeoJSON point (`[lng, lat]`) as Leaflet's `[lat, lng]`, or null when the station
  * has no point or its coordinates aren't numbers.

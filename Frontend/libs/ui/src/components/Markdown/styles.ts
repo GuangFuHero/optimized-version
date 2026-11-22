@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { designTokens } from '../../theme';
 
 const { color, focusRing, radius, typography } = designTokens;

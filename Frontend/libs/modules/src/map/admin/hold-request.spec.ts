@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 // @vitest-environment jsdom
 import { act, createElement, useEffect } from 'react';
 import { useEditSync, type EditSync } from '@rescue-frontend/leaflet/edit-sync';

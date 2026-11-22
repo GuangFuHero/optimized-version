@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { CircleHelp } from 'lucide-react';
 import { Box } from '@mui/material';
 import type { Meta, StoryObj } from '@storybook/react-vite';

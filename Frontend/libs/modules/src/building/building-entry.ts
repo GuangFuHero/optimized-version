@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import type { BuildingMapEntry } from './use-building-maps';
 
 /** How many buildings the list shows before 看全部 N 棟, so they do not push the tickets off the first screen. */

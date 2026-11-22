@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { describe, expect, it } from 'vitest';
 
 import { nextStatTile, STAT_TILE_ALL, statCountsFailed } from './stat-tiles';

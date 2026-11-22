@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * The link-preview card the whole site shares, drawn by `apps/demo/src/app/(site)/share-card.png`:
  * a PNG, since LINE, Facebook and X show no SVG. The URL is relative; the site layout's

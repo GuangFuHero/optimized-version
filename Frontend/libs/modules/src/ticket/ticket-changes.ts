@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { createStore } from 'zustand';
 
 import type { CreateHelpRequestMutation } from '@rescue-frontend/data-access';

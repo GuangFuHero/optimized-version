@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * A building's floors as its drawer lists them (prototype `site-building.jsx`, 現場分區): one box per
  * floor, and the tickets filed on each.

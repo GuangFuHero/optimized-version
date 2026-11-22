@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { AdminShell, NoBackOfficeAccess } from '@rescue-frontend/modules';
 import {
   currentUserFromBackendAsync,

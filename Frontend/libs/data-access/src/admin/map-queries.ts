@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { queryOptions } from '@tanstack/react-query';
 import {
   GetAdminMapTicketsDocument,

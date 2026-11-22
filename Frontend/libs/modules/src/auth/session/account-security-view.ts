@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import type { components } from '@rescue-frontend/data-access/openapi';
 
 /** A contact on the account, as `/users/me` lists it — the parts the page reads. */

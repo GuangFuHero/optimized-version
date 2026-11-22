@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * A space on the 任務管理 map (designer, `Design/後台/docs/任務管理.md` §開啟空間 3): one square pin
  * per space, the only square on the map, coloured as the list's priority and grey with no tickets

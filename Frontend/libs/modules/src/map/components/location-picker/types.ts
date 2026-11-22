@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /** A point marked on the small map, and how it got there — shown beside its coordinates. */
 export interface PickedPoint {
   lat: number;

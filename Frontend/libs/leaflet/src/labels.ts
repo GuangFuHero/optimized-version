@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 interface PixelSize {
   width: number;
   height: number;
