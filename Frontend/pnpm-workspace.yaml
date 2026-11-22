@@ -4,6 +4,13 @@ packages:
 
 autoInstallPeers: true
 
+# Only install versions published at least 7 days ago (the value is in minutes). Setting this makes
+# pnpm strict: `pnpm install --frozen-lockfile` (CI and the Docker build) fails on a lockfile entry
+# younger than that, and an add or update fails when no old enough version fits. For an urgent fix
+# that needs a newer release, list each version the error names under minimumReleaseAgeExclude as
+# `name@version` (e.g. `- next@16.4.7`), and remove the entries once those releases are 7 days old.
+minimumReleaseAge: 10080
+
 allowBuilds:
   '@parcel/watcher': true
   '@swc/core': true
