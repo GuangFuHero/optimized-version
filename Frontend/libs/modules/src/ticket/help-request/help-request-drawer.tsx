@@ -24,10 +24,12 @@ import {
   type Ref,
 } from 'react';
 
+import type { AddressLookupSource } from '@rescue-frontend/data-access';
 import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
 
 import { useBuilding } from '../../building/use-building';
 import { LocationPicker } from '../../map/components/location-picker';
+import { siteGraphql } from '../../session/site-clients';
 import { SiteActionDrawer } from '../../shell/site/site-action-drawer';
 import { SiteBadge } from '../../shell/site/site-badge';
 import {
@@ -66,9 +68,14 @@ import { NeedDraftRow } from './need-draft-row';
 import {
   usePinAddressLookup,
   useTypedAddressLookup,
-} from './use-address-lookup';
+} from '../use-address-lookup';
 
 const { color, radius } = designTokens;
+
+const siteAddressLookup = {
+  scope: 'site',
+  request: siteGraphql,
+} as const satisfies AddressLookupSource;
 
 const TITLE = '請求協助';
 
@@ -438,8 +445,8 @@ function HelpRequestFormDrawer({
   const addressNoteRef = useRef<HTMLDivElement | null>(null);
   // The typed line last checked, once the address field was left.
   const [check, setCheck] = useState<AddressCheck | null>(null);
-  const pinLookup = usePinAddressLookup(form.landmark);
-  const typedLookup = useTypedAddressLookup(check);
+  const pinLookup = usePinAddressLookup(form.landmark, siteAddressLookup);
+  const typedLookup = useTypedAddressLookup(check, siteAddressLookup);
 
   // The pin's 門牌 into the line. Again on 清空重填, whose blank line the same answer is for.
   useEffect(() => {

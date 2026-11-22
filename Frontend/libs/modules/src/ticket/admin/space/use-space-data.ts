@@ -1,11 +1,9 @@
 'use client';
 
-import { useQueries, useQuery } from '@tanstack/react-query';
+import { useQueries } from '@tanstack/react-query';
 
 import {
   buildingMapTicketsQuery,
-  normalizeAddressQuery,
-  reverseGeocodeQuery,
   useBuildingMap,
   useBuildingMaps,
   useBuildingMapTickets,
@@ -15,13 +13,6 @@ import {
 } from '@rescue-frontend/data-access/admin';
 import type { components } from '@rescue-frontend/data-access/openapi';
 
-import {
-  lookupPoint,
-  readAddressLookup,
-  type AddressCheck,
-  type AddressLookup,
-  type LatLng,
-} from '../../address-lookup';
 import {
   analyzeSpace,
   toSpaceListRow,
@@ -188,47 +179,4 @@ export function useHouseholdSpace(buildingMapUuid: string | null | undefined) {
     : (null satisfies SpaceHouseholdTarget | null);
   // A disabled query stays pending: only a ticket in a space waits for one.
   return { target, loading: Boolean(buildingMapUuid) && building.isPending };
-}
-
-/**
- * The nearest 門牌 to the pin, asked once for each place it's put down (the small map reports a tap
- * or a drag's end, never the drag). Same answers as the site's `usePinAddressLookup`, over the admin
- * client. Null with no pin.
- */
-export function useSpacePinLookup(pin: LatLng | null): AddressLookup | null {
-  const point = lookupPoint(pin);
-  const query = useQuery({
-    ...reverseGeocodeQuery(point ?? { lat: 0, lng: 0 }),
-    enabled: point !== null,
-    retry: false,
-    meta: { quietErrors: true },
-  });
-
-  return point
-    ? readAddressLookup({
-        fetching: query.isFetching,
-        error: query.error,
-        answer: query.data?.reverseGeocode,
-      })
-    : null;
-}
-
-/** A typed line checked against TGOS once the address field is left. Null until then. */
-export function useSpaceTypedLookup(
-  check: AddressCheck | null,
-): AddressLookup | null {
-  const query = useQuery({
-    ...normalizeAddressQuery(check ?? { address: '' }),
-    enabled: check !== null,
-    retry: false,
-    meta: { quietErrors: true },
-  });
-
-  return check
-    ? readAddressLookup({
-        fetching: query.isFetching,
-        error: query.error,
-        answer: query.data?.normalizeAddress,
-      })
-    : null;
 }

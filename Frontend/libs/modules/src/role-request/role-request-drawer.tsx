@@ -12,16 +12,17 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { useMutation, useQuery } from '@tanstack/react-query';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useMutation } from '@tanstack/react-query';
+import { useEffect, useId, useRef } from 'react';
 
 import {
   SubmitRoleRequestDocument,
+  useCurrentUser,
+  useInvalidateCurrentUser,
   type MyRoleRequestsQuery,
 } from '@rescue-frontend/data-access';
 import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
-import { getCurrentUserAsync } from '../auth/api/client';
 import { useAuthSession } from '../session/auth-session';
 import { siteGraphqlMutation } from '../session/site-clients';
 import { SiteActionDrawer } from '../shell/site/site-action-drawer';
@@ -127,14 +128,12 @@ export function RoleRequestDrawer({
   const resetWithdraw = withdraw.reset;
   const roleLabelId = useId();
   const userId = useAuthSession().user?.uuid ?? null;
-  // The account as the form needs it, while the drawer is open: the session itself holds only the
-  // uuid and the nickname. Read again once a phone is verified, which makes it the account's.
-  const applicant = useQuery({
-    queryKey: ['users', 'me'],
-    queryFn: getCurrentUserAsync,
-    select: readApplicantAccount,
+  const applicant = useCurrentUser({
+    select: (user) => (user ? readApplicantAccount(user) : NO_ACCOUNT),
     enabled: open,
+    staleTime: 0,
   });
+  const refreshSession = useInvalidateCurrentUser();
   const account = applicant.data ?? NO_ACCOUNT;
   const { keep: keepDraft, take: takeDraft } = useApplyDraft(userId);
   const teamType = teamTypeForRole(values.role);
@@ -148,12 +147,7 @@ export function RoleRequestDrawer({
   const goProveAtLine = async (phone: string) => {
     keepDraft({ ...values, phone });
 
-    try {
-      await getCurrentUserAsync();
-    } catch {
-      // An ended session reloads the tab as a guest by itself; anything else, LINE is tried anyway.
-    }
-
+    await refreshSession();
     window.location.assign(buildPhoneStepUpHref(window.location));
   };
 

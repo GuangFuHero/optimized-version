@@ -16,25 +16,23 @@ import {
   type AdminQueryOptions,
 } from './graphql-fetchers';
 import { readAllPages } from './team-members';
-import { SILENT_ERROR_META } from './query-client';
+import { SILENT_ERROR_META } from '../query-client';
 import { ticketKeys } from './ticket-query-keys';
-
-export const currentUserQuery = () =>
-  queryOptions({
-    queryKey: ['admin', 'session', 'CurrentUser'],
-    queryFn: ({ signal }) =>
-      adminRestClient.GET('/api/v1/users/me', { signal }).then(responseData),
-  });
-
-export function useCurrentUser(options: AdminQueryOptions = {}) {
-  return useQuery({ ...currentUserQuery(), enabled: options.enabled });
-}
+import { useCurrentUser, useInvalidateCurrentUser } from '../current-user';
 
 export function useCapability(capability: components['schemas']['Perm']) {
-  return useQuery({
-    ...currentUserQuery(),
-    select: (user) => user.capabilities.includes(capability),
+  return useCurrentUser({
+    select: (user) => user?.capabilities.includes(capability) ?? false,
   });
+}
+
+function useRefreshAdminAccess() {
+  const queryClient = useQueryClient();
+  const refreshUser = useInvalidateCurrentUser();
+  return async () => {
+    await refreshUser();
+    await queryClient.invalidateQueries({ queryKey: ['admin'] });
+  };
 }
 
 export type UsersQuery = NonNullable<
@@ -61,26 +59,18 @@ export function useUsers(
 }
 
 /** `/admin/users` pages by `skip`/`limit`; the member pages need every account to build rosters. */
-const ALL_USERS_PAGE_SIZE = 200;
-
 export const allUsersQuery = () =>
   queryOptions({
     queryKey: ['admin', 'users', 'AllUsers'],
-    queryFn: async ({ signal }) => {
-      const users: components['schemas']['AdminUserListItem'][] = [];
-      for (;;) {
-        const page = await adminRestClient
+    queryFn: ({ signal }) =>
+      readAllPages((skip, limit) =>
+        adminRestClient
           .GET('/api/v1/admin/users', {
-            params: {
-              query: { skip: users.length, limit: ALL_USERS_PAGE_SIZE },
-            },
+            params: { query: { skip, limit } },
             signal,
           })
-          .then(responseData);
-        users.push(...page);
-        if (page.length < ALL_USERS_PAGE_SIZE) return users;
-      }
-    },
+          .then(responseData),
+      ),
   });
 
 export function useAllUsers(options: AdminQueryOptions = {}) {
@@ -211,45 +201,6 @@ export function useUserPermissions(
 ) {
   return useQuery({
     ...userPermissionsQuery(params),
-    enabled: options.enabled,
-  });
-}
-
-export type NotificationsQuery = NonNullable<
-  paths['/api/v1/notifications']['get']['parameters']['query']
->;
-export interface NotificationsParams {
-  query?: NotificationsQuery;
-}
-
-export const notificationsQuery = (params: NotificationsParams = {}) =>
-  queryOptions({
-    queryKey: ['admin', 'notifications', 'Notifications', params],
-    queryFn: ({ signal }) =>
-      adminRestClient
-        .GET('/api/v1/notifications', { params, signal })
-        .then(responseData),
-  });
-
-export function useNotifications(
-  params: NotificationsParams = {},
-  options: AdminQueryOptions = {},
-) {
-  return useQuery({ ...notificationsQuery(params), enabled: options.enabled });
-}
-
-export const unreadNotificationCountQuery = () =>
-  queryOptions({
-    queryKey: ['admin', 'notifications', 'UnreadNotificationCount'],
-    queryFn: ({ signal }) =>
-      adminRestClient
-        .GET('/api/v1/notifications/unread-count', { signal })
-        .then(responseData),
-  });
-
-export function useUnreadNotificationCount(options: AdminQueryOptions = {}) {
-  return useQuery({
-    ...unreadNotificationCountQuery(),
     enabled: options.enabled,
   });
 }
@@ -421,12 +372,11 @@ export interface UpdateCurrentUserInput {
 }
 
 export function useUpdateCurrentUser() {
-  const queryClient = useQueryClient();
+  const refreshUser = useInvalidateCurrentUser();
   return useMutation({
     mutationFn: ({ body }: UpdateCurrentUserInput) =>
       adminRestClient.PATCH('/api/v1/users/me', { body }).then(responseData),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ['admin', 'session'] }),
+    onSuccess: refreshUser,
   });
 }
 
@@ -435,13 +385,13 @@ export interface SwitchIdentityInput {
 }
 
 export function useSwitchIdentity() {
-  const queryClient = useQueryClient();
+  const refreshNewIdentity = useInvalidateCurrentUser({ throwOnError: true });
   return useMutation({
     mutationFn: ({ body }: SwitchIdentityInput) =>
       adminRestClient
         .POST('/api/v1/auth/session/identity', { body })
         .then(() => undefined),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin'] }),
+    onSuccess: () => refreshNewIdentity().catch(() => window.location.reload()),
   });
 }
 
@@ -463,14 +413,13 @@ export interface VerifyContactInput {
 }
 
 export function useVerifyContact() {
-  const queryClient = useQueryClient();
+  const refreshUser = useInvalidateCurrentUser();
   return useMutation({
     mutationFn: ({ body }: VerifyContactInput) =>
       adminRestClient
         .POST('/api/v1/auth/contacts/verify', { body })
         .then(() => undefined),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ['admin', 'session'] }),
+    onSuccess: refreshUser,
   });
 }
 
@@ -496,13 +445,13 @@ export interface AssignUserRoleInput {
 }
 
 export function useAssignUserRole() {
-  const queryClient = useQueryClient();
+  const refreshAdminAccess = useRefreshAdminAccess();
   return useMutation({
     mutationFn: ({ params, body }: AssignUserRoleInput) =>
       adminRestClient
         .POST('/api/v1/admin/users/{user_uuid}/role', { params, body })
         .then(responseData),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin'] }),
+    onSuccess: refreshAdminAccess,
   });
 }
 
@@ -579,6 +528,7 @@ function refetchQueueOnConflict(
 }
 
 export function useApproveRoleRequest() {
+  const refreshAdminAccess = useRefreshAdminAccess();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ params, body }: DecideRoleRequestInput) =>
@@ -589,7 +539,7 @@ export function useApproveRoleRequest() {
         })
         .then(responseData),
     meta: DECISION_META,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin'] }),
+    onSuccess: refreshAdminAccess,
     onError: refetchQueueOnConflict(queryClient),
   });
 }
@@ -616,11 +566,11 @@ export interface CreateTeamInput {
 }
 
 export function useCreateTeam() {
-  const queryClient = useQueryClient();
+  const refreshAdminAccess = useRefreshAdminAccess();
   return useMutation({
     mutationFn: ({ body }: CreateTeamInput) =>
       adminRestClient.POST('/api/v1/admin/teams', { body }).then(responseData),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin'] }),
+    onSuccess: refreshAdminAccess,
   });
 }
 
@@ -630,13 +580,13 @@ export interface AddTeamMemberInput {
 }
 
 export function useAddTeamMember() {
-  const queryClient = useQueryClient();
+  const refreshAdminAccess = useRefreshAdminAccess();
   return useMutation({
     mutationFn: ({ params, body }: AddTeamMemberInput) =>
       adminRestClient
         .POST('/api/v1/admin/teams/{team_uuid}/members', { params, body })
         .then(responseData),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin'] }),
+    onSuccess: refreshAdminAccess,
   });
 }
 
@@ -645,7 +595,7 @@ export interface RemoveTeamMemberInput {
 }
 
 export function useRemoveTeamMember() {
-  const queryClient = useQueryClient();
+  const refreshAdminAccess = useRefreshAdminAccess();
   return useMutation({
     mutationFn: ({ params }: RemoveTeamMemberInput) =>
       adminRestClient
@@ -653,7 +603,7 @@ export function useRemoveTeamMember() {
           params,
         })
         .then(responseData),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin'] }),
+    onSuccess: refreshAdminAccess,
   });
 }
 
@@ -663,13 +613,13 @@ export interface UpdateTeamInput {
 }
 
 export function useUpdateTeam() {
-  const queryClient = useQueryClient();
+  const refreshAdminAccess = useRefreshAdminAccess();
   return useMutation({
     mutationFn: ({ params, body }: UpdateTeamInput) =>
       adminRestClient
         .PATCH('/api/v1/admin/teams/{team_uuid}', { params, body })
         .then(responseData),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin'] }),
+    onSuccess: refreshAdminAccess,
   });
 }
 
@@ -679,13 +629,13 @@ export interface SetTeamStatusInput {
 }
 
 export function useSetTeamStatus() {
-  const queryClient = useQueryClient();
+  const refreshAdminAccess = useRefreshAdminAccess();
   return useMutation({
     mutationFn: ({ params, body }: SetTeamStatusInput) =>
       adminRestClient
         .POST('/api/v1/admin/teams/{team_uuid}/status', { params, body })
         .then(responseData),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin'] }),
+    onSuccess: refreshAdminAccess,
   });
 }
 
@@ -799,13 +749,13 @@ export interface DeleteRoleInput {
 }
 
 export function useDeleteRole() {
-  const queryClient = useQueryClient();
+  const refreshAdminAccess = useRefreshAdminAccess();
   return useMutation({
     mutationFn: ({ params }: DeleteRoleInput) =>
       adminRestClient
         .DELETE('/api/v1/admin/rbac/roles/{role_uuid}', { params })
         .then(() => undefined),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin'] }),
+    onSuccess: refreshAdminAccess,
   });
 }
 
@@ -815,7 +765,7 @@ export interface SetRolePermissionInput {
 }
 
 export function useSetRolePermission() {
-  const queryClient = useQueryClient();
+  const refreshAdminAccess = useRefreshAdminAccess();
   return useMutation({
     mutationFn: ({ params, body }: SetRolePermissionInput) =>
       adminRestClient
@@ -824,7 +774,7 @@ export function useSetRolePermission() {
           body,
         })
         .then(responseData),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin'] }),
+    onSuccess: refreshAdminAccess,
   });
 }
 
@@ -833,7 +783,7 @@ export interface DeleteRolePermissionInput {
 }
 
 export function useDeleteRolePermission() {
-  const queryClient = useQueryClient();
+  const refreshAdminAccess = useRefreshAdminAccess();
   return useMutation({
     mutationFn: ({ params }: DeleteRolePermissionInput) =>
       adminRestClient
@@ -841,7 +791,7 @@ export function useDeleteRolePermission() {
           params,
         })
         .then(() => undefined),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin'] }),
+    onSuccess: refreshAdminAccess,
   });
 }
 
@@ -851,7 +801,7 @@ export interface SetUserPermissionInput {
 }
 
 export function useSetUserPermission() {
-  const queryClient = useQueryClient();
+  const refreshAdminAccess = useRefreshAdminAccess();
   return useMutation({
     mutationFn: ({ params, body }: SetUserPermissionInput) =>
       adminRestClient
@@ -860,7 +810,7 @@ export function useSetUserPermission() {
           body,
         })
         .then(responseData),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin'] }),
+    onSuccess: refreshAdminAccess,
   });
 }
 
@@ -869,13 +819,13 @@ export interface DeleteUserPermissionInput {
 }
 
 export function useDeleteUserPermission() {
-  const queryClient = useQueryClient();
+  const refreshAdminAccess = useRefreshAdminAccess();
   return useMutation({
     mutationFn: ({ params }: DeleteUserPermissionInput) =>
       adminRestClient
         .DELETE('/api/v1/admin/users/{user_uuid}/permissions/{cap}', { params })
         .then(() => undefined),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin'] }),
+    onSuccess: refreshAdminAccess,
   });
 }
 
@@ -884,41 +834,13 @@ export interface RemoveUserRoleInput {
 }
 
 export function useRemoveUserRole() {
-  const queryClient = useQueryClient();
+  const refreshAdminAccess = useRefreshAdminAccess();
   return useMutation({
     mutationFn: ({ params }: RemoveUserRoleInput) =>
       adminRestClient
         .DELETE('/api/v1/admin/users/{user_uuid}/role/{role_uuid}', { params })
         .then(() => undefined),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin'] }),
-  });
-}
-
-export interface MarkNotificationReadInput {
-  params: paths['/api/v1/notifications/{uuid}/read']['patch']['parameters'];
-}
-
-export function useMarkNotificationRead() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ params }: MarkNotificationReadInput) =>
-      adminRestClient
-        .PATCH('/api/v1/notifications/{uuid}/read', { params })
-        .then(responseData),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ['admin', 'notifications'] }),
-  });
-}
-
-export function useMarkAllNotificationsRead() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: () =>
-      adminRestClient
-        .PATCH('/api/v1/notifications/read-all', {})
-        .then(responseData),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ['admin', 'notifications'] }),
+    onSuccess: refreshAdminAccess,
   });
 }
 

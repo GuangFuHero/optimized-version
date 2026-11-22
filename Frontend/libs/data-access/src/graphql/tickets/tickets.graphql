@@ -249,32 +249,6 @@ query GetLinkedTicket($uuid: UUID!) {
   }
 }
 
-query GetTicketTasks(
-  $ticketUuid: String!
-  $status: String
-  $skip: Int = 0
-  $limit: Int = 50
-) {
-  ticketTasks(
-    ticketUuid: $ticketUuid
-    status: $status
-    skip: $skip
-    limit: $limit
-  ) {
-    ...TicketTaskFields
-    properties {
-      uuid
-      taskUuid
-      propertyName
-      propertyValue
-      quantity
-      status
-      comment
-      createdAt
-    }
-  }
-}
-
 # ─── Mutations ──────────────────────────────────────────────
 
 # 請求協助 (ticket/help-request): the ticket and every need on it in one go — nothing is written
@@ -300,12 +274,6 @@ mutation CreateHelpRequest($input: CreateHelpRequestInput!) {
         relatedTicketUuid
       }
     }
-  }
-}
-
-mutation UpdateTicket($uuid: UUID!, $input: UpdateTicketInput!) {
-  updateTicket(uuid: $uuid, input: $input) {
-    ...TicketFields
   }
 }
 
@@ -335,24 +303,12 @@ mutation CreateTicketTask(
   }
 }
 
-mutation UpdateTicketTask($uuid: UUID!, $input: UpdateTicketTaskInput!) {
-  updateTicketTask(uuid: $uuid, input: $input) {
-    ...TicketTaskFields
-  }
-}
-
 # The caller claims a need for themselves: no actorUuid means self-signup (ticket.assign: own).
 mutation ClaimNeed($taskUuid: UUID!) {
   assignTaskActor(taskUuid: $taskUuid) {
     uuid
     taskUuid
   }
-}
-
-# The caller gives their place on a need back (the assignment's uuid, `myAssignment.uuid`). Refused
-# once the requester stopped recruiting; a need that filled by itself reopens.
-mutation ReleaseClaim($uuid: UUID!) {
-  unassignTaskActor(uuid: $uuid)
 }
 
 # The requester stops recruiting for one need: the people on it stay and still go, its
@@ -363,20 +319,6 @@ mutation StopRecruiting($taskUuid: UUID!) {
   stopRecruiting(taskUuid: $taskUuid) {
     uuid
   }
-}
-
-# The requester deletes one need: any need not deleted yet, a filled or stopped one included. It is
-# gone from every query after, its ticket's status is worked out again, and everyone on it hears they
-# need not go. Refused with 'Ticket task not found' once the need or its ticket is deleted already.
-mutation DeleteTicketTask($uuid: UUID!) {
-  deleteTicketTask(uuid: $uuid)
-}
-
-# The requester deletes the whole ticket: it is cancelled and gone from every query after, every need
-# on it goes with it, and everyone on them hears once that they need not go. Refused with 'Ticket not
-# found' once it is deleted already.
-mutation DeleteTicket($uuid: UUID!) {
-  deleteTicket(uuid: $uuid)
 }
 
 # 我的任務 › 我承接的 (ticket/my-claims): the needs the caller claimed, newest first, deleted ones left
@@ -432,18 +374,5 @@ query MyTickets {
       uuid
       status
     }
-  }
-}
-
-mutation CreateTaskProperty($input: CreateTaskPropertyInput!) {
-  createTaskProperty(input: $input) {
-    uuid
-    taskUuid
-    propertyName
-    propertyValue
-    quantity
-    status
-    comment
-    createdAt
   }
 }

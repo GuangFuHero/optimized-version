@@ -472,8 +472,12 @@ export function BriefingsPage() {
       ) : canManage ? (
         <BriefingsContent
           key={`${identity?.role_uuid}:${identity?.team_uuid ?? ''}`}
-          canPublish={user.data.capabilities.includes('pre_departure.publish')}
-          canDiscard={user.data.capabilities.includes('pre_departure.delete')}
+          canPublish={
+            user.data?.capabilities.includes('pre_departure.publish') ?? false
+          }
+          canDiscard={
+            user.data?.capabilities.includes('pre_departure.delete') ?? false
+          }
         />
       ) : (
         <EmptyState
