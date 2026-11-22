@@ -3,6 +3,8 @@
 import { broadcastAuthChange } from './auth-broadcast';
 import { isSessionExpiredResponse, markSessionExpired } from './expiry';
 
+export const SESSION_ENDING_EVENT = 'wg:session-ending';
+
 let signingOutHere = false;
 
 /** This tab is already signing out, so a session that turns signed-out is its own doing. */
@@ -42,6 +44,7 @@ export function sessionStorageOrNull(): Storage | null {
  */
 export function continueSignedOut(href?: string): void {
   markSigningOutHere();
+  window.dispatchEvent(new Event(SESSION_ENDING_EVENT));
   broadcastAuthChange('signed-out');
 
   if (href) {

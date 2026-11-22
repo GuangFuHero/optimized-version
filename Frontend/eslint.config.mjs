@@ -118,4 +118,21 @@ export default [
   },
   // libs/modules has no config of its own and lints with this file; apps add their own copy.
   designSystemGuardrail(['libs/modules/**/*.ts', 'libs/modules/**/*.tsx']),
+  {
+    files: ['libs/modules/src/map/admin/**/*.{ts,tsx}'],
+    rules: {
+      '@typescript-eslint/no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**/session/site-clients', '**/site/**'],
+              message:
+                'Use shared map helpers and admin query options in the admin map.',
+            },
+          ],
+        },
+      ],
+    },
+  },
 ];

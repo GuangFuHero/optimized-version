@@ -13,10 +13,8 @@ import { useEventListener } from 'usehooks-ts';
 import { parseSiteRouteState } from '../../route/parse';
 import { useSiteRouteState } from '../../route/use-site-route-state';
 import type { SiteRouteState } from '../../route/types';
-import {
-  createSiteMapViewportStore,
-  SiteMapViewportStoreContext,
-} from './use-site-map-viewport-state';
+import { createMapViewportStore } from '../viewport-store';
+import { SiteMapViewportStoreContext } from './use-site-map-viewport-state';
 
 interface SiteMapRouteController {
   state: SiteRouteState;
@@ -36,7 +34,7 @@ export function SiteMapRouteProvider({ children }: { children: ReactNode }) {
       pathname.slice('/map'.length).split('/').filter(Boolean),
       searchParams,
     );
-    return createSiteMapViewportStore({ position, bbox });
+    return createMapViewportStore({ position, bbox });
   });
 
   useEventListener('popstate', () => {

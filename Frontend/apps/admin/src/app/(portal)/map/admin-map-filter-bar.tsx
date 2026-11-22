@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 
 import { Box, ButtonBase, Stack, Typography } from '@mui/material';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 import {
   activeFilterCount,
@@ -123,6 +123,8 @@ export function AdminMapFilterBar({
   onChange,
   shownTickets,
   shownStations,
+  ticketReadFailed,
+  stationReadFailed,
   ticketsMayBeMore,
   canFilterByAssignment,
   unassignedTickets,
@@ -133,6 +135,8 @@ export function AdminMapFilterBar({
   onChange: (next: AdminMapFilters) => void;
   shownTickets: number;
   shownStations: number;
+  ticketReadFailed: boolean;
+  stationReadFailed: boolean;
   /** The query stops at a limit, and the tickets reached it: the count may be a part of them. */
   ticketsMayBeMore: boolean;
   /** Whether the viewer is told which teams a ticket is answered by (ticket.view_detail). */
@@ -199,14 +203,26 @@ export function AdminMapFilterBar({
             flexShrink: 0,
           }}
         />
-        <Typography sx={{ ...typography.body[300], whiteSpace: 'nowrap' }}>
-          {filters.layers.tickets
-            ? `${shownTickets}${ticketsMayBeMore ? '+' : ''} 張任務單`
-            : '任務單已隱藏'}
+        <Typography
+          role={ticketReadFailed ? 'status' : undefined}
+          sx={{ ...typography.body[300], whiteSpace: 'nowrap' }}
+        >
+          {ticketReadFailed
+            ? '任務單載入失敗'
+            : filters.layers.tickets
+              ? `${shownTickets}${ticketsMayBeMore ? '+' : ''} 張任務單`
+              : '任務單已隱藏'}
         </Typography>
         <SummaryDot />
-        <Typography sx={{ ...typography.body[300], whiteSpace: 'nowrap' }}>
-          {filters.layers.stations ? `${shownStations} 個站點` : '站點已隱藏'}
+        <Typography
+          role={stationReadFailed ? 'status' : undefined}
+          sx={{ ...typography.body[300], whiteSpace: 'nowrap' }}
+        >
+          {stationReadFailed
+            ? '站點載入失敗'
+            : filters.layers.stations
+              ? `${shownStations} 個站點`
+              : '站點已隱藏'}
         </Typography>
         {unassignedTickets !== null ? (
           <>

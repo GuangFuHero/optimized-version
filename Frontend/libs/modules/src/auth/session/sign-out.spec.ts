@@ -1,17 +1,25 @@
 import { ApiError } from '@rescue-frontend/data-access';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { endExpiredSession } from '../../session/end-expired-session';
+import {
+  endExpiredSession,
+  SESSION_ENDING_EVENT,
+  unmarkSigningOutHere,
+} from '../../session/end-expired-session';
 import { signOutHereAsync } from './sign-out';
 
 /** The tab's own page: what it would reload or leave for. */
 function fakeBrowserTab() {
   const location = { reload: vi.fn(), assign: vi.fn() };
-  vi.stubGlobal('window', { location, sessionStorage: null });
+  vi.stubGlobal(
+    'window',
+    Object.assign(new EventTarget(), { location, sessionStorage: null }),
+  );
   return location;
 }
 
 afterEach(() => {
+  unmarkSigningOutHere();
   vi.unstubAllGlobals();
 });
 
@@ -55,6 +63,11 @@ describe('signOutHereAsync', () => {
 
   it('still reloads for a session that ends later, after a sign-out that did not go through', async () => {
     const location = fakeBrowserTab();
+    const sessionEnding = vi.fn();
+    window.addEventListener(SESSION_ENDING_EVENT, sessionEnding);
+    location.reload.mockImplementation(() => {
+      expect(sessionEnding).toHaveBeenCalledOnce();
+    });
     await signOutHereAsync(async () => {
       throw new ApiError(
         503,

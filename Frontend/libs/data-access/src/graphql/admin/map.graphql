@@ -1,0 +1,22 @@
+# Responsibility data is empty without ticket.view_detail (ADR-422).
+query GetAdminMapTickets(
+  $bounds: BoundsInput
+  $skip: Int = 0
+  $limit: Int = 50
+  $zoom: Float
+) {
+  tickets(bounds: $bounds, skip: $skip, limit: $limit, zoom: $zoom) {
+    items {
+      ...TicketFields
+      responsibleTeams {
+        uuid
+        name
+      }
+    }
+    pageInfo {
+      totalCount
+      hasNextPage
+      hasPreviousPage
+    }
+  }
+}

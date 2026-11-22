@@ -5,6 +5,7 @@ import {
   GetStationsDocument,
   GetTicketCellsDocument,
   GetTicketsDocument,
+  fetchAllAreaPages,
   type GraphqlError,
 } from '@rescue-frontend/data-access';
 import {
@@ -23,7 +24,6 @@ import type {
 } from '../types';
 import type { SiteRouteState } from '../../route/types';
 import { siteGraphql, SITE_READ_OPTIONS } from '../../session/site-clients';
-import { fetchAllAreaPages } from './area-pages';
 import {
   dedupeMarkersById,
   mapAreasToOverlays,
@@ -31,7 +31,7 @@ import {
   mapTicketToMarker,
   toBoundsInput,
   withTicketStatus,
-} from './markers';
+} from '../markers';
 import {
   readTicketCells,
   ticketCellStatuses,

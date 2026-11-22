@@ -259,6 +259,7 @@ interface MapProps {
   cursor?: string;
   /** A double-click then adds a corner (or nothing) instead of zooming. */
   disableDoubleClickZoom?: boolean;
+  editingArea?: boolean;
   /** Draws 責任區 and 標示區 as the admin 互助地圖 does (canvas `getAdminZoneStyle`). */
   adminAreaStyle?: boolean;
   /**
@@ -339,6 +340,7 @@ export const Map = memo(function Map({
   editArea,
   cursor,
   disableDoubleClickZoom,
+  editingArea,
   adminAreaStyle,
   draftPoint,
   onDraftPointChange,
@@ -468,6 +470,7 @@ export const Map = memo(function Map({
   };
 
   const handleMarkerClick = (marker: RescueMapMarkerItem) => {
+    if (editingArea) return;
     controller.closeLayerPanel();
 
     if (marker.building) {
@@ -479,6 +482,7 @@ export const Map = memo(function Map({
   };
 
   const handleLocationCellClick = (cell: RescueMapLocationCell) => {
+    if (editingArea) return;
     controller.closeLayerPanel();
     controller.setSelectedMarkerId(cell.id);
   };
@@ -543,6 +547,10 @@ export const Map = memo(function Map({
             minHeight: 0,
             position: 'relative',
             overflow: 'hidden',
+            '& .leaflet-marker-icon:not(.rescue-map-edit-corner):not(.rescue-map-edit-midpoint), & .leaflet-container .map-area-label-anchor .map-area-label, & .leaflet-container .map-location-cell':
+              {
+                pointerEvents: editingArea ? 'none' : undefined,
+              },
           }}
         >
           {opensAtOnce || opening ? (
@@ -556,6 +564,7 @@ export const Map = memo(function Map({
               editArea={editArea}
               cursor={cursor}
               disableDoubleClickZoom={disableDoubleClickZoom}
+              editingArea={editingArea}
               adminAreaStyle={adminAreaStyle}
               onMapClick={onMapClick}
               layoutKey={drawerOpen ? 'detail-open' : 'detail-closed'}

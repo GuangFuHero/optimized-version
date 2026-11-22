@@ -61,6 +61,7 @@ interface RescueMapCanvasProps {
   editArea?: RescueMapEditArea | null;
   cursor?: string;
   disableDoubleClickZoom?: boolean;
+  editingArea?: boolean;
   /** Draws 責任區 and 標示區 as the admin 互助地圖 does; the site's own look when unset. */
   adminAreaStyle?: boolean;
   onMapClick?: (position: [number, number]) => void;
@@ -349,6 +350,15 @@ function getHazardZoneStyle(area: RescueMapArea): L.PathOptions {
   return area.highlighted
     ? { ...HAZARD_ZONE_STYLE, weight: HIGHLIGHTED_WEIGHT }
     : HAZARD_ZONE_STYLE;
+}
+
+function getAdminHazardZoneStyle(area: RescueMapArea): L.PathOptions {
+  return {
+    ...HAZARD_ZONE_STYLE,
+    weight: area.highlighted ? 3.5 : 2.5,
+    opacity: area.dimmed ? 0.5 : HAZARD_ZONE_STYLE.opacity,
+    fillOpacity: area.dimmed ? 0.3 : HAZARD_ZONE_STYLE.fillOpacity,
+  };
 }
 
 /**
@@ -961,6 +971,7 @@ export function RescueMapCanvas({
   editArea,
   cursor,
   disableDoubleClickZoom = false,
+  editingArea = false,
   adminAreaStyle = false,
   onMapClick,
   layoutKey,
@@ -1009,6 +1020,36 @@ export function RescueMapCanvas({
   const clickCell = useEventCallback(onLocationCellClick);
   const changeDraftPoint = useEventCallback(onDraftPointChange);
   const changeView = useEventCallback(onViewChange);
+  const changeEditPoints = useEventCallback(
+    (points: RescueMapEditArea['points']) => editArea?.onChange(points),
+  );
+  const editPoints = editArea?.points;
+  const editInvalid = editArea?.invalid ?? false;
+  const syncPins = useEventCallback(() => {
+    const pins = getPinnedMarkers(controller.markers);
+    const standaloneLayer = buildingLayerRef.current;
+    const clusteredLayer = markerLayerRef.current;
+    if (standaloneLayer) {
+      const standalone = getBuildingMarkers(controller.markers);
+      if (editingArea) standalone.push(...pins);
+      syncMarkerLayer({
+        markerLayer: standaloneLayer,
+        items: standalone,
+        handles: buildingHandlesRef.current,
+        leaflet: L,
+        clickMarker,
+      });
+    }
+    if (clusteredLayer) {
+      syncMarkerLayer({
+        markerLayer: clusteredLayer,
+        items: editingArea ? [] : pins,
+        handles: markerHandlesRef.current,
+        leaflet: L,
+        clickMarker,
+      });
+    }
+  });
   const initialViewportStateRef = useRef(externalViewportState);
   // Read once, when the map is built.
   const mapOptionsRef = useRef({
@@ -1080,13 +1121,7 @@ export function RescueMapCanvas({
     // Drawn by the cell effect below, which runs after this one in the same commit.
     cellLayer.addTo(map);
     buildingLayer.addTo(map);
-    syncMarkerLayer({
-      markerLayer: buildingLayer,
-      items: getBuildingMarkers(getController().markers),
-      handles: buildingHandles,
-      leaflet: L,
-      clickMarker,
-    });
+    syncPins();
 
     void import(MARKER_CLUSTER_MODULE_ID).then(() => {
       if (cancelled || !mapRef.current) {
@@ -1155,13 +1190,7 @@ export function RescueMapCanvas({
 
       markerLayer.addTo(mapRef.current);
       markerLayerRef.current = markerLayer;
-      syncMarkerLayer({
-        markerLayer,
-        items: getPinnedMarkers(getController().markers),
-        handles: markerHandles,
-        leaflet: L,
-        clickMarker,
-      });
+      syncPins();
       queueAreaLabelsRef.current?.();
     });
 
@@ -1305,7 +1334,7 @@ export function RescueMapCanvas({
 
       map.remove();
     };
-  }, []);
+  }, [syncPins]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1439,33 +1468,16 @@ export function RescueMapCanvas({
   // 以 id 增量同步 marker：只移除消失的、加入新增的，內容相同時不動 DOM，
   // 避免每次資料刷新都整批 clearLayers 再重建造成閃爍。
   useEffect(() => {
-    const buildingLayer = buildingLayerRef.current;
-
-    if (buildingLayer) {
-      syncMarkerLayer({
-        markerLayer: buildingLayer,
-        items: getBuildingMarkers(controller.markers),
-        handles: buildingHandlesRef.current,
-        leaflet: L,
-        clickMarker,
-      });
-    }
-
-    const markerLayer = markerLayerRef.current;
-
-    if (!markerLayer) {
-      return;
-    }
-
-    syncMarkerLayer({
-      markerLayer,
-      items: getPinnedMarkers(controller.markers),
-      handles: markerHandlesRef.current,
-      leaflet: L,
-      clickMarker,
-    });
+    syncPins();
     queueAreaLabelsRef.current?.();
-  }, [controller.markers]);
+  }, [controller.markers, editingArea, syncPins]);
+
+  useEffect(() => {
+    if (!editingArea) return;
+    mapRef.current?.closePopup();
+    for (const { marker } of buildingHandlesRef.current.values())
+      marker.closeTooltip();
+  }, [editingArea]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1506,10 +1518,10 @@ export function RescueMapCanvas({
       overlayLayer,
       areas: controller.closureAreas,
       handles: closureAreaHandlesRef.current,
-      style: getHazardZoneStyle,
+      style: adminAreaStyle ? getAdminHazardZoneStyle : getHazardZoneStyle,
     });
     queueAreaLabelsRef.current?.();
-  }, [controller.closureAreas]);
+  }, [adminAreaStyle, controller.closureAreas]);
 
   useEffect(() => {
     const overlayLayer = overlayLayerRef.current;
@@ -1615,14 +1627,14 @@ export function RescueMapCanvas({
     editAreaLayerRef.current?.remove();
     editAreaLayerRef.current = null;
 
-    if (!map || !editArea) {
+    if (!map || !editPoints) {
       return;
     }
 
-    const { points, invalid, onChange } = editArea;
+    const invalid = editInvalid;
     const stroke = invalid ? color.bg.danger.default : color.fg.neutral.default;
     const layer = L.layerGroup();
-    const corners = points.map((point): [number, number] => [...point]);
+    const corners = editPoints.map((point): [number, number] => [...point]);
     const outline = L.polygon(corners, {
       interactive: false,
       color: stroke,
@@ -1652,12 +1664,12 @@ export function RescueMapCanvas({
         window.setTimeout(() => {
           justDragged = false;
         }, 50);
-        onChange(corners.map((point): [number, number] => [...point]));
+        changeEditPoints(corners.map((point): [number, number] => [...point]));
       });
       handle.on('click', () => {
         // A boundary keeps three corners at the least.
         if (!justDragged && corners.length > 3) {
-          onChange(
+          changeEditPoints(
             corners
               .filter((_, other) => other !== index)
               .map((point): [number, number] => [...point]),
@@ -1678,7 +1690,7 @@ export function RescueMapCanvas({
         icon: createEditMidpointIcon(),
       })
         .on('click', () =>
-          onChange([
+          changeEditPoints([
             ...corners.slice(0, index + 1),
             middle,
             ...corners.slice(index + 1),
@@ -1693,7 +1705,7 @@ export function RescueMapCanvas({
     return () => {
       layer.remove();
     };
-  }, [editArea]);
+  }, [editPoints, editInvalid, changeEditPoints]);
 
   const draftLat = draftPoint?.lat;
   const draftLng = draftPoint?.lng;

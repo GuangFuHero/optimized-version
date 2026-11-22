@@ -6,7 +6,7 @@ import { useEffect } from 'react';
 
 import { onTicketCreated } from '../../ticket/ticket-changes';
 import type { RescueMapMarkerItem } from '../types';
-import { mapTicketToMarker } from './markers';
+import { mapTicketToMarker } from '../markers';
 
 /**
  * Hands each ticket filed through 請求協助 to `listener` as a marker, for the map to add: its view

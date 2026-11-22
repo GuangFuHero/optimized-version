@@ -9,6 +9,12 @@ export const AREA_KIND_LABELS = {
 
 export type RescueMapAreaKind = keyof typeof AREA_KIND_LABELS;
 
+export const AREA_KIND_ORDER = [
+  'hazardous_zone',
+  'team_zone',
+  'mark_zone',
+] as const satisfies readonly RescueMapAreaKind[];
+
 export function isAreaKind(value: string): value is RescueMapAreaKind {
   return Object.prototype.hasOwnProperty.call(AREA_KIND_LABELS, value);
 }

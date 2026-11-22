@@ -108,6 +108,25 @@ export function viewOfArea(
   area: Pick<RescueMapArea, 'polygons'>,
   widthPx: number = DEFAULT_VIEW_WIDTH_PX,
 ): AreaView | null {
+  const bbox = boundsOfArea(area);
+  if (!bbox) return null;
+
+  const [minLng, minLat, maxLng, maxLat] = bbox;
+  const lngSpan = Math.max((maxLng - minLng) * VIEW_PADDING, 0.0005);
+  const zoom = Math.min(
+    MAX_ZOOM,
+    Math.max(
+      MIN_ZOOM,
+      Math.floor(Math.log2((360 * Math.max(widthPx, 1)) / (lngSpan * TILE_PX))),
+    ),
+  );
+
+  return { center: [(minLat + maxLat) / 2, (minLng + maxLng) / 2], zoom, bbox };
+}
+
+export function boundsOfArea(
+  area: Pick<RescueMapArea, 'polygons'>,
+): AreaView['bbox'] | null {
   const points = area.polygons.flat(2);
 
   if (points.length === 0) {
@@ -120,20 +139,7 @@ export function viewOfArea(
   const maxLat = Math.max(...lats);
   const minLng = Math.min(...lngs);
   const maxLng = Math.max(...lngs);
-  const lngSpan = Math.max((maxLng - minLng) * VIEW_PADDING, 0.0005);
-  const zoom = Math.min(
-    MAX_ZOOM,
-    Math.max(
-      MIN_ZOOM,
-      Math.floor(Math.log2((360 * Math.max(widthPx, 1)) / (lngSpan * TILE_PX))),
-    ),
-  );
-
-  return {
-    center: [(minLat + maxLat) / 2, (minLng + maxLng) / 2],
-    zoom,
-    bbox: [minLng, minLat, maxLng, maxLat],
-  };
+  return [minLng, minLat, maxLng, maxLat];
 }
 
 export interface BoundaryChange {
