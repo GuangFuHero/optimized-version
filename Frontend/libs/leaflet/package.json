@@ -1,6 +1,7 @@
 {
   "name": "@rescue-frontend/leaflet",
   "version": "0.1.0",
+  "private": true,
   "description": "Headless React components for live Leaflet maps, drawing, editing, and undoable saves.",
   "license": "GPL-3.0-only",
   "type": "module",

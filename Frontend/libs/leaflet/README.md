@@ -2,10 +2,16 @@
 
 Build editable Leaflet maps in React with headless components for drawing, point picking, live layers, and viewport updates. The package manages Leaflet layers, gestures, and cleanup. Use your own tiles, styling, and API for undoable saves.
 
-## Install
+## Use in the workspace
 
-```sh
-npm install @rescue-frontend/leaflet leaflet@1.9.4
+This is a private pnpm workspace package. Add it to the consuming package's dependencies, then run `pnpm install` from `Frontend`.
+
+```json
+{
+  "dependencies": {
+    "@rescue-frontend/leaflet": "workspace:*"
+  }
+}
 ```
 
 ## First map

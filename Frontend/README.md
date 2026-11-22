@@ -149,7 +149,7 @@ Frontend/
 
 ### Workspace packages 運作方式
 
-- 每個 app 和 library 各自在 `package.json` 宣告依賴，內部依賴使用 `workspace:*` 連結，**不使用** TypeScript path aliases。
+- 每個 app 和 library 都是 private workspace package，各自在 `package.json` 宣告依賴，內部依賴使用 `workspace:*` 連結，**不使用** TypeScript path aliases。
 - Libraries 透過 `exports` 欄位提供 `src/index.ts`（`@rescue-frontend/data-access` 另提供 `/admin` 與 `/server` 子路徑）。
 - Next.js 的 `transpilePackages` 會直接編譯 libraries 的 TypeScript 原始碼，開發時不需要先 build libraries。
 
