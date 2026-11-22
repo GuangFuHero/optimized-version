@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+import { polygonsLargestFirst as largestAreasFirst } from '@rescue-frontend/leaflet/geometry';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -7,11 +9,7 @@ import {
   areaSignature,
   areaTitle,
   isAreaKind,
-  largestAreasFirst,
-  placeAreaLabels,
   responsibleTeamsText,
-  type AreaLabelRequest,
-  type ScreenBox,
 } from './areas';
 import type { RescueMapPublicZone } from './types';
 
@@ -148,107 +146,6 @@ describe('areaLabelOpensPopup', () => {
     expect(areaLabelOpensPopup(long)).toBe(true);
     expect(areaPopupLines(long)).toEqual([
       '標示區・光復國小操場北側臨時集合點',
-    ]);
-  });
-});
-
-describe('placeAreaLabels', () => {
-  const LABEL = { width: 100, height: 22 };
-  const SCREEN = {
-    width: 400,
-    height: 300,
-    obstacles: [],
-    isCovered: () => false,
-  };
-  const box = (left: number, top: number, right: number, bottom: number) => ({
-    left,
-    top,
-    right,
-    bottom,
-  });
-  const request = (area: ScreenBox, hazard = false): AreaLabelRequest => ({
-    hazard,
-    area,
-    label: LABEL,
-  });
-  // Too small for a label inside: a 休息區.
-  const SMALL = box(190, 140, 210, 160);
-
-  it('puts the label in the middle of an area with room for it', () => {
-    expect(placeAreaLabels([request(box(50, 50, 350, 250))], SCREEN)).toEqual([
-      { place: 'center', x: 200, y: 150 },
-    ]);
-  });
-
-  it('moves it off a cell count to the nearest clear point inside the area', () => {
-    expect(
-      placeAreaLabels([request(box(50, 50, 350, 250))], {
-        ...SCREEN,
-        obstacles: [box(180, 140, 220, 160)],
-      }),
-    ).toEqual([{ place: 'center', x: 200, y: 109.5 }]);
-  });
-
-  it('looks only at the part of an area on screen, as a township reaches far off it', () => {
-    expect(
-      placeAreaLabels([request(box(-1000, -1000, 1200, 1000))], SCREEN),
-    ).toEqual([{ place: 'center', x: 200, y: 150 }]);
-  });
-
-  it('hangs it below an area too small for it, then above, then to its right', () => {
-    expect(placeAreaLabels([request(SMALL)], SCREEN)).toEqual([
-      { place: 'below', x: 200, y: 175 },
-    ]);
-    expect(
-      placeAreaLabels([request(SMALL)], {
-        ...SCREEN,
-        obstacles: [box(190, 170, 210, 180)],
-      }),
-    ).toEqual([{ place: 'above', x: 200, y: 125 }]);
-    expect(
-      placeAreaLabels([request(SMALL)], {
-        ...SCREEN,
-        obstacles: [box(190, 170, 210, 180), box(190, 120, 210, 130)],
-      }),
-    ).toEqual([{ place: 'right', x: 264, y: 150 }]);
-  });
-
-  it('leaves the label out when nowhere is clear', () => {
-    expect(
-      placeAreaLabels([request(SMALL)], { ...SCREEN, isCovered: () => true }),
-    ).toEqual([{ place: 'hidden' }]);
-  });
-
-  it('keeps it on screen and off what floats over the map', () => {
-    expect(placeAreaLabels([request(box(190, 280, 210, 295))], SCREEN)).toEqual(
-      [{ place: 'above', x: 200, y: 265 }],
-    );
-    expect(
-      placeAreaLabels([request(box(50, 0, 350, 300))], {
-        ...SCREEN,
-        isCovered: (label) => label.left < 190,
-      }),
-    ).toEqual([{ place: 'center', x: 246, y: 150 }]);
-  });
-
-  it('leaves out the label of an area off screen', () => {
-    expect(placeAreaLabels([request(box(500, 50, 600, 100))], SCREEN)).toEqual([
-      { place: 'offscreen' },
-    ]);
-  });
-
-  it('lets a 危險區 choose first, then the smaller area, and no two labels overlap', () => {
-    const larger = box(185, 140, 215, 160);
-
-    expect(placeAreaLabels([request(larger), request(SMALL)], SCREEN)).toEqual([
-      { place: 'above', x: 200, y: 125 },
-      { place: 'below', x: 200, y: 175 },
-    ]);
-    expect(
-      placeAreaLabels([request(SMALL), request(larger, true)], SCREEN),
-    ).toEqual([
-      { place: 'above', x: 200, y: 125 },
-      { place: 'below', x: 200, y: 175 },
     ]);
   });
 });

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { Box, Stack, Typography } from '@mui/material';
@@ -87,7 +88,7 @@ export function ReleaseClaimDialog({
               placeItems: 'center',
               height: '1.6em',
               fontSize: displayTextSize[13],
-              '& svg': { fontSize: 14 },
+              '& svg': { fontSize: designTokens.iconSize.sm },
             }}
           >
             <Icons.clipboardList />

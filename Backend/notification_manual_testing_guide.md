@@ -33,7 +33,7 @@ alembic upgrade head
 python3 scripts/seed_fake_notifications.py
 ```
 
-執行後終端機將印出測試人員與預先生成的 JWT Access Token：
+執行後終端機將印出測試人員的 UUID（不印 token；要用的 token 依腳本提示的指令自行產生）：
 * 👤 **Alice (陳隊長 - NGO Admin)**：3 則未讀（含 1 則 Urgent ⚠️ 緊急分區指派）
 * 👤 **Bob (林志工 - NGO Member)**：2 則未讀（含 1 則 Task 📌 任務派工）
 * 👤 **Charlie (王專員 - Gov Admin)**：1 則未讀（含 1 則 🏢 站點物資狀態）

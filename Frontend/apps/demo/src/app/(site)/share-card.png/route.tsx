@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -59,6 +60,7 @@ export async function GET() {
             padding: '0 96px',
           }}
         >
+          {/* eslint-disable-next-line @next/next/no-img-element -- ImageResponse draws this logo into a PNG. */}
           <img
             src={`data:image/svg+xml;base64,${logo.toString('base64')}`}
             width={300}
@@ -68,7 +70,7 @@ export async function GET() {
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <div
               style={{
-                fontSize: 108,
+                fontSize: designTokens.typography.fontSize[108],
                 fontWeight: 700,
                 color: color.fg.neutral.default,
                 letterSpacing: 6,
@@ -79,7 +81,7 @@ export async function GET() {
             <div
               style={{
                 marginTop: 20,
-                fontSize: 40,
+                fontSize: designTokens.typography.fontSize[40],
                 fontWeight: 400,
                 color: color.fg.neutral.subtle,
               }}

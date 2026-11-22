@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import type { StorybookConfig } from '@storybook/react-vite';
 
 const config = {

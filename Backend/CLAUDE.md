@@ -22,10 +22,9 @@
 - 完整跑一次：`pytest -n 4`。review 的人只跑自己動到的部分相關的測試。
 - 測試 DB 帳號要是 superuser（event trigger 和 reset 需要）；本機 docker 與 CI 的 `postgres` 都是。
 
-## 相依套件（uv.lock）
+## 套件
 
-`uv.lock` 有 commit：CI（`uv sync --locked`）和 Docker image（`uv sync --frozen`）都只裝 lock 裡的版本。
-加或升級套件：改 `pyproject.toml`，跑 `uv lock`（升級單一套件用 `uv lock --upgrade-package <名稱>`），兩個檔一起 commit；lock 跟 pyproject 對不上時 CI 會失敗。
+- 只用 `uv add`／`uv remove`／`uv lock` 改套件，`uv.lock` 和 `pyproject.toml` 一起 commit；不要手動編輯 `uv.lock`。
 
 ## 設定（config.py）
 

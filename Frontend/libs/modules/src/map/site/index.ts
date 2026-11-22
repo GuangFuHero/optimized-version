@@ -1,7 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-only
 export { pinnedBesideBuildings } from './building-markers';
 export { readLinkedSelection } from './linked-ticket';
 export { MapCellsNotice } from './map-cells-notice';
-export { dedupeMarkersById } from './markers';
 export {
   floorHelpForOpenBuilding,
   requestHelpOnBuildingFloor,
@@ -14,10 +14,8 @@ export {
   useSiteMapRouteState,
 } from './use-site-map-route-state';
 export {
-  createSiteMapViewportStore,
   useSiteMapViewportState,
   useSiteMapViewportStore,
-  type SiteMapViewportStore,
 } from './use-site-map-viewport-state';
 export { useSiteMapLiveData } from './use-site-map-live-data';
 export { useLinkedTicket } from './use-linked-ticket';

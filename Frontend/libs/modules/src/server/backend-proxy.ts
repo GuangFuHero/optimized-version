@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { resolveClientIp } from '@rescue-frontend/data-access/server';
 import { NextResponse, type NextRequest } from 'next/server';
 

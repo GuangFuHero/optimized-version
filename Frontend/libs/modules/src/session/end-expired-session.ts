@@ -1,7 +1,10 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { broadcastAuthChange } from './auth-broadcast';
 import { isSessionExpiredResponse, markSessionExpired } from './expiry';
+
+export const SESSION_ENDING_EVENT = 'wg:session-ending';
 
 let signingOutHere = false;
 
@@ -42,6 +45,7 @@ export function sessionStorageOrNull(): Storage | null {
  */
 export function continueSignedOut(href?: string): void {
   markSigningOutHere();
+  window.dispatchEvent(new Event(SESSION_ENDING_EVENT));
   broadcastAuthChange('signed-out');
 
   if (href) {

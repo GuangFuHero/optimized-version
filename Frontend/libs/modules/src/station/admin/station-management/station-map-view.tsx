@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { Box, ButtonBase, IconButton, Typography } from '@mui/material';
@@ -12,8 +13,6 @@ import {
   X,
 } from 'lucide-react';
 import {
-  useCallback,
-  useSyncExternalStore,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -21,6 +20,7 @@ import {
   type Ref,
   type RefObject,
 } from 'react';
+import { useMapZoom } from '@rescue-frontend/leaflet';
 import { useEventCallback } from 'usehooks-ts';
 
 import { Map } from '../../../map';
@@ -241,24 +241,6 @@ export function StationMapView({
   );
 }
 
-/** The map's zoom, followed as it changes; null until the map is built. */
-function useMapZoom(map: LeafletMap | null): number | null {
-  const subscribe = useCallback(
-    (notify: () => void) => {
-      map?.on('zoomend', notify);
-      return () => {
-        map?.off('zoomend', notify);
-      };
-    },
-    [map],
-  );
-  return useSyncExternalStore(
-    subscribe,
-    () => map?.getZoom() ?? null,
-    () => null,
-  );
-}
-
 /**
  * Frames the filtered stations once they are read, and again only when the filters change
  * (`decideStationFit`): not over the view the map was left at, nor over a selected station.
@@ -313,6 +295,8 @@ function useFitStations(
     restoredRef,
     arrivedWithNewFilters,
     pointCount,
+    getMarkers,
+    getSelected,
   ]);
 }
 
@@ -331,7 +315,7 @@ function useFlyToSelected(
     map.flyTo(marker.position, Math.max(map.getZoom(), FOCUS_ZOOM), {
       duration: 0.6,
     });
-  }, [map, selectedUuid]);
+  }, [map, selectedUuid, getMarkers]);
 }
 
 const OVERLAY_SX = {
@@ -377,7 +361,7 @@ function SelectedStationCard({
         <Typography
           sx={{
             ...typography.label[500],
-            fontSize: 15,
+            fontSize: designTokens.typography.fontSize[15],
             flex: 1,
             minWidth: 0,
             color: color.fg.neutral.default,

@@ -33,13 +33,13 @@ jobs:
           package_json_file: Frontend/package.json
       - uses: astral-sh/setup-uv@v6
         with:
+          version: "0.13.7"
           python-version: "3.13"
       - run: pnpm install --frozen-lockfile
-      # Exports the schemas with the backend's locked dependencies; fails if uv.lock is out of date.
       - run: pnpm schemas:generate
         env:
           UV_LOCKED: "1"
       - run: git diff --exit-code
       - run: pnpm typecheck
-      - run: pnpm lint
+      - run: pnpm lint --max-warnings=0
       - run: pnpm test

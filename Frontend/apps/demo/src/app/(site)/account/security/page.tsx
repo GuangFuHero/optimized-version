@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { Container } from '@mui/material';
 import type { Metadata } from 'next';
 

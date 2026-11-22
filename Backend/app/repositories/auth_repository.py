@@ -72,9 +72,7 @@ class UserRepository(GenericRepository[User]):
             try:
                 parsed = Scope(scope)
             except ValueError:
-                logger.warning(
-                    "skipping malformed scope %r for permission %s (user %s)", scope, key, user_uuid
-                )
+                logger.warning("skipping a malformed scope for permission %s (user %s)", key, user_uuid)
                 continue
             scopes_by_key.setdefault(key, []).append(parsed)
         return {key: widest(scopes) for key, scopes in scopes_by_key.items()}

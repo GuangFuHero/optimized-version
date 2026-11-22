@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * What the backend's duplicate check held back, read for the dialog that asks whether it is the
  * same thing (`duplicate-warn-dialog.tsx`, prototype `DuplicateWarnDialog`, `site-actions.jsx`).

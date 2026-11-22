@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { Layers } from 'lucide-react';
@@ -42,7 +43,7 @@ function SiteLayerButton({ controller }: SiteMapControlsProps) {
         sx={{
           width: '100%',
           height: '100%',
-          borderRadius: 999,
+          borderRadius: `${designTokens.radius.full}px`,
           color: controller.layerPanelOpen
             ? color.fg.neutral.default
             : color.fg.neutral.subtle,

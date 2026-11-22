@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { Box, Stack, Typography } from '@mui/material';
@@ -66,7 +67,11 @@ export function NeedLine({
     >
       <NeedTypeIcon
         taskType={need.taskType}
-        sx={{ fontSize: 16, color: color.fg.neutral.muted, flexShrink: 0 }}
+        sx={{
+          fontSize: designTokens.iconSize[16],
+          color: color.fg.neutral.muted,
+          flexShrink: 0,
+        }}
       />
 
       {/* At most 460px from the tablet up: across a full-width card the count drifts away from the

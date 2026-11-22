@@ -326,7 +326,7 @@ async def ensure_role_grant(db: AsyncSession, *, role: Role, permission: Permiss
     if existing is not None:
         return False
     db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope))
-    print(f"為角色 {role.name} 授予 {permission.key} ({scope})")
+    print(f"為角色 {role.name} 授予 {permission.key}")
     return True
 
 

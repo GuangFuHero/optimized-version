@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * MUI v9 theme — built on M3 color tokens.
  *

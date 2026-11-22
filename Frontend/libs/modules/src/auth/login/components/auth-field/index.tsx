@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import {
@@ -96,7 +97,7 @@ export function AuthField({
             '--wg-field-bg': authPalette.fieldBackground,
             '--wg-field-fg': authPalette.textPrimary,
             height: 40,
-            borderRadius: '16px',
+            borderRadius: `${designTokens.radius[16]}px`,
             bgcolor: authPalette.fieldBackground,
             color: authPalette.textPrimary,
             alignItems: 'center',
@@ -119,7 +120,7 @@ export function AuthField({
               minWidth: 0,
               width: '100%',
               height: '100%',
-              fontSize: 16,
+              fontSize: designTokens.typography.body[400].fontSize,
               lineHeight: '24px',
               color: authPalette.textPrimary,
               '&::placeholder': {
@@ -131,7 +132,7 @@ export function AuthField({
               pr: 1,
             },
             '& .MuiInputAdornment-root': {
-              color: '#6B7280',
+              color: designTokens.color.fg.fieldPlaceholder,
               alignSelf: 'stretch',
               display: 'flex',
               alignItems: 'center',

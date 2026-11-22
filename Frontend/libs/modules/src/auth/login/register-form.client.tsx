@@ -1,8 +1,10 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { useForm, useStore } from '@tanstack/react-form';
 
-import { Alert, Button, TextField } from '@mui/material';
+import { Alert, TextField } from '@mui/material';
+import { Button } from '@rescue-frontend/ui';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { startTransition, useEffect, useId, useState } from 'react';
 
@@ -179,7 +181,7 @@ export function RegisterFormClient({
         ) : null}
 
         <Button
-          variant="contained"
+          variant="primary"
           disabled={isVerifying || verificationCode.trim().length === 0}
           onClick={() => {
             void verificationForm.handleSubmit();
@@ -189,7 +191,7 @@ export function RegisterFormClient({
         </Button>
 
         <Button
-          variant="text"
+          variant="ghost"
           disabled={isResending}
           onClick={() => {
             void handleResendAsync();
@@ -199,7 +201,7 @@ export function RegisterFormClient({
         </Button>
 
         <Button
-          variant="text"
+          variant="ghost"
           onClick={() => {
             setPendingRegistration(null);
             verificationForm.reset();

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { responseData } from '@rescue-frontend/data-access';
@@ -78,8 +79,6 @@ interface RescueMapControllerOptions {
   sourceMarkers?: readonly RescueMapMarkerItem[];
   closureAreas?: readonly import('../types').RescueMapClosureArea[];
   publicZones?: readonly import('../types').RescueMapPublicZone[];
-  /** 是否用地圖疊加圖層開關過濾 marker。列表頁會關閉此行為。 */
-  filterMarkersByOverlayLayers?: boolean;
   /**
    * 是否用目前 bbox 過濾 marker。地圖畫布會關閉此行為——視窗外的標記本就
    * 不可見，關閉後視角移動不會重建 markers 陣列；列表頁維持開啟。
@@ -204,7 +203,6 @@ export function useRescueMapController({
   sourceMarkers = RESCUE_MAP_MARKERS,
   closureAreas: sourceClosureAreas = [],
   publicZones: sourcePublicZones = [],
-  filterMarkersByOverlayLayers = true,
   filterMarkersByBbox = true,
   filterMarkersBySearch = true,
   defaultView = MAP_VIEW_TAIWAN,
@@ -363,14 +361,14 @@ export function useRescueMapController({
 
       commit({ ...readState(), subDataTypes: [...current] });
     },
-    [commit],
+    [commit, readState],
   );
 
   const setSelectedMarkerId = useCallback(
     (markerId: string | undefined) => {
       commit({ ...readState(), selectedMarkerId: markerId });
     },
-    [commit],
+    [commit, readState],
   );
 
   const setViewportState = useCallback(
@@ -406,7 +404,7 @@ export function useRescueMapController({
         bbox: next.bbox,
       });
     },
-    [commit],
+    [commit, readState],
   );
 
   const tileLayer = (() => {

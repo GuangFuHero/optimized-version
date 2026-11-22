@@ -1,7 +1,7 @@
 FROM python:3.13-slim
 
 # Install uv from the official image
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.13.7 /uv /uvx /bin/
 
 # Set working directory
 WORKDIR /app
@@ -13,12 +13,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy dependency files first for caching
-COPY pyproject.toml uv.lock README.md ./
+COPY pyproject.toml uv.lock ./
 
-# Install exactly the versions in uv.lock (no dev tools) into /opt/venv; --frozen refuses to re-resolve.
+# Install exactly what uv.lock lists into /opt/venv, outside /app, which compose may bind-mount.
+# The app itself is not installed: it runs from /app.
 ENV UV_PROJECT_ENVIRONMENT=/opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
-RUN uv sync --frozen --no-dev --no-install-project
+RUN uv sync --locked --no-dev --no-install-project
 
 # Copy application code
 COPY . .

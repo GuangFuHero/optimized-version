@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * What a need's confirmation shows — 確認承接 and 停止招募 alike — from what it read of the ticket:
  * the need, a line saying it is loading, or a line saying it is gone.

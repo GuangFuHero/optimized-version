@@ -1,10 +1,16 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
-// A client component: its 回到地圖 hands `Link` to MUI's Button, and a server layout renders it.
-import { Button, Stack, Typography } from '@mui/material';
+// The server layout renders this client component so the shared Button can use Link.
+import { Stack, Typography } from '@mui/material';
 import Link from 'next/link';
 
-import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
+import {
+  Button,
+  designTokens,
+  displayTextSize,
+  Icons,
+} from '@rescue-frontend/ui';
 
 const { color } = designTokens;
 
@@ -17,7 +23,10 @@ export function BackOfficePlaceholder() {
   return (
     <Stack spacing={1.5} sx={{ alignItems: 'flex-start' }}>
       <Icons.shieldUser
-        sx={{ fontSize: 28, color: color.brand.secondary.subtle }}
+        sx={{
+          fontSize: designTokens.iconSize[28],
+          color: color.brand.secondary.subtle,
+        }}
       />
       <Typography
         component="h1"
@@ -39,7 +48,7 @@ export function BackOfficePlaceholder() {
       >
         管理平台正在準備中。開放後，這顆按鈕會直接帶你進去。
       </Typography>
-      <Button component={Link} href="/map" variant="outlined" sx={{ mt: 1 }}>
+      <Button component={Link} href="/map" variant="outline" sx={{ mt: 1 }}>
         回到地圖
       </Button>
     </Stack>

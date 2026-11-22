@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { Box, InputBase, Stack, type InputBaseProps } from '@mui/material';
 import { useId, type ReactNode } from 'react';
 

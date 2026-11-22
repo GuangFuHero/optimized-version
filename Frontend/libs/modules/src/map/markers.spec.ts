@@ -1,6 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { describe, expect, it } from 'vitest';
 
-import type { TicketNeed } from '../../ticket/needs/need-claim';
+import type { TicketNeed } from '../ticket/needs/need-claim';
 import {
   mapAreasToOverlays,
   mapTicketToMarker,
@@ -171,6 +172,20 @@ describe('mapAreasToOverlays', () => {
       },
       { id: 'area-3', kind: 'mark_zone', name: '志工休息區', teams: [] },
     ]);
+  });
+
+  it('keeps each responsible team’s uuid beside its name, in order, so an assignment compares identities', () => {
+    const assignedTeams = [
+      { uuid: 'team-1', name: '慈濟基金會' },
+      { uuid: 'team-2', name: '紅十字會' },
+    ];
+
+    const { publicZones } = mapAreasToOverlays([
+      area({ uuid: 'area-2', type: 'team_zone', assignedTeams }),
+    ]);
+
+    expect(publicZones[0]?.assignedTeams).toEqual(assignedTeams);
+    expect(publicZones[0]?.teams).toEqual(['慈濟基金會', '紅十字會']);
   });
 
   it('takes a name of only spaces as none', () => {

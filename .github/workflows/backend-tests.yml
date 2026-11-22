@@ -58,10 +58,10 @@ jobs:
 
       - uses: astral-sh/setup-uv@v6
         with:
+          version: "0.13.7"
           python-version: "3.13"
           enable-cache: true
           cache-dependency-glob: Backend/uv.lock
-      # --locked installs exactly uv.lock and fails when the lock no longer matches pyproject.toml.
       - name: Install dependencies
         working-directory: Backend
         run: uv sync --locked

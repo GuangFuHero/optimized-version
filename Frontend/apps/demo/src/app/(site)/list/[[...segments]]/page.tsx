@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { Suspense } from 'react';
 
 import type { Metadata } from 'next';

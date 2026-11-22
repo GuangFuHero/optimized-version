@@ -10,8 +10,9 @@ libs/data-access/
   src/
     graphql/
       schema.graphql           # 後端匯出的 GraphQL schema，前後台共用
-      admin/admin.graphql      # 後台的 operations
-      tickets/ geo/ …          # 前台的 operations
+      admin/                   # 後台的 .graphql operations
+      tickets/ geo/ …          # 前台與前後台共用的 .graphql operations
+      shared-mutations.graphql # 前後台共用的 mutations
       __generated__/           # graphql-codegen 產物
       request.ts               # createGraphqlRequest、GraphqlError
     rest/
@@ -19,7 +20,7 @@ libs/data-access/
       openapi.d.ts             # openapi-typescript 產物
       openapi-client.ts        # createRestClient（openapi-fetch）、responseData
       api-error.ts             # ApiError
-    admin/                     # 後台的 TanStack Query options 與 hooks
+    admin/                     # 後台的 TanStack Query options、hooks 與 query keys
     index.ts                   # 對外 export 入口
 ```
 
@@ -27,9 +28,9 @@ libs/data-access/
 
 - GraphQL contract：`src/graphql/schema.graphql`，由 `pnpm schemas:export` 從後端匯出
 - REST contract：`src/rest/openapi.json`，同上
-- GraphQL operations：`src/graphql/**/*.graphql`
+- GraphQL operations：`src/graphql/**/*.graphql`，排除 `schema.graphql`
 
-新增資料需求時，先改 `.graphql`（REST 不用改，路徑和型別都來自 OpenAPI），再執行 `pnpm codegen`。
+新增資料需求時，在 `.graphql` 檔寫 operation，再執行 `pnpm codegen`。使用端 import 產生的 `XxxDocument`。前後台讀同樣的欄位時共用同一個 operation。REST 的路徑和型別都來自 OpenAPI。
 
 ## 送出請求
 
@@ -55,11 +56,12 @@ server 端（分享卡片的 metadata、render 前讀登入的人）用 `libs/mo
 - 前台：`siteGraphqlQuery(document, variables)` 給 `useQuery`，key 是 document 與 variables。預設每次 mount 都重讀、
   切回分頁不重讀、失敗不跳 toast（畫面自己顯示錯誤）。寫入用 `siteGraphqlMutation(document)` 給 `useMutation`，
   失敗一樣不跳 toast。
-- 後台：`@rescue-frontend/data-access/admin` 的 query options 與 hooks，失敗由 `createAdminQueryClient` 的 callback 跳 toast。
+- 後台：`@rescue-frontend/data-access/admin` 的 query options 與 hooks，後台頁面不用前台的 `siteGraphql`。query key 放在 `admin/*-query-keys.ts`，讀取與 invalidation 用同一組 key。失敗由 `createAppQueryClient` 的 callback 跳 toast；畫面自己顯示錯誤的 query 或 mutation 設 `meta: { [SILENT_ERROR_META]: true }`。QueryClient 跟著登入的人與目前身分重建。
+- 登入的人（`/users/me`）：兩個 app 都用 `@rescue-frontend/data-access` 的 `useCurrentUser()`，同一份 query 由 `CurrentUserProvider` 持有，後台換身分重建 QueryClient 時不受影響。不要另外讀 `/users/me`。
 
 ## Codegen Workflow
 
-1. 修改 `.graphql` 文件
+1. 修改 `.graphql` operation 檔
 2. 執行 `pnpm codegen`（`pnpm schemas:generate` 會先從後端匯出 schema）
 3. 更新使用端 import 與型別
 

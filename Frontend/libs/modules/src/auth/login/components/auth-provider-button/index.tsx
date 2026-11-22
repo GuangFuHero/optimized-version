@@ -1,10 +1,15 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
-import { Button } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import type { ReactNode } from 'react';
 
-import { displayTextSize, Icons } from '@rescue-frontend/ui';
+import {
+  designTokens,
+  Button,
+  displayTextSize,
+  Icons,
+} from '@rescue-frontend/ui';
 import { getAuthColorScheme } from '../../theme/auth-theme';
 
 type AuthProvider = 'google' | 'line' | 'custom';
@@ -28,6 +33,7 @@ export function AuthProviderButton({
 
   return (
     <Button
+      variant="neutral"
       type="button"
       fullWidth
       onClick={onClick}
@@ -37,7 +43,7 @@ export function AuthProviderButton({
         justifyContent: 'center',
         gap: 1,
         minHeight: 36,
-        borderRadius: '999px',
+        height: 'auto',
         border: `1px solid ${authPalette.fieldBorder}`,
         bgcolor: authPalette.fieldBackground,
         color: authPalette.textPrimary,
@@ -49,8 +55,8 @@ export function AuthProviderButton({
         letterSpacing: '0.6px',
         textTransform: 'none',
         '&:hover': {
-          bgcolor: '#DCE8F2',
-          borderColor: '#C9AC99',
+          bgcolor: designTokens.color.bg.authProviderHover,
+          borderColor: designTokens.color.border.authProviderHover,
         },
       }}
     >
@@ -61,11 +67,23 @@ export function AuthProviderButton({
 
 function AuthProviderIcon({ provider }: { provider: AuthProvider }) {
   if (provider === 'line') {
-    return <Icons.lineBrand sx={{ fontSize: 16 }} />;
+    return (
+      <Icons.lineBrand
+        sx={{
+          fontSize: designTokens.iconSize[16],
+        }}
+      />
+    );
   }
 
   if (provider === 'google') {
-    return <Icons.googleBrand sx={{ fontSize: 16 }} />;
+    return (
+      <Icons.googleBrand
+        sx={{
+          fontSize: designTokens.iconSize[16],
+        }}
+      />
+    );
   }
 
   return null;

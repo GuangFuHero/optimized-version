@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 export {
   AuthField,
   AuthFooterLinks,
@@ -58,6 +59,7 @@ export { DEFAULT_TILE_ORIGIN } from './map/constants';
 export { hasRescueMapDetailItem, isLocationCellId } from './map/location-cells';
 export {
   AREA_KIND_LABELS,
+  AREA_KIND_ORDER,
   AREA_LABEL_NAME_MAX,
   type RescueMapAreaKind,
 } from './map/areas';
@@ -66,6 +68,8 @@ export type {
   RescueMapClosureArea,
   RescueMapDraftArea,
   RescueMapEditArea,
+  RescueMapArea,
+  RescueMapAreaTeam,
   RescueMapPublicZone,
   RescueMapBaseLayer,
   RescueMapControllerValue,
@@ -84,7 +88,9 @@ export {
   ADMIN_MAP_ASSIGNMENTS,
   ADMIN_MAP_STATUSES,
   areaErrorMessage,
+  knownAreaErrorMessage,
   boundaryChange,
+  boundsOfArea,
   countInsideArea,
   editableOutline,
   DEFAULT_ADMIN_MAP_FILTERS,
@@ -99,6 +105,16 @@ export {
   polygonSelfIntersects,
   toGeoJsonPolygon,
   holdRequest,
+  EMPTY_AREA_FORM,
+  createAdminAreaEditorStore,
+  useAdminAreaEditor,
+  type AreaFormValues,
+  type DrawEditor,
+  AdminAreaChangesProvider,
+  type AreaChanges,
+  useAdminAreaChanges,
+  showAreaError,
+  AREA_TEAM_LOAD_ERROR,
   UNDO_MS,
   useAdminMapAreas,
   ADMIN_MAP_LIVE_QUERY_LIMIT,
@@ -110,10 +126,11 @@ export {
   type AreaContents,
   type BoundaryChange,
 } from './map/admin';
+export { useMarkerDetail } from './map/hooks/use-marker-detail';
+export { createMapViewportStore } from './map/viewport-store';
+export { dedupeMarkersById } from './map/markers';
 
 export {
-  createSiteMapViewportStore,
-  dedupeMarkersById,
   floorHelpForOpenBuilding,
   MapCellsNotice,
   pinnedBesideBuildings,
@@ -132,7 +149,6 @@ export {
   useSiteMapRouteState,
   useSiteMapViewportState,
   useSiteMapViewportStore,
-  type SiteMapViewportStore,
 } from './map/site';
 
 export {
@@ -162,6 +178,7 @@ export { DashboardPage } from './admin/dashboard';
 export { DedupReviewPage } from './admin/dedup';
 export { SettingsPage } from './admin/settings/settings-page';
 export { BackOfficePlaceholder } from './role-request';
+export { useRoleRequestTeams } from './role-request/use-role-request-teams';
 export {
   AdminErrorPage,
   AdminPlaceholderPage,

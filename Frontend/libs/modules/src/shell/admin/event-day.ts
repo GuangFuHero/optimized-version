@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { taiwanCalendarDay } from '../../time/taiwan-time';
 
 /**

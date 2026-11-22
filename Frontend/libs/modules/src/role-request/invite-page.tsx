@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { useReturnQuery } from '../route/use-return-query';
@@ -15,11 +16,14 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 
-import { ApiError } from '@rescue-frontend/data-access';
+import {
+  ApiError,
+  useCurrentUser,
+  useInvalidateCurrentUser,
+} from '@rescue-frontend/data-access';
 import type { components } from '@rescue-frontend/data-access/openapi';
 import { Button, designTokens } from '@rescue-frontend/ui';
 
-import { getCurrentUserAsync } from '../auth/api/client';
 import { authHref } from '../auth/login/utils/auth-href';
 import { useAuthSession } from '../session/auth-session';
 import { readApplicantAccount } from './applicant';
@@ -66,12 +70,9 @@ export function TeamInvitePage({ token }: { token: string }) {
     retry: false,
     meta: { quietErrors: true },
   });
-  const applicant = useQuery({
-    queryKey: ['users', 'me', user?.uuid],
-    queryFn: getCurrentUserAsync,
+  const applicant = useCurrentUser({
     enabled: status === 'authenticated',
-    retry: false,
-    meta: { quietErrors: true },
+    staleTime: 0,
   });
   const authLink = authHref('/login', { callbackUrl });
 
@@ -140,17 +141,14 @@ export function TeamInvitePage({ token }: { token: string }) {
             >
               重新載入
             </Button>
-            {(invite.error instanceof ApiError &&
-              invite.error.status === 401) ||
-            (applicant.error instanceof ApiError &&
-              applicant.error.status === 401) ? (
+            {invite.error instanceof ApiError && invite.error.status === 401 ? (
               <Button variant="ghost" href={authLink}>
                 重新登入
               </Button>
             ) : null}
             <BackToSite />
           </>
-        ) : (
+        ) : applicant.data ? (
           <InviteDetails
             key={`${user?.uuid}:${token}`}
             token={token}
@@ -159,7 +157,7 @@ export function TeamInvitePage({ token }: { token: string }) {
             refreshInvite={() => void invite.refetch()}
             refreshAccount={() => void applicant.refetch()}
           />
-        )}
+        ) : null}
       </Stack>
     </Container>
   );
@@ -421,6 +419,7 @@ function InviteForm({
   const [lapsed, setLapsed] = useState(false);
   const lapsedRef = useRef<HTMLDivElement>(null);
   const { keep, take } = useApplyDraft(user.uuid);
+  const refreshSession = useInvalidateCurrentUser();
   const verification = usePhoneVerification({
     account,
     onVerified: refreshAccount,
@@ -434,11 +433,7 @@ function InviteForm({
         phone,
       });
       // Refresh cookies through the API proxy before a whole-page navigation to LINE.
-      try {
-        await getCurrentUserAsync();
-      } catch {
-        // The session layer handles an ended session; LINE can retry a transient failure.
-      }
+      await refreshSession();
       window.location.assign(buildPhoneStepUpHref(window.location));
     },
   });

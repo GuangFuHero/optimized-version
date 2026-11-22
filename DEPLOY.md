@@ -8,27 +8,34 @@
 
 ## 🧭 請依你的情境選擇閱讀起點
 
+> 只想在自己的電腦上跑起來試用、只有這台電腦看得到？請走 **D**，不用讀這份文件。
+
 | 你的身分與目標 | 建議閱讀順序 |
 | :--- | :--- |
 | **A. 團隊成員：部署更新至現有雲端環境（Staging）** | 直接從 **[第 2 節：日常部署速查](#2-日常部署速查tldr)** 開始（首次連線請先看 2-A「開始之前」安裝 `gcloud` 與開通權限） |
 | **B. 廠商／維運人員：在 GCP 從零架設一套全新雲端環境** | 請先從 **[第 10 節：從零架設雲端環境（One-Time Bootstrap）](#10-從零架設雲端環境one-time-bootstrap)** 依序完成外部服務申請、GCP 基建與首次部署；架設完成後的日常更新再回到 **[第 2 節](#2-日常部署速查tldr)** |
-| **C. 廠商：在自己的電腦（Ubuntu 24.04 LTS＋Docker）架設（僅供測試使用）** | 正式環境請走 B。測試用請先讀 **[第 10 節開頭「在自己的電腦上架設要先知道的事」](#在自己的電腦上架設要先知道的事)**，再照第 10 節的步驟做（Step 2 改做「Step 2 替代做法」）；日常更新同樣是到那台電腦上執行第 2 節的 `deploy.sh` |
+| **C. 廠商：在自己的電腦（Ubuntu 24.04 LTS＋Docker）架設，讓別人用網址連進來（僅供測試使用）** | 正式環境請走 B；只有自己在這台電腦上看，請走 D。測試用請先讀 **[第 10 節開頭「在自己的電腦上架設要先知道的事」](#在自己的電腦上架設要先知道的事)**，再照第 10 節的步驟做（Step 2 改做「Step 2 替代做法」）；日常更新同樣是到那台電腦上執行第 2 節的 `deploy.sh` |
+| **D. 只在自己的電腦上跑起來試用（只有這台電腦看得到）** | **不用讀這份文件。** 照根目錄 README 的 **[「5 分鐘跑起完整系統」](README.md#5-分鐘跑起完整系統onboarding-guide)** 做，登入帳號和驗證碼看 **[「本機測試帳號與驗證碼查看」](README.md#本機測試帳號與驗證碼查看)**。不用申請網域、GCP 或任何第三方服務：簡訊與 Email 驗證碼會印在後端的紀錄裡、地址不會自動定位、不能用 Google／LINE 登入（改用 Email＋密碼）。要先裝 Docker、Node.js 22、pnpm 與 Python 3.13＋`uv` |
 
 ---
 
 ## 目錄
 
-1. [雲端架構一覽](#1-雲端架構一覽)
-2. [日常部署速查（TL;DR）](#2-日常部署速查tldr)
-3. [從本機連線雲端除錯（SSH Tunnel）](#3-從本機連線雲端除錯ssh-tunnel)
-4. [雲端環境規格與設定總覽](#4-雲端環境規格與設定總覽)
-5. [`deploy.sh` 自動化部署 9 步驟與回滾機制](#5-deploysh-自動化部署-9-步驟與回滾機制)
-6. [環境變數、Cookie、Cloudflare Tunnel 與第三方服務設定](#6-環境變數cookiecloudflare-tunnel-與第三方服務設定)
-7. [資料庫備份、還原與資料安全（Backup & Restore）](#7-資料庫備份還原與資料安全backup--restore)
-8. [背景排程：通知清理服務（`retention`）](#8-背景排程通知清理服務retention)
-9. [金鑰輪替（Secret Rotation）與管理員密碼設定](#9-金鑰輪替secret-rotation與管理員密碼設定)
-10. [從零架設雲端環境（One-Time Bootstrap）](#10-從零架設雲端環境one-time-bootstrap)
-11. [常見問題與疑難排解（Troubleshooting）](#11-常見問題與疑難排解troubleshooting)
+每一節都標了誰要看。標「查詢用」的是對照表和原理，**不用先讀**，照步驟做到需要時，步驟裡會連過去。
+
+| 章節 | 講什麼 | 誰要看 |
+| :--- | :--- | :--- |
+| [1. 雲端架構一覽](#1-雲端架構一覽) | 網站怎麼透過 Cloudflare 連到主機 | B、C 開始前先看一次 |
+| [2. 日常部署速查（TL;DR）](#2-日常部署速查tldr) | 部署新版本的指令與驗收清單 | A；B、C 架好之後每次更新 |
+| [3. 從本機連線雲端除錯（SSH Tunnel）](#3-從本機連線雲端除錯ssh-tunnel) | 從自己的電腦連到雲端的 API 與資料庫 | A（主機在 GCP 才用得到） |
+| [4. 雲端環境規格與設定總覽](#4-雲端環境規格與設定總覽) | 團隊 Staging 的專案、VM、IP、Bucket | 查詢用 |
+| [5. `deploy.sh` 自動化部署 9 步驟與回滾機制](#5-deploysh-自動化部署-9-步驟與回滾機制) | 部署腳本每一步做什麼、失敗時會怎樣 | 查詢用；部署失敗時看 |
+| [6. 環境變數、Cookie、Cloudflare Tunnel 與第三方服務設定](#6-環境變數cookiecloudflare-tunnel-與第三方服務設定) | 各環境的網址與登入設定、Tunnel 路由、金鑰清單、OAuth 網址 | 查詢用 |
+| [7. 資料庫備份、還原與資料安全（Backup & Restore）](#7-資料庫備份還原與資料安全backup--restore) | 自動備份與還原步驟 | 維運；資料出錯時看 |
+| [8. 背景排程：通知清理服務（`retention`）](#8-背景排程通知清理服務retention) | 每天自動清掉過期通知 | 維運 |
+| [9. 金鑰輪替（Secret Rotation）與管理員密碼設定](#9-金鑰輪替secret-rotation與管理員密碼設定) | 換金鑰、設定高權限帳號密碼 | 維運 |
+| [10. 從零架設雲端環境（One-Time Bootstrap）](#10-從零架設雲端環境one-time-bootstrap) | 7 個步驟架一套新環境 | **B、C 照著做** |
+| [11. 常見問題與疑難排解（Troubleshooting）](#11-常見問題與疑難排解troubleshooting) | 常見錯誤與解法 | 所有人 |
 
 ---
 
@@ -174,15 +181,22 @@ gcloud secrets versions access latest --project=wanguard-250923 --secret=staging
 | **8** | **Migrate & Seed** | 使用新 image 啟動一次性容器執行 `alembic upgrade head` 與 `seed_rbac.py`（若帶 `SEED_MOCK=true` 則重灌測試情境） | PostgreSQL 交易自動回滾失敗的單一 Migration，印出備份路徑並中止 ⚠️ |
 | **9** | **Restart & Gate** | 啟動新版 `backend`、`frontend`、`admin`、`cloudflared`、`retention`，並連續輪詢 `http://localhost:8000/readyz`（最多 60 秒） | **觸發自動回滾（Auto-Rollback）**：自動將 `disaster-backend:prev` 換回 `:latest` 重啟舊版後端，並還原 Git 工作目錄 ✅ |
 
+### 後端套件版本與升級
+
+- 後端 image 只安裝 `Backend/uv.lock` 記錄的版本，所以 CI 測過的版本就是部署上去的版本；`uv.lock` 和 `pyproject.toml` 對不上時，上表的 Step 5（Build Images）會失敗。
+- 升級由 Dependabot 開 PR 更新 `uv.lock`：每週一上午 9 點（台北時間），小版本與修補版本合成一個 PR，大版本各開一個；新版本要發布滿 14 天才會被提出，安全性更新則立刻開 PR。PR 的 CI 全綠才可以合併。
+
 ---
 
 ## 6. 環境變數、Cookie、Cloudflare Tunnel 與第三方服務設定
+
+> 📖 這一節是對照表與原理，**不用先讀**。照第 10 節架設時，要填的值都寫在步驟裡，需要查的地方步驟會連過來。
 
 ### A. 各環境設定對照表
 
 雲端的非機密公開設定存放於 [`Backend/scripts/deploy-config.staging.env`](Backend/scripts/deploy-config.staging.env)（隨 Git 追蹤）；機密金鑰則存放於 GCP Secret Manager，每次部署由 `deploy.sh` 的 `gen_env()` 動態寫入（**切勿在 VM 上手動編輯 `.env`**，下次部署會被覆蓋）。
 
-| 設定變數 | Production（正式環境範例） | Staging（目前線上環境） | Local（本機開發） |
+| 設定變數 | Production（正式環境範例） | Staging（目前線上環境） | 本機開發（情境 D，只有這台電腦看得到） |
 | :--- | :--- | :--- | :--- |
 | **民眾前台網址 (`SITE_APP_URL`)** | `https://wan-guard.com` | `https://staging.wan-guard.com` | `http://localhost:3000` |
 | **管理後台網址 (`ADMIN_APP_URL`)** | `https://admin.wan-guard.com` | `https://admin-staging.wan-guard.com` | `http://localhost:3001` |
@@ -194,6 +208,8 @@ gcloud secrets versions access latest --project=wanguard-250923 --secret=staging
 | **MCP 對外網址 (`MCP_BASE_URL`)** | 前台網址，等 Tunnel 加上 MCP 路由後再設（尚未設定） | `https://staging.wan-guard.com`（見 [E. MCP 用戶端](#e-mcp-用戶端)） | `http://localhost:8000`（預設） |
 | **信任的 Proxy (`TRUSTED_PROXIES`)** | 預設值 | 預設值：`127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7` | 預設值 |
 | **MCP 上限（`MCP_EXECUTE_SECONDS` … `MCP_TOOL_CALLS_PER_MINUTE`）** | 預設值 | 預設值 | 預設值（見下方「MCP 上限」） |
+
+> ⚠️ 情境 B、C 自建環境請照 **Production 那一欄的格式**，換成自己的網域（填法見 [第 10 節 Step 5](#step-5僅限自建新環境在你的-fork-調整網域與-bucket-名稱)）。最右邊那欄只適用本機開發（情境 D），不是情境 C：情境 C 雖然也架在自己的電腦，網站一樣要讓別人用網址連進來。本機開發的值 `.env.example` 已經寫好，不用自己填。
 
 > 💡 **為什麼後台網址叫 `admin-staging.wan-guard.com` 而不是 `admin.staging.wan-guard.com`？**
 > 因為 Cloudflare 免費通用 SSL 憑證僅涵蓋 `*.wan-guard.com`（一層子網域），若用兩層子網域（`admin.staging.*`）會無法通過憑證驗證。也因為 Staging 與 Production 共用上層網域 `.wan-guard.com`，系統透過不同的 `AUTH_COOKIE_PREFIX`（`wgstg` vs `wg`）確保兩邊的 Cookie 不會互相干擾。
@@ -382,6 +398,8 @@ cd /opt/wanguard/Backend && ./scripts/deploy.sh
 ### 在自己的電腦上架設要先知道的事
 
 > ⚠️ **在自己的電腦上架設僅供測試使用。** 正式環境請架在雲端主機（情境 B）。
+>
+> 只有自己在這台電腦上看、不需要讓別人用網址連進來？不用做這一節，請走 [情境 D](#-請依你的情境選擇閱讀起點)。
 
 主機換成自己的電腦時，網站一樣透過 Cloudflare Tunnel 對外，**路由器不需要開任何 Port**。和 GCP VM 不同的地方有四件：
 
@@ -567,6 +585,44 @@ git clone https://github.com/<你的帳號或組織>/optimized-version.git /opt/
    - 第 22 行：`GCS_BUCKET="gs://<你的備份-bucket-名稱>"`
    - 第 273 行：部署完成後檢查的兩個網址，改成你的前台與後台網址（不改的話，第 2 節驗收清單（2-C）檢查到的會是團隊 Staging 的網址）
 2. **[`Backend/scripts/deploy-config.staging.env`](Backend/scripts/deploy-config.staging.env)**：將 `SITE_APP_URL`、`ADMIN_APP_URL`、`APP_BASE_URL`、`OAUTH_REDIRECT_BASE_URL`、`MCP_BASE_URL`、`AUTH_ALLOWED_ORIGINS`、`AUTH_COOKIE_DOMAIN`、`GOOGLE_CLIENT_ID`、`LINE_CHANNEL_ID` 改為你自己的網域與 Client ID，`EMAIL_FROM` 改成你在 SMTP2GO 驗證過的寄件信箱
+
+**填好的範例**：假設你在 Step 1 買的網域是 `example.org`，前台用 `example.org`、後台用 `admin.example.org`。只改下面這幾行，檔案裡其他行不用動：
+
+```bash
+# Backend/scripts/deploy.sh 第 22 行：Step 3 建的備份 Bucket
+GCS_BUCKET="gs://example-org-db-backups"    # created by the one-time bootstrap (30-day lifecycle)
+
+# Backend/scripts/deploy.sh 第 273 行：部署完會試著連一次的兩個網址
+for url in https://example.org https://admin.example.org; do
+```
+
+`Backend/scripts/deploy-config.staging.env` 裡要改的那幾行，改完長這樣：
+
+```bash
+EMAIL_FROM=no-reply@example.org
+GOOGLE_CLIENT_ID=<Step 1 建立的 Google Client ID>
+LINE_CHANNEL_ID=<Step 1 建立的 LINE Channel ID>
+APP_BASE_URL=https://example.org
+AUTH_COOKIE_DOMAIN=.example.org
+AUTH_ALLOWED_ORIGINS=https://example.org,https://admin.example.org
+SITE_APP_URL=https://example.org
+ADMIN_APP_URL=https://admin.example.org
+OAUTH_REDIRECT_BASE_URL=https://example.org
+```
+
+每一行是什麼：
+
+| 設定 | 是什麼 | 怎麼填 |
+| :--- | :--- | :--- |
+| `EMAIL_FROM` | 系統寄信的寄件人 | 在 SMTP2GO 驗證過的寄件信箱 |
+| `GOOGLE_CLIENT_ID`、`LINE_CHANNEL_ID` | Google／LINE 登入用的編號（不是密碼，密碼放在 Step 3 的金鑰） | Step 1 建立時拿到的值 |
+| `APP_BASE_URL` | 信件和簡訊裡的連結會連到哪裡 | 前台網址 |
+| `AUTH_COOKIE_DOMAIN` | 登入狀態要在哪些網址之間共用 | 前台和後台共用的上層網域，**前面要有一個點** |
+| `AUTH_ALLOWED_ORIGINS` | 哪些網址可以送出資料（擋掉別的網站假冒） | 前台和後台網址，中間用逗號，**不要空格** |
+| `SITE_APP_URL`、`ADMIN_APP_URL` | 前台、後台的網址（兩邊互相連結、邀請 QR Code 會用到） | 前台網址、後台網址 |
+| `OAUTH_REDIRECT_BASE_URL` | Google／LINE 登入完要回到哪裡 | 前台網址 |
+
+> 網址結尾不要加 `/`。說明請不要寫進檔案裡，檔案每一行只放 `名稱=值`。
 
 最簡單的改法是直接在 GitHub 網頁上編輯你 fork 裡的這兩個檔案並 commit 到 `main`。主機不用另外設定 GitHub 帳號，`deploy.sh` 部署時會自己抓到最新版。**不要在主機上直接改檔案**：`deploy.sh` 會檢查 Git 工作目錄是否乾淨，有未 commit 的修改就會停止。
 

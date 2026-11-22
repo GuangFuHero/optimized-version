@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * What the requester reads before deleting one of their ticket's needs: the 「刪除這筆需求」
  * of the need's ⋯, next to 停止招募.

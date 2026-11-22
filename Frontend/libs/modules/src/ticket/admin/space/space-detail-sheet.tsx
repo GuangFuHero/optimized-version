@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { useState } from 'react';
@@ -442,7 +443,7 @@ function StateTiles({ counts }: { counts: Record<FloorState, number> }) {
             <Typography
               sx={{
                 ...typography.heading[700],
-                fontSize: 22,
+                fontSize: designTokens.typography.fontSize[22],
                 color: n ? floorStateColor(state) : color.fg.neutral.muted,
               }}
             >

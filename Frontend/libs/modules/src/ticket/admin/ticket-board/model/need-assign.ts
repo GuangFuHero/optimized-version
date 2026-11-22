@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * The drawer's 需求與承接 card: what it says of a need, and 指派承接 — who the picker offers, and
  * when the card offers to assign or to take someone off.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { designTokens } from '@rescue-frontend/ui';
 
 import type { RescueMapMarkerItem } from '../../types';
@@ -17,13 +18,6 @@ function escapeHtml(value: string): string {
     .join('&quot;')
     .split("'")
     .join('&#39;');
-}
-
-function getMapMarkerDimensions(_: RescueMapMarkerItem['variant']): {
-  iconSize: [number, number];
-  iconAnchor: [number, number];
-} {
-  return { iconSize: [92, 62], iconAnchor: [46, 35] };
 }
 
 function getMarkerTone(item: RescueMapMarkerItem): {
@@ -173,7 +167,7 @@ function createPinIcon(
   // A space's square carries a building, as the prototype's pinHtml draws it (lucide Building).
   const glyph =
     pin.shape === 'square'
-      ? '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M10 6h4M10 10h4M10 14h4M10 18h4"/></svg>'
+      ? `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="${color.fg.inverse}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M10 6h4M10 10h4M10 14h4M10 18h4"/></svg>`
       : pin.shape === 'station'
         ? // The station's type, as its pin on the site map draws it.
           `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="${color.fg.inverse}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${stationTypeGlyphShapes(item.stationMeta?.type)}</svg>`
@@ -217,13 +211,11 @@ export function createMapMarkerIcon(
     return createBuildingIcon(item, leaflet);
   }
 
-  const { iconSize, iconAnchor } = getMapMarkerDimensions(item.variant);
-
   return leaflet.divIcon({
     className: 'map-marker-wrapper',
     html: createMapMarkerIconHtml(item),
-    iconSize,
-    iconAnchor,
+    iconSize: [92, 62],
+    iconAnchor: [46, 35],
     popupAnchor: [0, -20],
   });
 }

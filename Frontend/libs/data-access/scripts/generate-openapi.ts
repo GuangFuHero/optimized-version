@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { writeFile } from 'node:fs/promises';
 import openapiTS, { astToString } from 'openapi-typescript';
 import ts from 'typescript';

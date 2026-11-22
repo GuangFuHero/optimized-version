@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
@@ -326,13 +327,14 @@ function SiteMapViewportDataLayer({
   // would bring it, but the person who did it should not have to wait for one. A ticket found gone
   // (null — deleted) loses its pin, and its copy if a building or a link opened it, and with them
   // the selection, so its drawer shuts.
+  const { dismissMarker, replaceTicketStatus } = liveData;
   const showReloadedTicketStatus = useCallback(
     (ticketUuid: string, reloaded: ReloadedTicket | null) => {
       if (!reloaded) {
         const dropGone = (current: RescueMapMarkerItem | null) =>
           current?.id === ticketUuid ? null : current;
 
-        liveData.dismissMarker(ticketUuid);
+        dismissMarker(ticketUuid);
         setGoneTicketIds((current) =>
           current.includes(ticketUuid) ? current : [...current, ticketUuid],
         );
@@ -342,10 +344,10 @@ function SiteMapViewportDataLayer({
       }
 
       if (reloaded.ticketStatus) {
-        liveData.replaceTicketStatus(ticketUuid, reloaded.ticketStatus);
+        replaceTicketStatus(ticketUuid, reloaded.ticketStatus);
       }
     },
-    [liveData.dismissMarker, liveData.replaceTicketStatus],
+    [dismissMarker, replaceTicketStatus],
   );
 
   // Drawn with the controls, inside the map's own column: centred on the map, and clear of a detail

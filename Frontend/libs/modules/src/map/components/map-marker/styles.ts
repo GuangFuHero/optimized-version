@@ -1,4 +1,9 @@
-import { designTokens, displayTextSizeCss } from '@rescue-frontend/ui';
+// SPDX-License-Identifier: GPL-3.0-only
+import {
+  withAlpha,
+  designTokens,
+  displayTextSizeCss,
+} from '@rescue-frontend/ui';
 
 const { color, radius, shadow, typography, motion } = designTokens;
 
@@ -139,13 +144,13 @@ export const rescueMapMarkerStyles = {
     height: 22,
     borderRadius: '50% 50% 50% 0',
     transform: 'rotate(-45deg)',
-    boxShadow: '0 3px 8px rgba(15, 23, 42, 0.24)',
+    boxShadow: `0 3px 8px ${withAlpha(color.fg.neutral.default, 0.24)}`,
   },
   // A 開啟空間 space: the drop's box, unrotated (designer §開啟空間 3).
   '.map-pin--square .map-pin__drop': {
     width: 26,
     height: 26,
-    borderRadius: 6,
+    borderRadius: radius.sm,
     transform: 'none',
     display: 'flex',
     alignItems: 'center',
@@ -157,19 +162,19 @@ export const rescueMapMarkerStyles = {
     height: 14,
     borderRadius: '50%',
     transform: 'none',
-    boxShadow: `0 0 0 2px ${color.bg.neutral.default}, 0 1px 4px rgba(15, 23, 42, 0.45)`,
+    boxShadow: `0 0 0 2px ${color.bg.neutral.default}, 0 1px 4px ${withAlpha(color.fg.neutral.default, 0.45)}`,
   },
   // A station there: a dark rounded square carrying its type's icon (prototype `stationHtml`).
   '.map-pin--station .map-pin__drop': {
     width: 24,
     height: 24,
-    borderRadius: 7,
+    borderRadius: designTokens.radius[7],
     transform: 'none',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     border: `2px solid ${color.bg.neutral.default}`,
-    boxShadow: '0 2px 7px rgba(15, 23, 42, 0.4)',
+    boxShadow: `0 2px 7px ${withAlpha(color.fg.neutral.default, 0.4)}`,
   },
   '.map-pin--dimmed .map-pin__drop': {
     opacity: 0.45,
@@ -181,7 +186,7 @@ export const rescueMapMarkerStyles = {
     outline: `3px solid ${color.bg.neutral.default}`,
     outlineOffset: 2,
     border: `2px solid ${color.fg.neutral.default}`,
-    boxShadow: '0 10px 24px rgba(15, 23, 42, 0.34)',
+    boxShadow: `0 10px 24px ${withAlpha(color.fg.neutral.default, 0.34)}`,
   },
   // A dot has no border to colour: the dark ring is its selection (prototype).
   '.map-pin--dot.map-pin--selected .map-pin__drop': {

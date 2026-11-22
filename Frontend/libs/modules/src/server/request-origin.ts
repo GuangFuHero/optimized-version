@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { headers } from 'next/headers';
 
 const FALLBACK_ORIGIN = 'http://localhost:3000';

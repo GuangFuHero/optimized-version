@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /** The parts of `Storage` this code uses: `localStorage` in the browser, a stand-in in tests. */
 export type DeviceStorage = Pick<Storage, 'getItem' | 'setItem'>;
 

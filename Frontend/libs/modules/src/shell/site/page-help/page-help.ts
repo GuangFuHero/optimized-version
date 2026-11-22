@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * 這一頁怎麼用 (prototype `Design/前台/js/shared/wg-help.jsx`): what each page of the site
  * is for, kept in one place so the words change here and nowhere else. A page without an entry

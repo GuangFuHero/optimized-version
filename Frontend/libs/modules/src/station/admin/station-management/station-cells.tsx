@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { Box, Typography } from '@mui/material';
@@ -27,7 +28,10 @@ export function TypeChip({ type }: { type: string | null | undefined }) {
     >
       <StationTypeIcon
         type={type}
-        sx={{ fontSize: 16, color: color.fg.neutral.muted }}
+        sx={{
+          fontSize: designTokens.iconSize[16],
+          color: color.fg.neutral.muted,
+        }}
       />
       <Typography
         noWrap

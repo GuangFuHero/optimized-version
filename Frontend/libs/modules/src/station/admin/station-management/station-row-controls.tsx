@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { Box, ButtonBase, Menu, MenuItem } from '@mui/material';
@@ -107,7 +108,7 @@ function CellMenu({
           alignItems: 'center',
           gap: '5px',
           maxWidth: '100%',
-          borderRadius: 1,
+          borderRadius: `${radius.md}px`,
         }}
       >
         {trigger}

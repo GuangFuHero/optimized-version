@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import {
@@ -9,7 +10,7 @@ import {
   useQueryClient,
   type InfiniteData,
 } from '@tanstack/react-query';
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { useDebounceValue } from 'usehooks-ts';
 
 import type { RescueMapMarkerItem } from '../types';
@@ -24,7 +25,7 @@ import {
   mapStationToMarker,
   mapTicketToMarker,
   withTicketStatus,
-} from './markers';
+} from '../markers';
 import { nextTicketPageSkip, ticketPageVariables } from './ticket-pages';
 
 const LIST_PAGE_SIZE = 100;
@@ -74,12 +75,16 @@ export function usePaginatedRescueMapMarkers(state?: SiteRouteState) {
   );
   // Tickets only: stations are still filtered on the page, so a search must not reload them.
   const ticketQuery = activeDataType === 'ticket' ? settledQuery : undefined;
-  const queryKey = [
-    'site-list',
-    'markers',
-    activeDataType,
-    { ticketStatus, ticketQuery },
-  ] as const;
+  const queryKey = useMemo(
+    () =>
+      [
+        'site-list',
+        'markers',
+        activeDataType,
+        { ticketStatus, ticketQuery },
+      ] as const,
+    [activeDataType, ticketStatus, ticketQuery],
+  );
 
   const list = useInfiniteQuery({
     ...SITE_READ_OPTIONS,

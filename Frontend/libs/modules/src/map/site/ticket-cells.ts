@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { cellToLatLng, isValidCell } from 'h3-js';
 
 import {

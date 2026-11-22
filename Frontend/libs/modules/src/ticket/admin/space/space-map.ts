@@ -1,9 +1,12 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * A space on the 任務管理 map (designer, `Design/後台/docs/任務管理.md` §開啟空間 3): one square pin
  * per space, the only square on the map, coloured as the list's priority and grey with no tickets
  * (or none in yet).
  * The tickets inside a space draw no pin of their own: they share its point.
  */
+
+import { designTokens } from '@rescue-frontend/ui';
 
 import type { RescueMapMarkerItem } from '../../../map/types';
 import type { MapViewport } from '../ticket-board/model/ticket-filters';
@@ -16,7 +19,7 @@ import {
 } from './space-analysis';
 
 /** A space with no ticket that counts. */
-export const SPACE_PIN_EMPTY = '#64748B';
+export const SPACE_PIN_EMPTY = designTokens.color.fg.neutral.muted;
 
 /** The legend's entry for the square pin. */
 export const SPACE_LEGEND_LABEL = '開啟的空間';

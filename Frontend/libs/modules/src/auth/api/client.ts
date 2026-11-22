@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { responseData } from '@rescue-frontend/data-access';
@@ -36,11 +37,6 @@ export function verifyAndSignInAsync(
   return siteRestClient
     .POST('/api/v1/auth/session/verify', { body: payload })
     .then(responseData);
-}
-
-/** The signed-in account, through the proxy, which refreshes a spent access token on the way. */
-export function getCurrentUserAsync() {
-  return siteRestClient.GET('/api/v1/users/me').then(responseData);
 }
 
 /** Signs this browser out: the backend ends its session and clears both cookies. */

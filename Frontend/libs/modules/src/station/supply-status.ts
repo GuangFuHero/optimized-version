@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * What a station is short of as its detail shows it, and how long ago that last changed —
  * 「飲用水見底（3 小時前更新）」 (backend ADR-333; the site calls it 目前缺少, the back office 物資狀況).

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { Copy, ChevronDown } from 'lucide-react';
@@ -14,7 +15,7 @@ import { type SelectChangeEvent } from '@mui/material/Select';
 import { useTheme } from '@mui/material/styles';
 import type { ReactNode } from 'react';
 
-import { getRescueColorScheme, Icons } from '@rescue-frontend/ui';
+import { designTokens, getRescueColorScheme, Icons } from '@rescue-frontend/ui';
 
 const CloseIcon = Icons.close;
 const WarningIcon = Icons.warning;
@@ -229,8 +230,6 @@ function resolveRoleLabel({
 }
 
 function InviteQrCodePlaceholder() {
-  const inviteSideSheetPalette = useInviteSideSheetPalette();
-
   return (
     <Box
       sx={{
@@ -239,7 +238,7 @@ function InviteQrCodePlaceholder() {
         display: 'grid',
         gridTemplateColumns: `repeat(${defaultInviteQrPattern[0].length}, 1fr)`,
         gap: '1px',
-        bgcolor: '#FFFFFF',
+        bgcolor: designTokens.color.bg.neutral.default,
       }}
     >
       {defaultInviteQrPattern.flatMap((row, rowIndex) =>
@@ -247,7 +246,10 @@ function InviteQrCodePlaceholder() {
           <Box
             key={`${rowIndex}-${cellIndex}`}
             sx={{
-              bgcolor: cell === '1' ? '#151C22' : 'transparent',
+              bgcolor:
+                cell === '1'
+                  ? designTokens.color.fg.inviteQrInk
+                  : 'transparent',
             }}
           />
         )),
@@ -269,7 +271,7 @@ function InviteFooterButton({ action }: { action: InviteFooterAction }) {
         minHeight: 32,
         px: 3,
         py: 1,
-        borderRadius: '9999px',
+        borderRadius: `${designTokens.radius.full}px`,
         bgcolor: isPrimary
           ? inviteSideSheetPalette.actionSurface
           : 'transparent',
@@ -280,13 +282,13 @@ function InviteFooterButton({ action }: { action: InviteFooterAction }) {
         '&:hover': {
           bgcolor: isPrimary
             ? inviteSideSheetPalette.actionSurfaceHover
-            : '#EDF4FD',
+            : designTokens.color.bg.inviteActionHover,
         },
       }}
     >
       <Typography
         sx={{
-          fontSize: 12,
+          fontSize: designTokens.typography.label[300].fontSize,
           lineHeight: '16px',
           fontWeight: 600,
           letterSpacing: '0.6px',
@@ -324,7 +326,7 @@ export function InviteSideSheetHeader({
         <Typography
           sx={{
             color: inviteSideSheetPalette.heading,
-            fontSize: 20,
+            fontSize: designTokens.typography.heading[600].fontSize,
             lineHeight: '28px',
             fontWeight: 600,
           }}
@@ -334,7 +336,7 @@ export function InviteSideSheetHeader({
         <Typography
           sx={{
             color: inviteSideSheetPalette.bodyText,
-            fontSize: 14,
+            fontSize: designTokens.typography.body[300].fontSize,
             lineHeight: '20px',
             fontWeight: 400,
           }}
@@ -351,7 +353,7 @@ export function InviteSideSheetHeader({
           width: 30,
           height: 30,
           p: 1,
-          borderRadius: '9999px',
+          borderRadius: `${designTokens.radius.full}px`,
           color: inviteSideSheetPalette.heading,
           flexShrink: 0,
         }}
@@ -387,7 +389,7 @@ export function InviteRoleField({
       <Typography
         sx={{
           color: inviteSideSheetPalette.heading,
-          fontSize: 12,
+          fontSize: designTokens.typography.label[300].fontSize,
           lineHeight: '16px',
           fontWeight: 600,
           letterSpacing: '0.6px',
@@ -410,7 +412,7 @@ export function InviteRoleField({
         sx={{
           minHeight: 58,
           bgcolor: inviteSideSheetPalette.roleSurface,
-          borderRadius: '16px',
+          borderRadius: `${designTokens.radius[16]}px`,
           '& .MuiOutlinedInput-notchedOutline': {
             borderColor: inviteSideSheetPalette.frameBorder,
           },
@@ -426,7 +428,7 @@ export function InviteRoleField({
             py: '17px',
             pr: '48px',
             color: inviteSideSheetPalette.heading,
-            fontSize: 16,
+            fontSize: designTokens.typography.body[400].fontSize,
             lineHeight: '24px',
             fontWeight: 400,
             display: 'flex',
@@ -449,7 +451,7 @@ export function InviteRoleField({
         <Typography
           sx={{
             color: inviteSideSheetPalette.bodyText,
-            fontSize: 14,
+            fontSize: designTokens.typography.body[300].fontSize,
             lineHeight: '20px',
             fontWeight: 400,
           }}
@@ -475,7 +477,7 @@ export function InviteLinkField({
       <Typography
         sx={{
           color: inviteSideSheetPalette.bodyText,
-          fontSize: 10,
+          fontSize: designTokens.typography.fontSize[10],
           lineHeight: '12px',
           fontWeight: 700,
           letterSpacing: '0.8px',
@@ -492,7 +494,7 @@ export function InviteLinkField({
             flex: 1,
             minWidth: 0,
             border: `1px solid ${inviteSideSheetPalette.frameBorder}`,
-            borderRadius: '16px',
+            borderRadius: `${designTokens.radius[16]}px`,
             bgcolor: inviteSideSheetPalette.frame,
             px: '17px',
             py: '9px',
@@ -503,7 +505,7 @@ export function InviteLinkField({
             sx={{
               color: inviteSideSheetPalette.bodyText,
               fontFamily: 'Liberation Mono, monospace',
-              fontSize: 14,
+              fontSize: designTokens.typography.body[300].fontSize,
               lineHeight: '20px',
               fontWeight: 400,
               whiteSpace: 'nowrap',
@@ -523,7 +525,7 @@ export function InviteLinkField({
           sx={{
             width: 38,
             height: 38,
-            borderRadius: '16px',
+            borderRadius: `${designTokens.radius[16]}px`,
             bgcolor: inviteSideSheetPalette.copySurface,
             color: inviteSideSheetPalette.copyText,
             flexShrink: 0,
@@ -552,7 +554,7 @@ export function InviteLinkField({
           <Typography
             sx={{
               color: inviteSideSheetPalette.warningText,
-              fontSize: 10,
+              fontSize: designTokens.typography.fontSize[10],
               lineHeight: '12px',
               fontWeight: 700,
               letterSpacing: '0.8px',
@@ -581,7 +583,7 @@ export function InviteCredentialsCard({
         width: '100%',
         bgcolor: inviteSideSheetPalette.bodySurface,
         border: `1px solid ${inviteSideSheetPalette.frameBorder}`,
-        borderRadius: '16px',
+        borderRadius: `${designTokens.radius[16]}px`,
         px: '25px',
         py: '25px',
         alignItems: 'center',
@@ -597,7 +599,7 @@ export function InviteCredentialsCard({
         <Typography
           sx={{
             color: inviteSideSheetPalette.heading,
-            fontSize: 14,
+            fontSize: designTokens.typography.body[300].fontSize,
             lineHeight: '16px',
             fontWeight: 600,
             letterSpacing: '1.4px',
@@ -612,7 +614,7 @@ export function InviteCredentialsCard({
           width: 192,
           height: 192,
           p: '10px',
-          borderRadius: '16px',
+          borderRadius: `${designTokens.radius[16]}px`,
           border: `2px solid ${inviteSideSheetPalette.qrBorder}`,
           bgcolor: inviteSideSheetPalette.frame,
           flexShrink: 0,
@@ -628,7 +630,7 @@ export function InviteCredentialsCard({
               key={line}
               sx={{
                 color: inviteSideSheetPalette.bodyText,
-                fontSize: 14,
+                fontSize: designTokens.typography.body[300].fontSize,
                 lineHeight: '20px',
                 fontWeight: 400,
                 textAlign: 'center',

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { useEffect, useId, useState, type ReactNode } from 'react';
@@ -189,7 +190,6 @@ function LoadedStationForm(props: LoadedStationFormProps) {
     formApi.setFieldValue('addressToken', '');
   }, [formApi, pinLat, pinLng]);
 
-  // Once per pin: the query caches each position, so a lookup is never repeated.
   const lookup = useReverseGeocode(position);
   const lookupResult = lookup.data?.reverseGeocode;
   useEffect(() => {

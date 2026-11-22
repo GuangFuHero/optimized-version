@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import {
@@ -11,7 +12,7 @@ import {
 } from 'lucide-react';
 
 import { Box, Stack, Typography } from '@mui/material';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useIsClient } from 'usehooks-ts';
 import { toast } from 'sonner';
 

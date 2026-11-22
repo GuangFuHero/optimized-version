@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 export { StationCapacityBar } from './station-capacity-bar';
 export { StationContactCard } from './station-contact-card';
 export { StationDetailDrawer } from './station-detail-drawer';

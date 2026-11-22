@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * The way to LINE and back for an applicant whose account has only LINE to prove it is them
  * (backend ADR-361): the form is kept in this tab (`use-apply-draft.ts`), the page goes to LINE to
