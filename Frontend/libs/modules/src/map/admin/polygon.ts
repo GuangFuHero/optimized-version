@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 type LatLng = [number, number];
 
 function cross(o: LatLng, a: LatLng, b: LatLng): number {

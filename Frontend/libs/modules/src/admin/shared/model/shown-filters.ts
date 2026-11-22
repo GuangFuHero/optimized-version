@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /** A back-office board whose map opens where it was left and frames its filters (MAP-VIEW-104). */
 export type ShownFiltersBoard = 'station-management' | 'ticket-board';
 

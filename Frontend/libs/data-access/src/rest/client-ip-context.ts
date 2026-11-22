@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { AsyncLocalStorage } from 'node:async_hooks';
 
 import { setClientIpResolver } from './request-async';

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * Opens 修改建議 for a station from wherever its detail is shown — the map's panel, the phone's
  * drawer, the list. The drawer is kept once, in the site shell (`StationSuggestionHost`), as 請求協助's

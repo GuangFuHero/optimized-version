@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { clearApplyDraft } from '../../role-request/use-apply-draft';
 import { clearAllHelpRequestDrafts } from '../../ticket/help-request';
 import { clearContactDraft } from './use-contact-draft';

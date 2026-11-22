@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * An address line filled in from TGOS (the backend's `reverseGeocode` and `normalizeAddress`,
  * `Backend/Spec/027-address-normalization/frontend-guide.md`): the nearest 門牌 to the pin once it is

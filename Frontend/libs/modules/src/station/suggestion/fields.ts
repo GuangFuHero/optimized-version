@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * 修改建議: which of a station's fields the public may suggest, and the form's rules. One suggestion
  * is one field, its value now → the suggested one (PUB-FEAT-001 AC-10; prototype

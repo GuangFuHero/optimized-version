@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { designTokens } from '@rescue-frontend/ui';
 
 import type { RescueMapMarkerItem } from '../../../../map/types';

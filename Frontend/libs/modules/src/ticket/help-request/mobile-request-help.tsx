@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { Box, ButtonBase, type SxProps, type Theme } from '@mui/material';

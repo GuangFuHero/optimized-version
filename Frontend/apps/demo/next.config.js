@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 //@ts-check
 
 const { composePlugins, withNx } = require('@nx/next');

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { fetchExchange, type AnyVariables, type OperationResult } from 'urql';
 
 import { createUrqlClient } from '../graphql/client';

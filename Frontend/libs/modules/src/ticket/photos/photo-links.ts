@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * Scene photos as links (prototype `Design/前台/js/shared/wg-photos.jsx`, TM-FEAT-010):
  * the platform keeps no image, only a link to one kept elsewhere (TM-IMG-101). One source for the

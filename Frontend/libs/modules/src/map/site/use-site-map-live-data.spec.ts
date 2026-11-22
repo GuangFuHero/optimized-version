@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { latLngToCell } from 'h3-js';
 import { describe, expect, it, vi } from 'vitest';
 

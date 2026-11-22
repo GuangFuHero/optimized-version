@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * Where a volunteer reads, before going, how to get there, what to bring and whom to find
  * (prototype `BRIEFING_HREF`, `site-actions.jsx:1925-1941`). The claim toast, the top of

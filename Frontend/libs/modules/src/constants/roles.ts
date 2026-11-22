@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import type { components } from '@rescue-frontend/data-access/openapi';
 
 export const ROLE_DISPLAY_NAMES = new Map<

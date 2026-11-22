@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { describe, expect, it } from 'vitest';
 
 import { PLATFORM_NAME, siteBrandName } from './event-name';

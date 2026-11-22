@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * Opens 我回報的站點 from the account menu or from a notice of a review's result. The drawer is kept
  * once, in the site shell (`MyStationReportsHost`), as 修改建議's is (`open-station-suggestion.ts`):

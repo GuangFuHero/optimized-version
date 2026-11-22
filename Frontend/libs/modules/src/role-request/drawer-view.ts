@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import type { MyRoleRequestsQuery } from '@rescue-frontend/data-access';
 
 /** One application as `MyRoleRequests` returns it; the list is newest first. */

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { Box, type BoxProps } from '@mui/material';
 
 import { designTokens } from '../../theme';

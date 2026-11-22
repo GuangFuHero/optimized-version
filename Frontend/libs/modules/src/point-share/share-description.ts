@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * What a shared ticket or station says of itself — in a chat's link preview and in the message the
  * share sheet sends: the platform, then what it still needs (WG-002-2, the designer's 2026-10-10

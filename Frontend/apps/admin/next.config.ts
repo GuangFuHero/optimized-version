@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { composePlugins, withNx } from '@nx/next';
 import type { WithNxOptions } from '@nx/next/plugins/with-nx';
 import path from 'node:path';

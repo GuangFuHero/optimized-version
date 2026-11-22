@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * The back office's notice sentences, written here in zh-TW from the notice's `params` rather than
  * shown from the backend's `title` and `body`. A notice whose `params` is missing, or lacks a value

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import ApiError from './api-error';
 
 async function parseJsonResponseAsync<T>(response: Response): Promise<T> {

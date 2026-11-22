@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * 「現在過去有沒有人在」: a station's operational status and its hours, read together (prototype
  * site-route.js:33-90, after Sucre 2026-08-09). They are two things — whether the station still

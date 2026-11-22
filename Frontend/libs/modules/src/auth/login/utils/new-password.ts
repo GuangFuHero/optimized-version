@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * The one rule for a password someone sets — on register, reset, change, or a first password on an
  * account that signed up through Google or LINE. Eight characters is the design's number for reset,

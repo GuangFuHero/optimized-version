@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * The proof 帳號安全 asks for before a new way into the account: a contact added, or a first password
  * (backend `auth_contact.py`, ADR-215/220/361). The backend decides which proof from the account's

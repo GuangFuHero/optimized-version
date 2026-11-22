@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * The tab's title and the page's share tags, kept in step with what is open on the site's map and
  * list.

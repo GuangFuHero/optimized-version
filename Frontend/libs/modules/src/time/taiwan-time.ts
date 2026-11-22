@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 // Numbers only: `en-US` spells each part as digits, where `zh-TW` would add 上午／下午.
 const TAIWAN_PARTS_FORMAT = new Intl.DateTimeFormat('en-US', {
   timeZone: 'Asia/Taipei',

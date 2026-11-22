@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { resolveGraphqlUrl } from '@rescue-frontend/data-access';
 
 const DEFAULT_API_BASE_URL = 'http://localhost:8000/api';

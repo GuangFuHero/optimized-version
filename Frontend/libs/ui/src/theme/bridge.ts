@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * Bridge: design system tokens → Material 3 color roles.
  *

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 // A client component: its 回到地圖 hands `Link` to MUI's Button, and a server layout renders it.

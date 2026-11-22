@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /** A point as the map takes it: [lat, lng]. */
 export type MapPoint = readonly [number, number];
 

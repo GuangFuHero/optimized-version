@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { Alert, AlertTitle, Button, Stack } from '@mui/material';

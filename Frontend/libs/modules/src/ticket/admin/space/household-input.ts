@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * A household filed under a space (BE-036 point 3): `createTicket` with `buildingMapUuid`, which
  * copies the building's point and address onto the ticket, so the ticket sends no point of its own

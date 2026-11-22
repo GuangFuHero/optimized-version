@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import type { RescueMapMarkerItem } from './types';
 
 export const RESCUE_MAP_MARKERS: RescueMapMarkerItem[] = [

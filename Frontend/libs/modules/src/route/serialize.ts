@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import {
   SITE_FALLBACK_DATA_TYPE,
   normalizeSiteSubDataTypes,

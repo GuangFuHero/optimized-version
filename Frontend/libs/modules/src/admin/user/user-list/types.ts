@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 export type UserRoleId = 'admin' | 'agency' | 'ngo' | 'volunteer';
 
 export type UserListStatus = 'active' | 'pending' | 'suspended';

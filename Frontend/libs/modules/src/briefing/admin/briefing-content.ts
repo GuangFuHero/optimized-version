@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { formatDistanceToNowStrict } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
 

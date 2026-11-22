@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * A ticket's address (`secondaryLocation`) in one line, for telling a volunteer where they are going.
  */

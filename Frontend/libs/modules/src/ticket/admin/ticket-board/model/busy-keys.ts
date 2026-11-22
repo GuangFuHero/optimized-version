@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * The keys still busy once `key` reports `busy`. The set itself comes back when nothing changes,
  * so a repeated report never re-renders.

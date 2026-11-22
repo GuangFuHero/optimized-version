@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import type { AuthIdentityType } from '@rescue-frontend/data-access';
 import { PhoneNumberFormat, PhoneNumberUtil } from 'google-libphonenumber';
 

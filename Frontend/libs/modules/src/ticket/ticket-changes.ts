@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * Word that a ticket changed on the server — a need claimed or given back, added or deleted — so
  * that every view of it reloads. Whoever changes it may sit far from those views: 我的任務 lives in

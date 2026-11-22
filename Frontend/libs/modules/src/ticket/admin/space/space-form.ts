@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * The 開啟空間 form (BE-036): a pin, the address it brings, a name and the floor counts
  * (designer, `Design/後台/js/admin/ticket/tk-building.jsx` `BuildingSetupModal`, and
