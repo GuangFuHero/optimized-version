@@ -1,4 +1,6 @@
 import nx from '@nx/eslint-plugin';
+import query from '@tanstack/eslint-plugin-query';
+import react from 'eslint-plugin-react';
 import reactHooks from 'eslint-plugin-react-hooks';
 
 // A hex, rgb() or rgba() colour anywhere in a string.
@@ -14,18 +16,14 @@ const message = {
     'Design system: use designTokens.typography / textSize for text, iconSize for icons.',
 };
 
-/**
- * Design-system lint for page code: no raw colours, no numeric radius or font size, no MUI Button.
- * Warnings by default; a module that has been cleaned up raises its own path to 'error'.
- */
-export function designSystemGuardrail(files, severity = 'warn') {
+export function designSystemGuardrail(files) {
   return {
     files,
     // `brand/` draws the logo and mascot, whose colours are the artwork's own.
     ignores: ['**/*.spec.*', '**/*.test.*', '**/*.stories.*', '**/brand/**'],
     rules: {
       'no-restricted-imports': [
-        severity,
+        'error',
         {
           paths: [
             {
@@ -41,7 +39,7 @@ export function designSystemGuardrail(files, severity = 'warn') {
         },
       ],
       'no-restricted-syntax': [
-        severity,
+        'error',
         { selector: `Literal[value=${COLOUR}]`, message: message.colour },
         {
           selector: `TemplateElement[value.raw=${COLOUR}]`,
@@ -65,6 +63,7 @@ export default [
   ...nx.configs['flat/typescript'],
   ...nx.configs['flat/javascript'],
   reactHooks.configs.flat['recommended-latest'],
+  ...query.configs['flat/recommended'],
   {
     ignores: ['**/dist', '**/out-tsc'],
   },
@@ -113,8 +112,15 @@ export default [
       '**/*.cjs',
       '**/*.mjs',
     ],
-    // Override or add rules here
-    rules: {},
+    plugins: { react },
+    linterOptions: { reportUnusedDisableDirectives: 'error' },
+    rules: {
+      '@typescript-eslint/no-unused-vars': 'error',
+      'no-new': 'error',
+      'no-unneeded-ternary': 'error',
+      'react-hooks/exhaustive-deps': 'error',
+      'react/jsx-key': ['error', { checkFragmentShorthand: true }],
+    },
   },
   // libs/modules has no config of its own and lints with this file; apps add their own copy.
   designSystemGuardrail(['libs/modules/**/*.ts', 'libs/modules/**/*.tsx']),

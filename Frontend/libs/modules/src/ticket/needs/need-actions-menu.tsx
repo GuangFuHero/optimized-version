@@ -60,7 +60,7 @@ export function NeedActionsMenu({ needName, items, sx }: NeedActionsMenuProps) {
           ...(Array.isArray(sx) ? sx : [sx]),
         ]}
       >
-        <Icons.ellipsis sx={{ fontSize: 20 }} />
+        <Icons.ellipsis sx={{ fontSize: designTokens.iconSize.lg }} />
       </ButtonBase>
 
       <Menu

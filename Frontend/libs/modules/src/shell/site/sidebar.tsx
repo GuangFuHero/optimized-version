@@ -146,7 +146,7 @@ function SiteSidebarNav({
             onClick={onClose}
             sx={{ color: color.fg.neutral.subtle }}
           >
-            <Icons.close sx={{ fontSize: 20 }} />
+            <Icons.close sx={{ fontSize: designTokens.iconSize.lg }} />
           </IconButton>
         </Stack>
       ) : null}

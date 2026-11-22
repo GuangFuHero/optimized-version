@@ -1,14 +1,15 @@
 'use client';
 
-import { Button } from '@mui/material';
-
-import { displayTextSize, Icons } from '@rescue-frontend/ui';
+import {
+  Button,
+  designTokens,
+  displayTextSize,
+  Icons,
+} from '@rescue-frontend/ui';
 
 /**
- * A guest's 登入 in both top bars: the icon and the word, not the icon alone (prototype
- * `SiteUserMenu`, `site-shell.jsx:389`). The theme's secondary, blue with black text as text on blue
- * is (2026-09-17) — not the design system `Button`'s secondary, whose white text falls short of 4.5:1
- * on that blue. `compact` for the phone's bar, where the search box needs the width.
+ * The guest sign-in button keeps its label in both top bars. The phone bar uses less padding to
+ * leave room for the search box.
  */
 export function SiteSignInButton({
   compact = false,
@@ -19,16 +20,22 @@ export function SiteSignInButton({
 }) {
   return (
     <Button
-      variant="contained"
-      color="secondary"
-      size="small"
-      startIcon={<Icons.logIn sx={{ fontSize: 16 }} />}
+      variant="secondary"
+      size="sm"
+      startIcon={
+        <Icons.logIn
+          sx={{
+            fontSize: designTokens.iconSize[16],
+          }}
+        />
+      }
       onClick={onClick}
       sx={{
         flexShrink: 0,
+        minHeight: 40,
         whiteSpace: 'nowrap',
         fontSize: displayTextSize[14],
-        ...(compact ? { px: '14px' } : {}),
+        px: compact ? '14px' : '24px',
       }}
     >
       登入

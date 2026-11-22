@@ -168,7 +168,11 @@ export function SiteListRow({
                 {/* 官方認定：只有官方站點掛 chip，非官方不掛。 */}
                 {isStation && marker.stationMeta?.isOfficial ? (
                   <SiteBadge tone="secondary" variant="subtle">
-                    <Icons.shieldCheck sx={{ fontSize: 12 }} />
+                    <Icons.shieldCheck
+                      sx={{
+                        fontSize: designTokens.iconSize[12],
+                      }}
+                    />
                     官方
                   </SiteBadge>
                 ) : null}
@@ -176,7 +180,11 @@ export function SiteListRow({
                     front that this ticket's place is a region (ADR-281). */}
                 {marker.locationCell ? (
                   <SiteBadge tone="neutral" variant="subtle">
-                    <Icons.hexagon sx={{ fontSize: 12 }} />
+                    <Icons.hexagon
+                      sx={{
+                        fontSize: designTokens.iconSize[12],
+                      }}
+                    />
                     概略位置
                   </SiteBadge>
                 ) : null}

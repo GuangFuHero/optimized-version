@@ -33,7 +33,7 @@ export function FieldTag({
         bgcolor: color.bg.neutral.sunken,
         padding: '1px 6px',
         // Not a token: the design's chip radius is 4, tighter than our 6px `sm`.
-        borderRadius: '4px',
+        borderRadius: `${designTokens.radius[4]}px`,
         whiteSpace: 'nowrap',
       }}
     >

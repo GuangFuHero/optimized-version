@@ -1,12 +1,7 @@
 'use client';
 
 import { Box, Drawer, useMediaQuery, useTheme } from '@mui/material';
-import {
-  useEffect,
-  useState,
-  useSyncExternalStore,
-  type ReactNode,
-} from 'react';
+import { useState, useSyncExternalStore, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { usePathname } from 'next/navigation';
 

@@ -71,7 +71,11 @@ export function NeedRow({
       <Stack direction="row" sx={{ alignItems: 'center', gap: 1 }}>
         <NeedTypeIcon
           taskType={need.taskType}
-          sx={{ fontSize: 16, color: color.fg.neutral.muted, flexShrink: 0 }}
+          sx={{
+            fontSize: designTokens.iconSize[16],
+            color: color.fg.neutral.muted,
+            flexShrink: 0,
+          }}
         />
         <Typography
           sx={{

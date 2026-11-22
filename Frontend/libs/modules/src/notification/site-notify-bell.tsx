@@ -57,7 +57,11 @@ export function SiteNotifyBell({ size, ringColor }: SiteNotifyBellProps) {
           },
         }}
       >
-        <Icons.bell sx={{ fontSize: 24 }} />
+        <Icons.bell
+          sx={{
+            fontSize: designTokens.iconSize[24],
+          }}
+        />
         {/* 9+ past nine, as the prototype's 16px dot holds; none at zero, where CountBadge says 0. */}
         {unread > 0 ? (
           <CountBadge
@@ -73,7 +77,7 @@ export function SiteNotifyBell({ size, ringColor }: SiteNotifyBellProps) {
               height: 16,
               px: '4px',
               boxShadow: `0 0 0 2px ${ringColor}`,
-              fontSize: 10,
+              fontSize: designTokens.typography.fontSize[10],
             }}
           />
         ) : null}

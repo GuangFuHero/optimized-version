@@ -5,6 +5,8 @@
  * The tickets inside a space draw no pin of their own: they share its point.
  */
 
+import { designTokens } from '@rescue-frontend/ui';
+
 import type { RescueMapMarkerItem } from '../../../map/types';
 import type { MapViewport } from '../ticket-board/model/ticket-filters';
 import { TICKET_PRIORITY_PIN_COLORS } from '../ticket-board/model/ticket-marker';
@@ -16,7 +18,7 @@ import {
 } from './space-analysis';
 
 /** A space with no ticket that counts. */
-export const SPACE_PIN_EMPTY = '#64748B';
+export const SPACE_PIN_EMPTY = designTokens.color.fg.neutral.muted;
 
 /** The legend's entry for the square pin. */
 export const SPACE_LEGEND_LABEL = '開啟的空間';

@@ -2,7 +2,14 @@
 
 import { useForm, useStore, type Updater } from '@tanstack/react-form';
 
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 
 import {
   Box,
@@ -154,8 +161,11 @@ export function TicketForm(props: TicketFormProps) {
     (state) => state.errorMap.onSubmit ?? {},
   );
   const submitting = useStore(formApi.store, (state) => state.isSubmitting);
-  const setValues = (next: Updater<TicketFormValues>) =>
-    formApi.setFieldValue('draft', next, { dontValidate: true });
+  const setValues = useCallback(
+    (next: Updater<TicketFormValues>) =>
+      formApi.setFieldValue('draft', next, { dontValidate: true }),
+    [formApi],
+  );
   const [error, setError] = useState<string | null>(null);
   const [suspects, setSuspects] = useState<DuplicateSuspect[] | null>(null);
   const [acked, setAcked] = useState<Map<number, string>>(() => new Map());
@@ -194,7 +204,7 @@ export function TicketForm(props: TicketFormProps) {
     if (lookupResult) {
       setValues((current) => applyReverseGeocode(current, lookupResult));
     }
-  }, [lookupResult]);
+  }, [lookupResult, setValues]);
 
   useReportBusy(submitting, onBusyChange);
 

@@ -47,6 +47,7 @@
     "@swc/cli": "~0.8.0",
     "@swc/core": "~1.15.5",
     "@swc/helpers": "~0.5.18",
+    "@tanstack/eslint-plugin-query": "^5.107.1",
     "@types/geojson": "^7946.0.16",
     "@types/google-libphonenumber": "^7.4.30",
     "@types/leaflet": "^1.9.14",

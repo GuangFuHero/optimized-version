@@ -66,7 +66,7 @@ function RescueMapLayerPanelContent({
           sx={{
             width: 48,
             height: 4,
-            borderRadius: 999,
+            borderRadius: `${radius.full}px`,
             backgroundColor: color.fg.neutral.muted,
             mx: 'auto',
             mb: 1.5,
@@ -138,7 +138,7 @@ function RescueMapLayerPanelContent({
                 onClick={() => controller.setBaseLayer(key)}
                 sx={{
                   width: '100%',
-                  borderRadius: 3,
+                  borderRadius: `${designTokens.radius[36]}px`,
                   textAlign: 'left',
                 }}
               >
@@ -149,7 +149,7 @@ function RescueMapLayerPanelContent({
                     alignItems: 'center',
                     gap: 1.4,
                     p: 1.2,
-                    borderRadius: 3,
+                    borderRadius: `${designTokens.radius[36]}px`,
                     border: `1px solid ${
                       active
                         ? color.brand.secondary.default
@@ -166,7 +166,7 @@ function RescueMapLayerPanelContent({
                     sx={{
                       width: 72,
                       height: 56,
-                      borderRadius: 2,
+                      borderRadius: `${designTokens.radius[24]}px`,
                       background: value.preview,
                       border: `1px solid ${color.border.default}`,
                       display: 'grid',
@@ -248,7 +248,7 @@ function RescueMapLayerPanelContent({
               onClick={() => controller.toggleOverlayLayer(key)}
               sx={{
                 width: '100%',
-                borderRadius: 3,
+                borderRadius: `${designTokens.radius[36]}px`,
                 textAlign: 'left',
               }}
             >
@@ -264,7 +264,7 @@ function RescueMapLayerPanelContent({
                     alignItems: 'center',
                     gap: 1.4,
                     p: 1.2,
-                    borderRadius: 3,
+                    borderRadius: `${designTokens.radius[36]}px`,
                     border: `1px solid ${
                       active ? `${value.color}55` : color.border.default
                     }`,
@@ -279,7 +279,7 @@ function RescueMapLayerPanelContent({
                     sx={{
                       width: 40,
                       height: 40,
-                      borderRadius: 2.5,
+                      borderRadius: `${designTokens.radius[30]}px`,
                       display: 'grid',
                       placeItems: 'center',
                       color: value.color,

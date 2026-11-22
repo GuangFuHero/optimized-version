@@ -127,7 +127,7 @@ export function RescueMapStatusMessage({
             sx={{
               width: '100%',
               height: 9,
-              borderRadius: 999,
+              borderRadius: `${designTokens.radius.full}px`,
               backgroundColor: color.bg.neutral.sunken,
               overflow: 'hidden',
               position: 'relative',

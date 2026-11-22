@@ -86,7 +86,7 @@ function SuspectTicketCard({
   const reasonIcon = {
     flexShrink: 0,
     mt: '2px',
-    fontSize: 14,
+    fontSize: designTokens.iconSize.sm,
     color: color.fg.warning,
   } as const;
 

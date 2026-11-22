@@ -101,7 +101,7 @@ export function SiteStationDetailDrawer({
         >
           <StationTypeIcon
             type={marker.stationMeta?.type}
-            sx={{ fontSize: 20 }}
+            sx={{ fontSize: iconSize.lg }}
           />
         </Box>
         <Box sx={{ minWidth: 0 }}>

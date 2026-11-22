@@ -36,11 +36,20 @@ export function StepDots({
           />
         ))}
       </Stack>
-      <Typography sx={{ fontSize: 16, color: color.fg.neutral.subtle }}>
+      <Typography
+        sx={{
+          fontSize: designTokens.typography.body[400].fontSize,
+          color: color.fg.neutral.subtle,
+        }}
+      >
         第 {at + 1} 步，共 {steps.length} 步
       </Typography>
       <Typography
-        sx={{ fontSize: 18, fontWeight: 700, color: color.fg.neutral.default }}
+        sx={{
+          fontSize: designTokens.typography.body[500].fontSize,
+          fontWeight: 700,
+          color: color.fg.neutral.default,
+        }}
       >
         {steps[at]}
       </Typography>

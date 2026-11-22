@@ -93,7 +93,7 @@ export function MapViewPickerCanvas({
       mapRef.current = null;
       zoomControlRef.current = null;
     };
-  }, []);
+  }, [moveView]);
 
   useEffect(() => {
     const map = mapRef.current;

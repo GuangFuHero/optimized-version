@@ -42,7 +42,7 @@ export function ViewSwitch({
           display: 'inline-flex',
           gap: '2px',
           p: '3px',
-          borderRadius: '10px',
+          borderRadius: `${designTokens.radius[10]}px`,
           border: `1px solid ${color.border.default}`,
           bgcolor: color.bg.neutral.sunken,
         }}
@@ -61,7 +61,7 @@ export function ViewSwitch({
                 gap: '6px',
                 height: 30,
                 px: '14px',
-                borderRadius: '8px',
+                borderRadius: `${designTokens.radius[8]}px`,
                 whiteSpace: 'nowrap',
                 bgcolor: on ? color.bg.neutral.default : 'transparent',
                 boxShadow: on ? shadow.sm : 'none',

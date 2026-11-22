@@ -39,7 +39,7 @@ function SiteViewSwitchContent({
         color: color.fg.neutral.subtle,
       }}
     >
-      <Icon sx={{ fontSize: 18 }} />
+      <Icon sx={{ fontSize: designTokens.iconSize.md }} />
     </ButtonBase>
   );
 }

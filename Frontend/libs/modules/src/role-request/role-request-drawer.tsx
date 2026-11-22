@@ -6,7 +6,6 @@ import {
   Alert,
   AlertTitle,
   Box,
-  Button,
   ButtonBase,
   Stack,
   TextField,
@@ -21,7 +20,7 @@ import {
   useInvalidateCurrentUser,
   type MyRoleRequestsQuery,
 } from '@rescue-frontend/data-access';
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import { Button, designTokens, displayTextSize } from '@rescue-frontend/ui';
 
 import { useAuthSession } from '../session/auth-session';
 import { siteGraphqlMutation } from '../session/site-clients';
@@ -277,7 +276,7 @@ export function RoleRequestDrawer({
               ) : null}
               <Stack direction="row" spacing={1}>
                 <Button
-                  variant="outlined"
+                  variant="outline"
                   onClick={withdraw.cancel}
                   disabled={withdraw.submitting}
                   sx={{ flex: 1 }}
@@ -285,7 +284,7 @@ export function RoleRequestDrawer({
                   先不要
                 </Button>
                 <Button
-                  variant="contained"
+                  variant="primary"
                   onClick={() => withdraw.confirm(pending.uuid)}
                   disabled={withdraw.submitting}
                   sx={{ flex: 1 }}
@@ -296,7 +295,7 @@ export function RoleRequestDrawer({
             </Stack>
           ) : (
             <Box>
-              <Button variant="outlined" onClick={() => withdraw.request()}>
+              <Button variant="outline" onClick={() => withdraw.request()}>
                 撤回這筆申請
               </Button>
               {/* Not 「團隊已經用邀請碼讓你加入」 any more: a scan is an application too, and only one
@@ -385,11 +384,11 @@ export function RoleRequestDrawer({
       onClose={onClose}
       footer={
         <>
-          <Button variant="outlined" onClick={onClose} sx={{ flex: 1 }}>
+          <Button variant="outline" onClick={onClose} sx={{ flex: 1 }}>
             取消
           </Button>
           <Button
-            variant="contained"
+            variant="primary"
             onClick={() => void formApi.handleSubmit()}
             disabled={view.paused || submission.isPending}
             sx={{ flex: 2 }}

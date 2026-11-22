@@ -2,7 +2,7 @@
 
 import { useForm, useStore, type Updater } from '@tanstack/react-form';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 
 import { Box, TextField, Typography } from '@mui/material';
 import {
@@ -117,8 +117,10 @@ function CreateSpaceForm({
     formApi.store,
     (state) => state.submissionAttempts > 0,
   );
-  const setValues = (next: Updater<SpaceFormValues>) =>
-    formApi.setFieldValue('draft', next);
+  const setValues = useCallback(
+    (next: Updater<SpaceFormValues>) => formApi.setFieldValue('draft', next),
+    [formApi],
+  );
   const [check, setCheck] = useState<AddressCheck | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const create = useCreateBuildingMap();
@@ -130,14 +132,14 @@ function CreateSpaceForm({
   // BM-11/12: a 門牌 found for the pin fills the line until someone writes in it.
   useEffect(() => {
     setValues((current) => applyPinLookup(current, pinLookup));
-  }, [formApi, pinLookup]);
+  }, [pinLookup, setValues]);
   useEffect(() => {
     if (check) {
       setValues((current) =>
         applyTypedLookup(current, check.address, typedLookup),
       );
     }
-  }, [check, formApi, typedLookup]);
+  }, [check, typedLookup, setValues]);
 
   const set = <K extends keyof SpaceFormValues>(
     key: K,

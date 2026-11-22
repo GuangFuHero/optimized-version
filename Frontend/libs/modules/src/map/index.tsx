@@ -4,14 +4,7 @@ import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 
-import {
-  memo,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react';
+import { memo, useCallback, useRef, useState, type ReactNode } from 'react';
 
 import { Box, Drawer, GlobalStyles, useMediaQuery } from '@mui/material';
 import type { Map as LeafletMap } from 'leaflet';
@@ -104,7 +97,7 @@ const MAP_STATIC_GLOBAL_STYLES = {
   '.map-marker-cluster': {
     display: 'grid',
     placeItems: 'center',
-    borderRadius: '999px',
+    borderRadius: `${radius.full}px`,
     border: `3px solid ${color.bg.neutral.default}`,
     boxShadow: shadow.lg,
     fontWeight: 800,
@@ -141,11 +134,13 @@ const MAP_STATIC_GLOBAL_STYLES = {
   '.map-marker-cluster--solid': {
     color: color.fg.onPrimary,
     background: color.bg.primary.default,
-    boxShadow: '0 3px 10px rgba(15, 23, 42, 0.28)',
+    boxShadow: `0 3px 10px ${withAlpha(color.fg.neutral.default, 0.28)}`,
     // Admin chrome: the design system's px, not the public site's display scale.
-    fontSize: 15,
+    fontSize: designTokens.typography.fontSize[15],
   },
-  '.map-marker-cluster--solid-dense': { fontSize: 13 },
+  '.map-marker-cluster--solid-dense': {
+    fontSize: designTokens.typography.fontSize[13],
+  },
   '.map-marker-cluster__count': {
     display: 'block',
     transform: 'translateY(0.5px)',
@@ -205,11 +200,11 @@ const MAP_STATIC_GLOBAL_STYLES = {
     top: 0,
     transform: 'translate(-50%, -50%)',
     padding: '3px 8px',
-    borderRadius: 6,
+    borderRadius: radius.sm,
     border: `1px solid ${color.border.default}`,
     backgroundColor: color.bg.neutral.default,
     color: color.fg.neutral.default,
-    boxShadow: '0 1px 2px rgba(15, 23, 42, 0.15)',
+    boxShadow: `0 1px 2px ${withAlpha(color.fg.neutral.default, 0.15)}`,
     ...displayTextSizeCss(12),
     fontWeight: 700,
     lineHeight: 1.3,
@@ -426,7 +421,7 @@ export const Map = memo(function Map({
       // Leaflet's own chrome stays off the display scale — `site.css` pins the scale line,
       // attribution and tooltip to raw px. It is map furniture, not content to be read at arm's
       // length, and it has to fit Leaflet's fixed control geometry.
-      fontSize: 11,
+      fontSize: designTokens.typography.fontSize[11],
       fontWeight: 700,
       color: color.fg.neutral.default,
       lineHeight: '16px',

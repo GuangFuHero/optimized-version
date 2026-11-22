@@ -118,7 +118,10 @@ export function StationExportMenu() {
                     >
                       <StationTypeIcon
                         type={option.value}
-                        sx={{ fontSize: 17, color: color.fg.neutral.subtle }}
+                        sx={{
+                          fontSize: designTokens.iconSize[17],
+                          color: color.fg.neutral.subtle,
+                        }}
                       />
                       <Typography
                         sx={{

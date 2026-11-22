@@ -6,7 +6,7 @@ import { useTheme } from '@mui/material/styles';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { startTransition } from 'react';
 
-import { displayTextSize } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
 import { getAuthColorScheme } from '../../theme/auth-theme';
 
@@ -61,7 +61,7 @@ export function LoginAudienceSwitch({
     <Box
       sx={{
         p: 0.5,
-        borderRadius: '20px',
+        borderRadius: `${designTokens.radius.lg}px`,
         border: `1px solid ${authPalette.fieldBorder}`,
         bgcolor: authPalette.fieldBackground,
       }}
@@ -93,7 +93,7 @@ export function LoginAudienceSwitch({
             disabled={disabled || !handleAudienceChange}
             sx={{
               minHeight: 36,
-              borderRadius: '14px',
+              borderRadius: `${designTokens.radius[14]}px`,
               textTransform: 'none',
               fontSize: displayTextSize[13],
               lineHeight: 1.25,
@@ -105,7 +105,7 @@ export function LoginAudienceSwitch({
               '&.Mui-selected': {
                 color: authPalette.textPrimary,
                 bgcolor: 'common.white',
-                boxShadow: '0 1px 2px rgba(18, 24, 36, 0.08)',
+                boxShadow: designTokens.elevationShadow.authAudienceSelection,
               },
             }}
           />

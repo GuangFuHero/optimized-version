@@ -1,8 +1,13 @@
 'use client';
 
-import { Box, Button, Stack, Typography } from '@mui/material';
+import { Box, Stack, Typography } from '@mui/material';
 
-import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
+import {
+  Button,
+  designTokens,
+  displayTextSize,
+  Icons,
+} from '@rescue-frontend/ui';
 
 import { SiteBadge } from '../shell/site/site-badge';
 import {
@@ -27,7 +32,11 @@ export function SuspectedDuplicateBadge({ duplicates }: DuplicatesProps) {
 
   return (
     <SiteBadge tone="warning" variant="subtle">
-      <Icons.copy sx={{ fontSize: 12 }} />
+      <Icons.copy
+        sx={{
+          fontSize: designTokens.iconSize[12],
+        }}
+      />
       疑似重複
     </SiteBadge>
   );
@@ -99,7 +108,11 @@ export function SuspectedDuplicateNotice({
             sx={{ alignItems: 'flex-start', gap: 1 }}
           >
             <Icons.copy
-              sx={{ mt: '4px', fontSize: 16, color: color.fg.warning }}
+              sx={{
+                mt: '4px',
+                fontSize: designTokens.iconSize[16],
+                color: color.fg.warning,
+              }}
             />
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Typography
@@ -119,7 +132,7 @@ export function SuspectedDuplicateNotice({
                 >
                   {onOpenTicket ? (
                     <Button
-                      variant="text"
+                      variant="ghost"
                       // Which ticket, for a screen reader: with two or more, every button reads 看那張.
                       aria-label={`看那張：${other.title}`}
                       onClick={() => onOpenTicket(other.uuid)}
@@ -136,10 +149,9 @@ export function SuspectedDuplicateNotice({
                         // A link's blue, as the briefing's: the theme's orange on the faint fill is too
                         // light to read.
                         color: color.fg.info,
-                        textDecoration: 'underline',
                       }}
                     >
-                      看那張
+                      <span style={{ textDecoration: 'underline' }}>看那張</span>
                     </Button>
                   ) : null}
                   {advised ? (

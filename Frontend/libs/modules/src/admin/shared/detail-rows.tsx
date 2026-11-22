@@ -72,7 +72,7 @@ function Caption({ children }: { children: ReactNode }) {
       component="span"
       sx={{
         ...typography.body[300],
-        fontSize: 15,
+        fontSize: designTokens.typography.fontSize[15],
         color: color.fg.neutral.muted,
         flexShrink: 0,
       }}

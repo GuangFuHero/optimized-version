@@ -2,7 +2,6 @@
 
 import {
   Box,
-  Button,
   CircularProgress,
   GlobalStyles,
   Stack,
@@ -14,6 +13,7 @@ import { useRef } from 'react';
 
 import { CurrentBriefingDocument } from '@rescue-frontend/data-access';
 import {
+  Button,
   designTokens,
   displayTextSize,
   EmptyState,
@@ -47,19 +47,22 @@ function BriefingPrintStyles() {
         '@media print': {
           '@page': { margin: '14mm' },
           'html, body': {
-            background: '#fff !important',
+            background: `${designTokens.color.bg.printPaper} !important`,
             height: 'auto !important',
             overflow: 'visible !important',
           },
           [`body > *:not(${sheet})`]: { display: 'none !important' },
-          [sheet]: { display: 'block !important', color: '#000' },
+          [sheet]: {
+            display: 'block !important',
+            color: designTokens.color.fg.print.ink,
+          },
           [`${sheet} h1`]: { fontSize: '16pt', margin: '0 0 4pt' },
           [`${sheet} header`]: {
             fontSize: '9.5pt',
-            color: '#444',
+            color: designTokens.color.fg.print.mutedInk,
             paddingBottom: '8pt',
             marginBottom: '10pt',
-            borderBottom: '1pt solid #000',
+            borderBottom: `1pt solid ${designTokens.color.fg.print.ink}`,
           },
           [`${sheet} header p`]: { margin: '0 0 2pt' },
           [`${sheet} [data-briefing-article]`]: {
@@ -71,7 +74,7 @@ function BriefingPrintStyles() {
           [`${sheet} .${BRIEFING_MARKDOWN} .ProseMirror`]: {
             fontSize: '11.5pt !important',
             lineHeight: '1.7 !important',
-            color: '#000 !important',
+            color: `${designTokens.color.fg.print.ink} !important`,
           },
           [`${sheet} .${BRIEFING_MARKDOWN} h2`]: {
             fontSize: '14pt !important',
@@ -90,7 +93,7 @@ function BriefingPrintStyles() {
             breakInside: 'avoid',
           },
           [`${sheet} ul[data-type="taskList"] > li > div > :not(ul, ol)`]: {
-            color: '#000 !important',
+            color: `${designTokens.color.fg.print.ink} !important`,
             opacity: '1 !important',
           },
           [`${sheet} ul[data-type="taskList"] > li > label`]: {
@@ -102,9 +105,9 @@ function BriefingPrintStyles() {
             width: '11pt !important',
             height: '11pt !important',
             top: 'calc(2pt + (1.7em - 11pt) / 2) !important',
-            border: '1pt solid #000 !important',
+            border: `1pt solid ${designTokens.color.fg.print.ink} !important`,
             borderRadius: '1pt !important',
-            background: '#fff !important',
+            background: `${designTokens.color.bg.printPaper} !important`,
           },
           [`${sheet} ul[data-type="taskList"] > li input[type="checkbox"]::after`]:
             {
@@ -140,7 +143,7 @@ function BriefingStamp({ publishedAt }: { publishedAt: string | null }) {
           fontSize: displayTextSize[12],
         }}
       >
-        <Icons.clock sx={{ fontSize: 14 }} />
+        <Icons.clock sx={{ fontSize: designTokens.iconSize.sm }} />
         <span>
           最後更新 {at ?? '—'}
           {age ? `（${age}）` : null}
@@ -213,7 +216,7 @@ function NoBriefing() {
         title="目前還沒有發布行前資訊"
         description="協調單位還在整理。出發前請先看地圖上的任務與站點，或直接聯繫你要前往的團隊確認交通與裝備。"
         action={
-          <Button component={Link} href="/map" variant="outlined">
+          <Button component={Link} href="/map" variant="outline">
             回到地圖
           </Button>
         }
@@ -298,7 +301,7 @@ export function SiteBriefing() {
               >
                 <Icons.info
                   sx={{
-                    fontSize: 16,
+                    fontSize: designTokens.iconSize[16],
                     mt: '4px',
                     color: color.fg.neutral.muted,
                   }}
@@ -328,7 +331,7 @@ export function SiteBriefing() {
             >
               行前資訊載入失敗，請稍後再試。
             </Typography>
-            <Button variant="outlined" onClick={() => void refetch()}>
+            <Button variant="outline" onClick={() => void refetch()}>
               重新載入
             </Button>
           </Stack>

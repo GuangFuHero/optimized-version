@@ -139,7 +139,11 @@ function KpiValue({
     return (
       <Typography
         title={query.error?.message}
-        sx={{ ...typography.data[300], fontSize: 14, color: color.fg.danger }}
+        sx={{
+          ...typography.data[300],
+          fontSize: typography.fontSize.sm,
+          color: color.fg.danger,
+        }}
       >
         讀取失敗
       </Typography>
@@ -148,7 +152,10 @@ function KpiValue({
   const value = query.data?.value;
   if (!spec || value === undefined) {
     return (
-      <Typography sx={{ ...caption, fontSize: 20 }} aria-hidden>
+      <Typography
+        sx={{ ...caption, fontSize: typography.fontSize.xl }}
+        aria-hidden
+      >
         …
       </Typography>
     );
@@ -160,7 +167,7 @@ function KpiValue({
       <Box
         component="small"
         sx={{
-          fontSize: 15,
+          fontSize: designTokens.typography.fontSize[15],
           marginLeft: '2px',
           color: warn ? color.fg.warning : color.fg.neutral.muted,
         }}
@@ -265,7 +272,7 @@ function KpiCard({
         component="div"
         sx={{
           ...typography.data[500],
-          fontSize: 30,
+          fontSize: typography.fontSize['3xl'],
           lineHeight: 1.15,
           letterSpacing: '-.02em',
           color: warn ? color.fg.warning : color.fg.neutral.default,
@@ -441,7 +448,7 @@ function DomainSection({
             component="h2"
             sx={{
               ...typography.heading[600],
-              fontSize: 17,
+              fontSize: designTokens.typography.fontSize[17],
               color: color.fg.neutral.default,
             }}
           >

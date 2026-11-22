@@ -1,17 +1,13 @@
 'use client';
 
-import { Alert, Box, Button, Link, Stack, Typography } from '@mui/material';
+import { Alert, Box, Link, Stack, Typography } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { revalidateLogic, useForm, useStore } from '@tanstack/react-form';
 import type { components } from '@rescue-frontend/data-access/openapi';
 
-import {
-  Button as DesignSystemButton,
-  designTokens,
-  displayTextSize,
-} from '@rescue-frontend/ui';
+import { Button, designTokens, displayTextSize } from '@rescue-frontend/ui';
 
 import { getAuthColorScheme } from '../../theme/auth-theme';
 import { AuthFormError } from '../../utils/auth-form-error';
@@ -394,12 +390,13 @@ export function LoginForm({
       ) : null}
 
       <Button
+        variant="primary"
         onClick={() => void form.handleSubmit()}
         disabled={!canSubmit}
         sx={{
           width: '100%',
           minHeight: 40,
-          borderRadius: '999px',
+          height: 'auto',
           bgcolor: authPalette.primaryAction,
           color: 'common.white',
           px: 2,
@@ -410,12 +407,6 @@ export function LoginForm({
           letterSpacing: '0.7px',
           '&:hover': {
             bgcolor: authPalette.primaryActionHover,
-          },
-          // The design system's disabled look (libs/ui Button): grey, so a form not yet filled in
-          // reads as one that cannot be sent. The orange above would otherwise only fade.
-          '&.Mui-disabled': {
-            bgcolor: designTokens.color.bg.disable,
-            color: designTokens.color.fg.disable,
           },
         }}
       >
@@ -431,7 +422,7 @@ export function LoginForm({
       {/* The design system's outline, as the prototype's 註冊帳號 (site-auth.jsx:303), at the height
           of the button above it. */}
       {secondaryActionLabel && onSecondaryAction ? (
-        <DesignSystemButton
+        <Button
           variant="outline"
           type="button"
           onClick={() => {
@@ -446,7 +437,7 @@ export function LoginForm({
           sx={{ width: '100%', height: 40, minHeight: 40 }}
         >
           {secondaryActionLabel}
-        </DesignSystemButton>
+        </Button>
       ) : null}
 
       {mode === 'login' && onSmsLoginAsync ? (

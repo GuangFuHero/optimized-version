@@ -2,13 +2,7 @@
 
 import { Box, InputBase } from '@mui/material';
 import { usePathname } from 'next/navigation';
-import {
-  startTransition,
-  useEffect,
-  useRef,
-  useState,
-  type ChangeEvent,
-} from 'react';
+import { startTransition, useRef, useState, type ChangeEvent } from 'react';
 
 import { designTokens, Icons, IOS_NO_ZOOM_INPUT_PX } from '@rescue-frontend/ui';
 

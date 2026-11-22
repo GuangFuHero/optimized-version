@@ -50,7 +50,11 @@ export function PlaceHereAction({ point, onPlaced }: PlaceHereActionProps) {
           whiteSpace: 'nowrap',
         }}
       >
-        <Icons.move sx={{ fontSize: 12 }} />
+        <Icons.move
+          sx={{
+            fontSize: designTokens.iconSize[12],
+          }}
+        />
         <Typography
           component="span"
           sx={{ fontSize: displayTextSize[11], lineHeight: 1.5 }}
@@ -77,7 +81,11 @@ export function PlaceHereAction({ point, onPlaced }: PlaceHereActionProps) {
           '&:hover': { bgcolor: color.bg.primary.hover },
         }}
       >
-        <Icons.mapPinPlus sx={{ fontSize: 16 }} />
+        <Icons.mapPinPlus
+          sx={{
+            fontSize: designTokens.iconSize[16],
+          }}
+        />
         在這裡新增
       </ButtonBase>
     </Box>

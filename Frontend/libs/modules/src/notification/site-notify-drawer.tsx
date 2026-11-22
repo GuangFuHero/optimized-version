@@ -156,7 +156,7 @@ function SiteNotifyEmpty() {
                 <Icon
                   aria-hidden
                   sx={{
-                    fontSize: 16,
+                    fontSize: designTokens.iconSize[16],
                     flexShrink: 0,
                     color: color.fg.neutral.muted,
                   }}
@@ -206,7 +206,7 @@ function SiteNoticeRow({
           mt: '2px',
           flexShrink: 0,
           color: look.tone,
-          '& svg': { fontSize: 18 },
+          '& svg': { fontSize: designTokens.iconSize.md },
         }}
       >
         {look.icon}

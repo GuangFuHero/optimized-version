@@ -14,6 +14,7 @@ async function reported(
   const onError = vi.fn<(error: Error) => void>();
   const client = createAppQueryClient(onError, ignoreQueryError);
   await client
+    // eslint-disable-next-line @tanstack/query/exhaustive-deps -- Each call uses a fresh cache and only checks error reporting.
     .fetchQuery({
       queryKey: ['test'],
       queryFn: () => Promise.reject(error),
