@@ -62,13 +62,27 @@ export function designSystemGuardrail(files) {
 
 // The page's own location, as `window.location` or bare `location` — not a field named `location`.
 const LOCATION = `:matches(Identifier[name='location'], MemberExpression[object.name=/^(window|document|self|top|parent|globalThis)$/][property.name='location'])`;
+// The parts of a location whose setters load another page; `hash` only moves within this one.
+const PAGE_LOADING_PARTS =
+  '/^(href|protocol|host|hostname|port|pathname|search)$/';
 // A destination written out: a string, a template, or strings joined with `+`.
 const WRITTEN_OUT = `:matches(Literal, TemplateLiteral, BinaryExpression[operator='+'])`;
+const LEAVE_TO_CALLER =
+  'Navigation: this library cannot depend on @rescue-frontend/modules; leave the navigation to the caller, for example through a callback.';
 const navigationMessage = {
-  loadPage:
-    'Navigation: leave the page with loadPage (libs/modules/src/route/navigate.ts), which keeps the destination on this site.',
-  paths:
-    'Navigation: build the destination from the path constants in libs/modules/src/route/paths.ts, or a helper that does.',
+  // The apps and libs/modules, which can import @rescue-frontend/modules.
+  app: {
+    leave:
+      'Navigation: leave the page with loadPage from @rescue-frontend/modules (libs/modules/src/route/navigate.ts), which keeps the destination on this site.',
+    destination:
+      'Navigation: build the destination from SITE_PATHS or ADMIN_PATHS in @rescue-frontend/modules (libs/modules/src/route/paths.ts), or a helper that does.',
+  },
+  // ui, data-access and leaflet, which cannot depend on @rescue-frontend/modules.
+  library: { leave: LEAVE_TO_CALLER, destination: LEAVE_TO_CALLER },
+};
+// One object for every block: ESLint refuses a plugin name bound to two different objects.
+const navigationPlugin = {
+  rules: { 'no-restricted-syntax': builtinRules.get('no-restricted-syntax') },
 };
 
 /**
@@ -77,45 +91,44 @@ const navigationMessage = {
  * `no-restricted-syntax` under its own name, so the design-system guardrail's options for that rule,
  * set later for the same files, do not replace these. Opening another site in a new window
  * (`window.open`) is not covered.
+ *
+ * `audience` picks the advice: `'app'` for code that can import `@rescue-frontend/modules`,
+ * `'library'` for the libraries below it, which hand navigation back to their caller.
  */
-function navigationGuardrail() {
+export function navigationGuardrail(files, audience) {
+  const message = navigationMessage[audience];
+
   return {
-    files: ['**/*.ts', '**/*.tsx'],
+    files,
     ignores: [
       '**/*.spec.*',
       '**/*.test.*',
       '**/*.stories.*',
       '**/route/navigate.ts',
     ],
-    plugins: {
-      navigation: {
-        rules: {
-          'no-restricted-syntax': builtinRules.get('no-restricted-syntax'),
-        },
-      },
-    },
+    plugins: { navigation: navigationPlugin },
     rules: {
       'navigation/no-restricted-syntax': [
         'error',
         {
           selector: `CallExpression > MemberExpression.callee[property.name=/^(assign|replace)$/] > ${LOCATION}.object`,
-          message: navigationMessage.loadPage,
+          message: message.leave,
         },
         {
           selector: `AssignmentExpression > ${LOCATION}.left`,
-          message: navigationMessage.loadPage,
+          message: message.leave,
         },
         {
-          selector: `AssignmentExpression > MemberExpression.left[property.name='href'] > ${LOCATION}.object`,
-          message: navigationMessage.loadPage,
+          selector: `AssignmentExpression > MemberExpression.left[property.name=${PAGE_LOADING_PARTS}] > ${LOCATION}.object`,
+          message: message.leave,
         },
         {
           selector: `CallExpression[callee.object.name='router'][callee.property.name=/^(push|replace)$/] > ${WRITTEN_OUT}.arguments:first-child`,
-          message: navigationMessage.paths,
+          message: message.destination,
         },
         {
           selector: `CallExpression[callee.name=/^(redirect|permanentRedirect|loadPage|continueSignedIn|continueSignedOut)$/] > ${WRITTEN_OUT}.arguments:first-child`,
-          message: navigationMessage.paths,
+          message: message.destination,
         },
       ],
     },
@@ -194,8 +207,9 @@ export default [
       'react/jsx-key': ['error', { checkFragmentShorthand: true }],
     },
   },
-  navigationGuardrail(),
+  navigationGuardrail(['**/*.ts', '**/*.tsx'], 'library'),
   // libs/modules has no config of its own and lints with this file; apps add their own copy.
+  navigationGuardrail(['libs/modules/**/*.ts', 'libs/modules/**/*.tsx'], 'app'),
   designSystemGuardrail(['libs/modules/**/*.ts', 'libs/modules/**/*.tsx']),
   {
     files: ['libs/modules/src/map/admin/**/*.{ts,tsx}'],

@@ -31,4 +31,15 @@ describe('loadPage', () => {
 
     expect(location.assign).toHaveBeenCalledWith('/');
   });
+
+  it.each(['//one.invalid/x', '/\\two.invalid/x', '//this-site.invalid/x'])(
+    'loads the home page for %s, a host the check itself reads against',
+    (href) => {
+      const location = fakeBrowserTab();
+
+      loadPage(href as SiteHref);
+
+      expect(location.assign).toHaveBeenCalledWith('/');
+    },
+  );
 });

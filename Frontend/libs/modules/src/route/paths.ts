@@ -66,7 +66,12 @@ export const BACK_OFFICE_SIGN_IN_HREF = withQuery(SITE_PATHS.login, {
   callbackUrl: HOME_PATH,
 });
 
-const THIS_SITE = 'http://this-site.invalid';
+/**
+ * Two made-up sites to read a path against. A path names no host of its own only if it stays on
+ * whichever one it is read against: one that names a host lands there under both, and so leaves at
+ * least one of them, even when the host it names is one of these.
+ */
+const READ_AGAINST = ['http://one.invalid', 'http://two.invalid'];
 
 /**
  * `href` if it is a path on this site, else `fallback`. Read as the browser will read it: `//host/…`,
@@ -77,15 +82,17 @@ export function sameSiteHref(
   href: string | null | undefined,
   fallback: PageHref,
 ): PageHref {
-  return href?.startsWith('/') && staysOnThisSite(href)
+  return href?.startsWith('/') && namesNoHost(href)
     ? (href as SiteHref)
     : fallback;
 }
 
-function staysOnThisSite(path: string): boolean {
-  try {
-    return new URL(path, THIS_SITE).origin === THIS_SITE;
-  } catch {
-    return false;
-  }
+function namesNoHost(path: string): boolean {
+  return READ_AGAINST.every((site) => {
+    try {
+      return new URL(path, site).origin === site;
+    } catch {
+      return false;
+    }
+  });
 }

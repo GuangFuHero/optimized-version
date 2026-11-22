@@ -64,4 +64,21 @@ describe('sameSiteHref', () => {
   it('gives the fallback when there is no address at all', () => {
     expect(sameSiteHref(null, SITE_PATHS.map)).toBe('/map');
   });
+
+  // Whatever made-up site the check reads a path against, a path that names that very host must
+  // still count as another site: the browser would load it.
+  describe.each([
+    'this-site.invalid',
+    'one.invalid',
+    'two.invalid',
+    'evil.example',
+  ])('a path that names the host %s', (host) => {
+    it.each([
+      ['//', `//${host}/x`],
+      ['/\\', `/\\${host}/x`],
+      ['a tab after the slash', `/\t/${host}/x`],
+    ])('gives the fallback, written with %s', (_, href) => {
+      expect(sameSiteHref(href, SITE_PATHS.map)).toBe('/map');
+    });
+  });
 });

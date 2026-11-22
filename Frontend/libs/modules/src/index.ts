@@ -54,7 +54,11 @@ export {
   ADMIN_PATHS,
   BACK_OFFICE_SIGN_IN_HREF,
   SITE_PATHS,
+  withQuery,
+  type PageHref,
+  type SiteHref,
 } from './route/paths';
+export { loadPage } from './route/navigate';
 
 export { SiteListView } from './list';
 
