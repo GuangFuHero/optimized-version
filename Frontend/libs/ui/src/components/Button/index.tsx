@@ -32,7 +32,7 @@ import { type MouseEvent } from 'react';
 
 import { designTokens } from '../../theme';
 
-const { color, motion, primitives, radius, shadow, typography } = designTokens;
+const { color, motion, radius, shadow, typography } = designTokens;
 
 const VARIANTS = {
   primary: {
@@ -43,8 +43,8 @@ const VARIANTS = {
   },
   secondary: {
     bg: color.bg.secondary.default,
-    hover: primitives.color.blue[500],
-    fg: color.fg.inverse,
+    hover: color.bg.secondary.hover,
+    fg: color.fg.onSecondary,
     border: 'transparent',
   },
   danger: {

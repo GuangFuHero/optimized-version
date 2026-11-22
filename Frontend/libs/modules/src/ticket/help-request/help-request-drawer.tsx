@@ -660,7 +660,7 @@ function HelpRequestFormDrawer({
                 size="sm"
                 onClick={startOver}
                 // On a phone the words wrap instead: a button broken over two lines reads as two.
-                sx={{ whiteSpace: 'nowrap' }}
+                sx={{ color: 'inherit', whiteSpace: 'nowrap' }}
               >
                 清空重填
               </Button>
