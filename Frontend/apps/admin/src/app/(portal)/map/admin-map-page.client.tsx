@@ -88,7 +88,7 @@ export function AdminMapPageClient() {
     enabled: zonesAccessReady,
     includePrivate: canViewZones,
   });
-  const areaChanges = useAdminAreaChanges((state) => state);
+  const areaChanges = useAdminAreaChanges();
 
   const [map, setMap] = useState<LeafletMap | null>(null);
   const [viewportStore] = useState(() => createMapViewportStore({}));
@@ -343,11 +343,7 @@ export function AdminMapPageClient() {
     );
   };
 
-  const handleMapClick = (position: Parameters<typeof draft.addCorner>[0]) => {
-    if (draw?.step === 'drawing') {
-      draft.addCorner(position);
-      return;
-    }
+  const handleMapClick = () => {
     if (isBusy) return;
     if (pickedPin) closePin();
     else if (!isEditingMetadata) returnToList();

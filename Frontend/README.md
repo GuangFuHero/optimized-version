@@ -4,7 +4,7 @@
 
 - `apps/demo`：民眾與志工前台（`:3000`）
 - `apps/admin`：救災單位與管理員後台（`:3001`）
-- `libs/*`：前後台共用的 UI 設計系統（`@rescue-frontend/ui`）、業務模組（`@rescue-frontend/modules`）與資料存取層（`@rescue-frontend/data-access`）
+- `libs/*`：前後台共用的 UI 設計系統（`@rescue-frontend/ui`）、業務模組（`@rescue-frontend/modules`）、資料存取層（`@rescue-frontend/data-access`）與 Leaflet 元件（`@rescue-frontend/leaflet`）
 
 兩個 app 都使用 **Next.js 16（App Router）+ React 19**。
 
@@ -134,6 +134,7 @@ Frontend/
       src/providers/           # client-side context providers
   libs/
     ui/                        # @rescue-frontend/ui：designTokens、MUI theme、icons、通用 UI primitives
+    leaflet/                   # @rescue-frontend/leaflet：地圖圖層、繪製與編輯、可復原的儲存
     modules/                   # @rescue-frontend/modules：具備業務語意、可重用的功能模組
       src/auth/                #   登入與認證相關
       src/admin/               #   後台業務模組（dashboard、dedup、members、settings...）

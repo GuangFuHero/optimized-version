@@ -12,8 +12,6 @@ import {
   X,
 } from 'lucide-react';
 import {
-  useCallback,
-  useSyncExternalStore,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -21,6 +19,7 @@ import {
   type Ref,
   type RefObject,
 } from 'react';
+import { useMapZoom } from '@rescue-frontend/leaflet';
 import { useEventCallback } from 'usehooks-ts';
 
 import { Map } from '../../../map';
@@ -238,24 +237,6 @@ export function StationMapView({
         {hasAnyStation ? null : <EmptyMapNotice canAdd={Boolean(onAddAt)} />}
       </Box>
     </Box>
-  );
-}
-
-/** The map's zoom, followed as it changes; null until the map is built. */
-function useMapZoom(map: LeafletMap | null): number | null {
-  const subscribe = useCallback(
-    (notify: () => void) => {
-      map?.on('zoomend', notify);
-      return () => {
-        map?.off('zoomend', notify);
-      };
-    },
-    [map],
-  );
-  return useSyncExternalStore(
-    subscribe,
-    () => map?.getZoom() ?? null,
-    () => null,
   );
 }
 

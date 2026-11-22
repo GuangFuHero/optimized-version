@@ -86,7 +86,11 @@ export default [
             },
             {
               sourceTag: 'type:module',
-              onlyDependOnLibsWithTags: ['type:ui', 'type:data-access'],
+              onlyDependOnLibsWithTags: [
+                'type:ui',
+                'type:data-access',
+                'type:leaflet',
+              ],
             },
             {
               sourceTag: 'type:ui',
@@ -94,6 +98,10 @@ export default [
             },
             {
               sourceTag: 'type:data-access',
+              onlyDependOnLibsWithTags: [],
+            },
+            {
+              sourceTag: 'type:leaflet',
               onlyDependOnLibsWithTags: [],
             },
           ],

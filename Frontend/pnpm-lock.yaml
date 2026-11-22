@@ -199,10 +199,10 @@ importers:
         specifier: ^2.10.2
         version: 2.10.2(next@16.4.6(@babel/core@7.29.13(supports-color@10.2.2))(@types/node@20.19.9)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(sass@1.99.0))(react@19.2.5)
       react:
-        specifier: ^19.0.0
+        specifier: ^19.2.0
         version: 19.2.5
       react-dom:
-        specifier: ^19.0.0
+        specifier: ^19.2.0
         version: 19.2.5(react@19.2.5)
       sonner:
         specifier: ^2.0.7
@@ -235,10 +235,10 @@ importers:
         specifier: ~16.4.6
         version: 16.4.6(@babel/core@7.29.13(supports-color@10.2.2))(@types/node@20.19.9)(babel-plugin-macros@3.1.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(sass@1.99.0)
       react:
-        specifier: ^19.0.0
+        specifier: ^19.2.0
         version: 19.2.5
       react-dom:
-        specifier: ^19.0.0
+        specifier: ^19.2.0
         version: 19.2.5(react@19.2.5)
 
   libs/data-access:
@@ -262,6 +262,27 @@ importers:
         specifier: ^4.6.6
         version: 4.6.6
 
+  libs/leaflet:
+    dependencies:
+      '@types/leaflet':
+        specifier: ^1.9.14
+        version: 1.9.21
+      '@types/leaflet.markercluster':
+        specifier: ^1.5.6
+        version: 1.5.6
+      leaflet:
+        specifier: '>=1.9.4 <2'
+        version: 1.9.4
+      leaflet.markercluster:
+        specifier: ^1.5.3
+        version: 1.5.3(leaflet@1.9.4)
+      react:
+        specifier: ^19.2.0
+        version: 19.2.5
+      react-dom:
+        specifier: ^19.2.0
+        version: 19.2.5(react@19.2.5)
+
   libs/modules:
     dependencies:
       '@emotion/react':
@@ -279,6 +300,9 @@ importers:
       '@rescue-frontend/data-access':
         specifier: workspace:*
         version: link:../data-access
+      '@rescue-frontend/leaflet':
+        specifier: workspace:*
+        version: link:../leaflet
       '@rescue-frontend/ui':
         specifier: workspace:*
         version: link:../ui
@@ -328,10 +352,10 @@ importers:
         specifier: 2.0.4
         version: 2.0.4
       react:
-        specifier: ^19.0.0
+        specifier: ^19.2.0
         version: 19.2.5
       react-dom:
-        specifier: ^19.0.0
+        specifier: ^19.2.0
         version: 19.2.5(react@19.2.5)
       sonner:
         specifier: ^2.0.7
@@ -4223,6 +4247,9 @@ packages:
 
   '@types/json5@0.0.29':
     resolution: {integrity: sha512-dRLjCWHYg4oaA77cxO64oO+7JwCwnIzkZPdrrC71jQmQtlhM556pwKo5bUzqvZndkVbeFLIIi+9TC40JNF5hNQ==}
+
+  '@types/leaflet.markercluster@1.5.6':
+    resolution: {integrity: sha512-I7hZjO2+isVXGYWzKxBp8PsCzAYCJBc29qBdFpquOCkS7zFDqUsUvkEOyQHedsk/Cy5tocQzf+Ndorm5W9YKTQ==}
 
   '@types/leaflet@1.9.21':
     resolution: {integrity: sha512-TbAd9DaPGSnzp6QvtYngntMZgcRk+igFELwR2N99XZn7RXUdKgsXMR+28bUO0rPsWp8MIu/f47luLIQuSLYv/w==}
@@ -13752,6 +13779,10 @@ snapshots:
   '@types/json-schema@7.0.15': {}
 
   '@types/json5@0.0.29': {}
+
+  '@types/leaflet.markercluster@1.5.6':
+    dependencies:
+      '@types/leaflet': 1.9.21
 
   '@types/leaflet@1.9.21':
     dependencies:

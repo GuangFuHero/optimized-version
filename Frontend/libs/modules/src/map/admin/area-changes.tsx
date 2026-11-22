@@ -2,12 +2,15 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
+  useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
-import { createStore, useStore } from 'zustand';
+import { useEditSync } from '@rescue-frontend/leaflet/edit-sync';
 import { toast } from 'sonner';
 import { GraphqlError } from '@rescue-frontend/data-access';
 import type { RescueMapArea, RescueMapAreaTeam } from '../types';
@@ -44,7 +47,7 @@ interface AreaChangeView {
 }
 
 export interface AreaChanges {
-  pending: Readonly<Record<string, HeldAreaChange>>;
+  pending: Readonly<Partial<Record<string, HeldAreaChange>>>;
   heldDraft: DrawEditor | null;
   recoverableDraft: DrawEditor | null;
   hold: (change: AreaChange) => boolean;
@@ -57,114 +60,11 @@ export interface AreaChanges {
   cancelHolds: () => boolean;
 }
 
-function createAreaChanges() {
-  let view: AreaChangeView | null = null;
-  const activeHolds = new Set<() => void>();
-  const track = (
-    { send, onUndo, message }: Parameters<typeof holdRequest>[0],
-    onCancel: () => void,
-  ) => {
-    const cancelRequest = holdRequest({
-      message,
-      onUndo: () => {
-        activeHolds.delete(cancel);
-        onUndo();
-      },
-      send: async (keepalive) => {
-        activeHolds.delete(cancel);
-        await send(keepalive);
-      },
-    });
-    const cancel = () => {
-      cancelRequest();
-      onCancel();
-    };
-    activeHolds.add(cancel);
-  };
-  return createStore<AreaChanges>((set, get) => ({
-    pending: {},
-    heldDraft: null,
-    recoverableDraft: null,
-    hold: ({ uuid, change, message, send }) => {
-      if (get().pending[uuid]) return false;
-      set(({ pending }) => ({ pending: { ...pending, [uuid]: change } }));
-      const clear = () =>
-        set(({ pending }) => {
-          const next = { ...pending };
-          delete next[uuid];
-          return { pending: next };
-        });
-      track(
-        {
-          message,
-          onUndo: clear,
-          send: async (keepalive) => {
-            try {
-              await send(keepalive);
-            } catch (cause) {
-              showAreaError(cause);
-            } finally {
-              clear();
-            }
-          },
-        },
-        clear,
-      );
-      return true;
-    },
-    holdDraft: (heldDraft, request) => {
-      if (get().heldDraft) return false;
-      set({ heldDraft });
-      const restoreDraft = () => {
-        if (!view?.restoreDraft(heldDraft))
-          set({ recoverableDraft: heldDraft });
-      };
-      track(
-        {
-          message: request.message,
-          onUndo: () => {
-            set({ heldDraft: null });
-            restoreDraft();
-          },
-          send: async (keepalive) => {
-            try {
-              const uuid = await request.send(keepalive);
-              view?.highlightArea(uuid);
-            } catch (cause) {
-              if (knownAreaErrorMessage(cause)) restoreDraft();
-              else set({ recoverableDraft: heldDraft });
-              showAreaError(
-                cause,
-                '無法確認區域是否已儲存，請先查看區域清單。',
-              );
-            } finally {
-              set({ heldDraft: null });
-            }
-          },
-        },
-        () => set({ heldDraft: null, recoverableDraft: heldDraft }),
-      );
-      return true;
-    },
-    recoverDraft: (recoverableDraft) => set({ recoverableDraft }),
-    bindView: (nextView) => {
-      view = nextView;
-      return () => {
-        if (view === nextView) view = null;
-      };
-    },
-    cancelHolds: () => {
-      const hadHolds = activeHolds.size > 0;
-      for (const cancel of activeHolds) cancel();
-      activeHolds.clear();
-      return hadHolds;
-    },
-  }));
-}
-
-const AreaChangesContext = createContext<ReturnType<
-  typeof createAreaChanges
-> | null>(null);
+const NEW_AREA = 'new';
+const AreaChangesContext = createContext<AreaChanges | null>(null);
+const CancelAreaChangesContext = createContext<
+  AreaChanges['cancelHolds'] | undefined
+>(undefined);
 
 /** Undo lives with the signed-in identity, so it still works while another admin page is open. */
 export function AdminAreaChangesProvider({
@@ -172,24 +72,111 @@ export function AdminAreaChangesProvider({
 }: {
   children: ReactNode;
 }) {
-  const [changes] = useState(createAreaChanges);
-  useEffect(() => {
-    const { cancelHolds } = changes.getState();
-    window.addEventListener(SESSION_ENDING_EVENT, cancelHolds);
+  const {
+    pending,
+    save: saveArea,
+    cancelWaiting: cancelWaitingAreas,
+    reset: resetAreas,
+  } = useEditSync<HeldAreaChange>();
+  const {
+    pending: drafts,
+    save: saveDraft,
+    cancelWaiting: cancelWaitingDrafts,
+    reset: resetDrafts,
+  } = useEditSync<DrawEditor>();
+  const [recoverableDraft, recoverDraft] = useState<DrawEditor | null>(null);
+  const view = useRef<AreaChangeView | null>(null);
+
+  const bindView = useCallback((nextView: AreaChangeView) => {
+    view.current = nextView;
     return () => {
-      window.removeEventListener(SESSION_ENDING_EVENT, cancelHolds);
-      cancelHolds();
+      if (view.current === nextView) view.current = null;
     };
-  }, [changes]);
-  return <AreaChangesContext value={changes}>{children}</AreaChangesContext>;
+  }, []);
+  const cancelHolds = useCallback(() => {
+    const cancelledAreas = cancelWaitingAreas();
+    const cancelledDrafts = cancelWaitingDrafts();
+    return cancelledAreas || cancelledDrafts;
+  }, [cancelWaitingAreas, cancelWaitingDrafts]);
+
+  useEffect(() => {
+    function endSession() {
+      resetAreas();
+      resetDrafts();
+    }
+    window.addEventListener(SESSION_ENDING_EVENT, endSession);
+    return () => {
+      window.removeEventListener(SESSION_ENDING_EVENT, endSession);
+    };
+  }, [resetAreas, resetDrafts]);
+
+  const changes = useMemo<AreaChanges>(
+    () => ({
+      pending,
+      heldDraft: drafts[NEW_AREA] ?? null,
+      recoverableDraft,
+      recoverDraft,
+      bindView,
+      cancelHolds,
+      hold: ({ uuid, change, message, send }) =>
+        holdRequest({
+          save: saveArea,
+          key: uuid,
+          edit: change,
+          message,
+          persist: ({ keepalive }) => send(keepalive),
+          onError: (cause) => showAreaError(cause),
+        }) !== null,
+      holdDraft: (draft, request) => {
+        const restoreDraft = () => {
+          if (!view.current?.restoreDraft(draft)) recoverDraft(draft);
+        };
+        return (
+          holdRequest({
+            save: saveDraft,
+            key: NEW_AREA,
+            edit: draft,
+            message: request.message,
+            persist: ({ keepalive }) => request.send(keepalive),
+            onUndo: restoreDraft,
+            onCancel: () => recoverDraft(draft),
+            onSuccess: (uuid) => view.current?.highlightArea(uuid),
+            onError: (cause) => {
+              if (knownAreaErrorMessage(cause)) restoreDraft();
+              else recoverDraft(draft);
+              showAreaError(
+                cause,
+                '無法確認區域是否已儲存，請先查看區域清單。',
+              );
+            },
+          }) !== null
+        );
+      },
+    }),
+    [
+      bindView,
+      cancelHolds,
+      drafts,
+      pending,
+      recoverableDraft,
+      saveArea,
+      saveDraft,
+    ],
+  );
+
+  return (
+    <CancelAreaChangesContext value={cancelHolds}>
+      <AreaChangesContext value={changes}>{children}</AreaChangesContext>
+    </CancelAreaChangesContext>
+  );
 }
 
-export function useAdminAreaChanges<T>(select: (changes: AreaChanges) => T) {
-  const store = useContext(AreaChangesContext);
-  if (!store) throw new Error('AdminAreaChangesProvider is missing');
-  return useStore(store, select);
+export function useAdminAreaChanges() {
+  const changes = useContext(AreaChangesContext);
+  if (!changes) throw new Error('AdminAreaChangesProvider is missing');
+  return changes;
 }
 
 export function useCancelHeldAreaChanges() {
-  return useContext(AreaChangesContext)?.getState().cancelHolds;
+  return useContext(CancelAreaChangesContext);
 }
