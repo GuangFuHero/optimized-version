@@ -168,7 +168,9 @@ export {
   copyPointShareUrl,
   downloadQrSvg,
   createPointShareLinks,
+  lineMessageHref,
   openPointShareLink,
+  openShareTab,
   PointShareDrawer,
   resolvePointShareTargetFromRoute,
   resolvePointShareTargetFromState,
@@ -181,6 +183,7 @@ export type {
   PointShareChannel,
   PointShareLink,
   PointShareTarget,
+  ShareHref,
 } from './point-share';
 
 export { AnnouncementPage } from './admin/announcement';

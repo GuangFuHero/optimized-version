@@ -26,6 +26,8 @@ import {
   copyPointShareUrl,
   createQrDataUrl,
   downloadQrPng,
+  lineMessageHref,
+  openShareTab,
 } from '../../point-share';
 import {
   currentInvite,
@@ -37,11 +39,6 @@ import { captionSx, formatDateTime } from './parts';
 import type { Team } from './roster';
 
 const { color, radius, shadow, typography } = designTokens;
-
-/** LINE's own web intent: opens the app's chat picker on a phone, LINE web on a desktop. */
-function lineShareUrl(text: string, url: string) {
-  return `https://line.me/R/msg/text/?${encodeURIComponent(`${text}\n${url}`)}`;
-}
 
 /**
  * 邀請成員 (the prototype's `InviteMemberModal`, 2026-10-20): opening it is creating the invite,
@@ -162,11 +159,7 @@ export function InviteSheet({
                 size="sm"
                 startIcon={<MessageCircle size={15} />}
                 onClick={() =>
-                  window.open(
-                    lineShareUrl(shareText, invite.url),
-                    '_blank',
-                    'noopener',
-                  )
+                  openShareTab(lineMessageHref(shareText, invite.url))
                 }
               >
                 分享到 LINE

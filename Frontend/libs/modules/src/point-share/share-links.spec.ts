@@ -1,11 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-only
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   createPointShareLinks,
   isShareSheetDismissal,
+  lineMessageHref,
+  openPointShareLink,
+  openShareTab,
   sharesThroughDeviceSheet,
 } from './share-links';
+import type { ShareHref } from './types';
 
 const target = {
   title: '光復國中洗澡點｜救災站點',
@@ -36,6 +40,71 @@ describe('createPointShareLinks', () => {
       '光復國中洗澡點｜救災站點\n設置簡易淋浴間',
     );
     expect(href.searchParams.get('url')).toBe(target.url);
+  });
+});
+
+describe('lineMessageHref', () => {
+  it("puts the text and the link, a line apart, after LINE's message page", () => {
+    const href = new URL(lineMessageHref('邀請你加入「第一隊」', target.url));
+
+    expect(href.origin + href.pathname).toBe('https://line.me/R/msg/text/');
+    expect(decodeURIComponent(href.search.slice(1))).toBe(
+      `邀請你加入「第一隊」\n${target.url}`,
+    );
+  });
+});
+
+describe('opening a share page', () => {
+  /** The browser's `window.open`: what it was asked to open. */
+  function fakeWindow() {
+    const open = vi.fn();
+    vi.stubGlobal('window', { open });
+    return open;
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("opens each channel's page in a small window beside this one", () => {
+    const open = fakeWindow();
+    const links = createPointShareLinks(target);
+
+    links.forEach((link) => openPointShareLink(link.href));
+
+    expect(open.mock.calls).toEqual(
+      links.map((link) => [
+        link.href,
+        '_blank',
+        'noopener,noreferrer,width=720,height=640',
+      ]),
+    );
+  });
+
+  it("opens LINE's message page in a new tab", () => {
+    const open = fakeWindow();
+    const href = lineMessageHref('邀請', target.url);
+
+    openShareTab(href);
+
+    expect(open).toHaveBeenCalledWith(href, '_blank', 'noopener');
+  });
+
+  it.each([
+    'https://evil.example/lineit/share?url=x',
+    'https://line.me.evil.example/R/msg/text/?x',
+    'https://line.me/R/oaMessage/@evil/?x',
+    'http://twitter.com/intent/tweet?text=x',
+    '//twitter.com/intent/tweet?text=x',
+    'javascript:void 0',
+    '/map',
+  ])('opens nothing for %s, which no share link builds', (href) => {
+    const open = fakeWindow();
+
+    openPointShareLink(href as ShareHref);
+    openShareTab(href as ShareHref);
+
+    expect(open).not.toHaveBeenCalled();
   });
 });
 

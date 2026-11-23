@@ -62,6 +62,8 @@ export function designSystemGuardrail(files) {
 
 // The page's own location, as `window.location` or bare `location` — not a field named `location`.
 const LOCATION = `:matches(Identifier[name='location'], MemberExpression[object.name=/^(window|document|self|top|parent|globalThis)$/][property.name='location'])`;
+// The window's own `open`: a bare `open` is too often a function of the code's own to report.
+const WINDOW = `Identifier[name=/^(window|self|top|parent|globalThis)$/]`;
 // The parts of a location whose setters load another page; `hash` only moves within this one.
 const PAGE_LOADING_PARTS =
   '/^(href|protocol|host|hostname|port|pathname|search)$/';
@@ -76,9 +78,15 @@ const navigationMessage = {
       'Navigation: leave the page with loadPage from @rescue-frontend/modules (libs/modules/src/route/navigate.ts), which keeps the destination on this site.',
     destination:
       'Navigation: build the destination from SITE_PATHS or ADMIN_PATHS in @rescue-frontend/modules (libs/modules/src/route/paths.ts), or a helper that does.',
+    newWindow:
+      'Navigation: open a share page with openPointShareLink or openShareTab from @rescue-frontend/modules (libs/modules/src/point-share/share-links.ts), which open only the share pages built there.',
   },
   // ui, data-access and leaflet, which cannot depend on @rescue-frontend/modules.
-  library: { leave: LEAVE_TO_CALLER, destination: LEAVE_TO_CALLER },
+  library: {
+    leave: LEAVE_TO_CALLER,
+    destination: LEAVE_TO_CALLER,
+    newWindow: LEAVE_TO_CALLER,
+  },
 };
 // One object for every block: ESLint refuses a plugin name bound to two different objects.
 const navigationPlugin = {
@@ -87,10 +95,10 @@ const navigationPlugin = {
 
 /**
  * Navigation lint: a whole-page navigation goes through `loadPage`, the one place that sets the
- * page's location, and a destination is built from the path constants rather than written out.
- * `no-restricted-syntax` under its own name, so the design-system guardrail's options for that rule,
- * set later for the same files, do not replace these. Opening another site in a new window
- * (`window.open`) is not covered.
+ * page's location, and a destination is built from the path constants rather than written out. A
+ * new window (`window.open`) opens only in `point-share/share-links.ts`, on the share pages built
+ * there. `no-restricted-syntax` under its own name, so the design-system guardrail's options for
+ * that rule, set later for the same files, do not replace these.
  *
  * `audience` picks the advice: `'app'` for code that can import `@rescue-frontend/modules`,
  * `'library'` for the libraries below it, which hand navigation back to their caller.
@@ -100,11 +108,13 @@ export function navigationGuardrail(files, audience) {
 
   return {
     files,
+    // The two files that do what the rule reports, each in one checked place.
     ignores: [
       '**/*.spec.*',
       '**/*.test.*',
       '**/*.stories.*',
       '**/route/navigate.ts',
+      '**/point-share/share-links.ts',
     ],
     plugins: { navigation: navigationPlugin },
     rules: {
@@ -121,6 +131,10 @@ export function navigationGuardrail(files, audience) {
         {
           selector: `AssignmentExpression > MemberExpression.left[property.name=${PAGE_LOADING_PARTS}] > ${LOCATION}.object`,
           message: message.leave,
+        },
+        {
+          selector: `CallExpression > MemberExpression.callee[property.name='open'] > ${WINDOW}.object`,
+          message: message.newWindow,
         },
         {
           selector: `CallExpression[callee.object.name='router'][callee.property.name=/^(push|replace)$/] > ${WRITTEN_OUT}.arguments:first-child`,

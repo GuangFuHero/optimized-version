@@ -7,8 +7,13 @@ export interface PointShareTarget {
 
 export type PointShareChannel = 'line' | 'facebook' | 'threads' | 'x';
 
+declare const shareHref: unique symbol;
+
+/** A share page built in `share-links.ts`: the only kind of address a new window opens. */
+export type ShareHref = string & { readonly [shareHref]: true };
+
 export interface PointShareLink {
   channel: PointShareChannel;
   label: string;
-  href: string;
+  href: ShareHref;
 }
