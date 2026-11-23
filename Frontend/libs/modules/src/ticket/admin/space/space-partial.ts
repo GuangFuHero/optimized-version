@@ -12,22 +12,32 @@ export function ticketsCut(loaded: number): boolean {
   return loaded >= SPACE_TICKETS_LIMIT;
 }
 
-/** A space's tickets in the floor view: in, still on their way, or not read. */
+/**
+ * A space's tickets in the floor view: in, read earlier but the latest read failed, still on their
+ * way, or not read.
+ */
 export type SpaceTicketsLoad<T> =
   | { state: 'loaded'; tickets: T[] }
+  | { state: 'stale'; tickets: T[] }
   | { state: 'loading' }
   | { state: 'failed' };
 
 /**
  * Until a space's tickets are in, how many it has is unknown, never none: an empty list would read
  * as a building where nobody asked for help, and people go out on what the floor view says.
- * Tickets read once stay shown while a later read fails, as the query keeps them.
+ * Tickets read once (here, or by the space list sharing the query) stay shown while a later read
+ * fails, as the query keeps them, but as `stale`: the floor view says they may be out of date and
+ * offers to read them again, and nothing states their count as current.
  */
 export function readSpaceTickets<T>(query: {
   data: T[] | undefined;
   error: unknown;
 }): SpaceTicketsLoad<T> {
-  if (query.data) return { state: 'loaded', tickets: query.data };
+  if (query.data) {
+    return query.error
+      ? { state: 'stale', tickets: query.data }
+      : { state: 'loaded', tickets: query.data };
+  }
   return query.error ? { state: 'failed' } : { state: 'loading' };
 }
 

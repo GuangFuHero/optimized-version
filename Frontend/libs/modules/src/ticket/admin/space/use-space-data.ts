@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
-import { useQueries } from '@tanstack/react-query';
+import { useQueries, useQuery } from '@tanstack/react-query';
 
 import {
   buildingMapTicketsQuery,
+  SILENT_ERROR_META,
   useBuildingMap,
   useBuildingMaps,
-  useBuildingMapTickets,
   useCurrentUser,
   type AdminBuildingMapFieldsFragment,
   type BoundsInput,
@@ -151,11 +151,18 @@ function combineSpaceTickets<T>(
 /**
  * One space for the floor view. `building` is null while it loads, when it failed, and once it's
  * gone (`isLoading`, `error` tell which). Its tickets are read apart: `space` waits for them, and
- * until then `tickets` says whether they are on their way or failed (`readSpaceTickets`).
+ * `tickets` says whether they are in, on their way, failed, or read earlier with the latest read
+ * failed (`readSpaceTickets`).
  */
 export function useSpace(uuid: string | null) {
   const building = useBuildingMap({ uuid: uuid ?? '' });
-  const ticketsQuery = useBuildingMapTickets({ buildingMapUuid: uuid ?? '' });
+  const ticketsQuery = useQuery({
+    ...buildingMapTicketsQuery({ buildingMapUuid: uuid ?? '' }),
+    enabled: Boolean(uuid),
+    // The floor view says a failed read itself (讀不到… 重試); a toast too would stack one more
+    // on every failed 重試.
+    meta: { [SILENT_ERROR_META]: true },
+  });
   const found = building.data?.buildingMap ?? null;
   const tickets = readSpaceTickets({
     data: ticketsQuery.data?.buildingMapTickets,
@@ -165,7 +172,7 @@ export function useSpace(uuid: string | null) {
   return {
     building: found,
     space:
-      found && tickets.state === 'loaded'
+      found && (tickets.state === 'loaded' || tickets.state === 'stale')
         ? loadedSpace(found, tickets.tickets)
         : null,
     tickets: tickets.state,

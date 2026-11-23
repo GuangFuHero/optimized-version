@@ -118,6 +118,7 @@ export function SpaceDetailSheet({
           building={building}
           space={space}
           ticketsFailed={tickets === 'failed'}
+          ticketsStale={tickets === 'stale'}
           retryingTickets={retryingTickets}
           onRetryTickets={retryTickets}
           canEdit={caps.canEdit}
@@ -171,6 +172,7 @@ function SpaceDetailContent({
   building,
   space,
   ticketsFailed,
+  ticketsStale,
   retryingTickets,
   onRetryTickets,
   canEdit,
@@ -184,6 +186,8 @@ function SpaceDetailContent({
   /** Null until the building's tickets are in. */
   space: LoadedSpace | null;
   ticketsFailed: boolean;
+  /** Tickets read earlier are shown, but the latest read failed. */
+  ticketsStale: boolean;
   retryingTickets: boolean;
   onRetryTickets: () => void;
   canEdit: boolean;
@@ -200,8 +204,9 @@ function SpaceDetailContent({
   const addressStatus =
     ADDRESS_STATUS[building.secondaryLocation?.normalizationStatus ?? ''];
   // Deleting keeps every ticket under it, the cancelled ones `members` leaves out too. Unknown
-  // (null) until they are read, which the dialog and the toast then leave out.
-  const kept = space ? space.tickets.length : null;
+  // (null) until they are read, or when only an earlier read is at hand: the dialog and the toast
+  // then leave the count out rather than state one that may be out of date.
+  const kept = space && !ticketsStale ? space.tickets.length : null;
   const cut = ticketsCut(kept ?? 0);
 
   // Awaited, not mutate's own onSuccess: the delete's refetch finds the space gone and unmounts
@@ -282,7 +287,16 @@ function SpaceDetailContent({
       }
     >
       {space ? (
-        <SpaceFloors space={space} onOpenTicket={onOpenTicket} />
+        <>
+          {ticketsStale ? (
+            <StatTilesRetry
+              message="讀不到最新的任務單，下面是之前讀到的"
+              retrying={retryingTickets}
+              onRetry={onRetryTickets}
+            />
+          ) : null}
+          <SpaceFloors space={space} onOpenTicket={onOpenTicket} />
+        </>
       ) : ticketsFailed ? (
         <StatTilesRetry
           message="讀不到這一棟的任務單"

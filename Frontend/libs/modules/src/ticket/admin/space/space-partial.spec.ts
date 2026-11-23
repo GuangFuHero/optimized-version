@@ -24,10 +24,16 @@ describe('a space whose tickets are not in yet', () => {
     ).toEqual({ state: 'failed' });
   });
 
-  it('keeps the tickets it read when a later read fails', () => {
+  it('keeps the tickets it read when a later read fails, marked as out of date', () => {
     expect(
       readSpaceTickets({ data: ['a'], error: new Error('offline') }),
-    ).toEqual({ state: 'loaded', tickets: ['a'] });
+    ).toEqual({ state: 'stale', tickets: ['a'] });
+  });
+
+  it('marks an empty list read earlier as out of date too, not as a space with none', () => {
+    expect(
+      readSpaceTickets({ data: [], error: new Error('offline') }),
+    ).toEqual({ state: 'stale', tickets: [] });
   });
 
   it('is empty only when the read came back empty', () => {
