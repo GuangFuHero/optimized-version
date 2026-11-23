@@ -10,7 +10,12 @@ import {
   Typography,
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
-import type { HTMLAttributes, HTMLInputTypeAttribute, ReactNode } from 'react';
+import {
+  useId,
+  type HTMLAttributes,
+  type HTMLInputTypeAttribute,
+  type ReactNode,
+} from 'react';
 
 import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
@@ -56,11 +61,13 @@ export function AuthField({
   required = false,
 }: AuthFieldProps) {
   const authPalette = getAuthColorScheme(useTheme());
+  const inputId = useId();
 
   return (
     <Stack spacing={0.5} sx={{ width: '100%' }}>
       <Typography
-        component="div"
+        component="label"
+        htmlFor={inputId}
         sx={{
           color: authPalette.textSecondary,
           fontSize: displayTextSize[12],
@@ -79,6 +86,7 @@ export function AuthField({
 
       <FormControl fullWidth error={Boolean(errorText)}>
         <OutlinedInput
+          id={inputId}
           value={value}
           onChange={(event) => onChange(event.target.value)}
           placeholder={placeholder}

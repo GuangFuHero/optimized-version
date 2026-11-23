@@ -97,7 +97,6 @@ function CellMenu({
     <>
       <ButtonBase
         title={label}
-        aria-label={label}
         onClick={(event) => {
           event.stopPropagation();
           setAnchor(event.currentTarget);
@@ -112,6 +111,22 @@ function CellMenu({
         }}
       >
         {trigger}
+        <Box
+          component="span"
+          sx={{
+            position: 'absolute',
+            width: 1,
+            height: 1,
+            p: 0,
+            m: -1,
+            overflow: 'hidden',
+            clip: 'rect(0, 0, 0, 0)',
+            whiteSpace: 'nowrap',
+            border: 0,
+          }}
+        >
+          {label}
+        </Box>
         <ChevronsUpDown
           size={13}
           color={color.fg.neutral.muted}

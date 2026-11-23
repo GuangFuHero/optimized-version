@@ -85,7 +85,6 @@ export function AccountMenu() {
     <>
       <ButtonBase
         disableRipple
-        aria-label="帳號選單"
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={(event) => setAnchorEl(event.currentTarget)}
@@ -101,7 +100,23 @@ export function AccountMenu() {
           '&:hover': { bgcolor: color.bg.neutral.subtle },
         }}
       >
-        <Avatar name={name} size={36} />
+        <Avatar name={name} size={36} aria-hidden="true" />
+        <Box
+          component="span"
+          sx={{
+            position: 'absolute',
+            width: 1,
+            height: 1,
+            p: 0,
+            m: -1,
+            overflow: 'hidden',
+            clip: 'rect(0, 0, 0, 0)',
+            whiteSpace: 'nowrap',
+            border: 0,
+          }}
+        >
+          帳號選單
+        </Box>
         <Box
           sx={{
             lineHeight: 1.25,

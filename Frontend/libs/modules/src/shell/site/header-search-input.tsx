@@ -89,6 +89,8 @@ function SiteHeaderSearchField({
           value ? (
             <Box
               component="button"
+              type="button"
+              aria-label="清除搜尋"
               onClick={() =>
                 onChange?.({
                   target: { value: '' },

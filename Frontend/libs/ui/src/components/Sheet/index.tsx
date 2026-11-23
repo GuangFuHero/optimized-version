@@ -246,7 +246,17 @@ export function SheetLayout({
       ) : null}
 
       <Box
-        sx={{ flex: 1, minHeight: 0, overflowY: 'auto', p: flushBody ? 0 : px }}
+        tabIndex={0}
+        sx={{
+          flex: 1,
+          minHeight: 0,
+          overflowY: 'auto',
+          p: flushBody ? 0 : px,
+          outline: 'none',
+          '&:focus-visible': {
+            boxShadow: `inset 0 0 0 2px ${color.border.accent}`,
+          },
+        }}
       >
         {children}
       </Box>
