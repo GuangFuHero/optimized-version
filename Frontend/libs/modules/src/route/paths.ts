@@ -74,17 +74,22 @@ export const BACK_OFFICE_SIGN_IN_HREF = withQuery(SITE_PATHS.login, {
 const READ_AGAINST = ['http://one.invalid', 'http://two.invalid'];
 
 /**
- * `href` if it is a path on this site, else `fallback`. Read as the browser will read it: `//host/…`,
+ * `href` if it is a path on this site, else null. Read as the browser will read it: `//host/…`,
  * `/\host/…` and the like are paths to the eye and another site to the browser (it takes a
  * backslash for a slash, and drops tabs and newlines).
  */
+export function siteHrefOrNull(
+  href: string | null | undefined,
+): SiteHref | null {
+  return href?.startsWith('/') && namesNoHost(href) ? (href as SiteHref) : null;
+}
+
+/** `href` if it is a path on this site (`siteHrefOrNull`), else `fallback`. */
 export function sameSiteHref(
   href: string | null | undefined,
   fallback: PageHref,
 ): PageHref {
-  return href?.startsWith('/') && namesNoHost(href)
-    ? (href as SiteHref)
-    : fallback;
+  return siteHrefOrNull(href) ?? fallback;
 }
 
 function namesNoHost(path: string): boolean {
