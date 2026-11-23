@@ -264,17 +264,17 @@ type QueueRow = ReturnType<typeof useStationRows>['rows'][number];
 
 /**
  * A queued station's suggestions, each with its conflict. The list and the detail pane both call
- * it, so a station in the queue can show 衝突 and the selected one reads the same cache. `read`
+ * it, so a station in the queue can show 衝突 and the selected one reads the same cache. `enabled`
  * holds it back: a row reads only once it has been on screen.
  */
-function useQueuedStation(row: QueueRow | null, read = true) {
+function useQueuedStation(row: QueueRow | null, enabled = true) {
   const uuid = row?.uuid ?? '';
   const canViewHistory = row?.raw.viewerCanViewHistory ?? false;
-  const review = useStationReview({ uuid }, { enabled: read });
+  const review = useStationReview({ uuid }, { enabled });
   // Conflicts come from the station's history; without it they are unknown, never "none".
   const history = useStationHistory(
     { path: { uuid }, query: { limit: HISTORY_PAGE } },
-    { enabled: read && canViewHistory && Boolean(uuid) },
+    { enabled: enabled && canViewHistory && Boolean(uuid) },
   );
   const historyPage =
     history.isSuccess && history.data
