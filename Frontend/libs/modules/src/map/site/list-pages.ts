@@ -1,5 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import type { RescueMapMarkerItem } from '../types';
-import { dedupeMarkersById } from './markers';
+import { dedupeMarkersById } from '../markers';
 
 /** One page of the site list, stations or tickets. */
 export interface MarkerPage {
