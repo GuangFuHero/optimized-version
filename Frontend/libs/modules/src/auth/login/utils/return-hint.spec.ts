@@ -32,10 +32,17 @@ describe('returnHint', () => {
     expect(returnHint('/mapping')).toBe(OTHER_HINT);
   });
 
-  it('reads a whole address, as next-auth sometimes hands one on', () => {
-    expect(returnHint('http://localhost:3002/list/station?q=1')).toBe(
-      LIST_HINT,
-    );
+  it('says nothing for a whole address: the sign-in goes to its fallback, not there', () => {
+    expect(returnHint('http://localhost:3002/list/station?q=1')).toBeNull();
+  });
+
+  it('says nothing for a path to another site, which the sign-in also skips', () => {
+    expect(returnHint('//evil.example/map')).toBeNull();
+  });
+
+  it('says nothing, and does not throw, for a callbackUrl that is not an address', () => {
+    expect(() => returnHint('http://[')).not.toThrow();
+    expect(returnHint('http://[')).toBeNull();
   });
 });
 
@@ -43,6 +50,13 @@ describe('signedInMessage', () => {
   it('says the person is on the way back, when there is a page to go back to', () => {
     expect(signedInMessage('/list/station', 'site')).toBe(
       '登入成功，正在回到你剛剛那一頁⋯',
+    );
+  });
+
+  it('does not promise the way back for a callbackUrl the sign-in will not go back to', () => {
+    expect(signedInMessage('http://[', 'site')).toBe('登入成功，正在帶你過去⋯');
+    expect(signedInMessage('//evil.example/map', 'admin')).toBe(
+      '登入成功，正在前往總覽儀表板⋯',
     );
   });
 

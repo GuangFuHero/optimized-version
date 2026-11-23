@@ -9,9 +9,18 @@ export function safeReturnPath(
   callbackUrl: string | null,
   fallback: string,
 ): string {
+  return acceptedReturnPath(callbackUrl) ?? fallback;
+}
+
+/**
+ * The `callbackUrl` a sign-in will go back to, or null when it will go to the fallback instead.
+ * What the sign-in pages say about going back (`returnHint`, `signedInMessage`) reads this too,
+ * so they never promise a page the redirect then skips.
+ */
+export function acceptedReturnPath(callbackUrl: string | null): string | null {
   return callbackUrl?.startsWith('/') && staysOnThisSite(callbackUrl)
     ? callbackUrl
-    : fallback;
+    : null;
 }
 
 /**
