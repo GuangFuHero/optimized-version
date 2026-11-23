@@ -16,7 +16,9 @@ export { SITE_OPEN_GRAPH, SITE_SHARE_CARD } from './share-card';
 export {
   copyPointShareUrl,
   createPointShareLinks,
+  lineMessageHref,
   openPointShareLink,
+  openShareTab,
 } from './share-links';
 export {
   createPointShareTarget,
@@ -27,4 +29,5 @@ export type {
   PointShareChannel,
   PointShareLink,
   PointShareTarget,
+  ShareHref,
 } from './types';

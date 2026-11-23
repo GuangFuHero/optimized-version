@@ -9,6 +9,7 @@ import {
   markSigningOutHere,
   unmarkSigningOutHere,
 } from '../../session/end-expired-session';
+import { SITE_PATHS } from '../../route/paths';
 import { logoutAllAsync, signOutAsync } from '../api/client';
 
 export type SignOutOutcome = 'signed-out' | 'still-signed-in';
@@ -82,6 +83,6 @@ export async function signOutEverywhereAsync(
     return 'not-confirmed';
   }
 
-  continueSignedOut('/login');
+  continueSignedOut(SITE_PATHS.login);
   return 'signed-out';
 }

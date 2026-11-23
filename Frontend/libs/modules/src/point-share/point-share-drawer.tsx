@@ -23,7 +23,7 @@ import {
   openPointShareLink,
   sharesThroughDeviceSheet,
 } from './share-links';
-import type { PointShareChannel, PointShareTarget } from './types';
+import type { PointShareChannel, PointShareTarget, ShareHref } from './types';
 
 import {
   Button,
@@ -106,7 +106,7 @@ export function PointShareDrawer({
     window.setTimeout(() => setCopyState('idle'), 1400);
   };
 
-  const handleNativeShare = (fallbackHref?: string) => {
+  const handleNativeShare = (fallbackHref?: ShareHref) => {
     if (!target) {
       return;
     }

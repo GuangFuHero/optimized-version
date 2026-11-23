@@ -44,6 +44,20 @@ describe('returnHint', () => {
     expect(() => returnHint('http://[')).not.toThrow();
     expect(returnHint('http://[')).toBeNull();
   });
+
+  it.each([
+    '//this-site.invalid/map',
+    '/\\this-site.invalid/map',
+    '/\t/this-site.invalid/map',
+  ])(
+    'says nothing for %j, a path that names a host: the sign-in skips it',
+    (callbackUrl) => {
+      expect(returnHint(callbackUrl)).toBeNull();
+      expect(signedInMessage(callbackUrl, 'site')).toBe(
+        '登入成功，正在帶你過去⋯',
+      );
+    },
+  );
 });
 
 describe('signedInMessage', () => {

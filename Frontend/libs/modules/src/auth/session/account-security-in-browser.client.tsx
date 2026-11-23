@@ -5,9 +5,9 @@ import { Alert, Box, CircularProgress } from '@mui/material';
 import { useCurrentUser } from '@rescue-frontend/data-access';
 import { useEffect } from 'react';
 
+import { loadPage } from '../../route/navigate';
+import { ACCOUNT_SECURITY_SIGN_IN_HREF } from '../../route/paths';
 import { AccountSecurityClient } from './account-security.client';
-
-const SIGN_IN_HREF = '/login?callbackUrl=%2Faccount%2Fsecurity';
 
 /**
  * `/account/security` when the server found the access token in need of a refresh it cannot make
@@ -28,7 +28,7 @@ export function AccountSecurityInBrowser() {
 
   useEffect(() => {
     if (signedOut) {
-      window.location.assign(SIGN_IN_HREF);
+      loadPage(ACCOUNT_SECURITY_SIGN_IN_HREF);
     }
   }, [signedOut]);
 

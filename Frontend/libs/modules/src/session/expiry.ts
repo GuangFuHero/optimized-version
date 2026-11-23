@@ -4,8 +4,10 @@
  * 「登出所有裝置」, an admin's sign-out, an identity removed — backend ADR-096) or past its refresh.
  * The GraphQL proxy decides and marks the response; the browser reads the mark.
  *
- * Pure and import-free: the server route and the browser both use it.
+ * Pure, importing only the import-free path constants: the server route and the browser both use it.
  */
+
+import { SITE_PATHS } from '../route/paths';
 
 /** The response header the proxy marks an ended session with. */
 export const SESSION_HEADER = 'x-wg-session';
@@ -21,7 +23,7 @@ export function reloginHref({
   search,
 }: Pick<Location, 'pathname' | 'search'>): string {
   const callbackUrl = encodeURIComponent(`${pathname}${search}`);
-  return `/login?callbackUrl=${callbackUrl}`;
+  return `${SITE_PATHS.login}?callbackUrl=${callbackUrl}`;
 }
 
 /** `useAuthSession().status` (`auth-session.tsx`), spelled out so this file stays import-free. */
