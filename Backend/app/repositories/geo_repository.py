@@ -57,8 +57,13 @@ class StationRepository(GenericRepository[Station]):
         )
 
     def _active_conditions(
-        self, *, bounds=None, station_type: str | None = None,
-        operational_status: str | None = None, q: str | None = None, extra_filters=(),
+        self,
+        *,
+        bounds=None,
+        station_type: str | None = None,
+        operational_status: str | None = None,
+        q: str | None = None,
+        extra_filters=(),
     ) -> list:
         """The single source of truth for "which stations match this request".
 
@@ -131,33 +136,54 @@ class StationRepository(GenericRepository[Station]):
         ]
 
     async def list_active(
-        self, db: AsyncSession, *,
-        bounds=None, station_type: str | None = None, operational_status: str | None = None,
-        q: str | None = None, skip: int = 0, limit: int = 50, extra_filters=(), order: str = "default",
+        self,
+        db: AsyncSession,
+        *,
+        bounds=None,
+        station_type: str | None = None,
+        operational_status: str | None = None,
+        q: str | None = None,
+        skip: int = 0,
+        limit: int = 50,
+        extra_filters=(),
+        order: str = "default",
     ) -> list[Station]:
         """List active stations filtered by bbox/type/operational_status/keyword and RBAC scope."""
         term = normalize_query(q)
         conditions = self._active_conditions(
-            bounds=bounds, station_type=station_type, operational_status=operational_status,
-            q=q, extra_filters=extra_filters,
+            bounds=bounds,
+            station_type=station_type,
+            operational_status=operational_status,
+            q=q,
+            extra_filters=extra_filters,
         )
         async with search_timeout(db, term):
             result = await db.execute(
-                select(self.model).where(*conditions)
+                select(self.model)
+                .where(*conditions)
                 .order_by(*self._order_by(term, order))
-                .offset(skip).limit(limit)
+                .offset(skip)
+                .limit(limit)
             )
         return result.scalars().all()
 
     async def count_active(
-        self, db: AsyncSession, *,
-        bounds=None, station_type: str | None = None, operational_status: str | None = None,
-        q: str | None = None, extra_filters=(),
+        self,
+        db: AsyncSession,
+        *,
+        bounds=None,
+        station_type: str | None = None,
+        operational_status: str | None = None,
+        q: str | None = None,
+        extra_filters=(),
     ) -> int:
         """Count active stations — MUST use the same conditions as list_active()."""
         conditions = self._active_conditions(
-            bounds=bounds, station_type=station_type, operational_status=operational_status,
-            q=q, extra_filters=extra_filters,
+            bounds=bounds,
+            station_type=station_type,
+            operational_status=operational_status,
+            q=q,
+            extra_filters=extra_filters,
         )
         async with search_timeout(db, normalize_query(q)):
             return await db.scalar(
@@ -165,14 +191,22 @@ class StationRepository(GenericRepository[Station]):
             )
 
     def _matching(
-        self, columns, *,
-        bounds=None, station_type: str | None = None, operational_status: str | None = None,
-        q: str | None = None, extra_filters=(),
+        self,
+        columns,
+        *,
+        bounds=None,
+        station_type: str | None = None,
+        operational_status: str | None = None,
+        q: str | None = None,
+        extra_filters=(),
     ):
         """The stations list_active() would return, as a subquery of `columns` — for the counts below."""
         conditions = self._active_conditions(
-            bounds=bounds, station_type=station_type, operational_status=operational_status,
-            q=q, extra_filters=extra_filters,
+            bounds=bounds,
+            station_type=station_type,
+            operational_status=operational_status,
+            q=q,
+            extra_filters=extra_filters,
         )
         return select(*columns).where(*conditions).subquery()
 
@@ -219,9 +253,7 @@ class StationRepository(GenericRepository[Station]):
 
     async def get_high_level_stations(self, db: AsyncSession, min_level: int) -> list[Station]:
         """Return all stations with a level at or above min_level."""
-        result = await db.execute(
-            select(self.model).where(self.model.level >= min_level)
-        )
+        result = await db.execute(select(self.model).where(self.model.level >= min_level))
         return result.scalars().all()
 
 
@@ -238,22 +270,16 @@ class AreaRepository(GenericRepository[AreaPolygon]):
         """List active areas, newest first, with an optional bbox and extra filter conditions."""
         query = select(self.model).where(self.model.delete_at.is_(None), *extra_filters)
         if bounds:
-            bbox = func.ST_MakeEnvelope(
-                bounds.min_lng, bounds.min_lat, bounds.max_lng, bounds.max_lat, 4326
-            )
+            bbox = func.ST_MakeEnvelope(bounds.min_lng, bounds.min_lat, bounds.max_lng, bounds.max_lat, 4326)
             query = query.where(func.ST_Intersects(self.model.geometry, bbox))
-        result = await db.execute(
-            query.order_by(self.model.created_at.desc()).offset(skip).limit(limit)
-        )
+        result = await db.execute(query.order_by(self.model.created_at.desc()).offset(skip).limit(limit))
         return result.scalars().all()
 
     async def count_active(self, db: AsyncSession, *, bounds=None, extra_filters=()) -> int:
         """Count active areas with an optional bbox and extra filter conditions."""
         query = select(self.model).where(self.model.delete_at.is_(None), *extra_filters)
         if bounds:
-            bbox = func.ST_MakeEnvelope(
-                bounds.min_lng, bounds.min_lat, bounds.max_lng, bounds.max_lat, 4326
-            )
+            bbox = func.ST_MakeEnvelope(bounds.min_lng, bounds.min_lat, bounds.max_lng, bounds.max_lat, 4326)
             query = query.where(func.ST_Intersects(self.model.geometry, bbox))
         return await db.scalar(select(func.count()).select_from(query.subquery()))
 
@@ -282,9 +308,15 @@ class CrowdSourcingRepository(GenericRepository[CrowdSourcing]):
         super().__init__(CrowdSourcing)
 
     async def upsert(
-        self, db: AsyncSession, *,
-        station_uuid: str, item_uuid: str, user_uuid: str,
-        credibility_score: float, rating: str, distance: float | None,
+        self,
+        db: AsyncSession,
+        *,
+        station_uuid: str,
+        item_uuid: str,
+        user_uuid: str,
+        credibility_score: float,
+        rating: str,
+        distance: float | None,
     ) -> CrowdSourcing:
         """Update an existing rating or create a new one."""
         result = await db.execute(
@@ -303,11 +335,18 @@ class CrowdSourcingRepository(GenericRepository[CrowdSourcing]):
             await db.commit()
             await db.refresh(existing)
             return existing
-        return await self.create(db, obj_in={
-            "station_uuid": station_uuid, "item_uuid": item_uuid,
-            "user_uuid": user_uuid, "user_credibility_score": credibility_score,
-            "rating": rating, "n_updates": 0, "distance_from_geometry": distance,
-        })
+        return await self.create(
+            db,
+            obj_in={
+                "station_uuid": station_uuid,
+                "item_uuid": item_uuid,
+                "user_uuid": user_uuid,
+                "user_credibility_score": credibility_score,
+                "rating": rating,
+                "n_updates": 0,
+                "distance_from_geometry": distance,
+            },
+        )
 
 
 class SecondaryLocationRepository(GenericRepository[SecondaryLocation]):
@@ -317,9 +356,7 @@ class SecondaryLocationRepository(GenericRepository[SecondaryLocation]):
         """Initialize with SecondaryLocation as the managed model."""
         super().__init__(SecondaryLocation)
 
-    async def get_by_geometry(
-        self, db: AsyncSession, geometry_uuid: str
-    ) -> SecondaryLocation | None:
+    async def get_by_geometry(self, db: AsyncSession, geometry_uuid: str) -> SecondaryLocation | None:
         """Return the address row attached to a station or ticket, if it has one.
 
         One row per geometry by convention rather than by constraint, so this takes the

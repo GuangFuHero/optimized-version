@@ -2,12 +2,12 @@ import asyncio
 from logging.config import fileConfig
 
 import geoalchemy2  # noqa: F401 — registers Geometry type for autogenerate
+from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
 
 import app.models  # noqa: F401 — loads all models onto Base.metadata
-from alembic import context
 from app.db.session import SQLALCHEMY_DATABASE_URL, Base
 
 # this is the Alembic Config object, which provides

@@ -170,8 +170,7 @@ class VerificationRepository:
         await self.redis.expire(sends_key, self.ttl, nx=True)
         if sends > MAX_STEPUP_SENDS_PER_WINDOW:
             return None, "throttled"
-        payload = {"user_uuid": user_uuid, "type": type_, "value": value,
-                   "action": action, "target": target}
+        payload = {"user_uuid": user_uuid, "type": type_, "value": value, "action": action, "target": target}
         return await self._issue(key, payload), "issued"
 
     async def discard_old_channel_step_up(

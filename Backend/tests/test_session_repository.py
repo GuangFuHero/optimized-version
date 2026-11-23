@@ -244,7 +244,7 @@ async def test_rotate_survives_the_claim_being_retried(repo):
     async def set_losing_the_first_reply(*args, **kwargs):
         if kwargs.get("nx") and not sabotaged["done"]:
             sabotaged["done"] = True
-            await real_set(*args, **kwargs)   # the server ran it; the reply never arrived
+            await real_set(*args, **kwargs)  # the server ran it; the reply never arrived
             return await real_set(*args, **kwargs)  # what the client's retry gets back
         return await real_set(*args, **kwargs)
 

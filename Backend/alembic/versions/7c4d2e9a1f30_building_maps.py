@@ -11,6 +11,7 @@ Revises: 15370be54155
 Create Date: 2026-10-02
 
 """
+
 from collections.abc import Sequence
 
 from alembic import op
@@ -69,8 +70,6 @@ def downgrade() -> None:
     op.execute("DROP TABLE IF EXISTS building_map_ticket_map")
     # The subtype's base rows and addresses would otherwise be orphans with an unknown
     # polymorphic identity, which the ORM cannot load.
-    op.execute(
-        "DELETE FROM secondary_locations WHERE geometry_uuid IN (SELECT uuid FROM building_maps)"
-    )
+    op.execute("DELETE FROM secondary_locations WHERE geometry_uuid IN (SELECT uuid FROM building_maps)")
     op.execute("DROP TABLE IF EXISTS building_maps")
     op.execute("DELETE FROM base_geometries WHERE property_name = 'building_map'")

@@ -33,8 +33,12 @@ def _ticket(point: Point, creator: User) -> Tickets:
     "no team column" tests below use tickets.
     """
     return Tickets(
-        geometry=from_shape(point, srid=4326), created_by=str(creator.uuid),
-        title="t", contact_name="c", status="pending", priority="normal",
+        geometry=from_shape(point, srid=4326),
+        created_by=str(creator.uuid),
+        title="t",
+        contact_name="c",
+        status="pending",
+        priority="normal",
     )
 
 
@@ -193,11 +197,7 @@ async def test_in_scope_zone_matches_point_inside_assigned_zone(db):
     zone = TeamZone(name="Zone1", geometry=from_shape(zone_polygon, srid=4326))
     db.add(zone)
     await db.flush()
-    db.add(
-        TeamZoneAssign(
-            team_uuid=team.uuid, zone_uuid=zone.uuid, assigned_by=str(actor.uuid)
-        )
-    )
+    db.add(TeamZoneAssign(team_uuid=team.uuid, zone_uuid=zone.uuid, assigned_by=str(actor.uuid)))
     await db.flush()
 
     resource = _ticket(Point(121.5, 25.0), actor)
@@ -219,11 +219,7 @@ async def test_in_scope_zone_rejects_point_outside_assigned_zone(db):
     zone = TeamZone(name="Zone1", geometry=from_shape(zone_polygon, srid=4326))
     db.add(zone)
     await db.flush()
-    db.add(
-        TeamZoneAssign(
-            team_uuid=team.uuid, zone_uuid=zone.uuid, assigned_by=str(actor.uuid)
-        )
-    )
+    db.add(TeamZoneAssign(team_uuid=team.uuid, zone_uuid=zone.uuid, assigned_by=str(actor.uuid)))
     await db.flush()
 
     resource = _ticket(Point(130.0, 30.0), actor)
@@ -365,11 +361,7 @@ async def test_scope_filter_zone_matches_rows_inside_assigned_zone_only(db):
     zone = TeamZone(name="Zone1", geometry=from_shape(zone_polygon, srid=4326))
     db.add(zone)
     await db.flush()
-    db.add(
-        TeamZoneAssign(
-            team_uuid=team.uuid, zone_uuid=zone.uuid, assigned_by=str(actor.uuid)
-        )
-    )
+    db.add(TeamZoneAssign(team_uuid=team.uuid, zone_uuid=zone.uuid, assigned_by=str(actor.uuid)))
     await db.flush()
 
     inside = _ticket(Point(121.5, 25.0), actor)

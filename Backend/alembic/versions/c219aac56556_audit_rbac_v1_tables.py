@@ -12,14 +12,16 @@ Revises: 2f9a1c7b6e04
 Create Date: 2026-07-11
 
 """
+
 from collections.abc import Sequence
 
 from alembic import op
+
 from app.db.triggers import get_audit_trigger_sql
 
 # revision identifiers, used by Alembic.
-revision: str = 'c219aac56556'
-down_revision: str | Sequence[str] | None = '2f9a1c7b6e04'
+revision: str = "c219aac56556"
+down_revision: str | Sequence[str] | None = "2f9a1c7b6e04"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

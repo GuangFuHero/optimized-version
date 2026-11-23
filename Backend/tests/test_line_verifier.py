@@ -1,4 +1,5 @@
 """Tests for the LINE verifier dependency selector and (relocated) fake double."""
+
 import json
 
 import httpx
@@ -48,14 +49,16 @@ def _patch_client(monkeypatch, handler):
     def factory(**kwargs):
         kwargs.pop("transport", None)
         return real_client(transport=httpx.MockTransport(handler), **kwargs)
+
     monkeypatch.setattr(line_verifier.httpx, "AsyncClient", factory)
 
 
 @pytest.mark.asyncio
 async def test_adapter_valid_claims(monkeypatch):
     """200 + valid claims -> LineIdentity with sub/name/email."""
-    _patch_client(monkeypatch, lambda req: httpx.Response(
-        200, json={"sub": "U1", "name": "Mei", "email": "m@x.com"}))
+    _patch_client(
+        monkeypatch, lambda req: httpx.Response(200, json={"sub": "U1", "name": "Mei", "email": "m@x.com"})
+    )
     lid = await LineVerifyApiVerifier("chan").verify("tok")
     assert lid.sub == "U1" and lid.name == "Mei" and lid.email == "m@x.com"
 
@@ -103,8 +106,10 @@ async def test_adapter_missing_sub_raises(monkeypatch):
 @pytest.mark.asyncio
 async def test_adapter_httpx_error_raises(monkeypatch):
     """A transport/network error -> LineTokenVerificationError (401-not-500 contract)."""
+
     def boom(req):
         raise httpx.ConnectError("boom")
+
     _patch_client(monkeypatch, boom)
     with pytest.raises(LineTokenVerificationError):
         await LineVerifyApiVerifier("chan").verify("tok")

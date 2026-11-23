@@ -1,4 +1,5 @@
 """Google id_token verification: protocol + real (OIDC) adapter and dependency."""
+
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -43,6 +44,7 @@ class GoogleOidcVerifier:
         """Verify a real Google id_token against the configured client id."""
         from google.auth.transport import requests as ga_requests
         from google.oauth2 import id_token as ga_id_token
+
         try:
             # verify_oauth2_token is sync and fetches Google's certs over the network — run it off the
             # event loop so a slow round-trip doesn't block every other request.

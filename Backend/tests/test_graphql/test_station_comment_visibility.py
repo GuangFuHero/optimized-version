@@ -43,8 +43,11 @@ async def _station(created_by: str) -> str:
     async with db_ctx() as db:
         station = Station(
             geometry=from_shape(Point(121.5, 25.0), srid=4326),
-            created_by=created_by, type="shelter", comment=COMMENT,
-            source="user", visibility="public",
+            created_by=created_by,
+            type="shelter",
+            comment=COMMENT,
+            source="user",
+            visibility="public",
         )
         db.add(station)
         await db.flush()
@@ -157,12 +160,24 @@ async def _old_comment_merge(station_uuid: str, reviewer_uuid: str) -> str:
         station = await db.scalar(select(Station).where(Station.uuid == station_uuid))
         station.op_hour = "24h"
         merge = StationSuggestionMerge(
-            station_uuid=station_uuid, reviewed_by=reviewer_uuid, status="applied",
+            station_uuid=station_uuid,
+            reviewed_by=reviewer_uuid,
+            status="applied",
             changes=[
-                {"target_type": "station", "target_uuid": station_uuid, "field_name": "comment",
-                 "before": "與 b…07 疑似重複", "after": COMMENT},
-                {"target_type": "station", "target_uuid": station_uuid, "field_name": "op_hour",
-                 "before": "08:00-18:00", "after": "24h"},
+                {
+                    "target_type": "station",
+                    "target_uuid": station_uuid,
+                    "field_name": "comment",
+                    "before": "與 b…07 疑似重複",
+                    "after": COMMENT,
+                },
+                {
+                    "target_type": "station",
+                    "target_uuid": station_uuid,
+                    "field_name": "op_hour",
+                    "before": "08:00-18:00",
+                    "after": "24h",
+                },
             ],
         )
         db.add(merge)
@@ -203,14 +218,13 @@ async def test_an_old_merge_shows_the_comment_with_view_pii(client, redis, coord
     merges = (await _gql(client, token, MERGES, {"uuid": station_uuid}))["station"]["suggestionMerges"]
 
     assert {c["fieldName"]: c["after"] for c in merges[0]["changes"]} == {
-        "comment": COMMENT, "op_hour": "24h",
+        "comment": COMMENT,
+        "op_hour": "24h",
     }
 
 
 @pytest.mark.asyncio
-async def test_revoking_an_old_merge_leaves_the_comment_out_without_view_pii(
-    client, redis, coordinator_auth
-):
+async def test_revoking_an_old_merge_leaves_the_comment_out_without_view_pii(client, redis, coordinator_auth):
     """The revoke answers with the merge too, so it is the same field and the same rule."""
     coord_uuid, _ = coordinator_auth
     station_uuid = await _station(coord_uuid)

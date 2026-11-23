@@ -9,14 +9,15 @@ recruitment with its quantity cut to the people already on it. Only the first re
 someone gives their place back, so the row has to say which it was. Nullable, no backfill: no
 existing need was stopped this way — the old 停止招募 canceled needs rather than fulfilling them.
 """
+
 from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = '6c5a9d3d3444'
-down_revision: str | Sequence[str] | None = 'a7d3c5e9f214'
+revision: str = "6c5a9d3d3444"
+down_revision: str | Sequence[str] | None = "a7d3c5e9f214"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -24,10 +25,10 @@ depends_on: str | Sequence[str] | None = None
 def upgrade() -> None:
     """Add the nullable recruiting_stopped_at column."""
     op.add_column(
-        'ticket_tasks', sa.Column('recruiting_stopped_at', sa.DateTime(timezone=True), nullable=True)
+        "ticket_tasks", sa.Column("recruiting_stopped_at", sa.DateTime(timezone=True), nullable=True)
     )
 
 
 def downgrade() -> None:
     """Drop the column."""
-    op.drop_column('ticket_tasks', 'recruiting_stopped_at')
+    op.drop_column("ticket_tasks", "recruiting_stopped_at")

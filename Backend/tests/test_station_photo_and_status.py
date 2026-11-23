@@ -65,8 +65,12 @@ async def _editor_and_station(db, *, operational_status: str = "temporarily_clos
     await _grant(db, user, Perm.STATION_EDIT, "all", "station_editor")
     station = Station(
         geometry=from_shape(Point(121.5, 25.0), srid=4326),
-        created_by=str(user.uuid), level=1, source="user", visibility="public",
-        type="shelter", operational_status=operational_status,
+        created_by=str(user.uuid),
+        level=1,
+        source="user",
+        visibility="public",
+        type="shelter",
+        operational_status=operational_status,
     )
     db.add(station)
     await db.flush()
@@ -81,7 +85,9 @@ async def test_update_station_does_not_restamp_an_unchanged_status(db):
     await db.flush()
 
     await update_station(
-        db, actor=user, uuid=str(station.uuid),
+        db,
+        actor=user,
+        uuid=str(station.uuid),
         changes={"operational_status": "temporarily_closed", "name": "renamed"},
     )
     assert station.status_changed_at is None, "an unchanged status must not stamp"
@@ -96,7 +102,9 @@ async def test_update_station_stamps_on_a_real_transition(db):
     await db.flush()
 
     await update_station(
-        db, actor=user, uuid=str(station.uuid),
+        db,
+        actor=user,
+        uuid=str(station.uuid),
         changes={"operational_status": "permanently_closed"},
     )
     assert station.status_changed_at is not None
