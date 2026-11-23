@@ -128,22 +128,31 @@ export function openShareTab(href: ShareHref) {
 
 /**
  * The one place the site opens another window, and only on a share page above. A cast can make any
- * string a `ShareHref`, so the address is checked again here; anything else opens nothing.
+ * string a `ShareHref`, so the address is checked again here; anything else opens nothing. The
+ * window gets the address as checked, not the text it came as: the browser reads that text against
+ * this page, where `https:line.me/…` or `https:\line.me\…` is a path of this site's own.
  */
 function openSharePage(href: ShareHref, features: string) {
-  if (typeof window === 'undefined' || !isSharePage(href)) {
+  const page = typeof window === 'undefined' ? null : checkedSharePage(href);
+
+  if (page === null) {
     return;
   }
 
-  window.open(href, '_blank', features);
+  window.open(page, '_blank', features);
 }
 
-function isSharePage(href: string): boolean {
+/** `href` read on its own, written out in full, if it is a share page above; else null. */
+function checkedSharePage(href: string): string | null {
   try {
-    const { origin, pathname } = new URL(href);
+    const url = new URL(href);
 
-    return Object.values<string>(SHARE_PAGES).includes(origin + pathname);
+    return Object.values<string>(SHARE_PAGES).includes(
+      url.origin + url.pathname,
+    )
+      ? url.href
+      : null;
   } catch {
-    return false;
+    return null;
   }
 }

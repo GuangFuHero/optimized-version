@@ -106,6 +106,25 @@ describe('opening a share page', () => {
 
     expect(open).not.toHaveBeenCalled();
   });
+
+  it.each(['https:line.me/R/msg/text/?x', 'https:\\line.me\\R\\msg\\text\\?x'])(
+    'opens the share page it checked for %j, not the text, which the page would read as a path of its own',
+    (href) => {
+      const open = fakeWindow();
+
+      openPointShareLink(href as ShareHref);
+      openShareTab(href as ShareHref);
+
+      // Read against a page of this site, the text stays here; read alone, it is LINE's page.
+      expect(
+        new URL(href, 'https://demo.wan-guard.com/admin/members').origin,
+      ).toBe('https://demo.wan-guard.com');
+      expect(open.mock.calls.map(([url]) => url)).toEqual([
+        'https://line.me/R/msg/text/?x',
+        'https://line.me/R/msg/text/?x',
+      ]);
+    },
+  );
 });
 
 describe('sharesThroughDeviceSheet', () => {
