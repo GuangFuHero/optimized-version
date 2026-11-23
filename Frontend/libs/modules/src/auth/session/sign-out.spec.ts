@@ -95,14 +95,19 @@ describe('signOutEverywhereAsync', () => {
     expect(location.assign).toHaveBeenCalledWith('/login');
   });
 
-  it('stays on the page, still signed in, when the backend refuses', async () => {
+  it('stays on the page, unable to say how far it got, when the backend fails partway', async () => {
+    // 503: the backend may have ended this session before its session store went out of reach.
     const location = fakeBrowserTab();
 
     const outcome = await signOutEverywhereAsync(async () => {
-      throw new ApiError(500, 'Internal Server Error', 'internal_error');
+      throw new ApiError(
+        503,
+        'Session store unavailable',
+        'session_store_unavailable',
+      );
     });
 
-    expect(outcome).toBe('still-signed-in');
+    expect(outcome).toBe('not-confirmed');
     expect(location.assign).not.toHaveBeenCalled();
     expect(location.reload).not.toHaveBeenCalled();
   });
@@ -114,7 +119,34 @@ describe('signOutEverywhereAsync', () => {
       throw new TypeError('Failed to fetch');
     });
 
-    expect(outcome).toBe('still-signed-in');
+    expect(outcome).toBe('not-confirmed');
     expect(location.assign).not.toHaveBeenCalled();
+  });
+
+  it('goes on as a guest, as for any ended session, when this session had already ended', async () => {
+    const location = fakeBrowserTab();
+
+    const outcome = await signOutEverywhereAsync(async () => {
+      // The proxy's mark on this very answer reaches the expiry watch while the request is out;
+      // it waits, and this tab is reloaded once, as a guest.
+      endExpiredSession();
+      throw new ApiError(401, 'Not authenticated', 'not_authenticated');
+    });
+
+    expect(outcome).toBe('session-ended');
+    expect(location.reload).toHaveBeenCalledOnce();
+    expect(location.assign).not.toHaveBeenCalled();
+  });
+
+  it('is not reloaded by another request ending while the sessions are being signed out', async () => {
+    const location = fakeBrowserTab();
+
+    await signOutEverywhereAsync(async () => {
+      endExpiredSession();
+    });
+
+    expect(location.reload).not.toHaveBeenCalled();
+    expect(location.assign).toHaveBeenCalledOnce();
+    expect(location.assign).toHaveBeenCalledWith('/login');
   });
 });

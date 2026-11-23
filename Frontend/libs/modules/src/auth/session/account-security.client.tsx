@@ -74,7 +74,10 @@ import {
   type AccountStepUpAction,
   type StepUpProblem,
 } from './account-step-up';
-import { SIGN_OUT_FAILED_MESSAGE, signOutEverywhereAsync } from './sign-out';
+import {
+  SIGN_OUT_EVERYWHERE_UNCONFIRMED_MESSAGE,
+  signOutEverywhereAsync,
+} from './sign-out';
 import { clearDraftsOnSignOut } from './sign-out-drafts';
 import { useAddContact } from './use-add-contact';
 import { useContactDraft, type ContactDraft } from './use-contact-draft';
@@ -671,7 +674,7 @@ export function AccountSecurityClient({
     const outcome = await signOutEverywhereAsync();
 
     setIsLoggingOutAll(false);
-    setLogoutAllFailed(outcome === 'still-signed-in');
+    setLogoutAllFailed(outcome === 'not-confirmed');
   }
 
   const setPasswordOriginal = originalContactName(contacts);
@@ -1150,7 +1153,7 @@ export function AccountSecurityClient({
         </Button>
         {logoutAllFailed ? (
           <Alert severity="error" sx={ALERT_TEXT}>
-            {SIGN_OUT_FAILED_MESSAGE}
+            {SIGN_OUT_EVERYWHERE_UNCONFIRMED_MESSAGE}
           </Alert>
         ) : null}
       </SecurityRow>
