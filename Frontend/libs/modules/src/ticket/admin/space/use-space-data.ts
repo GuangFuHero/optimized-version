@@ -90,7 +90,7 @@ export function useSpaces(bounds?: BoundsInput) {
   // spreading each query's data into the memo's deps changed their count with the spaces.
   const tickets = useQueries({
     queries: items.map((building) => ({
-      ...buildingMapTicketsQuery({ buildingMapUuid: building.uuid }),
+      ...spaceTicketsQuery(building.uuid),
       refetchOnWindowFocus: false,
       staleTime: SPACE_TICKETS_STALE_MS,
     })),
@@ -123,6 +123,20 @@ export function useSpaces(bounds?: BoundsInput) {
 }
 
 const NO_BUILDINGS: AdminBuildingMapFieldsFragment[] = [];
+
+/**
+ * One space's tickets, as the board's rows and the floor view both read them. Each says a failed
+ * read itself (the board's 無法載入空間 重試, the floor view's 讀不到… 重試), so neither wants the
+ * app's toast too: it would stack one more on every failed 重試. Every reader of this key has to
+ * carry the meta, since a query takes the options of whichever reader rendered last — one reader
+ * without it brings the toast back.
+ */
+function spaceTicketsQuery(buildingMapUuid: string) {
+  return {
+    ...buildingMapTicketsQuery({ buildingMapUuid }),
+    meta: { [SILENT_ERROR_META]: true },
+  };
+}
 
 /** How long a space's tickets stand on the board before a remount loads them again. */
 const SPACE_TICKETS_STALE_MS = 5 * 60_000;
@@ -157,11 +171,8 @@ function combineSpaceTickets<T>(
 export function useSpace(uuid: string | null) {
   const building = useBuildingMap({ uuid: uuid ?? '' });
   const ticketsQuery = useQuery({
-    ...buildingMapTicketsQuery({ buildingMapUuid: uuid ?? '' }),
+    ...spaceTicketsQuery(uuid ?? ''),
     enabled: Boolean(uuid),
-    // The floor view says a failed read itself (讀不到… 重試); a toast too would stack one more
-    // on every failed 重試.
-    meta: { [SILENT_ERROR_META]: true },
   });
   const found = building.data?.buildingMap ?? null;
   const tickets = readSpaceTickets({
