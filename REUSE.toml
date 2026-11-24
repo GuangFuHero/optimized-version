@@ -1,0 +1,104 @@
+# The license and copyright of every file in this repository, set by path
+# (https://reuse.software/spec-3.3/). LICENSING.md explains the categories, and LICENSES/ holds the
+# license texts. When several entries match a file, the last one wins, so general entries come first.
+# A file's own SPDX lines, where it has them, are kept and added to what is set here.
+version = 1
+
+# Code and technical documentation: everything at the top level and in these folders, unless an entry
+# further down says otherwise. A new top-level folder needs a line here before `reuse lint` passes.
+[[annotations]]
+path = [
+  "*",
+  ".github/**",
+  "Backend/**",
+  "Design/**",
+  "Frontend/**",
+  "SBOM/**",
+  "Spec/**",
+  "System_Design/**",
+]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "GuangFuHero contributors"
+SPDX-License-Identifier = "GPL-3.0-only"
+
+# Design material: illustrations, icons and pictures.
+[[annotations]]
+path = ["Design/**/*.png", "Design/**/*.svg", "Frontend/**/*.png", "Frontend/**/*.svg"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "光復超人設計團隊"
+SPDX-License-Identifier = "CC-BY-SA-4.0"
+
+# Components that hold a drawing: the code is GPL, the drawing CC BY-SA.
+[[annotations]]
+path = [
+  "Frontend/libs/modules/src/brand/guang-fu-mascot.tsx",
+  "Frontend/libs/ui/src/components/Icon/generated/SearchIconSvg.tsx",
+  "Frontend/libs/ui/src/components/Icon/generated/UserAvatarMarkIconSvg.tsx",
+]
+precedence = "aggregate"
+SPDX-FileCopyrightText = ["GuangFuHero contributors", "光復超人設計團隊"]
+SPDX-License-Identifier = "GPL-3.0-only AND CC-BY-SA-4.0"
+
+# The project's names and logos are not licensed.
+[[annotations]]
+path = [
+  "Backend/app/messaging/assets/logo.png",
+  "Frontend/apps/admin/public/wan-guard.svg",
+  "Frontend/apps/demo/public/wan-guard.svg",
+  "Frontend/libs/modules/src/brand/guang-fu-brand-icon.tsx",
+]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "GuangFuHero"
+SPDX-License-Identifier = "LicenseRef-Trademark"
+
+# Third party: other companies' marks on the sign-in and share buttons.
+[[annotations]]
+path = [
+  "Frontend/libs/ui/src/components/Icon/generated/GoogleBrandIconSvg.tsx",
+  "Frontend/libs/ui/src/components/Icon/source/google-brand.svg",
+]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "Google LLC"
+SPDX-License-Identifier = "LicenseRef-Trademark"
+
+[[annotations]]
+path = [
+  "Frontend/libs/ui/src/components/Icon/generated/LineBrandIconSvg.tsx",
+  "Frontend/libs/ui/src/components/Icon/source/line-brand.svg",
+]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "LY Corporation"
+SPDX-License-Identifier = "LicenseRef-Trademark"
+
+[[annotations]]
+path = "Frontend/libs/ui/src/components/Icon/generated/FacebookBrandIconSvg.tsx"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "Meta Platforms, Inc."
+SPDX-License-Identifier = "LicenseRef-Trademark"
+
+[[annotations]]
+path = "Frontend/libs/ui/src/components/Icon/generated/XBrandIconSvg.tsx"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "X Corp."
+SPDX-License-Identifier = "LicenseRef-Trademark"
+
+# Third party: the share card's fonts, subsets of Noto Sans TC.
+[[annotations]]
+path = [
+  "Frontend/apps/demo/assets/share-card/*.otf",
+  "Frontend/apps/demo/assets/share-card/OFL.txt",
+]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2014-2021 Adobe (http://www.adobe.com/), with Reserved Font Name 'Source'"
+SPDX-License-Identifier = "OFL-1.1"
+
+# Third party: files from GitHub's spec-kit, with changes made here.
+[[annotations]]
+path = [
+  "Backend/.claude/commands/speckit.*.md",
+  "Backend/.specify/scripts/**",
+  "Backend/.specify/templates/**",
+]
+precedence = "aggregate"
+SPDX-FileCopyrightText = ["GitHub, Inc.", "GuangFuHero contributors"]
+SPDX-License-Identifier = "MIT"
