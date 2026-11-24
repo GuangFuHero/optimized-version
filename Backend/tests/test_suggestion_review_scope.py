@@ -74,7 +74,8 @@ async def _team_reviewer_with_property_suggestion(db, *, on_own_station: bool):
     await _grant(db, reviewer, Perm.STATION_REVIEW, "team", "role-review", team=team)
 
     station = Station(
-        geometry=from_shape(_POINT, srid=4326), created_by=str(author.uuid),
+        geometry=from_shape(_POINT, srid=4326),
+        created_by=str(author.uuid),
         team_uuid=team.uuid if on_own_station else other.uuid,
     )
     db.add(station)

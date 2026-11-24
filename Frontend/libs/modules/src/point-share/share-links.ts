@@ -3,7 +3,29 @@ import type {
   PointShareChannel,
   PointShareLink,
   PointShareTarget,
+  ShareHref,
 } from './types';
+
+/**
+ * The share pages another window may open: each channel's, and LINE's message page. Every share
+ * address is built on one of these, and `openSharePage` opens nothing else.
+ */
+const SHARE_PAGES = {
+  line: 'https://social-plugins.line.me/lineit/share',
+  facebook: 'https://www.facebook.com/sharer/sharer.php',
+  threads: 'https://www.threads.net/intent/post',
+  x: 'https://twitter.com/intent/tweet',
+  lineMessage: 'https://line.me/R/msg/text/',
+} as const;
+
+function sharePage(page: keyof typeof SHARE_PAGES, query: string): ShareHref {
+  return `${SHARE_PAGES[page]}?${query}` as ShareHref;
+}
+
+/** LINE's own message page: the app's chat picker on a phone, LINE on the web on a computer. */
+export function lineMessageHref(text: string, url: string): ShareHref {
+  return sharePage('lineMessage', encodeURIComponent(`${text}\n${url}`));
+}
 
 export function createPointShareLinks(
   target: PointShareTarget,
@@ -21,22 +43,22 @@ export function createPointShareLinks(
     {
       channel: 'line',
       label: 'LINE',
-      href: `https://social-plugins.line.me/lineit/share?url=${encodedUrl}&text=${encodedMessage}`,
+      href: sharePage('line', `url=${encodedUrl}&text=${encodedMessage}`),
     },
     {
       channel: 'facebook',
       label: 'Facebook',
-      href: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`,
+      href: sharePage('facebook', `u=${encodedUrl}`),
     },
     {
       channel: 'threads',
       label: 'Threads',
-      href: `https://www.threads.net/intent/post?text=${encodedMessage}`,
+      href: sharePage('threads', `text=${encodedMessage}`),
     },
     {
       channel: 'x',
       label: 'X',
-      href: `https://twitter.com/intent/tweet?text=${encodedText}&url=${encodedUrl}`,
+      href: sharePage('x', `text=${encodedText}&url=${encodedUrl}`),
     },
   ];
 }
@@ -94,10 +116,43 @@ export async function copyPointShareUrl(url: string) {
   document.body.removeChild(textarea);
 }
 
-export function openPointShareLink(href: string) {
-  if (typeof window === 'undefined') {
+/** A channel's share page, in a small window beside this one. */
+export function openPointShareLink(href: ShareHref) {
+  openSharePage(href, 'noopener,noreferrer,width=720,height=640');
+}
+
+/** A share page, in a new tab. */
+export function openShareTab(href: ShareHref) {
+  openSharePage(href, 'noopener');
+}
+
+/**
+ * The one place the site opens another window, and only on a share page above. A cast can make any
+ * string a `ShareHref`, so the address is checked again here; anything else opens nothing. The
+ * window gets the address as checked, not the text it came as: the browser reads that text against
+ * this page, where `https:line.me/…` or `https:\line.me\…` is a path of this site's own.
+ */
+function openSharePage(href: ShareHref, features: string) {
+  const page = typeof window === 'undefined' ? null : checkedSharePage(href);
+
+  if (page === null) {
     return;
   }
 
-  window.open(href, '_blank', 'noopener,noreferrer,width=720,height=640');
+  window.open(page, '_blank', features);
+}
+
+/** `href` read on its own, written out in full, if it is a share page above; else null. */
+function checkedSharePage(href: string): string | null {
+  try {
+    const url = new URL(href);
+
+    return Object.values<string>(SHARE_PAGES).includes(
+      url.origin + url.pathname,
+    )
+      ? url.href
+      : null;
+  } catch {
+    return null;
+  }
 }

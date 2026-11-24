@@ -5,15 +5,15 @@ Revises: a2a8e4d8c51d
 Create Date: 2026-05-31 19:41:26.766112
 
 """
+
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = 'd19cda4d9871'
-down_revision: str | Sequence[str] | None = 'a2a8e4d8c51d'
+revision: str = "d19cda4d9871"
+down_revision: str | Sequence[str] | None = "a2a8e4d8c51d"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

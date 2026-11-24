@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
+import { loadPage } from '../../route/navigate';
+import { SITE_PATHS } from '../../route/paths';
 import { useReturnQuery } from '../../route/use-return-query';
 
 import { useMutation } from '@tanstack/react-query';
@@ -39,7 +41,6 @@ import {
 } from '../login';
 import {
   changePasswordAsync,
-  logoutAllAsync,
   setPasswordAsync,
 } from '../api/client';
 import { resolveAuthErrorMessage } from '../api/error-messages';
@@ -56,7 +57,6 @@ import {
   type LoginMethod,
 } from './account-security-view';
 import {
-  ACCOUNT_SECURITY_PATH,
   addContactSteps,
   buildAccountStepUpHref,
   cannotProveHere,
@@ -75,6 +75,10 @@ import {
   type AccountStepUpAction,
   type StepUpProblem,
 } from './account-step-up';
+import {
+  SIGN_OUT_EVERYWHERE_UNCONFIRMED_MESSAGE,
+  signOutEverywhereAsync,
+} from './sign-out';
 import { clearDraftsOnSignOut } from './sign-out-drafts';
 import { useAddContact } from './use-add-contact';
 import { useContactDraft, type ContactDraft } from './use-contact-draft';
@@ -93,7 +97,7 @@ interface AccountSecurityClientProps {
  * again.
  */
 function signInAgain() {
-  continueSignedOut('/login');
+  continueSignedOut(SITE_PATHS.login);
 }
 
 /** Where a first password is: typed, or waiting on the code the backend sent to a contact first. */
@@ -407,6 +411,7 @@ export function AccountSecurityClient({
     code: contactCode,
   } = useStore(contactForm.store, (state) => state.values);
   const [isLoggingOutAll, setIsLoggingOutAll] = useState(false);
+  const [logoutAllFailed, setLogoutAllFailed] = useState(false);
   const [editor] = useState(() =>
     createStore<SecurityEditor>(() => ({ kind: 'closed' })),
   );
@@ -434,7 +439,7 @@ export function AccountSecurityClient({
     }
 
     await refreshSession();
-    window.location.assign(buildAccountStepUpHref(action));
+    loadPage(buildAccountStepUpHref(action));
   };
 
   const contact = useAddContact({
@@ -638,6 +643,8 @@ export function AccountSecurityClient({
     } else if (row === 'contact') {
       contact.cancel();
       setContactKind(null);
+    } else if (row === 'logout') {
+      setLogoutAllFailed(false);
     }
   }
 
@@ -663,13 +670,12 @@ export function AccountSecurityClient({
     // This tab is signed out by the person's choice too, as by 登出 in the menu.
     clearDraftsOnSignOut(sessionStorageOrNull());
     setIsLoggingOutAll(true);
+    setLogoutAllFailed(false);
 
-    try {
-      await logoutAllAsync();
-      signInAgain();
-    } finally {
-      setIsLoggingOutAll(false);
-    }
+    const outcome = await signOutEverywhereAsync();
+
+    setIsLoggingOutAll(false);
+    setLogoutAllFailed(outcome === 'not-confirmed');
   }
 
   const setPasswordOriginal = originalContactName(contacts);
@@ -1019,7 +1025,7 @@ export function AccountSecurityClient({
             <Button
               component={Link}
               href={authHref('/forgot-password', {
-                callbackUrl: ACCOUNT_SECURITY_PATH,
+                callbackUrl: SITE_PATHS.accountSecurity,
               })}
               variant="ghost"
               sx={BIG_BUTTON}
@@ -1146,6 +1152,11 @@ export function AccountSecurityClient({
         >
           登出所有裝置
         </Button>
+        {logoutAllFailed ? (
+          <Alert severity="error" sx={ALERT_TEXT}>
+            {SIGN_OUT_EVERYWHERE_UNCONFIRMED_MESSAGE}
+          </Alert>
+        ) : null}
       </SecurityRow>
     </Stack>
   );

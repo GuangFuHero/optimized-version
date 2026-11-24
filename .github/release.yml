@@ -1,0 +1,30 @@
+# 按「Generate release notes」時，GitHub 照這裡把這一版合併的 PR 分組，每個 PR 後面標作者，
+# 最後自動加上「New Contributors」（第一次貢獻的人）。分組看 PR 的標籤：frontend、backend、infra
+# 由 .github/workflows/labeler.yml 依改到的路徑自動加；security 由維護者手動加；dependencies 由 Dependabot 加。
+# 手寫的發版說明放在最上面，產生的這一段接在後面當「這版包含的 PR」與致謝。
+changelog:
+  exclude:
+    labels:
+      - skip-changelog
+  categories:
+    - title: 資安
+      labels:
+        - security
+    - title: 前端
+      labels:
+        - frontend
+    - title: 後端
+      labels:
+        - backend
+    - title: CI 與部署
+      labels:
+        - infra
+    - title: 相依套件
+      labels:
+        - dependencies
+    - title: 文件
+      labels:
+        - documentation
+    - title: 其他
+      labels:
+        - "*"

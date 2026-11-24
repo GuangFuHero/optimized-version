@@ -20,6 +20,7 @@ import {
   nameInitials,
 } from '@rescue-frontend/ui';
 
+import { SITE_PATHS } from '../../route/paths';
 import { openMyStationReports } from '../../station/suggestion/open-my-station-reports';
 import { MyTasksDrawer } from '../../ticket/my-claims/my-tasks-drawer';
 
@@ -55,7 +56,7 @@ export function SiteUserMenu({ userName, onSignOut }: SiteUserMenuProps) {
 
   const handleOpenSecurity = () => {
     setAnchorEl(null);
-    router.push('/account/security');
+    router.push(SITE_PATHS.accountSecurity);
   };
 
   const handleSignOut = () => {

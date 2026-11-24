@@ -164,8 +164,10 @@ async def _assigned_and_unassigned() -> dict[str, str]:
         stations = {}
         for key, team_uuid in (("assigned", team.uuid), ("unassigned", None)):
             station = Station(
-                geometry=from_shape(Point(121.5, 24.5), srid=4326), created_by=str(author.uuid),
-                name=f"{tag} {key}", team_uuid=team_uuid,
+                geometry=from_shape(Point(121.5, 24.5), srid=4326),
+                created_by=str(author.uuid),
+                name=f"{tag} {key}",
+                team_uuid=team_uuid,
             )
             db.add(station)
             await db.flush()
@@ -187,7 +189,8 @@ async def test_anyone_can_see_which_team_runs_a_station(client):
 
     assert "errors" not in assigned.json(), assigned.json()
     assert assigned.json()["data"]["station"]["assignedTeam"] == {
-        "uuid": made["team_uuid"], "name": made["team_name"]
+        "uuid": made["team_uuid"],
+        "name": made["team_name"],
     }
     assert unassigned.json()["data"]["station"]["assignedTeam"] is None
 
@@ -256,7 +259,8 @@ async def test_a_station_of_a_deleted_team_is_in_the_unassigned_queue(client):
     body = resp.json()
     assert "errors" not in body, body
     assert sorted(item["name"] for item in body["data"]["stations"]["items"]) == [
-        f"{made['tag']} assigned", f"{made['tag']} unassigned"
+        f"{made['tag']} assigned",
+        f"{made['tag']} unassigned",
     ]
 
 
@@ -279,10 +283,15 @@ async def _contact_stations(own_team_uuid: str) -> str:
         db.add_all([author, other])
         await db.flush()
         for key, team_uuid in (("own", own_team_uuid), ("other", str(other.uuid)), ("unassigned", None)):
-            db.add(Station(
-                geometry=from_shape(Point(121.5, 24.5), srid=4326), created_by=str(author.uuid),
-                name=f"{tag} {key}", team_uuid=team_uuid, contact_phone=PHONE,
-            ))
+            db.add(
+                Station(
+                    geometry=from_shape(Point(121.5, 24.5), srid=4326),
+                    created_by=str(author.uuid),
+                    name=f"{tag} {key}",
+                    team_uuid=team_uuid,
+                    contact_phone=PHONE,
+                )
+            )
         await db.flush()
     return tag
 

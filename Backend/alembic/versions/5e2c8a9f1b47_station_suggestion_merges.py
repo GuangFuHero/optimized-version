@@ -12,6 +12,7 @@ Revises: e3b8f1a6c2d7
 Create Date: 2026-09-22
 
 """
+
 from collections.abc import Sequence
 
 from alembic import op

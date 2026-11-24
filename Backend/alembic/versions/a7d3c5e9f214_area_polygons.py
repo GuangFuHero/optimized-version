@@ -14,6 +14,7 @@ Revises: 5e2c8a9f1b47
 Create Date: 2026-10-04
 
 """
+
 from collections.abc import Sequence
 
 from alembic import op
@@ -67,9 +68,7 @@ def upgrade() -> None:
         )
         """
     )
-    op.execute(
-        "CREATE TABLE IF NOT EXISTS team_zones (uuid UUID PRIMARY KEY REFERENCES area_polygons(uuid))"
-    )
+    op.execute("CREATE TABLE IF NOT EXISTS team_zones (uuid UUID PRIMARY KEY REFERENCES area_polygons(uuid))")
 
     op.execute(
         "ALTER TABLE team_zone_assign ADD CONSTRAINT team_zone_assign_zone_uuid_fkey "
@@ -99,8 +98,7 @@ def downgrade() -> None:
     op.execute("DROP TABLE IF EXISTS hazardous_zones")
     op.execute("DROP TABLE IF EXISTS area_polygons")
     op.execute(
-        "DELETE FROM base_geometries "
-        "WHERE property_name IN ('hazardous_zone', 'team_zone', 'mark_zone')"
+        "DELETE FROM base_geometries WHERE property_name IN ('hazardous_zone', 'team_zone', 'mark_zone')"
     )
 
     op.execute(
@@ -126,9 +124,7 @@ def downgrade() -> None:
         )
         """
     )
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_work_zones_geometry ON work_zones USING GIST (geometry)"
-    )
+    op.execute("CREATE INDEX IF NOT EXISTS ix_work_zones_geometry ON work_zones USING GIST (geometry)")
     op.execute(
         "ALTER TABLE team_zone_assign ADD CONSTRAINT team_zone_assign_zone_uuid_fkey "
         "FOREIGN KEY (zone_uuid) REFERENCES work_zones(uuid)"

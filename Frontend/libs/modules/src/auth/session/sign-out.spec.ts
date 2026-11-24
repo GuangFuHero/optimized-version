@@ -7,7 +7,7 @@ import {
   SESSION_ENDING_EVENT,
   unmarkSigningOutHere,
 } from '../../session/end-expired-session';
-import { signOutHereAsync } from './sign-out';
+import { signOutEverywhereAsync, signOutHereAsync } from './sign-out';
 
 /** The tab's own page: what it would reload or leave for. */
 function fakeBrowserTab() {
@@ -81,5 +81,72 @@ describe('signOutHereAsync', () => {
     endExpiredSession();
 
     expect(location.reload).toHaveBeenCalledOnce();
+  });
+});
+
+// The backend's `POST /auth/logout-all` is the one thing faked.
+describe('signOutEverywhereAsync', () => {
+  it('leaves for the sign-in page once every session has ended', async () => {
+    const location = fakeBrowserTab();
+
+    const outcome = await signOutEverywhereAsync(async () => undefined);
+
+    expect(outcome).toBe('signed-out');
+    expect(location.assign).toHaveBeenCalledWith('/login');
+  });
+
+  it('stays on the page, unable to say how far it got, when the backend fails partway', async () => {
+    // 503: the backend may have ended this session before its session store went out of reach.
+    const location = fakeBrowserTab();
+
+    const outcome = await signOutEverywhereAsync(async () => {
+      throw new ApiError(
+        503,
+        'Session store unavailable',
+        'session_store_unavailable',
+      );
+    });
+
+    expect(outcome).toBe('not-confirmed');
+    expect(location.assign).not.toHaveBeenCalled();
+    expect(location.reload).not.toHaveBeenCalled();
+  });
+
+  it('stays on the page when the backend never answers', async () => {
+    const location = fakeBrowserTab();
+
+    const outcome = await signOutEverywhereAsync(async () => {
+      throw new TypeError('Failed to fetch');
+    });
+
+    expect(outcome).toBe('not-confirmed');
+    expect(location.assign).not.toHaveBeenCalled();
+  });
+
+  it('goes on as a guest, as for any ended session, when this session had already ended', async () => {
+    const location = fakeBrowserTab();
+
+    const outcome = await signOutEverywhereAsync(async () => {
+      // The proxy's mark on this very answer reaches the expiry watch while the request is out;
+      // it waits, and this tab is reloaded once, as a guest.
+      endExpiredSession();
+      throw new ApiError(401, 'Not authenticated', 'not_authenticated');
+    });
+
+    expect(outcome).toBe('session-ended');
+    expect(location.reload).toHaveBeenCalledOnce();
+    expect(location.assign).not.toHaveBeenCalled();
+  });
+
+  it('is not reloaded by another request ending while the sessions are being signed out', async () => {
+    const location = fakeBrowserTab();
+
+    await signOutEverywhereAsync(async () => {
+      endExpiredSession();
+    });
+
+    expect(location.reload).not.toHaveBeenCalled();
+    expect(location.assign).toHaveBeenCalledOnce();
+    expect(location.assign).toHaveBeenCalledWith('/login');
   });
 });

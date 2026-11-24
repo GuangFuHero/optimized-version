@@ -8,6 +8,7 @@ Chained onto main's head rather than the announcements revision this branch was 
 against: a sibling of what main added since would leave two heads, and `alembic upgrade
 head` refuses to run with more than one. Re-point this line whenever main moves under it.
 """
+
 from collections.abc import Sequence
 
 import sqlalchemy as sa
@@ -15,8 +16,8 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = 'c3f0a1b2d4e6'
-down_revision: str | Sequence[str] | None = 'c4a91e77b0d3'
+revision: str = "c3f0a1b2d4e6"
+down_revision: str | Sequence[str] | None = "c4a91e77b0d3"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -30,15 +31,25 @@ def upgrade() -> None:
         sa.Column("state", sa.String(length=50), server_default=sa.text("'briefing'"), nullable=False),  # noqa: E501
         sa.Column("created_by", sa.UUID(as_uuid=True), nullable=False),
         sa.Column("uuid", sa.UUID(as_uuid=True), nullable=False, comment="主鍵 UUID"),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False, comment="建立時間"),  # noqa: E501
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False, comment="最後更新時間"),  # noqa: E501
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+            comment="建立時間",
+        ),  # noqa: E501
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+            comment="最後更新時間",
+        ),  # noqa: E501
         sa.Column("delete_at", sa.DateTime(timezone=True), nullable=True, comment="軟刪除時間"),
         sa.ForeignKeyConstraint(["created_by"], ["users.uuid"]),
         sa.PrimaryKeyConstraint("uuid"),
     )
-    op.create_index(
-        op.f("ix_briefing_templates_created_by"), "briefing_templates", ["created_by"]
-    )
+    op.create_index(op.f("ix_briefing_templates_created_by"), "briefing_templates", ["created_by"])
 
     op.create_table(
         "briefings",
@@ -48,8 +59,20 @@ def upgrade() -> None:
         sa.Column("state", sa.String(length=50), server_default=sa.text("'briefing'"), nullable=False),  # noqa: E501
         sa.Column("created_by", sa.UUID(as_uuid=True), nullable=False),
         sa.Column("uuid", sa.UUID(as_uuid=True), nullable=False, comment="主鍵 UUID"),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False, comment="建立時間"),  # noqa: E501
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False, comment="最後更新時間"),  # noqa: E501
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+            comment="建立時間",
+        ),  # noqa: E501
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+            comment="最後更新時間",
+        ),  # noqa: E501
         sa.Column("delete_at", sa.DateTime(timezone=True), nullable=True, comment="軟刪除時間"),
         sa.ForeignKeyConstraint(["created_by"], ["users.uuid"]),
         sa.ForeignKeyConstraint(["template_uuid"], ["briefing_templates.uuid"]),

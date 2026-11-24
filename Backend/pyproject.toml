@@ -68,7 +68,8 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"alembic/**" = ["D", "E501"]  # auto-generated migration files
+# `**/` so it matches whether ruff runs from Backend/ (local) or the repo root (CI).
+"**/alembic/**" = ["D", "E501"]  # auto-generated migration files
 
 [tool.ruff.lint.isort]
 # Classify app/tests/tools/scripts as first-party regardless of cwd, so import grouping is identical

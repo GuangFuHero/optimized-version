@@ -59,7 +59,7 @@ def test_searching_only_prepends_relevance_keys():
     for repo, _model, _term in _cases():
         standing = [_rendered(c) for c in repo._order_by(None)]
         searching = [_rendered(c) for c in repo._order_by("光復")]
-        assert searching[-len(standing):] == standing, (
+        assert searching[-len(standing) :] == standing, (
             f"{type(repo).__name__}: searching does not end in the standing order\n"
             f"  standing:  {standing}\n  searching: {searching}"
         )
@@ -72,7 +72,7 @@ def test_the_public_ticket_ordering_has_the_same_shape():
     standing = [_rendered(c) for c in repo._order_by(None, public_only=True)]
     searching = [_rendered(c) for c in repo._order_by("光復", public_only=True)]
 
-    assert searching[-len(standing):] == standing
+    assert searching[-len(standing) :] == standing
     assert len(searching) == len(standing) + 2
     assert searching[-1] == _rendered(Tickets.uuid.desc())
     assert "search_text" not in " ".join(searching), "ranked on text the caller cannot read"
@@ -89,9 +89,7 @@ async def test_list_by_ticket_also_ends_on_the_primary_key():
     timestamp, so the tie this guards against is the normal case, not an edge case.
     """
     db = CapturingSession()
-    await TicketTaskRepository().list_by_ticket(
-        db, "00000000-0000-0000-0000-000000000000", public_only=False
-    )
+    await TicketTaskRepository().list_by_ticket(db, "00000000-0000-0000-0000-000000000000", public_only=False)
 
     last = list(db.statements[-1]._order_by_clauses)[-1]
     assert _rendered(last) == _rendered(TicketTask.uuid.desc()), (

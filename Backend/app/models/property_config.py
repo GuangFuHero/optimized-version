@@ -51,9 +51,7 @@ class StationPropertyConfig(Base, UUIDPKMixin):
 
     __tablename__ = "station_property_config"
     __table_args__ = (
-        UniqueConstraint(
-            "station_type", "property_name", name="uq_station_property_config_key"
-        ),
+        UniqueConstraint("station_type", "property_name", name="uq_station_property_config_key"),
     )
     station_type: Mapped[str] = mapped_column(String(50))
     property_name: Mapped[str] = mapped_column(String(100))
@@ -64,7 +62,10 @@ class StationPropertyConfig(Base, UUIDPKMixin):
     )
     # 空陣列 = 不分災害型別一律啟用（沿用 station_type='all' 的慣例）
     disaster_types: Mapped[list[str]] = mapped_column(
-        ARRAY(String), server_default=text("'{}'"), default=list, nullable=False,
+        ARRAY(String),
+        server_default=text("'{}'"),
+        default=list,
+        nullable=False,
         comment="啟用於哪些災害型別；空陣列代表全部",
     )
     label: Mapped[str | None] = mapped_column(
@@ -82,9 +83,7 @@ class TaskPropertyConfig(Base, UUIDPKMixin):
     """ORM model defining the property schema for a given task type."""
 
     __tablename__ = "task_property_config"
-    __table_args__ = (
-        UniqueConstraint("task_type", "property_name", name="uq_task_property_config_key"),
-    )
+    __table_args__ = (UniqueConstraint("task_type", "property_name", name="uq_task_property_config_key"),)
     task_type: Mapped[str] = mapped_column(String(50))
     property_name: Mapped[str] = mapped_column(String(100))
     data_type: Mapped[str] = mapped_column(String(50))
@@ -93,7 +92,10 @@ class TaskPropertyConfig(Base, UUIDPKMixin):
         String(20), nullable=True, comment="number 欄位的單位，例如 cm、mm；其他型別為 NULL"
     )
     disaster_types: Mapped[list[str]] = mapped_column(
-        ARRAY(String), server_default=text("'{}'"), default=list, nullable=False,
+        ARRAY(String),
+        server_default=text("'{}'"),
+        default=list,
+        nullable=False,
         comment="啟用於哪些災害型別；空陣列代表全部",
     )
     label: Mapped[str | None] = mapped_column(
@@ -115,9 +117,7 @@ class TicketPropertyConfig(Base, UUIDPKMixin):
     """
 
     __tablename__ = "ticket_property_config"
-    __table_args__ = (
-        UniqueConstraint("property_name", name="uq_ticket_property_config_key"),
-    )
+    __table_args__ = (UniqueConstraint("property_name", name="uq_ticket_property_config_key"),)
     property_name: Mapped[str] = mapped_column(String(100))
     data_type: Mapped[str] = mapped_column(String(50))
     enum_options: Mapped[list | None] = mapped_column(JSON, nullable=True)
@@ -128,7 +128,10 @@ class TicketPropertyConfig(Base, UUIDPKMixin):
     # 這裡的「查詢參數為空」代表「這張單沒有災害型別」，只回傳本欄位為空的通用欄位，
     # 而不是「不過濾」——見 repositories/config_repository.py::TicketPropertyConfigRepository。
     disaster_types: Mapped[list[str]] = mapped_column(
-        ARRAY(String), server_default=text("'{}'"), default=list, nullable=False,
+        ARRAY(String),
+        server_default=text("'{}'"),
+        default=list,
+        nullable=False,
         comment="啟用於哪些災害型別；空陣列代表全部",
     )
     label: Mapped[str | None] = mapped_column(

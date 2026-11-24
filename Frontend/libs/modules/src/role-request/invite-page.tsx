@@ -28,7 +28,13 @@ import { authHref } from '../auth/login/utils/auth-href';
 import { useAuthSession } from '../session/auth-session';
 import { readApplicantAccount } from './applicant';
 import { ApplicantSection } from './applicant-section';
-import { buildPhoneStepUpHref, readApplyReturn } from './apply-return';
+import { loadPage } from '../route/navigate';
+import { SITE_PATHS } from '../route/paths';
+import {
+  APPLY_HREF,
+  buildPhoneStepUpHref,
+  readApplyReturn,
+} from './apply-return';
 import { roleRequestErrorMessage } from './error';
 import {
   pendingRequestName,
@@ -163,13 +169,10 @@ export function TeamInvitePage({ token }: { token: string }) {
   );
 }
 
-/** 前台: the public map, where 申請管理權限 also opens (`?apply=1`, `apply-return.ts`). */
-const SITE_HREF = '/map';
-const APPLY_HREF = '/map?apply=1';
-
+/** 前台: the public map, where 申請管理權限 also opens (`APPLY_HREF`, `apply-return.ts`). */
 function BackToSite({ label = '回到前台' }: { label?: string }) {
   return (
-    <Button href={SITE_HREF} variant="ghost">
+    <Button href={SITE_PATHS.map} variant="ghost">
       {label}
     </Button>
   );
@@ -434,7 +437,7 @@ function InviteForm({
       });
       // Refresh cookies through the API proxy before a whole-page navigation to LINE.
       await refreshSession();
-      window.location.assign(buildPhoneStepUpHref(window.location));
+      loadPage(buildPhoneStepUpHref(window.location));
     },
   });
   const resumed = useRef(false);
@@ -507,7 +510,7 @@ function InviteForm({
       reason,
       phone: verification.phone,
     });
-    window.location.assign(APPLY_HREF);
+    loadPage(APPLY_HREF);
   };
 
   return (

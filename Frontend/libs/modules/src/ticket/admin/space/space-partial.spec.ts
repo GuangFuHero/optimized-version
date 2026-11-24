@@ -5,10 +5,51 @@ import { boardCountLine } from './board-count';
 import {
   deletedToast,
   deleteKeepsText,
+  readSpaceTickets,
   SPACE_TICKETS_LIMIT,
   strandedHeading,
   ticketsCut,
 } from './space-partial';
+
+describe('a space whose tickets are not in yet', () => {
+  it('reads as loading, not as a space with none', () => {
+    expect(readSpaceTickets({ data: undefined, error: null })).toEqual({
+      state: 'loading',
+    });
+  });
+
+  it('reads as failed when the request failed', () => {
+    expect(
+      readSpaceTickets({ data: undefined, error: new Error('offline') }),
+    ).toEqual({ state: 'failed' });
+  });
+
+  it('keeps the tickets it read when a later read fails, marked as out of date', () => {
+    expect(
+      readSpaceTickets({ data: ['a'], error: new Error('offline') }),
+    ).toEqual({ state: 'stale', tickets: ['a'] });
+  });
+
+  it('marks an empty list read earlier as out of date too, not as a space with none', () => {
+    expect(
+      readSpaceTickets({ data: [], error: new Error('offline') }),
+    ).toEqual({ state: 'stale', tickets: [] });
+  });
+
+  it('is empty only when the read came back empty', () => {
+    expect(readSpaceTickets({ data: [], error: null })).toEqual({
+      state: 'loaded',
+      tickets: [],
+    });
+  });
+
+  it('does not claim the space is empty in the delete dialog', () => {
+    expect(deleteKeepsText(null, false)).toBe(
+      '這個空間會從列表與地圖上消失。底下的任務單會保留，變回一般任務單（不再歸在這個空間），樓層與戶別照舊寫在單上。',
+    );
+    expect(deletedToast('中正25', null, false)).toBe('已刪除空間「中正25」');
+  });
+});
 
 describe('a space whose tickets came back cut at the limit', () => {
   it('is cut once a full page comes back', () => {
