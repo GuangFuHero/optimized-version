@@ -79,8 +79,7 @@ async def _create_station(client, token: str, lonlat=(121.5, 24.5)) -> str:
 async def _attach(client, token: str, station_uuid: str, url: str):
     resp = await client.post(
         "/graphql",
-        json={"query": ATTACH_STATION_PHOTO,
-              "variables": {"stationUuid": station_uuid, "url": url}},
+        json={"query": ATTACH_STATION_PHOTO, "variables": {"stationUuid": station_uuid, "url": url}},
         headers=auth_header(token),
     )
     return resp.json()
@@ -124,18 +123,16 @@ async def _make_user_with_grants(redis, grants: dict[Perm, str], *, team_uuid: s
                 permission = Permission(key=perm.value)
                 db.add(permission)
                 await db.flush()
-            db.add(
-                RolePermissionAssign(
-                    role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope
-                )
-            )
+            db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope))
         db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid, team_uuid=team_uuid))
         # Session and token must name the SAME identity (ADR-195): the session record is the
         # source of truth, and a token that disagrees reads as one a switch has replaced.
         act = encode_act(str(role.uuid), str(team_uuid) if team_uuid is not None else None)
         sid, _ = await SessionRepository(redis).create_session(str(user.uuid), "test", act=act)
         return str(user.uuid), create_access_token(
-            data={"sub": str(user.uuid)}, sid=sid, act=act,
+            data={"sub": str(user.uuid)},
+            sid=sid,
+            act=act,
         )
 
 
@@ -143,8 +140,7 @@ async def _make_user_with_grants(redis, grants: dict[Perm, str], *, team_uuid: s
 async def contributor_auth(redis):
     """A user who can attach photos but holds no station.review — the plain-citizen shape."""
     return await _make_user_with_grants(
-        redis,
-        {Perm.STATION_ADD: "all", Perm.STATION_CONTRIBUTE: "all", Perm.STATION_VIEW: "all"}
+        redis, {Perm.STATION_ADD: "all", Perm.STATION_CONTRIBUTE: "all", Perm.STATION_VIEW: "all"}
     )
 
 
@@ -167,17 +163,18 @@ async def _assign_station(station_uuid: str, team_uuid: str) -> None:
 
 # --- A2: url validation -----------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "bad_url",
     [
-        "https://example.com/" + "a" * 500,     # over the String(500) column width
-        "javascript:alert(1)",                  # scheme not in the allowlist
+        "https://example.com/" + "a" * 500,  # over the String(500) column width
+        "javascript:alert(1)",  # scheme not in the allowlist
         "data:text/html,<script>alert(1)</script>",
         "not a url at all",
-        "http://example.com/photo.jpg",         # plain http is rejected too
-        "   ",                                  # whitespace-only
-        "https://",                             # scheme but no host — an empty <img src>
+        "http://example.com/photo.jpg",  # plain http is rejected too
+        "   ",  # whitespace-only
+        "https://",  # scheme but no host — an empty <img src>
     ],
 )
 async def test_attach_station_photo_rejects_bad_url(client, coordinator_auth, bad_url):
@@ -201,9 +198,7 @@ async def test_attach_station_photo_rejects_bad_url(client, coordinator_auth, ba
     assert "INSERT" not in message.upper(), message
     assert "photos" not in message, message
 
-    resp = await client.post(
-        "/graphql", json={"query": STATION_PHOTOS, "variables": {"uuid": station_uuid}}
-    )
+    resp = await client.post("/graphql", json={"query": STATION_PHOTOS, "variables": {"uuid": station_uuid}})
     assert resp.json()["data"]["station"]["photos"] == []
 
 
@@ -234,6 +229,7 @@ async def test_attach_station_photo_accepts_uppercase_scheme(client, coordinator
 
 # --- A6: moderated removal --------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_detach_station_photo_removes_it(client, coordinator_auth, contributor_auth):
     """Someone who can moderate stations can remove a photo, and the read path forgets it.
@@ -249,16 +245,15 @@ async def test_detach_station_photo_removes_it(client, coordinator_auth, contrib
     _, token = coordinator_auth
     _, uploader_token = contributor_auth
     station_uuid = await _create_station(client, token)
-    photo_uuid = (await _attach(client, uploader_token, station_uuid,
-                               "https://example.com/p.jpg"))["data"]["attachStationPhoto"]["uuid"]
+    photo_uuid = (await _attach(client, uploader_token, station_uuid, "https://example.com/p.jpg"))["data"][
+        "attachStationPhoto"
+    ]["uuid"]
 
     body = await _detach(client, token, photo_uuid)
     assert "errors" not in body, body
     assert body["data"]["detachStationPhoto"] is True
 
-    resp = await client.post(
-        "/graphql", json={"query": STATION_PHOTOS, "variables": {"uuid": station_uuid}}
-    )
+    resp = await client.post("/graphql", json={"query": STATION_PHOTOS, "variables": {"uuid": station_uuid}})
     assert resp.json()["data"]["station"]["photos"] == []
 
 
@@ -274,8 +269,7 @@ async def test_detach_station_photo_denied_without_review(client, contributor_au
     """
     _, uploader_token = contributor_auth
     _, other_token = await _make_user_with_grants(
-        redis,
-        {Perm.STATION_ADD: "all", Perm.STATION_CONTRIBUTE: "all", Perm.STATION_VIEW: "all"}
+        redis, {Perm.STATION_ADD: "all", Perm.STATION_CONTRIBUTE: "all", Perm.STATION_VIEW: "all"}
     )
     station_uuid = await _create_station(client, uploader_token)
     attached = await _attach(client, uploader_token, station_uuid, "https://example.com/p.jpg")
@@ -286,9 +280,7 @@ async def test_detach_station_photo_denied_without_review(client, contributor_au
     assert "errors" in body, body
 
     # Still there.
-    resp = await client.post(
-        "/graphql", json={"query": STATION_PHOTOS, "variables": {"uuid": station_uuid}}
-    )
+    resp = await client.post("/graphql", json={"query": STATION_PHOTOS, "variables": {"uuid": station_uuid}})
     assert len(resp.json()["data"]["station"]["photos"]) == 1
 
 
@@ -311,9 +303,7 @@ async def test_detach_station_photo_uploader_removes_own(client, contributor_aut
     assert "errors" not in body, body
     assert body["data"]["detachStationPhoto"] is True
 
-    resp = await client.post(
-        "/graphql", json={"query": STATION_PHOTOS, "variables": {"uuid": station_uuid}}
-    )
+    resp = await client.post("/graphql", json={"query": STATION_PHOTOS, "variables": {"uuid": station_uuid}})
     assert resp.json()["data"]["station"]["photos"] == []
 
 
@@ -336,10 +326,12 @@ async def test_detach_station_photo_team_scoped_reviewer_on_another_teams_statio
     own = await _create_station(client, coord_token)
     unassigned = await _create_station(client, coord_token)
     await _assign_station(own, reviewer_team)
-    own_photo = (await _attach(client, coord_token, own,
-                               "https://example.com/own.jpg"))["data"]["attachStationPhoto"]["uuid"]
-    other_photo = (await _attach(client, coord_token, unassigned,
-                                 "https://example.com/other.jpg"))["data"]["attachStationPhoto"]["uuid"]
+    own_photo = (await _attach(client, coord_token, own, "https://example.com/own.jpg"))["data"][
+        "attachStationPhoto"
+    ]["uuid"]
+    other_photo = (await _attach(client, coord_token, unassigned, "https://example.com/other.jpg"))["data"][
+        "attachStationPhoto"
+    ]["uuid"]
 
     denied = await _detach(client, reviewer_token, other_photo)
     assert "errors" in denied, denied
@@ -369,11 +361,13 @@ async def test_detach_station_photo_rejects_a_ticket_photo(client, coordinator_a
         "/graphql",
         json={
             "query": CREATE_TICKET,
-            "variables": {"input": {
-                "title": "Ticket owning a photo",
-                "geometry": {"type": "Point", "coordinates": [121.5, 24.5]},
-                "contactName": "Ticket Contact",
-            }},
+            "variables": {
+                "input": {
+                    "title": "Ticket owning a photo",
+                    "geometry": {"type": "Point", "coordinates": [121.5, 24.5]},
+                    "contactName": "Ticket Contact",
+                }
+            },
         },
         headers=auth_header(token),
     )
@@ -383,8 +377,12 @@ async def test_detach_station_photo_rejects_a_ticket_photo(client, coordinator_a
 
     # No ticket-photo mutation exists yet, so insert the row the way a future one would.
     async with test_db() as db:
-        photo = Photo(ref_uuid=ticket_uuid, ref_type="geometry",
-                      url="https://example.com/ticket.jpg", created_by=user_uuid)
+        photo = Photo(
+            ref_uuid=ticket_uuid,
+            ref_type="geometry",
+            url="https://example.com/ticket.jpg",
+            created_by=user_uuid,
+        )
         db.add(photo)
         await db.flush()
         ticket_photo_uuid = str(photo.uuid)

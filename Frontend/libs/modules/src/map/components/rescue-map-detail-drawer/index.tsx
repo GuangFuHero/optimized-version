@@ -1,6 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 
 import { Box } from '@mui/material';
 
@@ -135,6 +136,8 @@ function createStationResources(marker: RescueMapMarkerItem) {
     // 後端也已移除 `confidence_score`（a889fd4，從未被寫入）。
   ];
 }
+
+const NO_TICKET_ACTIONS = [] as const;
 
 function createTicketSummary(marker: RescueMapMarkerItem) {
   const [latitude, longitude] = marker.position;
@@ -315,6 +318,7 @@ function RescueMapDetailDrawerView({
       {marker.detailType === 'ticket' && !ticketDetailOverrides ? (
         <TicketDetailDrawer
           {...createTicketSummary(marker)}
+          footerActions={NO_TICKET_ACTIONS}
           closeAction={closeAction}
           width="100%"
           height="100%"

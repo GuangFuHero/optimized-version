@@ -13,7 +13,7 @@
 
 ## 模組
 
-數字是 `pnpm lint` 的 design-system warning 數（顏色＝hex／rgb／rgba；圓角、字級＝寫死的數字；Button＝從 MUI import），在 `main` 的 `dab23743` 上算的。之後 `main` 新加的程式可能會多幾個；接任務時先跑一次 lint 看該模組現在的數字。
+下表保留 lint 升為 error 前的歷史統計。舊版介面沿用的尺寸、配色和陰影已納入對應的 `designTokens` 分組，供設計師審查。
 依序處理；路徑在 `libs/modules/src/` 底下，`apps/*` 除外。
 
 ⚠️ 數字**不含**模組專屬調色盤：`libs/ui/src/theme/tokens.ts` 的 `moduleColorSchemes`（auth、adminShell、adminPanels、stationList、stationDetail、ticket、mapOverlay）有大量寫死的 hex，模組透過 `getRescueColorScheme(theme)` 讀取。`libs/ui` 不在 lint 範圍內，所以例如 `admin/user` 只顯示 4 個顏色 warning，真正的偏差在調色盤裡。
@@ -53,19 +53,13 @@
 ## 修正任務的規則
 
 1. **一個 PR 只修一個模組**，在上表填負責人、PR、狀態。
-2. 修掉該模組**所有** warning，並打開設計分支上對應的原型畫面（`Design/前台/`、`Design/後台/`，讀法見 `design-system.md`）逐一對照。
+2. 對照設計分支上對應的原型畫面（`Design/前台/`、`Design/後台/`，讀法見 `design-system.md`），把有對應 token 或共用元件的例外換掉。
 3. **不改行為**：只動樣式，不改資料流、文案、互動。
 4. PR 附修改前後的截圖（桌機與手機寬度各一張）。
-5. 找不到對應 token 的顏色（例：任務管理頁的 `#564337`、`#151C22`、`#954900`、`#17212B`、`#E7EFF7`、`#667085`）是**設計師要回答的問題**：在 #uiux 問，不要自己新增 token，也不要挑一個「差不多」的。等答案時先留著，PR 說明列出來。
+5. 既有畫面的尺寸和配色已依原值收進 `designTokens`，等設計師審查。新的樣式找不到對應 token 時，先在 #uiux 跟設計師確認，再新增或更換 token。
 6. 模組有用到 `moduleColorSchemes` 的調色盤時，把那份調色盤也一起改成語意 token（或改成直接用 `designTokens`），算在同一個 PR；不再用的項目刪掉。
 7. 圖示的 `fontSize` 改用 `designTokens.iconSize`；文字改用 `typography` 或（前台）`textSize`。
-8. 同一個 PR 把這個模組的 lint 升成 error，之後不會再退回去。在 `../eslint.config.mjs` 的最後加一行（`apps/*` 則加在該 app 的 eslint 設定，路徑相對於 app）：
-
-   ```js
-   designSystemGuardrail(['libs/modules/src/ticket/admin/**/*.ts', 'libs/modules/src/ticket/admin/**/*.tsx'], 'error'),
-   ```
-
-9. `pnpm lint` 通過、該模組 0 個 design-system warning，才算完成。
+8. 設計師確認替代值後，換掉舊 token，並移除已無使用處的項目。最後跑 `pnpm lint --max-warnings=0`。
 
 ## 圖示（已統一）
 

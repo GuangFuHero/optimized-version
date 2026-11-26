@@ -1,9 +1,11 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { useForm, useStore } from '@tanstack/react-form';
 import type { components } from '@rescue-frontend/data-access/openapi';
 
-import { Alert, Button, Stack } from '@mui/material';
+import { Alert, Stack } from '@mui/material';
+import { Button } from '@rescue-frontend/ui';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { startTransition, useState } from 'react';
 
@@ -144,11 +146,7 @@ export function ResetPasswordFormClient() {
     return (
       <Stack spacing={2}>
         <AuthActionCard title="密碼已重設" description="用新密碼登入就可以了。">
-          <Button
-            variant="contained"
-            onClick={goToLogin}
-            sx={{ minHeight: 44, borderRadius: '999px' }}
-          >
+          <Button variant="primary" onClick={goToLogin}>
             回到登入
           </Button>
         </AuthActionCard>
@@ -234,18 +232,17 @@ export function ResetPasswordFormClient() {
         {errorMessage ? <Alert severity="error">{errorMessage}</Alert> : null}
 
         <Button
-          variant="contained"
+          variant="primary"
           disabled={isSubmitting}
           onClick={() => {
             void form.handleSubmit();
           }}
-          sx={{ minHeight: 44, borderRadius: '999px' }}
         >
           {isSubmitting ? '處理中⋯' : '設定新密碼'}
         </Button>
 
         <Button
-          variant="text"
+          variant="ghost"
           onClick={() => {
             startTransition(() => {
               router.push(authHref('/forgot-password', { callbackUrl }), {
@@ -257,7 +254,7 @@ export function ResetPasswordFormClient() {
           重新取得驗證碼
         </Button>
 
-        <Button variant="text" onClick={goToLogin}>
+        <Button variant="ghost" onClick={goToLogin}>
           回到登入
         </Button>
       </AuthActionCard>

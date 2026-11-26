@@ -15,15 +15,15 @@ Revises: e1f2a3b4c5d6
 Create Date: 2026-08-06
 
 """
+
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = 'b8f4d2a6e1c3'
-down_revision: str | Sequence[str] | None = 'e1f2a3b4c5d6'
+revision: str = "b8f4d2a6e1c3"
+down_revision: str | Sequence[str] | None = "e1f2a3b4c5d6"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -35,16 +35,16 @@ def upgrade() -> None:
     # trigger-disable handling.
     op.execute("UPDATE photos SET ref_type = 'geometry' WHERE ref_type = 'ticket'")
 
-    op.add_column('stations', sa.Column('contact_name', sa.String(100), nullable=True))
-    op.add_column('stations', sa.Column('contact_email', sa.String(100), nullable=True))
-    op.add_column('stations', sa.Column('contact_phone', sa.String(50), nullable=True))
+    op.add_column("stations", sa.Column("contact_name", sa.String(100), nullable=True))
+    op.add_column("stations", sa.Column("contact_email", sa.String(100), nullable=True))
+    op.add_column("stations", sa.Column("contact_phone", sa.String(50), nullable=True))
 
 
 def downgrade() -> None:
     """Drop station contact columns; rename photos.ref_type='geometry' back to 'ticket'."""
-    op.drop_column('stations', 'contact_phone')
-    op.drop_column('stations', 'contact_email')
-    op.drop_column('stations', 'contact_name')
+    op.drop_column("stations", "contact_phone")
+    op.drop_column("stations", "contact_email")
+    op.drop_column("stations", "contact_name")
 
     # Station photos added since the upgrade get relabelled 'ticket' here too: this UPDATE
     # cannot tell the two apart, because station and ticket photos both store a

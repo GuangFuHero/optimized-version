@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { Box, ButtonBase, Portal, Snackbar, Typography } from '@mui/material';
@@ -62,7 +63,13 @@ export function NeedClaimToast({ open, needName, onClose }: NeedClaimToastProps)
             boxShadow: shadow.lg,
           }}
         >
-          <Icons.circleCheck sx={{ fontSize: 20, mt: '1px', color: color.fg.success }} />
+          <Icons.circleCheck
+            sx={{
+              fontSize: designTokens.iconSize.lg,
+              mt: '1px',
+              color: color.fg.success,
+            }}
+          />
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography
               sx={{
@@ -96,7 +103,9 @@ export function NeedClaimToast({ open, needName, onClose }: NeedClaimToastProps)
               label={
                 <>
                   看行前資訊
-                  <Icons.chevronRight sx={{ fontSize: 14 }} />
+                  <Icons.chevronRight
+                    sx={{ fontSize: designTokens.iconSize.sm }}
+                  />
                 </>
               }
               sx={{ mt: 1.5, minHeight: 44 }}
@@ -113,7 +122,11 @@ export function NeedClaimToast({ open, needName, onClose }: NeedClaimToastProps)
               color: color.fg.neutral.subtle,
             }}
           >
-            <Icons.close sx={{ fontSize: 16 }} />
+            <Icons.close
+              sx={{
+                fontSize: designTokens.iconSize[16],
+              }}
+            />
           </ButtonBase>
         </Box>
       </Snackbar>

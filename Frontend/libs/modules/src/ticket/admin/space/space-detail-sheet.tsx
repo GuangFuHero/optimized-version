@@ -1,9 +1,13 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { useState } from 'react';
 
 import { Box, ButtonBase, Typography } from '@mui/material';
-import { useDeleteBuildingMap } from '@rescue-frontend/data-access/admin';
+import {
+  useDeleteBuildingMap,
+  type AdminBuildingMapFieldsFragment,
+} from '@rescue-frontend/data-access/admin';
 import {
   Button,
   Callout,
@@ -17,6 +21,7 @@ import { Building2, Layers, PenLine, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Muted } from '../../../admin/shared/muted';
+import { StatTilesRetry } from '../../../admin/shared/stat-tiles';
 import { TicketStatusTag } from '../ticket-status-tag';
 import { matchFloor } from './floors';
 import {
@@ -83,7 +88,15 @@ export function SpaceDetailSheet({
   onAddHousehold,
   onDeleted,
 }: SpaceDetailSheetProps) {
-  const { space, isLoading, error } = useSpace(uuid);
+  const {
+    building,
+    space,
+    tickets,
+    retryingTickets,
+    retryTickets,
+    isLoading,
+    error,
+  } = useSpace(uuid);
   const caps = useSpaceCapabilities();
   const [editing, setEditing] = useState(false);
   const [previousUuid, setPreviousUuid] = useState(uuid);
@@ -100,9 +113,14 @@ export function SpaceDetailSheet({
       variant="admin"
       ariaLabel="看各樓層"
     >
-      {space ? (
+      {building ? (
         <SpaceDetailContent
+          building={building}
           space={space}
+          ticketsFailed={tickets === 'failed'}
+          ticketsStale={tickets === 'stale'}
+          retryingTickets={retryingTickets}
+          onRetryTickets={retryTickets}
           canEdit={caps.canEdit}
           canDelete={caps.canDelete}
           onEdit={() => setEditing(true)}
@@ -115,11 +133,9 @@ export function SpaceDetailSheet({
             })
               ? () =>
                   onAddHousehold({
-                    uuid: space.building.uuid,
-                    name: space.building.name,
-                    floorLabels: space.building.floors.map(
-                      (floor) => floor.label,
-                    ),
+                    uuid: building.uuid,
+                    name: building.name,
+                    floorLabels: building.floors.map((floor) => floor.label),
                   })
               : undefined
           }
@@ -153,7 +169,12 @@ export function SpaceDetailSheet({
 }
 
 function SpaceDetailContent({
+  building,
   space,
+  ticketsFailed,
+  ticketsStale,
+  retryingTickets,
+  onRetryTickets,
   canEdit,
   canDelete,
   onEdit,
@@ -161,7 +182,14 @@ function SpaceDetailContent({
   onAddHousehold,
   onDeleted,
 }: {
-  space: LoadedSpace;
+  building: AdminBuildingMapFieldsFragment;
+  /** Null until the building's tickets are in. */
+  space: LoadedSpace | null;
+  ticketsFailed: boolean;
+  /** Tickets read earlier are shown, but the latest read failed. */
+  ticketsStale: boolean;
+  retryingTickets: boolean;
+  onRetryTickets: () => void;
   canEdit: boolean;
   canDelete: boolean;
   onEdit: () => void;
@@ -170,20 +198,16 @@ function SpaceDetailContent({
   onAddHousehold?: () => void;
   onDeleted: () => void;
 }) {
-  const { building, analysis } = space;
-  const [showAll, setShowAll] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const remove = useDeleteBuildingMap();
   const address = building.secondaryLocation?.fullAddress;
   const addressStatus =
     ADDRESS_STATUS[building.secondaryLocation?.normalizationStatus ?? ''];
-  const withTickets = analysis.floors.filter((floor) => floor.tickets.length);
-  const shownFloors = showAll ? analysis.floors : withTickets;
-  const hiddenCount = analysis.floors.length - withTickets.length;
-  const count = analysis.members.length;
-  // Deleting keeps every ticket under it, the cancelled ones `members` leaves out too.
-  const kept = space.tickets.length;
-  const cut = ticketsCut(space.tickets.length);
+  // Deleting keeps every ticket under it, the cancelled ones `members` leaves out too. Unknown
+  // (null) until they are read, or when only an earlier read is at hand: the dialog and the toast
+  // then leave the count out rather than state one that may be out of date.
+  const kept = space && !ticketsStale ? space.tickets.length : null;
+  const cut = ticketsCut(kept ?? 0);
 
   // Awaited, not mutate's own onSuccess: the delete's refetch finds the space gone and unmounts
   // this content first, and TanStack drops a mutate callback once its caller has unmounted, which
@@ -247,10 +271,12 @@ function SpaceDetailContent({
               </Button>
             ) : null}
             {canEdit ? (
+              // Waits for the tickets: the form warns of those on floors it would take away.
               <Button
                 variant="outline"
                 size="md"
                 startIcon={<PenLine size={16} />}
+                disabled={!space}
                 onClick={onEdit}
               >
                 編輯
@@ -260,134 +286,26 @@ function SpaceDetailContent({
         ) : undefined
       }
     >
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        {cut ? (
-          <Callout tone="info">
-            這一棟的任務單超過 200 張，只算了前 200 張：樓層狀態可能不完整。
-          </Callout>
-        ) : null}
-        <StateTiles counts={analysis.counts} />
-
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Typography
-            sx={{ ...typography.label[500], color: color.fg.neutral.default }}
-          >
-            各樓層
-          </Typography>
-          <Typography
-            sx={{ ...typography.data[300], color: color.fg.neutral.muted }}
-          >
-            {floorsCaption(analysis)}
-          </Typography>
-          {hiddenCount > 0 && withTickets.length > 0 ? (
-            <ButtonBase
-              onClick={() => setShowAll((all) => !all)}
-              sx={{
-                ml: 'auto',
-                height: 28,
-                px: '12px',
-                borderRadius: `${radius.full}px`,
-                border: `1px solid ${color.border.default}`,
-                ...typography.label[300],
-                color: color.fg.neutral.default,
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {showAll
-                ? '只看有任務單的樓層'
-                : `顯示全部 ${analysis.floors.length} 層`}
-            </ButtonBase>
+      {space ? (
+        <>
+          {ticketsStale ? (
+            <StatTilesRetry
+              message="讀不到最新的任務單，下面是之前讀到的"
+              retrying={retryingTickets}
+              onRetry={onRetryTickets}
+            />
           ) : null}
-        </Box>
-
-        {count === 0 ? (
-          <EmptyState
-            icon={<Layers size={28} />}
-            title="這個空間還沒有任務單"
-            description={
-              <>
-                民眾在前台點這個空間，選樓層後送出求助，就會出現在這裡的那一層。
-                <br />
-                戶別（302、早餐店）是寫在每張任務單上的。
-              </>
-            }
-          />
-        ) : (
-          <Box>
-            {shownFloors.map((floor) => (
-              <FloorRow
-                key={floor.label}
-                floor={floor}
-                onOpenTicket={onOpenTicket}
-              />
-            ))}
-            {!showAll && hiddenCount > 0 ? (
-              <Typography
-                sx={{
-                  ...typography.data[300],
-                  color: color.fg.neutral.muted,
-                  py: '10px',
-                  borderTop: `1px solid ${color.border.default}`,
-                }}
-              >
-                {`其他 ${hiddenCount} 層沒有任務單`}
-              </Typography>
-            ) : null}
-            {analysis.noFloor.length ? (
-              <>
-                <FloorRow
-                  floor={{
-                    label: '？',
-                    state: floorState(analysis.noFloor),
-                    tickets: analysis.noFloor,
-                  }}
-                  onOpenTicket={onOpenTicket}
-                />
-                <Typography
-                  sx={{
-                    ...typography.data[300],
-                    color: color.fg.neutral.muted,
-                    mt: '-4px',
-                  }}
-                >
-                  「？」＝通報的人不知道在幾樓（樓層可以不填）
-                </Typography>
-              </>
-            ) : null}
-            {analysis.offList.length ? (
-              <Box sx={{ mt: '8px' }}>
-                <Callout tone="warning">
-                  <strong>{`${analysis.offList.length} 張單的樓層不在這棟的樓層裡`}</strong>
-                  <br />
-                  多半是樓層數改少了。單不會不見，樓層照原本寫的留著：
-                  {analysis.offList
-                    .map(
-                      (ticket) =>
-                        `#${ticket.propertyName}（${writtenFloor(ticket)}）`,
-                    )
-                    .join('、')}
-                </Callout>
-                <Box
-                  sx={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '6px',
-                    mt: '8px',
-                  }}
-                >
-                  {analysis.offList.map((ticket) => (
-                    <MiniTicket
-                      key={ticket.uuid}
-                      ticket={ticket}
-                      onOpen={onOpenTicket}
-                    />
-                  ))}
-                </Box>
-              </Box>
-            ) : null}
-          </Box>
-        )}
-      </Box>
+          <SpaceFloors space={space} onOpenTicket={onOpenTicket} />
+        </>
+      ) : ticketsFailed ? (
+        <StatTilesRetry
+          message="讀不到這一棟的任務單"
+          retrying={retryingTickets}
+          onRetry={onRetryTickets}
+        />
+      ) : (
+        <Muted>載入中…</Muted>
+      )}
 
       <Dialog
         open={confirming}
@@ -407,6 +325,154 @@ function SpaceDetailContent({
         {deleteKeepsText(kept, cut)}
       </Dialog>
     </SheetLayout>
+  );
+}
+
+/** The floors with their tickets, once the tickets are in. */
+function SpaceFloors({
+  space,
+  onOpenTicket,
+}: {
+  space: LoadedSpace;
+  onOpenTicket?: (ticketUuid: string) => void;
+}) {
+  const { analysis } = space;
+  const [showAll, setShowAll] = useState(false);
+  const withTickets = analysis.floors.filter((floor) => floor.tickets.length);
+  const shownFloors = showAll ? analysis.floors : withTickets;
+  const hiddenCount = analysis.floors.length - withTickets.length;
+  const count = analysis.members.length;
+  const cut = ticketsCut(space.tickets.length);
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      {cut ? (
+        <Callout tone="info">
+          這一棟的任務單超過 200 張，只算了前 200 張：樓層狀態可能不完整。
+        </Callout>
+      ) : null}
+      <StateTiles counts={analysis.counts} />
+
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <Typography
+          sx={{ ...typography.label[500], color: color.fg.neutral.default }}
+        >
+          各樓層
+        </Typography>
+        <Typography
+          sx={{ ...typography.data[300], color: color.fg.neutral.muted }}
+        >
+          {floorsCaption(analysis)}
+        </Typography>
+        {hiddenCount > 0 && withTickets.length > 0 ? (
+          <ButtonBase
+            onClick={() => setShowAll((all) => !all)}
+            sx={{
+              ml: 'auto',
+              height: 28,
+              px: '12px',
+              borderRadius: `${radius.full}px`,
+              border: `1px solid ${color.border.default}`,
+              ...typography.label[300],
+              color: color.fg.neutral.default,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {showAll
+              ? '只看有任務單的樓層'
+              : `顯示全部 ${analysis.floors.length} 層`}
+          </ButtonBase>
+        ) : null}
+      </Box>
+
+      {count === 0 ? (
+        <EmptyState
+          icon={<Layers size={28} />}
+          title="這個空間還沒有任務單"
+          description={
+            <>
+              民眾在前台點這個空間，選樓層後送出求助，就會出現在這裡的那一層。
+              <br />
+              戶別（302、早餐店）是寫在每張任務單上的。
+            </>
+          }
+        />
+      ) : (
+        <Box>
+          {shownFloors.map((floor) => (
+            <FloorRow
+              key={floor.label}
+              floor={floor}
+              onOpenTicket={onOpenTicket}
+            />
+          ))}
+          {!showAll && hiddenCount > 0 ? (
+            <Typography
+              sx={{
+                ...typography.data[300],
+                color: color.fg.neutral.muted,
+                py: '10px',
+                borderTop: `1px solid ${color.border.default}`,
+              }}
+            >
+              {`其他 ${hiddenCount} 層沒有任務單`}
+            </Typography>
+          ) : null}
+          {analysis.noFloor.length ? (
+            <>
+              <FloorRow
+                floor={{
+                  label: '？',
+                  state: floorState(analysis.noFloor),
+                  tickets: analysis.noFloor,
+                }}
+                onOpenTicket={onOpenTicket}
+              />
+              <Typography
+                sx={{
+                  ...typography.data[300],
+                  color: color.fg.neutral.muted,
+                  mt: '-4px',
+                }}
+              >
+                「？」＝通報的人不知道在幾樓（樓層可以不填）
+              </Typography>
+            </>
+          ) : null}
+          {analysis.offList.length ? (
+            <Box sx={{ mt: '8px' }}>
+              <Callout tone="warning">
+                <strong>{`${analysis.offList.length} 張單的樓層不在這棟的樓層裡`}</strong>
+                <br />
+                多半是樓層數改少了。單不會不見，樓層照原本寫的留著：
+                {analysis.offList
+                  .map(
+                    (ticket) =>
+                      `#${ticket.propertyName}（${writtenFloor(ticket)}）`,
+                  )
+                  .join('、')}
+              </Callout>
+              <Box
+                sx={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '6px',
+                  mt: '8px',
+                }}
+              >
+                {analysis.offList.map((ticket) => (
+                  <MiniTicket
+                    key={ticket.uuid}
+                    ticket={ticket}
+                    onOpen={onOpenTicket}
+                  />
+                ))}
+              </Box>
+            </Box>
+          ) : null}
+        </Box>
+      )}
+    </Box>
   );
 }
 
@@ -442,7 +508,7 @@ function StateTiles({ counts }: { counts: Record<FloorState, number> }) {
             <Typography
               sx={{
                 ...typography.heading[700],
-                fontSize: 22,
+                fontSize: designTokens.typography.fontSize[22],
                 color: n ? floorStateColor(state) : color.fg.neutral.muted,
               }}
             >

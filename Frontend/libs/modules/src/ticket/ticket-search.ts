@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /** The backend's `tickets(q:)` takes 2 to 50 characters and refuses anything else. */
 const SEARCH_MIN_LENGTH = 2;
 const SEARCH_MAX_LENGTH = 50;

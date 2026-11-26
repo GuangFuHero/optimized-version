@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -5,7 +6,7 @@ import {
   polygonAreaKm2,
   polygonSelfIntersects,
   toGeoJsonPolygon,
-} from './polygon';
+} from '../src/geometry.ts';
 
 const SQUARE: [number, number][] = [
   [0, 0],

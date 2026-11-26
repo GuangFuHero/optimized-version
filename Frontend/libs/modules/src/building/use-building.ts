@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
@@ -8,7 +9,7 @@ import {
   type GetBuildingMapWithTicketsQuery,
 } from '@rescue-frontend/data-access';
 
-import { mapTicketToMarker } from '../map/site/markers';
+import { mapTicketToMarker } from '../map/markers';
 import { siteGraphqlQuery } from '../session/site-clients';
 import { formatTicketStreet } from '../ticket/address';
 import { onTicketReread } from '../ticket/ticket-changes';

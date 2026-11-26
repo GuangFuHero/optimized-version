@@ -12,11 +12,12 @@ DB can migrate end-to-end. It changes no schema — both branches already applie
 The announcement *code* port (Perm.ANN_* / require_authenticated) still lives on
 feature/backend-annoucement-rbac; only the migration-DAG reconciliation is done here.
 """
+
 from collections.abc import Sequence
 
 # revision identifiers, used by Alembic.
-revision: str = 'c7d8e9f0a1b2'
-down_revision: str | Sequence[str] | None = ('b7c1f0a92d34', 'a7c9e1f4b2d8')
+revision: str = "c7d8e9f0a1b2"
+down_revision: str | Sequence[str] | None = ("b7c1f0a92d34", "a7c9e1f4b2d8")
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

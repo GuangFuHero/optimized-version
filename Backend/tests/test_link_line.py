@@ -1,4 +1,5 @@
 """Endpoint tests for linking a LINE identity to the current (logged-in) account."""
+
 import json
 
 import pytest
@@ -18,8 +19,12 @@ STEP_UP = {"step_up": {"password": PASSWORD}}  # ADR-217: linking needs proof of
 
 async def _password_user(db_session, redis, email="owner@x.com"):
     user = await create_account(
-        db_session, name="Owner", contact_type="email", value=email,
-        password_hash=get_password_hash(PASSWORD, generate_salt()))
+        db_session,
+        name="Owner",
+        contact_type="email",
+        value=email,
+        password_hash=get_password_hash(PASSWORD, generate_salt()),
+    )
     headers = await auth_headers_for(redis, user.uuid)
     return user, headers
 
@@ -41,11 +46,18 @@ async def test_link_attaches_line_identity_no_contact(client, db_session, redis)
     from sqlalchemy import func, select
 
     from app.models.auth import UserContact, UserIdentity
-    line = (await db_session.execute(select(UserIdentity).where(
-        UserIdentity.user_uuid == user_uuid, UserIdentity.provider == "line"))).scalar_one_or_none()
+
+    line = (
+        await db_session.execute(
+            select(UserIdentity).where(UserIdentity.user_uuid == user_uuid, UserIdentity.provider == "line")
+        )
+    ).scalar_one_or_none()
     assert line is not None and line.provider_subject is not None
-    n = (await db_session.execute(select(func.count()).select_from(UserContact)
-         .where(UserContact.user_uuid == user_uuid))).scalar_one()
+    n = (
+        await db_session.execute(
+            select(func.count()).select_from(UserContact).where(UserContact.user_uuid == user_uuid)
+        )
+    ).scalar_one()
     assert n == 1  # only the original email contact; link adds none
 
 
@@ -71,6 +83,7 @@ async def test_link_twice_409(client, db_session, redis):
     """Linking a second LINE identity to an already-linked account returns 409."""
     _, headers = await _password_user(db_session, redis)
     await client.post("/api/v1/auth/link/line", headers=headers, json={"id_token": _tok(), **STEP_UP})
-    res = await client.post("/api/v1/auth/link/line", headers=headers,
-                            json={"id_token": _tok(sub="Ulink2"), **STEP_UP})
+    res = await client.post(
+        "/api/v1/auth/link/line", headers=headers, json={"id_token": _tok(sub="Ulink2"), **STEP_UP}
+    )
     assert res.status_code == 409

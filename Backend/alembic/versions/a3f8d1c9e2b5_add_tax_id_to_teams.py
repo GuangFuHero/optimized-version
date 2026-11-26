@@ -9,13 +9,14 @@ Nullable and non-unique on purpose: government agencies may lack one, and it is 
 plain descriptive data — a team's scope boundary is still its own uuid (ADR-053), so this
 column is never an authorization boundary.
 """
+
 from collections.abc import Sequence
 
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = 'a3f8d1c9e2b5'
-down_revision: str | Sequence[str] | None = 'c219aac56556'
+revision: str = "a3f8d1c9e2b5"
+down_revision: str | Sequence[str] | None = "c219aac56556"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

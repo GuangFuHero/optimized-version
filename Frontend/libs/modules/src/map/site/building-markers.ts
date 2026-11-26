@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * Open buildings (開啟空間) on the site's map of tickets: one entry each, 0 tickets inside or more —
  * the way in to file the first one cannot wait for one to be there. A tap opens the building's

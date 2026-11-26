@@ -134,9 +134,7 @@ async def set_user_permission(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
 
-@router.delete(
-    "/users/{user_uuid}/permissions/{cap}", status_code=status.HTTP_204_NO_CONTENT
-)
+@router.delete("/users/{user_uuid}/permissions/{cap}", status_code=status.HTTP_204_NO_CONTENT)
 async def revoke_user_permission(
     user_uuid: UUID,
     cap: Perm,
@@ -165,9 +163,7 @@ async def create_role(
 ):
     """Create a new empty role (super_admin only, via rbac.edit)."""
     try:
-        return await rbac_admin_service.create_role(
-            db, actor=current_user, name=body.name, kind=body.kind
-        )
+        return await rbac_admin_service.create_role(db, actor=current_user, name=body.name, kind=body.kind)
     except RbacConflictError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
@@ -205,9 +201,7 @@ async def delete_role(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
 
-@router.delete(
-    "/users/{user_uuid}/role/{role_uuid}", status_code=status.HTTP_204_NO_CONTENT
-)
+@router.delete("/users/{user_uuid}/role/{role_uuid}", status_code=status.HTTP_204_NO_CONTENT)
 async def unassign_user_role(
     user_uuid: UUID,
     role_uuid: UUID,

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import type { GraphQLFormattedError } from 'graphql';
 
 import type { TypedDocumentString } from './__generated__/graphql';
@@ -50,6 +51,7 @@ export function createGraphqlRequest({
     document: TypedDocumentString<TResult, TVariables>,
     variables: TVariables,
     signal?: AbortSignal,
+    options?: Pick<RequestInit, 'keepalive'>,
   ): Promise<TResult> {
     let response: Response;
     try {
@@ -63,6 +65,7 @@ export function createGraphqlRequest({
         credentials: 'include',
         cache,
         signal,
+        keepalive: options?.keepalive,
       });
     } catch (error) {
       if (signal?.aborted) throw error;

@@ -184,28 +184,22 @@ async def seed():
         db.add_all(mock_notifications)
         await db.commit()
 
-        # 生成可直接用於 Swagger "Authorize" 授權的 JWT Token
-        from app.core.security import create_access_token
-
-        alice_token = create_access_token({"sub": str(alice.uuid)})
-        bob_token = create_access_token({"sub": str(bob.uuid)})
-        charlie_token = create_access_token({"sub": str(charlie.uuid)})
-
+        # 只印使用者 UUID，不印 token：要測 Swagger 時自己用下方指令產生。
         print("\n" + "=" * 80)
-        print("✅ 假資料生成完成！Swagger 登入測試 Token 清單：")
+        print("✅ 假資料生成完成！測試使用者：")
         print("=" * 80)
-        print("\n👤 1. Alice (NGO Admin - 陳隊長) | 未讀: 3 則 (含 Urgent ⚠️)")
-        print(f"   Token: {alice_token}")
-        print("\n👤 2. Bob (NGO Member - 林志工)   | 未讀: 2 則 (含 Task 📌)")
-        print(f"   Token: {bob_token}")
-        print("\n👤 3. Charlie (Gov Admin - 王專員) | 未讀: 1 則 🏢")
-        print(f"   Token: {charlie_token}")
+        print(f"\n👤 1. Alice (NGO Admin - 陳隊長) | 未讀: 3 則 (含 Urgent ⚠️) | uuid: {alice.uuid}")
+        print(f"👤 2. Bob (NGO Member - 林志工)   | 未讀: 2 則 (含 Task 📌)   | uuid: {bob.uuid}")
+        print(f"👤 3. Charlie (Gov Admin - 王專員) | 未讀: 1 則 🏢             | uuid: {charlie.uuid}")
         print("\n" + "=" * 80)
         print("🔑 如何在 Swagger 登入測試：")
-        print("1. 打開 http://localhost:8000/docs")
-        print("2. 點擊右上角綠色的【Authorize 🔓】按鈕")
-        print("3. 複製上方任一使用者的 Token 貼入 Value 欄位，點擊【Authorize】")
-        print("4. 現在測試 /api/v1/notifications 就不會再出現 Not authenticated 了！")
+        print("1. 在 Backend/ 產生該使用者的 token：")
+        print(
+            '   python -c "from app.core.security import create_access_token; '
+            "print(create_access_token({'sub': '<uuid>'}))\""
+        )
+        print("2. 打開 http://localhost:8000/docs，點右上角【Authorize 🔓】")
+        print("3. 把 token 貼入 Value 欄位，點擊【Authorize】")
         print("=" * 80 + "\n")
 
 

@@ -1,4 +1,5 @@
 """Tests for the SMS sender abstraction."""
+
 import logging
 from datetime import UTC, datetime
 
@@ -38,12 +39,15 @@ def test_a_changed_password_sms_says_when_in_taiwan_time_and_what_to_do():
     )
 
 
-@pytest.mark.parametrize("build", [
-    lambda: build_verification_sms("123456"),
-    lambda: build_password_reset_sms("123456"),
-    build_sso_notice_sms,
-    lambda: build_password_set_sms("09****678", changed=True, at=CHANGED_AT),
-])
+@pytest.mark.parametrize(
+    "build",
+    [
+        lambda: build_verification_sms("123456"),
+        lambda: build_password_reset_sms("123456"),
+        build_sso_notice_sms,
+        lambda: build_password_set_sms("09****678", changed=True, at=CHANGED_AT),
+    ],
+)
 def test_bodies_fit_one_kotsms_point(build):
     """Every body fits KotSMS's 70-char 1-point bracket and leads with the 實名制 sender identity.
 
@@ -58,6 +62,7 @@ def test_bodies_fit_one_kotsms_point(build):
 def test_get_sms_sender_defaults_to_console(monkeypatch):
     """get_sms_sender returns the console sender by default."""
     from app.core.config import settings
+
     monkeypatch.setattr(settings, "SMS_PROVIDER", "console")
     assert isinstance(get_sms_sender(), ConsoleSmsSender)
 
@@ -65,15 +70,19 @@ def test_get_sms_sender_defaults_to_console(monkeypatch):
 def test_get_sms_sender_returns_kotsms_when_configured(monkeypatch):
     """SMS_PROVIDER=kotsms selects the KotSMS adapter."""
     from app.core.config import settings
+
     monkeypatch.setattr(settings, "SMS_PROVIDER", "kotsms")
     assert isinstance(get_sms_sender(), KotSmsSender)
 
 
-@pytest.mark.parametrize(("e164", "expected"), [
-    ("+886912345678", "0912345678"),      # TW mobile: 09 prefix, never 8869
-    ("+886227923939", "0227923939"),      # TW landline
-    ("+8613922223333", "8613922223333"),  # international: country code kept, "+" dropped
-])
+@pytest.mark.parametrize(
+    ("e164", "expected"),
+    [
+        ("+886912345678", "0912345678"),  # TW mobile: 09 prefix, never 8869
+        ("+886227923939", "0227923939"),  # TW landline
+        ("+8613922223333", "8613922223333"),  # international: country code kept, "+" dropped
+    ],
+)
 def test_to_kotsms_number(e164, expected):
     """E.164 is rewritten into the digits-only format KotSMS accepts."""
     assert to_kotsms_number(e164) == expected
@@ -83,6 +92,7 @@ def test_to_kotsms_number(e164, expected):
 async def test_kotsms_send_without_credentials_raises(monkeypatch):
     """The adapter refuses to run before the credentials are configured."""
     from app.core.config import settings
+
     monkeypatch.setattr(settings, "KOTSMS_USERNAME", "")
     monkeypatch.setattr(settings, "KOTSMS_PASSWORD", "")
     with pytest.raises(RuntimeError, match="KOTSMS_USERNAME"):
@@ -128,6 +138,7 @@ def _capture_kotsms_post(monkeypatch, reply):
 def kotsms_credentials(monkeypatch):
     """Configure dummy credentials so the adapter gets past its guard."""
     from app.core.config import settings
+
     monkeypatch.setattr(settings, "KOTSMS_USERNAME", "user")
     monkeypatch.setattr(settings, "KOTSMS_PASSWORD", "pass")
 
@@ -142,15 +153,19 @@ async def test_kotsms_send_accepts_delivery_statuscodes(monkeypatch, kotsms_cred
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(("statuscode", "expected"), [
-    ("e", "帳號、密碼錯誤"),
-    ("k", "無效的連線位址"),
-    ("p", "沒有權限使用外部 Http 程式"),
-    ("6", "門號有錯誤"),
-    ("8", "逾時無送達"),
-])
+@pytest.mark.parametrize(
+    ("statuscode", "expected"),
+    [
+        ("e", "帳號、密碼錯誤"),
+        ("k", "無效的連線位址"),
+        ("p", "沒有權限使用外部 Http 程式"),
+        ("6", "門號有錯誤"),
+        ("8", "逾時無送達"),
+    ],
+)
 async def test_kotsms_send_raises_on_failure_statuscode(
-        monkeypatch, kotsms_credentials, statuscode, expected):
+    monkeypatch, kotsms_credentials, statuscode, expected
+):
     """A failing statuscode must surface — swallowing it would lose the user's OTP silently."""
     _capture_kotsms_post(monkeypatch, f"[1]\nstatuscode={statuscode}\n")
 

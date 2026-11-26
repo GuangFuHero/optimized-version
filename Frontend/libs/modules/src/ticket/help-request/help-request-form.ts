@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * 請求協助: what a resident fills in, and the `createHelpRequest` input it becomes (prototype
  * `SiteTicketCreateDrawer`, `site-actions.jsx:1424-1765`).

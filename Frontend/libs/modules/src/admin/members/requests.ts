@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * What a review card says about a role request (Spec/026). One table holds three kinds
  * (ADR-350): joining an existing team, founding a new one, becoming a data auditor.

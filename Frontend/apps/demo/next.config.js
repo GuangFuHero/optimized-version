@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 //@ts-check
 
 const { composePlugins, withNx } = require('@nx/next');
@@ -56,6 +57,7 @@ const nextConfig = {
   transpilePackages: [
     '@rescue-frontend/ui',
     '@rescue-frontend/modules',
+    '@rescue-frontend/leaflet',
     '@rescue-frontend/data-access',
   ],
   // Standalone output for a lean production Docker image: a self-contained server.js plus

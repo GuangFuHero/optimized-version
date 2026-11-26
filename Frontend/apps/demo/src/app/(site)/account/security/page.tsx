@@ -1,9 +1,11 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { Container } from '@mui/material';
 import type { Metadata } from 'next';
 
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import {
+  ACCOUNT_SECURITY_SIGN_IN_HREF,
   AccountSecurityClient,
   AccountSecurityInBrowser,
 } from '@rescue-frontend/modules';
@@ -26,7 +28,7 @@ export default async function AccountSecurityPage() {
   );
 
   if (!user) {
-    redirect('/login?callbackUrl=%2Faccount%2Fsecurity');
+    redirect(ACCOUNT_SECURITY_SIGN_IN_HREF);
   }
 
   return (

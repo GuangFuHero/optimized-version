@@ -72,9 +72,7 @@ class ActiveIdentityRepository:
         ).all()
         return [_to_identity(r) for r in rows]
 
-    async def resolve(
-        self, db: AsyncSession, user_uuid: str, act: str | None
-    ) -> ActiveIdentity | None:
+    async def resolve(self, db: AsyncSession, user_uuid: str, act: str | None) -> ActiveIdentity | None:
         """Resolve an `act` claim, or None when it names nothing the user still holds.
 
         None is the signal for ADR-096's fail-closed behaviour: the request and the refresh

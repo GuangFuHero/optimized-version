@@ -1,10 +1,10 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import {
   Alert,
   AlertTitle,
   Box,
-  Button,
   ButtonBase,
   Stack,
   TextField,
@@ -15,7 +15,12 @@ import { useId } from 'react';
 import { useForm, useStore } from '@tanstack/react-form';
 
 import { GetStationForSuggestionDocument } from '@rescue-frontend/data-access';
-import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
+import {
+  Button,
+  designTokens,
+  displayTextSize,
+  Icons,
+} from '@rescue-frontend/ui';
 
 import { siteGraphqlQuery } from '../../session/site-clients';
 import { SiteActionDrawer } from '../../shell/site/site-action-drawer';
@@ -90,11 +95,11 @@ function GuestStationSuggestionDrawer({
       onClose={onClose}
       footer={
         <>
-          <Button variant="outlined" onClick={onClose} sx={{ flex: 1 }}>
+          <Button variant="outline" onClick={onClose} sx={{ flex: 1 }}>
             取消
           </Button>
           <Button
-            variant="contained"
+            variant="primary"
             startIcon={<Icons.logIn />}
             onClick={onSignIn}
             sx={{ flex: 2 }}
@@ -163,11 +168,11 @@ function StationSuggestionFormDrawer({
       footer={
         form ? (
           <>
-            <Button variant="outlined" onClick={onClose} sx={{ flex: 1 }}>
+            <Button variant="outline" onClick={onClose} sx={{ flex: 1 }}>
               取消
             </Button>
             <Button
-              variant="contained"
+              variant="primary"
               onClick={() => void formApi.handleSubmit()}
               disabled={Boolean(problem) || submitting}
               sx={{ flex: 2 }}

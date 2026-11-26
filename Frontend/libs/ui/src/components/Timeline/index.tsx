@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { ArrowRight, History } from 'lucide-react';
 import { Box, Stack, Typography } from '@mui/material';
 import type { ReactNode } from 'react';

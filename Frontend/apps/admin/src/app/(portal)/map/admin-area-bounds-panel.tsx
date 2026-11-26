@@ -1,11 +1,13 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { X } from 'lucide-react';
 
-import { Box, Button, ButtonBase, Stack, Typography } from '@mui/material';
+import { Box, ButtonBase, Stack, Typography } from '@mui/material';
 
 import type { BoundaryChange } from '@rescue-frontend/modules';
-import { designTokens } from '@rescue-frontend/ui';
+import { Button, designTokens } from '@rescue-frontend/ui';
+import { AreaStats } from './area-stats';
 
 const { color, radius, typography } = designTokens;
 
@@ -31,7 +33,7 @@ export function AdminAreaBoundsPanel({
   isTeamZone: boolean;
   teams: readonly string[];
   cornerCount: number;
-  change: BoundaryChange;
+  change: BoundaryChange | null;
   areaKm2: number;
   crosses: boolean;
   /** Whether the corners are anywhere but where they began. */
@@ -43,9 +45,9 @@ export function AdminAreaBoundsPanel({
   const teamNames = teams.join('、');
   const stats: [string, string][] = [
     ['轉角', String(cornerCount)],
-    ['改完區內', `${change.inside} 張`],
-    ['新納入', `${change.added} 張`],
-    ['移出', `${change.removed} 張`],
+    ['改完區內', change ? `${change.inside} 張` : '—'],
+    ['新納入', change ? `${change.added} 張` : '—'],
+    ['移出', change ? `${change.removed} 張` : '—'],
     ['面積 km²', areaKm2.toFixed(2)],
   ];
 
@@ -79,34 +81,7 @@ export function AdminAreaBoundsPanel({
         <Typography sx={{ ...typography.body[300], lineHeight: 1.7 }}>
           拖曳轉角移動，點轉角刪除，點邊上的 ＋ 加一個轉角。
         </Typography>
-        <Box
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
-            gap: 1.5,
-            p: 1.75,
-            borderRadius: `${radius.md}px`,
-            border: `1px solid ${color.border.default}`,
-            bgcolor: color.bg.neutral.default,
-          }}
-        >
-          {stats.map(([label, value]) => (
-            <Box key={label}>
-              <Typography
-                sx={{
-                  ...typography.label[300],
-                  fontWeight: 700,
-                  color: color.fg.neutral.subtle,
-                }}
-              >
-                {label}
-              </Typography>
-              <Typography sx={{ ...typography.heading[600] }}>
-                {value}
-              </Typography>
-            </Box>
-          ))}
-        </Box>
+        <AreaStats values={stats} />
         {crosses ? (
           <Typography
             role="alert"
@@ -115,7 +90,7 @@ export function AdminAreaBoundsPanel({
             邊線交叉或重疊了，這樣的範圍不能儲存。請把轉角拖回去，或按「回到原本範圍」。
           </Typography>
         ) : null}
-        {change.removed > 0 ? (
+        {change && change.removed > 0 ? (
           <Typography
             sx={{
               ...typography.body[300],
@@ -124,13 +99,13 @@ export function AdminAreaBoundsPanel({
             }}
           >
             {isTeamZone
-              ? `${change.removed} 張任務單會掉到範圍外，並立刻從負責單位${
+              ? `${change.removed} 張任務單會移出此區。如果仍在負責單位${
                   teamNames ? `（${teamNames}）` : ''
-                }的清單消失。`
+                }的其他責任區，仍會留在該單位的清單。`
               : `${change.removed} 張任務單會掉到範圍外。`}
           </Typography>
         ) : null}
-        {change.added > 0 && isTeamZone ? (
+        {change && change.added > 0 && isTeamZone ? (
           <Typography
             sx={{
               ...typography.body[300],
@@ -138,8 +113,7 @@ export function AdminAreaBoundsPanel({
               color: color.fg.neutral.subtle,
             }}
           >
-            {change.added}{' '}
-            張任務單會進到範圍內，負責單位的清單會立刻多出這幾張。
+            {change.added} 張任務單會納入此區，負責單位可在清單中查看。
           </Typography>
         ) : null}
         {!changed ? (
@@ -165,15 +139,15 @@ export function AdminAreaBoundsPanel({
           borderTop: `1px solid ${color.border.default}`,
         }}
       >
-        <Button onClick={onReset} disabled={!changed}>
+        <Button variant="ghost" onClick={onReset} disabled={!changed}>
           回到原本範圍
         </Button>
         <Box sx={{ flex: 1 }} />
-        <Button variant="outlined" onClick={onCancel}>
+        <Button variant="outline" onClick={onCancel}>
           取消
         </Button>
         <Button
-          variant="contained"
+          variant="primary"
           disabled={!changed || crosses || cornerCount < 3}
           onClick={onSave}
         >

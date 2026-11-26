@@ -1,9 +1,11 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import type {
   InfiniteData,
   UseInfiniteQueryOptions,
 } from '@tanstack/react-query';
 import type { LucideIcon } from 'lucide-react';
 import type { StoreApi } from 'zustand';
+import type { GetMapAreasQuery } from '@rescue-frontend/data-access';
 import type {
   StationType,
   TicketType,
@@ -147,6 +149,10 @@ export interface RescueMapArea {
 export interface RescueMapDraftArea {
   points: [number, number][];
   invalid: boolean;
+  drawing?: {
+    onChange: (points: [number, number][]) => void;
+    onFinish: () => void;
+  };
 }
 
 /**
@@ -163,13 +169,18 @@ export interface RescueMapEditArea {
 /** A 危險區, on the 封閉區域 layer. */
 export type RescueMapClosureArea = RescueMapArea;
 
+export type RescueMapAreaTeam = Pick<
+  GetMapAreasQuery['areas']['items'][number]['assignedTeams'][number],
+  'uuid' | 'name'
+>;
+
 /** A 責任區, or a 標示區 switched to public, on the 責任區與標示區 layer. */
 export interface RescueMapPublicZone extends RescueMapArea {
   kind: 'team_zone' | 'mark_zone';
   /** The teams a 責任區 is assigned to; none for a 標示區. A guest gets no 責任區 at all (ADR-311 point 8). */
   teams: readonly string[];
-  /** The same teams by uuid, in the same order, for the admin 互助地圖 to add and remove them by. */
-  teamUuids?: readonly string[];
+  /** Live team identities for assignment actions. */
+  assignedTeams?: readonly RescueMapAreaTeam[];
   /**
    * False for a 標示區 the public map does not show. Only the admin 互助地圖 asks for those
    * (`includePrivate`), and draws them dashed.
@@ -271,7 +282,8 @@ export interface RescueMapMarkerItem {
     >
   > & {
     /** The 責任區 teams of the place, where the admin map asked for them; none = 未指派. */
-    responsibleTeams?: readonly { name: string }[];
+    responsibleTeams?: readonly (Pick<RescueMapAreaTeam, 'name'> &
+      Partial<Pick<RescueMapAreaTeam, 'uuid'>>)[];
   };
   /**
    * The ticket's needs, each with its own claim button. Only the site list fetches them

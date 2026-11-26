@@ -1,0 +1,35 @@
+name: 功能建議
+description: 想要新功能，或希望現有的功能改得更好用
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        謝謝你的建議！先講遇到什麼問題，再講想到的做法，我們比較好判斷。
+
+        **不要放真實的個人資料**：姓名、電話、地址、帳號，文字和截圖都一樣。
+  - type: textarea
+    id: problem
+    attributes:
+      label: 遇到什麼問題
+      description: 誰、在什麼情況下、想做什麼但做不到或很麻煩。
+      placeholder: 例：志工在現場想知道最近的加水站，但地圖上站點太多，找不到。
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 你想到的做法
+      description: 沒有想法也沒關係，可以留白。
+  - type: textarea
+    id: context
+    attributes:
+      label: 其他補充
+      description: 參考的網站或畫面、現場的照片（請先遮住個資）、相關的 issue。
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: 送出前
+      options:
+        - label: 我確認文字和截圖裡沒有真實的個人資料。
+          required: true

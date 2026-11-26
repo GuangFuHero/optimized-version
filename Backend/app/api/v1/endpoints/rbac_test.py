@@ -8,6 +8,7 @@ from app.models.auth import User
 
 router = APIRouter()
 
+
 @router.get("/public")
 async def public_api():
     """公開 API：不需要任何權限。"""
@@ -17,16 +18,25 @@ async def public_api():
 @router.get("/map-view", dependencies=[security.has_permission(Perm.MAP_VIEW)])
 async def map_view_api(current_user: User = Depends(security.get_current_user)):
     """地圖檢視 API：需要 'map.view' 權限。"""
-    return {"status": "success", "message": f"Authorized. User {current_user.name} ({current_user.uuid}) has map view permission."}  # noqa: E501
+    return {
+        "status": "success",
+        "message": f"Authorized. User {current_user.name} ({current_user.uuid}) has map view permission.",
+    }  # noqa: E501
 
 
 @router.get("/map-create", dependencies=[security.has_permission(Perm.ZONE_ADD)])
 async def map_create_api(current_user: User = Depends(security.get_current_user)):
     """建立地圖區域 API：需要 'work_zone.add' 權限。"""
-    return {"status": "success", "message": f"Authorized. User {current_user.name} ({current_user.uuid}) has map create permission."}  # noqa: E501
+    return {
+        "status": "success",
+        "message": f"Authorized. User {current_user.name} ({current_user.uuid}) has map create permission.",
+    }  # noqa: E501
 
 
 @router.get("/admin-only", dependencies=[security.has_permission(Perm.USER_VIEW)])
 async def admin_only_api(current_user: User = Depends(security.get_current_user)):
     """管理員專用 API：需要 'user.view' 權限。"""
-    return {"status": "success", "message": f"Authorized. User {current_user.name} ({current_user.uuid}) has admin permission."}  # noqa: E501
+    return {
+        "status": "success",
+        "message": f"Authorized. User {current_user.name} ({current_user.uuid}) has admin permission.",
+    }  # noqa: E501

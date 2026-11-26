@@ -32,17 +32,13 @@ class ChangeResponse(BaseModel):
     field: str
     before: object | None = None
     after: object | None = None
-    changed: bool | None = Field(
-        default=None, description="true 代表有變更但不揭露值"
-    )
+    changed: bool | None = Field(default=None, description="true 代表有變更但不揭露值")
 
 
 class HistoryEventResponse(BaseModel):
     """One transaction, folded into a single event (ADR-134)."""
 
-    event_type: str = Field(
-        description="CREATED / UPDATED / DELETED / RESTORED / ASSIGNED / UNASSIGNED"
-    )
+    event_type: str = Field(description="CREATED / UPDATED / DELETED / RESTORED / ASSIGNED / UNASSIGNED")
     at: datetime
     entity: str
     actor: ActorResponse

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { Box, Stack, Typography } from '@mui/material';
@@ -120,7 +121,7 @@ function DetailLine({
           placeItems: 'center',
           height: '1.6em',
           fontSize: displayTextSize[13],
-          '& svg': { fontSize: 14 },
+          '& svg': { fontSize: designTokens.iconSize.sm },
         }}
       >
         {icon}

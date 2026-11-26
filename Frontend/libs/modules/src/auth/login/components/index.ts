@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 export { AuthField } from './auth-field';
 export { AuthFooterLinks } from './auth-footer-links';
 export { AuthIdentityToggle } from './auth-identity-toggle';

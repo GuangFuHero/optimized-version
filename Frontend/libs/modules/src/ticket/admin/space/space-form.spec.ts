@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import type { AdminBuildingMapFieldsFragment } from '@rescue-frontend/data-access/admin';
 import { describe, expect, it } from 'vitest';
 

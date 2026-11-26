@@ -1,8 +1,11 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * What the sign-in pages say about where signing in leads (design `site-auth.jsx`). The page to come
  * back to is `?callbackUrl=`; the map and the list keep their place and filters in it, so those two
  * can promise that much — anywhere else, only the page.
  */
+
+import { acceptedReturnPath } from './return-path';
 
 const HINT_PREFIX = '登入完成後會回到你剛剛那一頁';
 
@@ -11,14 +14,27 @@ function isUnder(pathname: string, section: string): boolean {
   return pathname === section || pathname.startsWith(`${section}/`);
 }
 
-/** The line under the card, or null when no page is waiting for the sign-in. */
-export function returnHint(callbackUrl: string | null): string | null {
-  if (!callbackUrl) {
+/** The path of an accepted `callbackUrl`, without its query, or null when it cannot be read. */
+function callbackPath(callbackUrl: string): string | null {
+  try {
+    return new URL(callbackUrl, 'http://localhost').pathname;
+  } catch {
     return null;
   }
+}
 
-  // next-auth sometimes hands on a whole address rather than a path.
-  const { pathname } = new URL(callbackUrl, 'http://localhost');
+/**
+ * The line under the card, or null when no page is waiting for the sign-in. A `callbackUrl` the
+ * sign-in will not go back to (anyone can type one into the bar) gets no line, and the page still
+ * signs in.
+ */
+export function returnHint(callbackUrl: string | null): string | null {
+  const accepted = acceptedReturnPath(callbackUrl);
+  const pathname = accepted ? callbackPath(accepted) : null;
+
+  if (pathname === null) {
+    return null;
+  }
 
   if (isUnder(pathname, '/map')) {
     return `${HINT_PREFIX}，地圖的位置與篩選都會保留。`;
@@ -42,7 +58,7 @@ export function signedInMessage(
   callbackUrl: string | null,
   app: 'site' | 'admin',
 ): string {
-  if (callbackUrl) return '登入成功，正在回到你剛剛那一頁⋯';
+  if (acceptedReturnPath(callbackUrl)) return '登入成功，正在回到你剛剛那一頁⋯';
   return app === 'admin'
     ? '登入成功，正在前往總覽儀表板⋯'
     : '登入成功，正在帶你過去⋯';

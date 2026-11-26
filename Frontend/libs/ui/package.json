@@ -34,10 +34,10 @@
     "zod": "^4.6.6"
   },
   "devDependencies": {
-    "@storybook/addon-docs": "10.6.0",
-    "@storybook/react-vite": "10.6.0",
-    "storybook": "10.6.0",
-    "vite": "^8.0.8"
+    "@storybook/addon-docs": "10.6.7",
+    "@storybook/react-vite": "10.6.7",
+    "storybook": "10.6.7",
+    "vite": "^8.0.16"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.lib.json",

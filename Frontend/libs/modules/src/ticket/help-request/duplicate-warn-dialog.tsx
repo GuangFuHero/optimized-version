@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { Box, Stack, Typography } from '@mui/material';
@@ -86,7 +87,7 @@ function SuspectTicketCard({
   const reasonIcon = {
     flexShrink: 0,
     mt: '2px',
-    fontSize: 14,
+    fontSize: designTokens.iconSize.sm,
     color: color.fg.warning,
   } as const;
 

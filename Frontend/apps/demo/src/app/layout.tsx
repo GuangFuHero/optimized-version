@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { SiteProviders } from '@rescue-frontend/modules';
 import { DocumentLayout } from '@rescue-frontend/modules/document';
 import type { ReactNode } from 'react';

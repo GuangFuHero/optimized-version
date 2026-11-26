@@ -1,8 +1,9 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { useForm, useStore } from '@tanstack/react-form';
 
-import { Alert, Button, ButtonBase, Stack, Typography } from '@mui/material';
+import { Alert, ButtonBase, Stack, Typography } from '@mui/material';
 import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 
@@ -11,7 +12,12 @@ import {
   type GraphqlError,
   type CreateTicketTaskMutationVariables,
 } from '@rescue-frontend/data-access';
-import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
+import {
+  Button,
+  designTokens,
+  displayTextSize,
+  Icons,
+} from '@rescue-frontend/ui';
 
 import { siteGraphqlMutation } from '../../session/site-clients';
 import { addNeedErrorMessage } from '../needs/claim-error';
@@ -178,7 +184,11 @@ export function AddNeedPanel({ ticketUuid, needCount }: AddNeedPanelProps) {
             fontWeight: 500,
           }}
         >
-          <Icons.plus sx={{ fontSize: 16 }} />
+          <Icons.plus
+            sx={{
+              fontSize: designTokens.iconSize[16],
+            }}
+          />
           再加一件需要的幫忙
         </ButtonBase>
         {dialog}
@@ -227,7 +237,7 @@ export function AddNeedPanel({ ticketUuid, needCount }: AddNeedPanelProps) {
       {error ? <Alert severity="error">{error}</Alert> : null}
       <Stack direction="row" spacing={1}>
         <Button
-          variant="outlined"
+          variant="outline"
           onClick={close}
           disabled={submitting}
           sx={{ flex: 1 }}
@@ -235,7 +245,7 @@ export function AddNeedPanel({ ticketUuid, needCount }: AddNeedPanelProps) {
           取消
         </Button>
         <Button
-          variant="contained"
+          variant="primary"
           onClick={() => void form.handleSubmit()}
           disabled={submitting}
           sx={{ flex: 2 }}

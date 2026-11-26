@@ -14,13 +14,18 @@ async def test_change_password_updates_identity(client, db_session, redis):
     # (a duplicate role makes role_repository.get_by_name raise MultipleResultsFound).
     salt = generate_salt()
     user = await create_account(
-        db_session, contact_type="email", value="a@x.com",
-        password_hash=get_password_hash("oldpw1", salt), name="Tester",
+        db_session,
+        contact_type="email",
+        value="a@x.com",
+        password_hash=get_password_hash("oldpw1", salt),
+        name="Tester",
     )
     headers = await auth_headers_for(redis, user.uuid)
-    res = await client.post("/api/v1/auth/change-password",
+    res = await client.post(
+        "/api/v1/auth/change-password",
         headers=headers,
-        json={"old_password": "oldpw1", "new_password": "newpw1", "salt_frontend": "deadbeef"})
+        json={"old_password": "oldpw1", "new_password": "newpw1", "salt_frontend": "deadbeef"},
+    )
     assert res.status_code == 204
     # old password no longer works, new one does
     old_login = await client.post("/api/v1/auth/login", data={"username": "a@x.com", "password": "oldpw1"})
@@ -34,11 +39,16 @@ async def test_change_password_wrong_old_password_401(client, db_session, redis)
     """Change-password with a wrong old password returns 401."""
     salt = generate_salt()
     user = await create_account(
-        db_session, contact_type="email", value="a@x.com",
-        password_hash=get_password_hash("oldpw1", salt), name="Tester",
+        db_session,
+        contact_type="email",
+        value="a@x.com",
+        password_hash=get_password_hash("oldpw1", salt),
+        name="Tester",
     )
     headers = await auth_headers_for(redis, user.uuid)
-    res = await client.post("/api/v1/auth/change-password",
+    res = await client.post(
+        "/api/v1/auth/change-password",
         headers=headers,
-        json={"old_password": "wrongpw", "new_password": "newpw1", "salt_frontend": "deadbeef"})
+        json={"old_password": "wrongpw", "new_password": "newpw1", "salt_frontend": "deadbeef"},
+    )
     assert res.status_code == 401

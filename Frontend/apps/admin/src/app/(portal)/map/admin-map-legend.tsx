@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { Box, Stack, Typography } from '@mui/material';
 import { Package } from 'lucide-react';
 
@@ -63,7 +64,7 @@ export function AdminMapLegend() {
           sx={{
             width: 14,
             height: 14,
-            borderRadius: '4px',
+            borderRadius: `${designTokens.radius[4]}px`,
             bgcolor: color.fg.neutral.default,
             display: 'inline-flex',
             alignItems: 'center',

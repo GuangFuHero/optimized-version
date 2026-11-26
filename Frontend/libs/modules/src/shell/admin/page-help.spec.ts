@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { describe, expect, it } from 'vitest';
 
 import { ADMIN_PAGE_HELP, adminPageHelpKey } from './page-help';

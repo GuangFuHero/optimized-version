@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * 疑似重複 on the site: another ticket this one may repeat, as the backend says (`suspectedDuplicateOf`,
  * ADR-454) — those 重複審核 has yet to decide, or judged the same and not merged yet. A reminder only: it

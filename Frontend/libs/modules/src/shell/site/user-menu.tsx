@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { useRouter } from 'next/navigation';
@@ -19,6 +20,7 @@ import {
   nameInitials,
 } from '@rescue-frontend/ui';
 
+import { SITE_PATHS } from '../../route/paths';
 import { openMyStationReports } from '../../station/suggestion/open-my-station-reports';
 import { MyTasksDrawer } from '../../ticket/my-claims/my-tasks-drawer';
 
@@ -54,7 +56,7 @@ export function SiteUserMenu({ userName, onSignOut }: SiteUserMenuProps) {
 
   const handleOpenSecurity = () => {
     setAnchorEl(null);
-    router.push('/account/security');
+    router.push(SITE_PATHS.accountSecurity);
   };
 
   const handleSignOut = () => {
@@ -88,11 +90,13 @@ export function SiteUserMenu({ userName, onSignOut }: SiteUserMenuProps) {
             border: `1px solid ${color.border.default}`,
             // Fixed, not displayTextSize (16 on a phone): two initials have to fit on one line in
             // the 32px circle. The ui Avatar's size too (`size * 0.36`).
-            fontSize: 12,
+            fontSize: designTokens.typography.label[300].fontSize,
           }}
         >
           {/* No picture since the login moved to the backend (`/users/me` has none): the name's initials. */}
-          {nameInitials(userName ?? '') || <PersonIcon sx={{ fontSize: 20 }} />}
+          {nameInitials(userName ?? '') || (
+            <PersonIcon sx={{ fontSize: designTokens.iconSize.lg }} />
+          )}
         </Avatar>
       </ButtonBase>
 
@@ -134,7 +138,7 @@ export function SiteUserMenu({ userName, onSignOut }: SiteUserMenuProps) {
         </MenuItem>
         <Divider />
         <MenuItem onClick={handleOpenMyTasks} sx={{ gap: 1 }}>
-          <Icons.clipboardList sx={{ fontSize: 18 }} />
+          <Icons.clipboardList sx={{ fontSize: designTokens.iconSize.md }} />
           <Typography sx={{ fontSize: displayTextSize[14] }}>
             我的任務
           </Typography>
@@ -156,7 +160,7 @@ export function SiteUserMenu({ userName, onSignOut }: SiteUserMenuProps) {
           </Typography>
         </MenuItem>
         <MenuItem onClick={handleSignOut} sx={{ gap: 1 }}>
-          <Icons.logOut sx={{ fontSize: 18 }} />
+          <Icons.logOut sx={{ fontSize: designTokens.iconSize.md }} />
           <Typography sx={{ fontSize: displayTextSize[14] }}>登出</Typography>
         </MenuItem>
       </Menu>

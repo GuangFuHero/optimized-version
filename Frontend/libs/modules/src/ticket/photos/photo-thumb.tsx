@@ -1,16 +1,15 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
-import {
-  Box,
-  Button,
-  ButtonBase,
-  Link,
-  Stack,
-  Typography,
-} from '@mui/material';
+import { Box, ButtonBase, Link, Stack, Typography } from '@mui/material';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
+import {
+  Button,
+  designTokens,
+  displayTextSize,
+  Icons,
+} from '@rescue-frontend/ui';
 
 import { PHOTO_LOAD_TIMEOUT_MS } from './photo-links';
 
@@ -151,7 +150,10 @@ function PhotoThumbImage({
           }}
         >
           <Icons.imageOff
-            sx={{ fontSize: 20, color: color.fg.neutral.muted }}
+            sx={{
+              fontSize: designTokens.iconSize.lg,
+              color: color.fg.neutral.muted,
+            }}
           />
           <Typography
             sx={{
@@ -217,25 +219,10 @@ function PhotoThumbImage({
             圖片本身仍在原網站上，平台刪不掉。
           </Typography>
           <Stack direction="row" sx={{ gap: 0.75 }}>
-            <Button
-              size="small"
-              variant="outlined"
-              color="inherit"
-              onClick={onCancelRemove}
-            >
+            <Button size="sm" variant="neutral" onClick={onCancelRemove}>
               取消
             </Button>
-            <Button
-              size="small"
-              variant="contained"
-              disableElevation
-              onClick={onConfirmRemove}
-              sx={{
-                bgcolor: color.bg.danger.default,
-                color: color.fg.onDanger,
-                '&:hover': { bgcolor: color.bg.danger.hover },
-              }}
-            >
+            <Button size="sm" variant="danger" onClick={onConfirmRemove}>
               移除
             </Button>
           </Stack>
@@ -258,7 +245,7 @@ function PhotoThumbImage({
             color: color.fg.neutral.muted,
           }}
         >
-          <Icons.close sx={{ fontSize: 14 }} />
+          <Icons.close sx={{ fontSize: designTokens.iconSize.sm }} />
         </ButtonBase>
       ) : null}
     </Box>

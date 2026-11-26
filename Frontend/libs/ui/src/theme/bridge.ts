@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * Bridge: design system tokens → Material 3 color roles.
  *
@@ -230,8 +231,9 @@ export const designExtensions = {
   /** Composed box-shadow strings, orange-tinted. MUI's own `shadows[]` array stays neutral. */
   shadow: semanticShadow,
 
-  /** z-index ladder, and the shadow expected at each rung. */
+  /** z-index ladder. */
   elevation: semanticElevation,
+  /** Shadows for layers and components. */
   elevationShadow,
 
   radius: semanticRadius,

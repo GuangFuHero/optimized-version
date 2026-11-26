@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import {
   type GetMapAreasQuery,
   type GetStationsQuery,
@@ -7,17 +8,20 @@ import {
 } from '@rescue-frontend/data-access';
 import type { Geometry, Polygon } from 'geojson';
 
-import { isAreaKind } from '../areas';
+import { isAreaKind } from './areas';
 import type {
   RescueMapArea,
+  RescueMapViewportStoreSnapshot,
   RescueMapClosureArea,
   RescueMapMarkerItem,
   RescueMapPublicZone,
-} from '../types';
-import { readOpHour } from '../../station/availability';
-import { getStationTypeLabel } from '../../station/type-options';
-import { formatTicketStatusLabel, formatTicketTypeLabel } from '../../ticket/status';
-import type { SiteRouteState } from '../../route/types';
+} from './types';
+import { readOpHour } from '../station/availability';
+import { getStationTypeLabel } from '../station/type-options';
+import {
+  formatTicketStatusLabel,
+  formatTicketTypeLabel,
+} from '../ticket/status';
 
 export interface BoundsInput {
   minLat: number;
@@ -27,7 +31,7 @@ export interface BoundsInput {
 }
 
 export function toBoundsInput(
-  state?: SiteRouteState,
+  state?: Pick<RescueMapViewportStoreSnapshot, 'bbox'>,
 ): BoundsInput | undefined {
   if (!state?.bbox) {
     return undefined;
@@ -277,20 +281,15 @@ function readAreaPolygons(
   return [];
 }
 
-export interface SiteMapAreaOverlays {
+export interface MapAreaOverlays {
   closureAreas: RescueMapClosureArea[];
   publicZones: RescueMapPublicZone[];
 }
 
-/**
- * The public map's areas, one layer each (prototype `site-data.js:709-721`): a 危險區 to 封閉區域,
- * a 責任區 or a public 標示區 to 責任區與標示區. An area with nothing to draw, or of a kind this map does
- * not know, is left out.
- */
 export function mapAreasToOverlays(
   items: readonly GetMapAreasQuery['areas']['items'][number][],
-): SiteMapAreaOverlays {
-  const overlays: SiteMapAreaOverlays = { closureAreas: [], publicZones: [] };
+): MapAreaOverlays {
+  const overlays: MapAreaOverlays = { closureAreas: [], publicZones: [] };
 
   items.forEach((item) => {
     const polygons = readAreaPolygons(item.geometry ?? null);
@@ -315,7 +314,7 @@ export function mapAreasToOverlays(
       ...area,
       kind: item.type,
       teams: item.assignedTeams.map((team) => team.name),
-      teamUuids: item.assignedTeams.map((team) => team.uuid),
+      assignedTeams: item.assignedTeams,
       isPublic: item.isPublic,
     });
   });

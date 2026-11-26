@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * The tag a ticket filed in a space carries beside its title on the 任務管理 list: 「名稱 · 3F」 in a
  * pill with a building drawn in it (designer, `tk-table.jsx` `data-space-of`; §開啟空間 3). Deleting the space clears the ticket's

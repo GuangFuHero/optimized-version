@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { Alert, Box, ButtonBase, Stack, Typography } from '@mui/material';
@@ -64,7 +65,11 @@ function BuildingNotice() {
       }}
     >
       <Icons.triangleAlert
-        sx={{ flexShrink: 0, fontSize: 18, color: color.fg.warning }}
+        sx={{
+          flexShrink: 0,
+          fontSize: designTokens.iconSize.md,
+          color: color.fg.warning,
+        }}
       />
       <Typography
         sx={{

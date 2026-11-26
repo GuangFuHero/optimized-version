@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 export { NeedClaimFooter } from './need-claim-footer';
 export { NeedClaimProvider, useNeedClaim } from './need-claim-provider';
 export { NeedLine } from './need-line';

@@ -1,5 +1,8 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
+import { loadPage } from '../../route/navigate';
+import { SITE_PATHS } from '../../route/paths';
 import { useReturnQuery } from '../../route/use-return-query';
 
 import { useMutation } from '@tanstack/react-query';
@@ -10,7 +13,6 @@ import type { components } from '@rescue-frontend/data-access/openapi';
 import {
   Alert,
   Box,
-  Button,
   ButtonBase,
   Card,
   Stack,
@@ -21,8 +23,11 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useId, useRef, useState } from 'react';
 
-import { ApiError } from '@rescue-frontend/data-access';
-import { designTokens, Icons } from '@rescue-frontend/ui';
+import {
+  ApiError,
+  useInvalidateCurrentUser,
+} from '@rescue-frontend/data-access';
+import { Button, designTokens, Icons } from '@rescue-frontend/ui';
 
 import {
   continueSignedOut,
@@ -36,8 +41,6 @@ import {
 } from '../login';
 import {
   changePasswordAsync,
-  getCurrentUserAsync,
-  logoutAllAsync,
   setPasswordAsync,
 } from '../api/client';
 import { resolveAuthErrorMessage } from '../api/error-messages';
@@ -54,7 +57,6 @@ import {
   type LoginMethod,
 } from './account-security-view';
 import {
-  ACCOUNT_SECURITY_PATH,
   addContactSteps,
   buildAccountStepUpHref,
   cannotProveHere,
@@ -73,6 +75,10 @@ import {
   type AccountStepUpAction,
   type StepUpProblem,
 } from './account-step-up';
+import {
+  SIGN_OUT_EVERYWHERE_UNCONFIRMED_MESSAGE,
+  signOutEverywhereAsync,
+} from './sign-out';
 import { clearDraftsOnSignOut } from './sign-out-drafts';
 import { useAddContact } from './use-add-contact';
 import { useContactDraft, type ContactDraft } from './use-contact-draft';
@@ -91,7 +97,7 @@ interface AccountSecurityClientProps {
  * again.
  */
 function signInAgain() {
-  continueSignedOut('/login');
+  continueSignedOut(SITE_PATHS.login);
 }
 
 /** Where a first password is: typed, or waiting on the code the backend sent to a contact first. */
@@ -100,10 +106,20 @@ type SetPasswordStage =
   | { kind: 'old-code'; pending: boolean };
 
 // The design's floor for a reader up to ninety (design A1): 16px text, fields and buttons; 48px buttons.
-const BODY_TEXT = { fontSize: 16, lineHeight: 1.7, color: '#6A5F5B' } as const;
-const BIG_BUTTON = { minHeight: 48, fontSize: 16 } as const;
+const BODY_TEXT = {
+  fontSize: designTokens.typography.body[400].fontSize,
+  lineHeight: 1.7,
+  color: designTokens.color.fg.accountSecurity.secondaryText,
+} as const;
+const BIG_BUTTON = {
+  minHeight: 48,
+  fontSize: designTokens.typography.body[400].fontSize,
+} as const;
 // An Alert can hold a whole email, longer than a phone is wide.
-const ALERT_TEXT = { fontSize: 16, overflowWrap: 'anywhere' } as const;
+const ALERT_TEXT = {
+  fontSize: designTokens.typography.body[400].fontSize,
+  overflowWrap: 'anywhere',
+} as const;
 
 const CODE_INPUT = {
   htmlInput: { inputMode: 'numeric', autoComplete: 'one-time-code' },
@@ -143,8 +159,7 @@ const EMPTY_CONTACT_PROOF: ContactProof = {
   oldCode: '',
   code: '',
 };
-
-const ROW_BORDER = '#E5DDD8';
+const ROW_BORDER = designTokens.color.border.accountSecurity;
 const OPEN_BLUE = designTokens.color.brand.secondary.default;
 const GREYED = designTokens.color.fg.neutral.muted;
 
@@ -181,9 +196,9 @@ function SecurityRow({
     <Stack spacing={0.5} sx={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
       <Typography
         sx={{
-          fontSize: 20,
+          fontSize: designTokens.typography.fontSize.xl,
           fontWeight: 700,
-          color: blocked ? GREYED : '#241B19',
+          color: blocked ? GREYED : designTokens.color.fg.accountSecurity.text,
         }}
       >
         {title}
@@ -204,7 +219,7 @@ function SecurityRow({
   return (
     <Card
       sx={{
-        borderRadius: '24px',
+        borderRadius: `${designTokens.radius[24]}px`,
         boxShadow: 'none',
         border: `1px solid ${open ? OPEN_BLUE : ROW_BORDER}`,
       }}
@@ -227,7 +242,7 @@ function SecurityRow({
               gap: 2,
               alignItems: 'flex-start',
               justifyContent: 'space-between',
-              borderRadius: '24px',
+              borderRadius: `${designTokens.radius[24]}px`,
             }}
           >
             {heading}
@@ -238,7 +253,7 @@ function SecurityRow({
                 flexShrink: 0,
                 pt: '2px',
                 color: OPEN_BLUE,
-                fontSize: 16,
+                fontSize: designTokens.typography.body[400].fontSize,
                 fontWeight: 700,
               }}
             >
@@ -251,7 +266,7 @@ function SecurityRow({
               {children}
               {/* 取消 goes with the row it closes: focus stays on the row, not the top of the page. */}
               <Button
-                variant="text"
+                variant="ghost"
                 sx={BIG_BUTTON}
                 onClick={() => {
                   onClose();
@@ -272,7 +287,13 @@ function SecurityRow({
 function CannotHere({ children }: { children: React.ReactNode }) {
   return (
     <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
-      <Icons.info sx={{ mt: '4px', fontSize: 20, color: '#6A5F5B' }} />
+      <Icons.info
+        sx={{
+          mt: '4px',
+          fontSize: designTokens.iconSize.lg,
+          color: designTokens.color.fg.accountSecurity.secondaryText,
+        }}
+      />
       <Typography sx={BODY_TEXT}>{children}</Typography>
     </Stack>
   );
@@ -293,6 +314,7 @@ export function AccountSecurityClient({
 }: AccountSecurityClientProps) {
   const consumeReturn = useReturnQuery();
   const router = useRouter();
+  const refreshSession = useInvalidateCurrentUser();
   const saltIdentity = saltLookupIdentity(contacts);
   const signsInWithPassword = hasPassword(loginMethods);
   // Only Google and nothing to send a code to: both sections say so before anything is pressed.
@@ -389,6 +411,7 @@ export function AccountSecurityClient({
     code: contactCode,
   } = useStore(contactForm.store, (state) => state.values);
   const [isLoggingOutAll, setIsLoggingOutAll] = useState(false);
+  const [logoutAllFailed, setLogoutAllFailed] = useState(false);
   const [editor] = useState(() =>
     createStore<SecurityEditor>(() => ({ kind: 'closed' })),
   );
@@ -415,13 +438,8 @@ export function AccountSecurityClient({
       keepContactDraft(draft);
     }
 
-    try {
-      await getCurrentUserAsync();
-    } catch {
-      // An ended session reloads the tab as a guest by itself; anything else, LINE is tried anyway.
-    }
-
-    window.location.assign(buildAccountStepUpHref(action));
+    await refreshSession();
+    loadPage(buildAccountStepUpHref(action));
   };
 
   const contact = useAddContact({
@@ -432,7 +450,10 @@ export function AccountSecurityClient({
       oldCodeStillPending(originalContactName(contacts, type)),
     onReauth: (draft) => void goProveAtLine('add_contact', draft),
     // The account's contacts are read again, the new one among them.
-    onChanged: () => router.refresh(),
+    onChanged: () => {
+      router.refresh();
+      void refreshSession();
+    },
     // Done: back to the list, with what was done over it (design ⑫) and no warning about it. Focus goes
     // to the row's header: the button just pressed goes away with step 3.
     onVerified: () => {
@@ -622,6 +643,8 @@ export function AccountSecurityClient({
     } else if (row === 'contact') {
       contact.cancel();
       setContactKind(null);
+    } else if (row === 'logout') {
+      setLogoutAllFailed(false);
     }
   }
 
@@ -647,13 +670,12 @@ export function AccountSecurityClient({
     // This tab is signed out by the person's choice too, as by 登出 in the menu.
     clearDraftsOnSignOut(sessionStorageOrNull());
     setIsLoggingOutAll(true);
+    setLogoutAllFailed(false);
 
-    try {
-      await logoutAllAsync();
-      signInAgain();
-    } finally {
-      setIsLoggingOutAll(false);
-    }
+    const outcome = await signOutEverywhereAsync();
+
+    setIsLoggingOutAll(false);
+    setLogoutAllFailed(outcome === 'not-confirmed');
   }
 
   const setPasswordOriginal = originalContactName(contacts);
@@ -675,7 +697,13 @@ export function AccountSecurityClient({
   return (
     <Stack spacing={3}>
       <Box>
-        <Typography sx={{ fontSize: 32, lineHeight: '40px', fontWeight: 700 }}>
+        <Typography
+          sx={{
+            fontSize: designTokens.typography.fontSize[32],
+            lineHeight: '40px',
+            fontWeight: 700,
+          }}
+        >
           帳號安全
         </Typography>
         <Typography sx={{ ...BODY_TEXT, mt: 1 }}>
@@ -739,7 +767,7 @@ export function AccountSecurityClient({
           ) : null}
 
           <Button
-            variant="contained"
+            variant="primary"
             disabled={isChangingPassword}
             sx={BIG_BUTTON}
             onClick={() => {
@@ -818,7 +846,7 @@ export function AccountSecurityClient({
           ) : null}
 
           <Button
-            variant="contained"
+            variant="primary"
             disabled={isSettingPassword}
             sx={BIG_BUTTON}
             onClick={() => {
@@ -829,7 +857,7 @@ export function AccountSecurityClient({
           </Button>
           {setPasswordStage.kind === 'old-code' ? (
             <Button
-              variant="text"
+              variant="ghost"
               disabled={isSettingPassword}
               sx={BIG_BUTTON}
               onClick={() => {
@@ -877,7 +905,11 @@ export function AccountSecurityClient({
                 >
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Typography
-                      sx={{ fontSize: 16, fontWeight: 700, color: '#241B19' }}
+                      sx={{
+                        fontSize: designTokens.typography.body[400].fontSize,
+                        fontWeight: 700,
+                        color: designTokens.color.fg.accountSecurity.text,
+                      }}
                     >
                       {contactName(type)}
                     </Typography>
@@ -893,9 +925,13 @@ export function AccountSecurityClient({
                   </Box>
                   {/* Both can read 更換: the name says which, with the word on the button in it. */}
                   <Button
-                    variant="outlined"
+                    variant="outline"
                     aria-label={`${held ? '更換' : '新增'}${contactName(type)}`}
-                    sx={{ minHeight: 44, minWidth: 88, fontSize: 16 }}
+                    sx={{
+                      minHeight: 44,
+                      minWidth: 88,
+                      fontSize: designTokens.typography.body[400].fontSize,
+                    }}
                     onClick={() => {
                       setContactKind(type);
                       contact.change({ type, value: '' });
@@ -916,7 +952,10 @@ export function AccountSecurityClient({
                 現在的{contactName(contactKind)}：
                 <Box
                   component="b"
-                  sx={{ color: '#241B19', overflowWrap: 'anywhere' }}
+                  sx={{
+                    color: designTokens.color.fg.accountSecurity.text,
+                    overflowWrap: 'anywhere',
+                  }}
                 >
                   {replacing.value}
                 </Box>
@@ -947,7 +986,7 @@ export function AccountSecurityClient({
               </Alert>
             ) : null}
             <Button
-              variant="contained"
+              variant="primary"
               disabled={contact.busy}
               sx={BIG_BUTTON}
               onClick={contact.send}
@@ -973,7 +1012,7 @@ export function AccountSecurityClient({
               }
             />
             <Button
-              variant="contained"
+              variant="primary"
               disabled={contact.busy || !contactPassword}
               sx={BIG_BUTTON}
               onClick={() => {
@@ -986,9 +1025,9 @@ export function AccountSecurityClient({
             <Button
               component={Link}
               href={authHref('/forgot-password', {
-                callbackUrl: ACCOUNT_SECURITY_PATH,
+                callbackUrl: SITE_PATHS.accountSecurity,
               })}
-              variant="text"
+              variant="ghost"
               sx={BIG_BUTTON}
             >
               忘記密碼？
@@ -1012,7 +1051,7 @@ export function AccountSecurityClient({
               }
             />
             <Button
-              variant="contained"
+              variant="primary"
               disabled={contact.busy || contactOldCode.trim().length < 4}
               sx={BIG_BUTTON}
               onClick={() => void contactForm.handleSubmit()}
@@ -1020,7 +1059,7 @@ export function AccountSecurityClient({
               確認
             </Button>
             <Button
-              variant="text"
+              variant="ghost"
               disabled={contact.busy}
               sx={BIG_BUTTON}
               onClick={contact.resendOldCode}
@@ -1035,7 +1074,7 @@ export function AccountSecurityClient({
             <Typography sx={BODY_TEXT}>{LINE_TEXT}</Typography>
             {/* No field in this step: the button takes the focus 寄驗證碼 had. */}
             <Button
-              variant="contained"
+              variant="primary"
               autoFocus
               sx={BIG_BUTTON}
               onClick={contact.proveAtLine}
@@ -1065,7 +1104,7 @@ export function AccountSecurityClient({
               }
             />
             <Button
-              variant="contained"
+              variant="primary"
               disabled={contact.busy}
               sx={BIG_BUTTON}
               onClick={() => {
@@ -1075,7 +1114,7 @@ export function AccountSecurityClient({
               {replacing ? '完成更換' : '完成新增'}
             </Button>
             <Button
-              variant="text"
+              variant="ghost"
               disabled={contact.busy}
               sx={BIG_BUTTON}
               onClick={() => {
@@ -1103,8 +1142,8 @@ export function AccountSecurityClient({
         onClose={() => closeRow('logout')}
       >
         <Button
-          color="error"
-          variant="outlined"
+          tone="danger"
+          variant="outline"
           disabled={isLoggingOutAll}
           sx={BIG_BUTTON}
           onClick={() => {
@@ -1113,6 +1152,11 @@ export function AccountSecurityClient({
         >
           登出所有裝置
         </Button>
+        {logoutAllFailed ? (
+          <Alert severity="error" sx={ALERT_TEXT}>
+            {SIGN_OUT_EVERYWHERE_UNCONFIRMED_MESSAGE}
+          </Alert>
+        ) : null}
       </SecurityRow>
     </Stack>
   );

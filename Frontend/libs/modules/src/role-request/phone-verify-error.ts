@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * What an applicant reads when verifying their phone goes wrong. The backend's codes
  * (`Backend/app/core/api_errors.py`) through the shared copy, with this form's own words where the

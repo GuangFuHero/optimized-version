@@ -1,8 +1,9 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { Box, Typography } from '@mui/material';
 
-import { displayTextSize } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
 import {
   type StationDetailColorScheme,
@@ -83,10 +84,10 @@ export function StationStatusCard({
         display: 'flex',
         flexDirection: 'column',
         gap: 1.25,
-        borderRadius: '32px',
+        borderRadius: `${designTokens.radius.xl}px`,
         bgcolor: stationDetailPalette.cardSurface,
         border: `1px solid ${stationDetailPalette.cardBorder}`,
-        boxShadow: '0px 1px 1px rgba(0, 0, 0, 0.05)',
+        boxShadow: designTokens.elevationShadow.stationDetailCard,
       }}
     >
       <Box
@@ -131,7 +132,7 @@ export function StationStatusCard({
             gap: '4px',
             px: '9px',
             py: '5px',
-            borderRadius: '999px',
+            borderRadius: `${designTokens.radius.full}px`,
             flexShrink: 0,
             bgcolor: statusPalette.backgroundColor,
             border: `1px solid ${statusPalette.borderColor}`,
@@ -141,7 +142,7 @@ export function StationStatusCard({
             sx={{
               width: 8,
               height: 8,
-              borderRadius: '999px',
+              borderRadius: `${designTokens.radius.full}px`,
               bgcolor: statusPalette.dotColor,
               flexShrink: 0,
             }}

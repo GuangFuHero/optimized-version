@@ -47,18 +47,21 @@ from .deps import (
 router = APIRouter()
 
 
-@router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT,
-             dependencies=[Depends(get_rate_limiter(5, 60))])
+@router.post(
+    "/change-password",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(get_rate_limiter(5, 60))],
+)
 async def change_password(
-        body: ChangePasswordRequest,
-        background_tasks: BackgroundTasks,
-        request: Request,
-        response: Response,
-        current_user: User = Depends(security.get_current_user),
-        db: AsyncSession = Depends(security.get_db),
-        redis=Depends(get_redis),
-        email_sender=Depends(get_email_sender),
-        sms_sender=Depends(get_sms_sender),
+    body: ChangePasswordRequest,
+    background_tasks: BackgroundTasks,
+    request: Request,
+    response: Response,
+    current_user: User = Depends(security.get_current_user),
+    db: AsyncSession = Depends(security.get_db),
+    redis=Depends(get_redis),
+    email_sender=Depends(get_email_sender),
+    sms_sender=Depends(get_sms_sender),
 ):
     """Verify the old password, write the new hash, revoke every session, tell the owner.
 
@@ -70,35 +73,44 @@ async def change_password(
     user_uuid = str(current_user.uuid)
     identity = await identity_repository.get_password_identity(db, user_uuid)
     if identity is None:
-        raise ApiError(status.HTTP_422_UNPROCESSABLE_ENTITY, ErrorCode.PASSWORD_NOT_SET,
-                       detail="No password set; use /auth/set-password")
+        raise ApiError(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            ErrorCode.PASSWORD_NOT_SET,
+            detail="No password set; use /auth/set-password",
+        )
     if not security.verify_password(body.old_password, identity.password_hash):
-        raise ApiError(status.HTTP_401_UNAUTHORIZED, ErrorCode.PASSWORD_INCORRECT,
-                       detail="Incorrect current password")
+        raise ApiError(
+            status.HTTP_401_UNAUTHORIZED, ErrorCode.PASSWORD_INCORRECT, detail="Incorrect current password"
+        )
     new_hash = security.get_password_hash(body.new_password, body.salt_frontend)
     await identity_repository.update(db, db_obj=identity, obj_in={"password_hash": new_hash})
     await SessionRepository(redis).revoke_all_for_user(user_uuid)
     clear_cookies_if_cookie_authenticated(request, response)
     await contact_service.notify_password_set(
-        db, user_uuid=user_uuid, email_sender=email_sender, sms_sender=sms_sender,
-        dispatch=background_tasks.add_task, changed=True,
+        db,
+        user_uuid=user_uuid,
+        email_sender=email_sender,
+        sms_sender=sms_sender,
+        dispatch=background_tasks.add_task,
+        changed=True,
     )
 
 
-@router.post("/set-password", status_code=status.HTTP_204_NO_CONTENT,
-             dependencies=[Depends(get_rate_limiter(5, 60))])
+@router.post(
+    "/set-password", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(get_rate_limiter(5, 60))]
+)
 async def set_password(
-        body: SetPasswordRequest,
-        background_tasks: BackgroundTasks,
-        request: Request,
-        response: Response,
-        current_user: User = Depends(security.get_current_user),
-        step_up_holder: ProofHolder | None = Depends(get_step_up_holder),
-        db: AsyncSession = Depends(security.get_db),
-        redis=Depends(get_redis),
-        verifiers=Depends(get_sso_verifiers),
-        email_sender=Depends(get_email_sender),
-        sms_sender=Depends(get_sms_sender),
+    body: SetPasswordRequest,
+    background_tasks: BackgroundTasks,
+    request: Request,
+    response: Response,
+    current_user: User = Depends(security.get_current_user),
+    step_up_holder: ProofHolder | None = Depends(get_step_up_holder),
+    db: AsyncSession = Depends(security.get_db),
+    redis=Depends(get_redis),
+    verifiers=Depends(get_sso_verifiers),
+    email_sender=Depends(get_email_sender),
+    sms_sender=Depends(get_sms_sender),
 ):
     """Create a first password identity for an SSO-only account, proof first.
 
@@ -119,55 +131,77 @@ async def set_password(
     """
     user_uuid = str(current_user.uuid)
     if await identity_repository.get_password_identity(db, user_uuid) is not None:
-        raise ApiError(status.HTTP_409_CONFLICT, ErrorCode.PASSWORD_ALREADY_SET,
-                       detail="Password already set; use /auth/change-password")
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.PASSWORD_ALREADY_SET,
+            detail="Password already set; use /auth/change-password",
+        )
     if not any(contact.verified for contact in await contact_repository.list_by_user(db, user_uuid)):
-        raise ApiError(status.HTTP_409_CONFLICT, ErrorCode.PASSWORD_NEEDS_CONTACT,
-                       detail="Add an email or phone number first: a password signs in with one")
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.PASSWORD_NEEDS_CONTACT,
+            detail="Add an email or phone number first: a password signs in with one",
+        )
     try:
         await contact_service.require_step_up_for_first_password(
-            db, redis, actor=current_user, step_up=body.step_up,
-            email_sender=email_sender, sms_sender=sms_sender, verifiers=verifiers,
+            db,
+            redis,
+            actor=current_user,
+            step_up=body.step_up,
+            email_sender=email_sender,
+            sms_sender=sms_sender,
+            verifiers=verifiers,
             proof_holder=step_up_holder,
         )
     except StepUpFailed as err:
-        raise ApiError(status.HTTP_401_UNAUTHORIZED, ErrorCode.STEP_UP_INVALID,
-                       detail=str(err)) from err
+        raise ApiError(status.HTTP_401_UNAUTHORIZED, ErrorCode.STEP_UP_INVALID, detail=str(err)) from err
     except ReauthRequired as err:
         raise reauth_required(err) from err
     except StepUpRequired as err:
-        raise ApiError(status.HTTP_422_UNPROCESSABLE_ENTITY, ErrorCode.STEP_UP_REQUIRED,
-                       detail=str(err)) from err
+        raise ApiError(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, ErrorCode.STEP_UP_REQUIRED, detail=str(err)
+        ) from err
     except ContactNotFound as err:
-        raise ApiError(status.HTTP_422_UNPROCESSABLE_ENTITY, ErrorCode.NO_PROOF_CHANNEL,
-                       detail=str(err)) from err
+        raise ApiError(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, ErrorCode.NO_PROOF_CHANNEL, detail=str(err)
+        ) from err
 
     password_hash = security.get_password_hash(body.password, body.salt_frontend)
     try:
-        await identity_repository.create(db, obj_in={
-            "user_uuid": current_user.uuid, "provider": "password", "password_hash": password_hash,
-        })
+        await identity_repository.create(
+            db,
+            obj_in={
+                "user_uuid": current_user.uuid,
+                "provider": "password",
+                "password_hash": password_hash,
+            },
+        )
     except IntegrityError as err:
         await db.rollback()
-        raise ApiError(status.HTTP_409_CONFLICT, ErrorCode.PASSWORD_ALREADY_SET,
-                       detail="Password already set") from err
+        raise ApiError(
+            status.HTTP_409_CONFLICT, ErrorCode.PASSWORD_ALREADY_SET, detail="Password already set"
+        ) from err
     await SessionRepository(redis).revoke_all_for_user(user_uuid)
     clear_cookies_if_cookie_authenticated(request, response)
     await contact_service.notify_password_set(
-        db, user_uuid=user_uuid, email_sender=email_sender, sms_sender=sms_sender,
+        db,
+        user_uuid=user_uuid,
+        email_sender=email_sender,
+        sms_sender=sms_sender,
         dispatch=background_tasks.add_task,
     )
 
 
-@router.post("/forgot-password", status_code=status.HTTP_202_ACCEPTED,
-             dependencies=[Depends(get_rate_limiter(3, 60))])
+@router.post(
+    "/forgot-password", status_code=status.HTTP_202_ACCEPTED, dependencies=[Depends(get_rate_limiter(3, 60))]
+)
 async def forgot_password(
-        body: ForgotPasswordRequest,
-        background_tasks: BackgroundTasks,
-        db: AsyncSession = Depends(security.get_db),
-        redis=Depends(get_redis),
-        email_sender=Depends(get_email_sender),
-        sms_sender=Depends(get_sms_sender),
+    body: ForgotPasswordRequest,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(security.get_db),
+    redis=Depends(get_redis),
+    email_sender=Depends(get_email_sender),
+    sms_sender=Depends(get_sms_sender),
 ):
     """Start a logged-out password reset. Always 202 (anti-enumeration).
 
@@ -183,15 +217,17 @@ async def forgot_password(
     try:
         ident = _normalize_identifier(body.type, body.value)
     except ValueError as err:
-        raise ApiError(status.HTTP_422_UNPROCESSABLE_ENTITY, ErrorCode.IDENTIFIER_INVALID,
-                       detail="Invalid identifier") from err
+        raise ApiError(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, ErrorCode.IDENTIFIER_INVALID, detail="Invalid identifier"
+        ) from err
     user = await contact_repository.get_user_by_contact(db, type_=body.type, value=ident)
     if user is None:
         return generic
     identity = await identity_repository.get_password_identity(db, str(user.uuid))
     if identity is not None:
         code = await VerificationRepository(redis).issue_password_reset(
-            user_uuid=str(user.uuid), type_=body.type, value=ident)
+            user_uuid=str(user.uuid), type_=body.type, value=ident
+        )
         if body.type == "email":
             subject, html, text = build_password_reset_email(code)
             background_tasks.add_task(email_sender.send, ident, subject, html, text)
@@ -205,29 +241,32 @@ async def forgot_password(
     return generic
 
 
-@router.post("/reset-password", status_code=status.HTTP_204_NO_CONTENT,
-             dependencies=[Depends(get_rate_limiter(10, 60))])
+@router.post(
+    "/reset-password",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(get_rate_limiter(10, 60))],
+)
 async def reset_password(
-        body: ResetPasswordRequest,
-        background_tasks: BackgroundTasks,
-        db: AsyncSession = Depends(security.get_db),
-        redis=Depends(get_redis),
-        email_sender=Depends(get_email_sender),
-        sms_sender=Depends(get_sms_sender),
+    body: ResetPasswordRequest,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(security.get_db),
+    redis=Depends(get_redis),
+    email_sender=Depends(get_email_sender),
+    sms_sender=Depends(get_sms_sender),
 ):
     """Complete a logged-out reset: consume the code, write the new password, revoke all sessions.
 
     Every contact on the account is then told, as after `change-password` (ADR-218), not only
     the one the code went to.
     """
-    bad = ApiError(status.HTTP_400_BAD_REQUEST, ErrorCode.CODE_INVALID,
-                   detail="Invalid or expired code")
+    bad = ApiError(status.HTTP_400_BAD_REQUEST, ErrorCode.CODE_INVALID, detail="Invalid or expired code")
     try:
         ident = _normalize_identifier(body.type, body.value)
     except ValueError as err:
         raise bad from err
     payload = await VerificationRepository(redis).consume_password_reset(
-        type_=body.type, value=ident, code=body.code)
+        type_=body.type, value=ident, code=body.code
+    )
     if payload is None:
         raise bad
     user = await user_repository.get_by_uuid(db, payload["user_uuid"])
@@ -241,6 +280,10 @@ async def reset_password(
     await identity_repository.update(db, db_obj=identity, obj_in={"password_hash": new_hash})
     await SessionRepository(redis).revoke_all_for_user(user_uuid)
     await contact_service.notify_password_set(
-        db, user_uuid=user_uuid, email_sender=email_sender, sms_sender=sms_sender,
-        dispatch=background_tasks.add_task, changed=True,
+        db,
+        user_uuid=user_uuid,
+        email_sender=email_sender,
+        sms_sender=sms_sender,
+        dispatch=background_tasks.add_task,
+        changed=True,
     )

@@ -33,7 +33,10 @@ ME = "/api/v1/users/me"
 async def _user(db, email="revoke@x.com", password="secret"):
     """An account with a password identity, returned as a detached uuid string."""
     user = await create_account(
-        db, contact_type="email", value=email, name="Revoked",
+        db,
+        contact_type="email",
+        value=email,
+        name="Revoked",
         password_hash=get_password_hash(password, generate_salt()),
     )
     user_uuid = str(user.uuid)
@@ -83,7 +86,8 @@ async def test_change_password_kills_the_old_tokens(client, db_session, redis):
     changing_device = await auth_headers_for(redis, user_uuid)
 
     res = await client.post(
-        "/api/v1/auth/change-password", headers=changing_device,
+        "/api/v1/auth/change-password",
+        headers=changing_device,
         json={"old_password": "oldpw1", "new_password": "newpw1", "salt_frontend": "deadbeef"},
     )
     assert res.status_code == 204, res.text
@@ -101,14 +105,17 @@ async def test_reset_password_kills_the_intruders_token(client, db_session, redi
     user_uuid = await _user(db_session, email="victim@x.com", password="oldpw1")
     intruder_headers = await auth_headers_for(redis, user_uuid)
 
-    res = await client.post(
-        "/api/v1/auth/forgot-password", json={"type": "email", "value": "victim@x.com"}
-    )
+    res = await client.post("/api/v1/auth/forgot-password", json={"type": "email", "value": "victim@x.com"})
     assert res.status_code == 202
     res = await client.post(
         "/api/v1/auth/reset-password",
-        json={"type": "email", "value": "victim@x.com", "code": capture_email.last_code,
-              "new_password": "newpw1", "salt_frontend": "deadbeef"},
+        json={
+            "type": "email",
+            "value": "victim@x.com",
+            "code": capture_email.last_code,
+            "new_password": "newpw1",
+            "salt_frontend": "deadbeef",
+        },
     )
     assert res.status_code == 204, res.text
 
@@ -215,9 +222,7 @@ async def _admin_who_can_kick(db, redis):
     permission = Permission(key=Perm.USER_EDIT.value)
     db.add_all([role, permission])
     await db.flush()
-    db.add(RolePermissionAssign(
-        role_uuid=role.uuid, permission_uuid=permission.uuid, scope="all"
-    ))
+    db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope="all"))
     admin = User(name="Kicker")
     db.add(admin)
     await db.flush()
@@ -304,7 +309,7 @@ async def test_logout_all_from_a_revoked_token_revokes_nothing(client, db_sessio
 
 
 async def test_logout_is_idempotent(client, db_session, redis):
-    """"This device is signed out" is already true on the second call (ADR-190).
+    """'This device is signed out' is already true on the second call (ADR-190).
 
     Returning 401 there reported a failure that had not happened, and collided with the
     ordinary client pattern of calling logout from a 401 interceptor: 401 → logout → 401.
@@ -337,17 +342,13 @@ async def test_a_sid_less_token_cannot_sign_anyone_out_of_anything(client, db_se
     live = await auth_headers_for(redis, user_uuid)
     token = create_access_token(data={"sub": user_uuid})  # no sid
 
-    res = await client.post(
-        "/api/v1/auth/logout-all", headers={"Authorization": f"Bearer {token}"}
-    )
+    res = await client.post("/api/v1/auth/logout-all", headers={"Authorization": f"Bearer {token}"})
 
     assert res.status_code == 204
     assert (await client.get(ME, headers=live)).status_code == 200  # untouched
 
 
-async def test_logout_reports_a_redis_outage_rather_than_claiming_success(
-    client, db_session, redis
-):
+async def test_logout_reports_a_redis_outage_rather_than_claiming_success(client, db_session, redis):
     """204 would tell the caller they are signed out when the store never heard the request."""
     user_uuid = await _user(db_session, email="logout-outage@x.com")
     headers = await auth_headers_for(redis, user_uuid)
@@ -376,9 +377,7 @@ async def _kicker_at_scope(db, redis, scope: str):
     permission = Permission(key=Perm.USER_EDIT.value)
     db.add_all([role, permission])
     await db.flush()
-    db.add(RolePermissionAssign(
-        role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope
-    ))
+    db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope))
     actor = User(name=f"Kicker {scope}")
     db.add(actor)
     await db.flush()
@@ -428,7 +427,8 @@ async def test_change_password_signs_the_changing_device_out_as_well(client, db_
     changing_device = await auth_headers_for(redis, user_uuid)
 
     res = await client.post(
-        "/api/v1/auth/change-password", headers=changing_device,
+        "/api/v1/auth/change-password",
+        headers=changing_device,
         json={"old_password": "oldpw1", "new_password": "newpw1", "salt_frontend": "deadbeef"},
     )
     assert res.status_code == 204, res.text
@@ -459,9 +459,7 @@ async def test_a_kick_writes_an_audit_row_naming_the_actor(client, db_session, r
 
     row = (
         await db_session.execute(
-            select(AuditLog).where(
-                AuditLog.row_id == target_uuid, AuditLog.action == "REVOKE_SESSIONS"
-            )
+            select(AuditLog).where(AuditLog.row_id == target_uuid, AuditLog.action == "REVOKE_SESSIONS")
         )
     ).scalar_one()
     assert str(row.user_uuid) == admin_uuid
@@ -551,9 +549,7 @@ async def test_a_kick_during_a_redis_outage_is_503_not_500(client, db_session, r
     assert "no sessions were revoked" not in res.json()["detail"]
 
 
-async def test_a_kick_that_dies_mid_loop_does_not_claim_nothing_was_revoked(
-    client, db_session, redis
-):
+async def test_a_kick_that_dies_mid_loop_does_not_claim_nothing_was_revoked(client, db_session, redis):
     """The set read succeeds and the deletion fails partway, leaving some sessions gone.
 
     `revoke_all_for_user` deletes one session at a time, so this is the realistic outage
@@ -603,9 +599,7 @@ async def test_a_kick_that_dies_mid_loop_does_not_claim_nothing_was_revoked(
 # ──────────────────────────────────────────────
 
 
-async def test_the_audit_count_comes_from_the_read_that_did_the_revoking(
-    client, db_session, redis
-):
+async def test_the_audit_count_comes_from_the_read_that_did_the_revoking(client, db_session, redis):
     """One `smembers`, not two (ADR-221).
 
     The service used to read the session set for the count and then call
@@ -624,14 +618,16 @@ async def test_the_audit_count_comes_from_the_read_that_did_the_revoking(
     res = await client.post(_kick(target_uuid), headers=admin_headers)
 
     assert res.status_code == 204, res.text
-    row = (await db_session.execute(
-        select(AuditLog).where(
-            AuditLog.row_id == target_uuid, AuditLog.action == "REVOKE_SESSIONS"
+    row = (
+        await db_session.execute(
+            select(AuditLog).where(AuditLog.row_id == target_uuid, AuditLog.action == "REVOKE_SESSIONS")
         )
-    )).scalar_one()
+    ).scalar_one()
     assert row.new_values == {"revoked_sessions": 3}
-    assert await SessionRepository(redis).redis.smembers(
-        SessionRepository(redis).USER_SESSIONS + target_uuid) == set()
+    assert (
+        await SessionRepository(redis).redis.smembers(SessionRepository(redis).USER_SESSIONS + target_uuid)
+        == set()
+    )
 
 
 async def test_revoke_all_for_user_reports_what_it_revoked(redis):
@@ -645,9 +641,7 @@ async def test_revoke_all_for_user_reports_what_it_revoked(redis):
     assert await repo.revoke_all_for_user(user_uuid) == 0  # idempotent, and honest about it
 
 
-async def test_logout_all_follows_the_session_record_not_the_token_claim(
-    client, db_session, redis
-):
+async def test_logout_all_follows_the_session_record_not_the_token_claim(client, db_session, redis):
     """`logout-all` revokes every session a uuid owns, so it must not take the uuid on trust.
 
     Both claims are signed, so no path mints a mismatched pair today. But this endpoint was

@@ -180,6 +180,11 @@ gcloud secrets versions access latest --project=wanguard-250923 --secret=staging
 | **8** | **Migrate & Seed** | 使用新 image 啟動一次性容器執行 `alembic upgrade head` 與 `seed_rbac.py`（若帶 `SEED_MOCK=true` 則重灌測試情境） | PostgreSQL 交易自動回滾失敗的單一 Migration，印出備份路徑並中止 ⚠️ |
 | **9** | **Restart & Gate** | 啟動新版 `backend`、`frontend`、`admin`、`cloudflared`、`retention`，並連續輪詢 `http://localhost:8000/readyz`（最多 60 秒） | **觸發自動回滾（Auto-Rollback）**：自動將 `disaster-backend:prev` 換回 `:latest` 重啟舊版後端，並還原 Git 工作目錄 ✅ |
 
+### 後端套件版本與升級
+
+- 後端 image 只安裝 `Backend/uv.lock` 記錄的版本，所以 CI 測過的版本就是部署上去的版本；`uv.lock` 和 `pyproject.toml` 對不上時，上表的 Step 5（Build Images）會失敗。
+- 升級由 Dependabot 開 PR 更新 `uv.lock`：每週一上午 9 點（台北時間），小版本與修補版本合成一個 PR，大版本各開一個；新版本要發布滿 14 天才會被提出，安全性更新則立刻開 PR。PR 的 CI 全綠才可以合併。
+
 ---
 
 ## 6. 環境變數、Cookie、Cloudflare Tunnel 與第三方服務設定

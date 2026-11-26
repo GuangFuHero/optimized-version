@@ -1,4 +1,5 @@
 """Integration tests for adding a verified contact to a logged-in account."""
+
 import pytest
 
 from app.core.security import generate_salt, get_password_hash
@@ -14,8 +15,11 @@ STEP_UP = {"step_up": {"password": PASSWORD}}
 async def _logged_in_email_user(db_session, redis):
     """Create an email account and return (user, bearer_headers)."""
     user = await create_account(
-        db_session, contact_type="email", value="owner@x.com",
-        password_hash=get_password_hash(PASSWORD, generate_salt()), name="Tester",
+        db_session,
+        contact_type="email",
+        value="owner@x.com",
+        password_hash=get_password_hash(PASSWORD, generate_salt()),
+        name="Tester",
     )
     headers = await auth_headers_for(redis, user.uuid)
     return user, headers
@@ -25,13 +29,17 @@ async def _logged_in_email_user(db_session, redis):
 async def test_add_phone_then_verify_then_login(client, db_session, redis, capture_sms):
     """Email user adds a phone, verifies via SMS code, then logs in by phone."""
     _, headers = await _logged_in_email_user(db_session, redis)
-    res = await client.post("/api/v1/auth/contacts", headers=headers,
-                            json={"type": "phone", "value": "0912345678", **STEP_UP})
+    res = await client.post(
+        "/api/v1/auth/contacts", headers=headers, json={"type": "phone", "value": "0912345678", **STEP_UP}
+    )
     assert res.status_code == 202
     code = capture_sms.last_code
     assert code
-    v = await client.post("/api/v1/auth/contacts/verify", headers=headers,
-                          json={"type": "phone", "value": "0912345678", "code": code})
+    v = await client.post(
+        "/api/v1/auth/contacts/verify",
+        headers=headers,
+        json={"type": "phone", "value": "0912345678", "code": code},
+    )
     assert v.status_code == 200
     # phone now logs into the SAME account
     login = await client.post("/api/v1/auth/login", data={"username": "0912345678", "password": "secret"})
@@ -49,12 +57,14 @@ async def test_add_contact_requires_auth(client):
 async def test_add_contact_collision_409(client, db_session, redis):
     """Adding a value already verified by another account → 409."""
     # someone else already owns this phone
-    await create_account(db_session, contact_type="phone", value="+886912345678", password_hash="h",
-                         name="Tester")
+    await create_account(
+        db_session, contact_type="phone", value="+886912345678", password_hash="h", name="Tester"
+    )
     _, headers = await _logged_in_email_user(db_session, redis)
     # 0912345678 normalizes to +886912345678, which the other account already owns
-    res = await client.post("/api/v1/auth/contacts", headers=headers,
-                            json={"type": "phone", "value": "0912345678", **STEP_UP})
+    res = await client.post(
+        "/api/v1/auth/contacts", headers=headers, json={"type": "phone", "value": "0912345678", **STEP_UP}
+    )
     assert res.status_code == 409
     assert res.json()["code"] == "identifier_taken"
 
@@ -63,10 +73,14 @@ async def test_add_contact_collision_409(client, db_session, redis):
 async def test_verify_wrong_code_400(client, db_session, redis, capture_sms):
     """Wrong code on verify → 400."""
     _, headers = await _logged_in_email_user(db_session, redis)
-    await client.post("/api/v1/auth/contacts", headers=headers,
-                      json={"type": "phone", "value": "0912345678", **STEP_UP})
-    v = await client.post("/api/v1/auth/contacts/verify", headers=headers,
-                          json={"type": "phone", "value": "0912345678", "code": "000000"})
+    await client.post(
+        "/api/v1/auth/contacts", headers=headers, json={"type": "phone", "value": "0912345678", **STEP_UP}
+    )
+    v = await client.post(
+        "/api/v1/auth/contacts/verify",
+        headers=headers,
+        json={"type": "phone", "value": "0912345678", "code": "000000"},
+    )
     assert v.status_code == 400
 
 
@@ -74,14 +88,19 @@ async def test_verify_wrong_code_400(client, db_session, redis, capture_sms):
 async def test_resend_then_old_code_dead(client, db_session, redis, capture_sms):
     """Resend issues a new code; the old one no longer verifies."""
     _, headers = await _logged_in_email_user(db_session, redis)
-    await client.post("/api/v1/auth/contacts", headers=headers,
-                      json={"type": "phone", "value": "0912345678", **STEP_UP})
+    await client.post(
+        "/api/v1/auth/contacts", headers=headers, json={"type": "phone", "value": "0912345678", **STEP_UP}
+    )
     old = capture_sms.last_code
-    r = await client.post("/api/v1/auth/contacts/resend", headers=headers,
-                          json={"type": "phone", "value": "0912345678"})
+    r = await client.post(
+        "/api/v1/auth/contacts/resend", headers=headers, json={"type": "phone", "value": "0912345678"}
+    )
     assert r.status_code == 202 and capture_sms.last_code != old
-    bad = await client.post("/api/v1/auth/contacts/verify", headers=headers,
-                            json={"type": "phone", "value": "0912345678", "code": old})
+    bad = await client.post(
+        "/api/v1/auth/contacts/verify",
+        headers=headers,
+        json={"type": "phone", "value": "0912345678", "code": old},
+    )
     assert bad.status_code == 400
 
 
@@ -89,8 +108,9 @@ async def test_resend_then_old_code_dead(client, db_session, redis, capture_sms)
 async def test_resend_no_pending_404(client, db_session, redis):
     """Resend with no pending contact → 404."""
     _, headers = await _logged_in_email_user(db_session, redis)
-    r = await client.post("/api/v1/auth/contacts/resend", headers=headers,
-                          json={"type": "phone", "value": "0911222333"})
+    r = await client.post(
+        "/api/v1/auth/contacts/resend", headers=headers, json={"type": "phone", "value": "0911222333"}
+    )
     assert r.status_code == 404
 
 
@@ -102,8 +122,9 @@ async def test_add_second_email_requires_step_up(client, db_session, redis, capt
     proof rather than a flat 409 — and crucially no code reaches the new address.
     """
     _, headers = await _logged_in_email_user(db_session, redis)  # already owns owner@x.com
-    res = await client.post("/api/v1/auth/contacts", headers=headers,
-                            json={"type": "email", "value": "second@x.com"})
+    res = await client.post(
+        "/api/v1/auth/contacts", headers=headers, json={"type": "email", "value": "second@x.com"}
+    )
     assert res.status_code == 422
     assert capture_email.last_code is None
 
@@ -112,12 +133,16 @@ async def test_add_second_email_requires_step_up(client, db_session, redis, capt
 async def test_add_second_phone_requires_step_up(client, db_session, redis, capture_sms):
     """Same replacement gate on the phone side (ADR-085)."""
     user = await create_account(
-        db_session, contact_type="phone", value="0912345678",
-        password_hash=get_password_hash(PASSWORD, generate_salt()), name="Tester",
+        db_session,
+        contact_type="phone",
+        value="0912345678",
+        password_hash=get_password_hash(PASSWORD, generate_salt()),
+        name="Tester",
     )
     headers = await auth_headers_for(redis, user.uuid)
-    res = await client.post("/api/v1/auth/contacts", headers=headers,
-                            json={"type": "phone", "value": "0911222333"})
+    res = await client.post(
+        "/api/v1/auth/contacts", headers=headers, json={"type": "phone", "value": "0911222333"}
+    )
     assert res.status_code == 422
     assert capture_sms.last_code is None
 
@@ -126,13 +151,17 @@ async def test_add_second_phone_requires_step_up(client, db_session, redis, capt
 async def test_email_user_can_add_phone(client, db_session, redis, capture_sms):
     """Cross-type is allowed: an email user can add AND verify a phone (200)."""
     _, headers = await _logged_in_email_user(db_session, redis)  # owns an email, no phone
-    res = await client.post("/api/v1/auth/contacts", headers=headers,
-                            json={"type": "phone", "value": "0912345678", **STEP_UP})
+    res = await client.post(
+        "/api/v1/auth/contacts", headers=headers, json={"type": "phone", "value": "0912345678", **STEP_UP}
+    )
     assert res.status_code == 202
     code = capture_sms.last_code
     assert code
-    v = await client.post("/api/v1/auth/contacts/verify", headers=headers,
-                          json={"type": "phone", "value": "0912345678", "code": code})
+    v = await client.post(
+        "/api/v1/auth/contacts/verify",
+        headers=headers,
+        json={"type": "phone", "value": "0912345678", "code": code},
+    )
     assert v.status_code == 200
 
 
@@ -150,8 +179,9 @@ async def test_a_code_is_never_issued_to_a_new_address_without_step_up(
     """
     _, headers = await _logged_in_email_user(db_session, redis)  # already owns owner@x.com
 
-    res = await client.post("/api/v1/auth/contacts", headers=headers,
-                            json={"type": "email", "value": "attacker@evil.com"})
+    res = await client.post(
+        "/api/v1/auth/contacts", headers=headers, json={"type": "email", "value": "attacker@evil.com"}
+    )
 
     assert res.status_code == 422
     assert capture_email.messages == []
@@ -171,17 +201,22 @@ async def test_verify_409_does_not_consume_code(client, db_session, redis):
     # second account below would expire user.uuid and re-reading it raises MissingGreenlet
     user_uuid = str(user.uuid)
     await create_account(
-        db_session, contact_type="email", value="taken@x.com",
-        password_hash=get_password_hash("secret", generate_salt()), name="Other",
+        db_session,
+        contact_type="email",
+        value="taken@x.com",
+        password_hash=get_password_hash("secret", generate_salt()),
+        name="Other",
     )
     repo = VerificationRepository(redis)
-    code = await repo.issue_contact_verification(
-        user_uuid=user_uuid, type_="email", value="taken@x.com")
+    code = await repo.issue_contact_verification(user_uuid=user_uuid, type_="email", value="taken@x.com")
     key = f"pending_contact:{user_uuid}:email:taken@x.com"
     assert await redis.exists(key)
 
-    v = await client.post("/api/v1/auth/contacts/verify", headers=headers,
-                          json={"type": "email", "value": "taken@x.com", "code": code})
+    v = await client.post(
+        "/api/v1/auth/contacts/verify",
+        headers=headers,
+        json={"type": "email", "value": "taken@x.com", "code": code},
+    )
     assert v.status_code == 409
     # the pending code was NOT consumed by the 409 path
     assert await redis.exists(key)
@@ -196,9 +231,13 @@ async def test_resend_for_a_value_owned_by_someone_else_is_409(client, db_sessio
     """
     _, headers = await _logged_in_email_user(db_session, redis)
     await create_account(
-        db_session, contact_type="email", value="taken@x.com",
-        password_hash=get_password_hash("secret", generate_salt()), name="Other",
+        db_session,
+        contact_type="email",
+        value="taken@x.com",
+        password_hash=get_password_hash("secret", generate_salt()),
+        name="Other",
     )
-    res = await client.post("/api/v1/auth/contacts/resend", headers=headers,
-                            json={"type": "email", "value": "taken@x.com"})
+    res = await client.post(
+        "/api/v1/auth/contacts/resend", headers=headers, json={"type": "email", "value": "taken@x.com"}
+    )
     assert res.status_code == 409

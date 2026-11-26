@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { Suspense } from 'react';
@@ -39,7 +40,7 @@ function SiteViewSwitchContent({
         color: color.fg.neutral.subtle,
       }}
     >
-      <Icon sx={{ fontSize: 18 }} />
+      <Icon sx={{ fontSize: designTokens.iconSize.md }} />
     </ButtonBase>
   );
 }

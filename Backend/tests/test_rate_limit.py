@@ -89,7 +89,8 @@ async def test_ttl_is_not_extended_by_later_hits_in_the_same_window(redis):
 def test_client_ip_prefers_the_forwarded_header():
     """The BFF's forwarded browser IP wins over the container's peer address."""
     request = _FakeRequest(
-        headers={"X-Forwarded-For": "203.0.113.7, 10.1.1.1"}, client_host="172.18.0.3",
+        headers={"X-Forwarded-For": "203.0.113.7, 10.1.1.1"},
+        client_host="172.18.0.3",
     )
 
     assert resolve_client_ip(request) == "203.0.113.7"

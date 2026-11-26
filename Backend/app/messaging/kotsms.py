@@ -143,5 +143,10 @@ class KotSmsSender:
         status = fields.get("statuscode", "")
         if status not in _ACCEPTED_STATUS:
             raise RuntimeError(f"KotSMS rejected the message (statuscode={status!r}: {_describe(status)})")
-        logger.info("kotsms sent msgid=%s statuscode=%s point=%s balance=%s",
-                    fields.get("msgid"), status, fields.get("smsPoint"), fields.get("AccountPoint"))
+        logger.info(
+            "kotsms sent msgid=%s statuscode=%s point=%s balance=%s",
+            fields.get("msgid"),
+            status,
+            fields.get("smsPoint"),
+            fields.get("AccountPoint"),
+        )
