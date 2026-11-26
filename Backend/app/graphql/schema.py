@@ -10,10 +10,13 @@ from strawberry.extensions import (
     MaxAliasesLimiter,
     MaxTokensLimiter,
     QueryDepthLimiter,
+    SchemaExtension,
 )
 from strawberry.types.execution import ExecutionResult as StrawberryExecutionResult
+from strawberry.types.graphql import OperationType
 from strawberry.utils.logging import StrawberryLogger
 
+from app.core.api_errors import ErrorCode
 from app.core.config import settings
 from app.graphql.announcements.mutations import AnnouncementMutation
 from app.graphql.announcements.queries import AnnouncementQuery
@@ -52,7 +55,7 @@ class Query(
     SuggestionQuery,
     AreaQuery,
     RoleRequestQuery,
-):  # noqa: E501
+):
     """Root query type composing all domain query mixins."""
 
 
@@ -68,7 +71,7 @@ class Mutation(
     SuggestionMutation,
     AreaMutation,
     RoleRequestMutation,
-):  # noqa: E501
+):
     """Root mutation type composing all domain mutation mixins."""
 
 
@@ -120,6 +123,27 @@ def _is_expected(error: GraphQLError) -> bool:
         # A fault while serializing a result also wraps one but carries a path, so it stays masked.
         return True
     return isinstance(original, ValueError | HTTPException)
+
+
+class _McpReadOnly(SchemaExtension):
+    """Run nothing but queries for a request carrying an MCP token, answering anything else with a 403."""
+
+    def on_execute(self):
+        execution_context = self.execution_context
+        context = execution_context.context
+        if (
+            isinstance(context, dict)
+            and context.get("mcp_read_only")
+            and execution_context.operation_type is not OperationType.QUERY
+        ):
+            if context.get("response") is not None:
+                context["response"].status_code = 403
+            error = GraphQLError(
+                "A token issued to an MCP client can only read",
+                extensions={"code": ErrorCode.MCP_READ_ONLY.value},
+            )
+            execution_context.result = GraphQLExecutionResult(data=None, errors=[error])
+        yield
 
 
 class _RequestMaskErrors(MaskErrors):
@@ -174,6 +198,7 @@ schema = _Schema(
     # 90 tokens), and introspection is open only in development so other deployments hide the schema.
     extensions=[
         _RequestMaskErrors(should_mask_error=_should_mask),
+        _McpReadOnly,
         QueryDepthLimiter(max_depth=10),
         MaxAliasesLimiter(max_alias_count=10),
         MaxTokensLimiter(max_token_count=1000),

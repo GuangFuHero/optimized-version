@@ -58,6 +58,7 @@
 | **Pre-Departure（出勤前須知／行前通知）** | `pre_departure.view` ★、`pre_departure.publish`、`pre_departure.edit`、`pre_departure.delete` |
 | **Audit（稽核日誌）** | `audit.view` |
 | **RBAC 自管（僅 Super Admin）** | `rbac.assign`、`rbac.edit` |
+| **MCP（MCP 用戶端）** | `mcp.use`（每個角色都有）、`mcp.unlimited_use`（`user` 以外的角色都有；沒有的帳號每分鐘有次數上限），都可在執行期逐角色調整（ADR-463） |
 
 > `PII` 與檢視分離（ADR-012）：`ticket.view`（看得到單）≠ `ticket.view_pii`（看得到聯絡資訊）。
 > 後台 BI 儀表板與它的 API 要 `analytics.view`（只授予四個後台角色，ADR-462），每張圖另外照舊要來源模組的 view 權限、只算該 scope 看得到的資料。

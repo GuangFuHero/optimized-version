@@ -8,7 +8,7 @@ from app.core import auth_cookies, security
 from app.core.api_errors import ApiError, ErrorCode
 from app.core.config import settings
 from app.core.normalize import normalize_email, normalize_phone
-from app.core.request_auth import authenticated_by_cookie
+from app.core.request_auth import authenticated_by_cookie, resolve_client_ip
 from app.repositories.step_up_proof_repository import ProofHolder
 from app.schemas.auth import TokenPair
 from app.services import auth_session
@@ -86,25 +86,6 @@ def clear_cookies_if_cookie_authenticated(request: Request, response: Response) 
     """
     if authenticated_by_cookie(request):
         auth_cookies.clear_session_cookies(response)
-
-
-# An IP is well under this; the cap only stops a hostile header from becoming a huge Redis key.
-_MAX_CALLER_KEY_LEN = 64
-
-
-def resolve_client_ip(request: Request) -> str:
-    """Resolve the caller's IP, preferring the proxy-supplied `X-Forwarded-For`.
-
-    The backend is only reachable from the frontend container over the internal docker network, so
-    this header is written by our own BFF — which sets it from `CF-Connecting-IP` only, never from
-    the browser's own `X-Forwarded-For`. If the backend is ever exposed directly, the header becomes
-    caller-controlled and the rate limit becomes bypassable by rotating it; it must then be
-    re-validated at the edge before being used as a key.
-    """
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()[:_MAX_CALLER_KEY_LEN]
-    return request.client.host if request.client else "unknown"
 
 
 def build_rate_limit_key(times: int, seconds: int, caller: str, path: str) -> str:

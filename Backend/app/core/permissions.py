@@ -159,6 +159,13 @@ class Perm(StrEnum):
     RBAC_ASSIGN = "rbac.assign"
     RBAC_EDIT = "rbac.edit"
 
+    # ADR-463: connecting an MCP client to the account. Held on any of the account's identities, it
+    # lets the account sign a client in, whichever identity the client then reads as.
+    MCP_USE = "mcp.use"
+    # ADR-463: no limit on the backend calls an account's MCP tools make a minute. Held on any identity,
+    # it lifts the limit whichever identity the session acts as; it grants no access of its own.
+    MCP_UNLIMITED_USE = "mcp.unlimited_use"
+
 
 # ADR-025/027: read-only capabilities the whole world holds — `check_permission` resolves
 # these to Scope.ALL for every caller, authenticated or not, because the map, shelter list,

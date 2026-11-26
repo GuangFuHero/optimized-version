@@ -25,3 +25,9 @@
 ## 套件
 
 - 只用 `uv add`／`uv remove`／`uv lock` 改套件，`uv.lock` 和 `pyproject.toml` 一起 commit；不要手動編輯 `uv.lock`。
+
+## 設定（config.py）
+
+可能要依環境調整的值（網址、時間、次數或數量上限…）優先放進 `app/core/config.py` 的 `Settings`，程式用 `settings.X` 讀，不要寫成模組常數；不會變的值（路徑、協定規定的值）照樣寫在模組裡。
+- 欄位上寫預設值，環境變數可以覆蓋；數值加範圍（例如 `Field(gt=0)`），設錯時 backend 啟動就停，不會在沒有限制的情況下跑。
+- 新增設定時，在 repo 根目錄的部署文件（`DEPLOY.md`）第 6 節列出名稱、預設值，並寫明改了要重啟。

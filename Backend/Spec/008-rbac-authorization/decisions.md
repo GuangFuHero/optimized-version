@@ -1635,6 +1635,49 @@ ADR-048 當初拒絕資源上的 team 歸屬，理由是「gov 把東西交給 N
 2. seed 以 `all` 授予 `data_auditor`、`super_admin`、`admin`、`member`；gov 與 NGO team 的 `admin`、`member` 都有。`user` 沒有。
 3. migration 只補缺少的授予，執行期已設定的 scope 不動。
 
+#### ADR-463 MCP 用戶端：`mcp.use` 決定能不能用，`mcp.unlimited_use` 決定有沒有次數上限
+
+> **狀態：ACCEPTED**
+
+**白話**：每個角色預設都能讓 MCP 用戶端（Claude、Cursor…）登入讀資料。只持有一般使用者（`user`）的帳號，工具每分鐘最多呼叫後端 10 次；還持有其他預設角色（後台與團隊角色）的帳號不限次數。超級管理員在 RBAC 設定把某個角色的權限設成 `none`，下一次呼叫就生效，也可以單獨給某個帳號不限次數。
+
+**Context**：
+
+- 後端內的 MCP server 讓帳號用 MCP 用戶端唯讀讀取資料，讀的是後端自己的 REST 與 GraphQL，權限與遮罩照該帳號的身分。原本任何能登入的帳號都能用，也沒有次數限制，沒辦法逐角色關掉或限制。
+- 一般使用者可以自己註冊，這種帳號用 MCP 大量讀取，負擔落在後端；後台人員則需要正常使用。
+- MCP session 一律從帳號的預設身分開始，有一般使用者身分的帳號就是一般使用者，之後才可能切到其他身分。
+
+**Decision**：
+
+1. 兩個權限：
+   - `mcp.use`：帳號能讓 MCP 用戶端登入、用 MCP 讀資料。seed 與 migration 以 `all` 授予每個角色（平台與團隊角色都有）。
+   - `mcp.unlimited_use`：MCP 工具呼叫後端不限次數。它只拿掉上限，本身不給使用權，能不能用仍看 `mcp.use`。seed 與 migration 以 `all` 授予除了平台 `user` 以外的每個角色。
+   - migration 只補缺少的授予，執行期已設定的 scope 不動。執行期新建的角色兩個都沒有，要在 RBAC 設定另外授予。
+   - 要關掉某個角色，在 RBAC 設定把它的 scope 設成 `none`，不要刪掉授予：部署時會重跑 seed，把刪掉的授予補回 `all`；設成 `none` 的不會被改。
+2. 兩個都看帳號的**任一個**可用身分，每個身分照一般的權限檢查算（含直接授予帳號、對那個身分有效的權限），不只看目前的身分。session 從一般使用者開始，只看目前身分的話，持有後台角色的人在切換之前會被當成一般使用者限制或擋下。
+3. 檢查的位置，讓 RBAC 設定一改就生效：
+   - `mcp.use`：同意頁發授權碼前檢查，沒有就不發碼，頁面直接說這個帳號不能使用 MCP。用授權碼換 token、每個 MCP 請求與每次換發 token 也檢查：拿掉後，已連上的 session 下一個請求或換發就被拒，訊息說明原因，同時結束這個帳號所有的 MCP session。MCP 的 token 也能直接讀其他 API，只拒絕 MCP 請求的話，token 在其他地方還能用到過期、也還能換發。
+   - `mcp.unlimited_use`：每一次工具呼叫後端、計數之前檢查，改了下一次呼叫就照新設定算。
+4. 沒有 `mcp.unlimited_use` 的帳號，MCP 工具每分鐘最多呼叫後端 `MCP_TOOL_CALLS_PER_MINUTE` 次（伺服器設定，預設 10，列在 repo 根目錄的 `DEPLOY.md`）：
+   - 一次 `graphql_query`、`rest_get` 或 `switch_identity` 算一次；`graphql_schema`、`rest_routes` 不呼叫後端，不算。
+   - 按帳號計數，不分身分與 session，用既有的 Redis 限流：從第一次計數起算 60 秒。
+   - 超過時這一次呼叫在送到後端之前就被拒，訊息寫幾秒後可以再試。沒有每日上限。
+   - 原有的 `execute` 限制（每人每分鐘次數、每次的執行時間與工具呼叫數）照舊。
+5. 沒有「受限」權限。RBAC 的授予只會加上能力，不會拿掉：有一個「受限」權限的話，同時持有其他角色的帳號照樣受限，要再寫例外。所以「受限」就是「有 `mcp.use`、沒有 `mcp.unlimited_use`」。
+6. 次數是伺服器設定，誰受限是 RBAC。資料庫裡沒有可以按角色存數字的地方；讓管理員改數字要新的資料表欄位、migration、API 和畫面。誰受限是一般的權限授予，現有的 RBAC 設定就能改。
+
+**後果**：
+
+- ➕ 超級管理員不用改程式就能決定哪些角色能用 MCP、哪些受限，也能單獨放寬某個帳號。
+- ➕ 只持有一般使用者的帳號一分鐘最多讓後端回應 10 次 MCP 讀取。
+- ➖ 改次數要改伺服器設定並重啟。
+- ➖ 拿掉 `mcp.use` 後又加回來，用戶端要重新登入一次，因為原本的 session 已經結束。
+- ➖ 計數用固定的 60 秒視窗，在視窗交界前後最多可以連續呼叫兩倍的次數。
+- ◾ 考慮過但不做：
+  - 讀取紀錄：現在沒有可以延伸的紀錄。uvicorn 的 access log 沒有使用者，也看不到 MCP 在程式內呼叫的後端；`audit_logs` 只記寫入。
+  - 全 API 的每人讀取上限：用帳號自己的登入寫個簡單的程式，照樣讀得到同樣的資料，所以只限 MCP 擋不住刻意的大量讀取；全 API 的上限影響範圍太大，先不做。
+- 測試：`tests/test_graphql/test_mcp_server.py`、`tests/test_seed_rbac.py`、`tests/test_migration_mcp_use_grant.py`。
+
 ---
 
 ## 附錄 A. Scope 語意表（ADR-049 定案：純地理，無 gov/ngo）

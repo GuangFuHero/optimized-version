@@ -11372,7 +11372,9 @@
           "audit.export",
           "rbac.view",
           "rbac.assign",
-          "rbac.edit"
+          "rbac.edit",
+          "mcp.use",
+          "mcp.unlimited_use"
         ],
         "title": "Perm",
         "description": "A capability key. Every RBAC check (checkpoint 1) is keyed on one of these."
