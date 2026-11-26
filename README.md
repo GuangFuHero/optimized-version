@@ -2,231 +2,237 @@
 
 > 災害發生時，讓民眾、志工與救災單位在同一張地圖上回報災情、媒合任務、掌握站點狀態。
 
-**目前狀態**：Phase 1 開發中（目標 115/06/15）｜**授權**：程式碼 GPL-3.0-only，設計素材 CC BY-SA 4.0，名稱與 Logo 不授權（見[授權](#授權)）
+**版本**：每一版的變更見 [Releases](https://github.com/GuangFuHero/optimized-version/releases)｜**授權**：程式碼 GPL-3.0-only，設計素材 CC BY-SA 4.0，名稱與 Logo 不授權（見[授權](#授權)）
 
-> **要部署到伺服器？** 請看 [`DEPLOY.md`](DEPLOY.md)。最上面的表會告訴你從哪一節開始：部署更新到現有的 Staging、在 GCP 從零架設一套，或在自己的電腦架設、讓別人用網址連進來（僅供測試使用）。
->
-> **只想在自己的電腦上跑起來試用？** 照本頁的「[5 分鐘跑起完整系統](#5-分鐘跑起完整系統onboarding-guide)」做就好，不用看 `DEPLOY.md`，也不用申請任何外部服務。
+這是一套開源、不綁定特定災害的救災協作平台。水災、土石流、地震都可以用：部署一套、設定好災害事件，就能讓民眾求助、志工承接、救災單位調度。歡迎各地的救災社群拿去用、一起維護。
 
 ---
 
 ## 目錄
 
-1. [這個專案在做什麼](#這個專案在做什麼)
-2. [Repo 結構與角色導覽](#repo-結構與角色導覽)
-3. [系統架構一覽](#系統架構一覽)
+1. [平台概覽](#平台概覽)
+2. [主要功能](#主要功能)
+3. [角色與他們在系統裡做的事](#角色與他們在系統裡做的事)
 4. [5 分鐘跑起完整系統（Onboarding Guide）](#5-分鐘跑起完整系統onboarding-guide)
-5. [本機測試帳號與驗證碼查看](#本機測試帳號與驗證碼查看)
-6. [執行測試（Frontend & Backend）](#執行測試frontend--backend)
-7. [開發流程與必讀規範](#開發流程與必讀規範)
-8. [共用元件庫模組規劃（12 模組）](#共用元件庫模組規劃)
-9. [授權](#授權)
+5. [系統需求與支援版本](#系統需求與支援版本)
+6. [部署到伺服器](#部署到伺服器)
+7. [用在你的災害](#用在你的災害)
+8. [技術文件導覽](#技術文件導覽)
+9. [參與貢獻](#參與貢獻)
+10. [授權](#授權)
 
 ---
 
-## 這個專案在做什麼
+## 平台概覽
 
-平台採模組化設計，由 12 個共用模組組成。模組之間透過標準介面溝通，彼此不直接依賴，可以獨立維護或替換。
+平台分成兩個網站，共用同一個後端與資料庫：
 
-主要使用者：
-
-| 角色 | 使用方式 |
-| :--- | :--- |
-| **民眾 / 志工** | 前台（`Frontend/apps/demo`，`:3000`）：看救災地圖、回報救援需求与站點狀態、認領志工任務、申請成為後台人員 |
-| **救災單位 / 管理者** | 後台（`Frontend/apps/admin`，`:3001`）：任務看板調度、互助地圖（含建物樓層與工作區域）、重複案件審核、據點管理、團隊與成員權限管理 |
-
----
-
-## Repo 結構與角色導覽
-
-| 目錄 | 內容 | 從這裡開始 |
+| 網站 | 給誰用 | 說明 |
 | :--- | :--- | :--- |
-| `Frontend/` | Nx 22 + pnpm monorepo，含前台 `demo`、後台 `admin`、共用 UI 與資料存取層 | [Frontend/README.md](Frontend/README.md) |
-| `Backend/` | FastAPI + Strawberry GraphQL + PostgreSQL/PostGIS/H3 + Redis（Python 3.13） | [Backend/README.md](Backend/README.md) |
-| `Design/` | 設計稿導覽與視覺規範（Figma 匯出檔案位於 `origin/sucrelindesign` 分支） | [Design/GUIDE.md](Design/GUIDE.md) |
-| `.github/workflows/` | CI 設定（`frontend-ci.yaml`、`backend-tests.yml`、`ruff-check.yml`、`alembic-heads.yml`） | — |
-
-**第一次來？依你的角色先讀：**
-
-- **前端工程師** → 本頁「[5 分鐘跑起完整系統](#5-分鐘跑起完整系統onboarding-guide)」→ [`Frontend/CLAUDE.md`](Frontend/CLAUDE.md) → [`Frontend/README.md`](Frontend/README.md) → [`Frontend/docs/README.md`](Frontend/docs/README.md)
-- **後端工程師** → 本頁「[5 分鐘跑起完整系統](#5-分鐘跑起完整系統onboarding-guide)」→ [`Backend/CLAUDE.md`](Backend/CLAUDE.md) → [`Backend/README.md`](Backend/README.md)
-- **設計 / PM** → 本頁「[共用元件庫模組規劃](#共用元件庫模組規劃)」→ [`Design/GUIDE.md`](Design/GUIDE.md)
-- **要部署的人（團隊成員、廠商）** → [`DEPLOY.md`](DEPLOY.md)，先看最上面的「請依你的情境選擇閱讀起點」
-
----
-
-## 系統架構一覽
+| **前台** | 民眾、志工 | 不用登入就能看地圖、求助單與站點；登入後可以送出求助、承接任務 |
+| **管理平台** | 政府單位、NGO、資料檢核員、平台管理員 | 調度任務、分配責任區、管理站點與團隊、看儀表板；要有後台身分才進得去 |
 
 ```text
 瀏覽器
-  ├─ 前台 demo   http://localhost:3000 ─┐
-  └─ 後台 admin  http://localhost:3001 ─┤  Next.js BFF proxy（/api/v1/*、/api/graphql）
-                                         ▼
-                              FastAPI  http://localhost:8000  （REST + GraphQL）
-                                ├─ PostgreSQL + PostGIS + H3  :5432
-                                └─ Redis                      :6379
-
-外部服務（本機皆可不填）：
-  - Email / SMS OTP：本機預設 console 模式，驗證碼直接印在 Docker backend log
-  - Google / LINE OAuth：只在後端設定，本機用 Email + 密碼即可登入
-  - TGOS 門牌定位 / Google Maps API：選填，僅用於輔助地址查詢
+  ├─ 前台         ─┐
+  └─ 管理平台     ─┤  Next.js（同一個 monorepo 的兩個 app）
+                   ▼
+              FastAPI 後端（REST + GraphQL）
+                ├─ PostgreSQL + PostGIS + H3（空間資料）
+                └─ Redis（登入 session、流量限制）
 ```
 
-- **認證機制**：登入一律由後端處理，以 `HttpOnly` session cookie（本機前綴 `wgdev`）維持登入狀態。前端不保存任何登入 secret。
-- **前後端型別合約**：前端的 GraphQL / OpenAPI 型別由後端 schema 產生（`pnpm --dir Frontend schemas:generate`），CI 會檢查產生結果是否與 commit 一致。
+---
+
+## 主要功能
+
+| 功能 | 說明 |
+| :--- | :--- |
+| **救災地圖** | 在同一張地圖上看求助單、資源站點、危險區與責任區；可以切換街道圖與衛星影像底圖、篩選類型與狀態。也有清單模式 |
+| **求助與任務回報** | 民眾送出求助單，寫明需要的人力、物資或搜救；建單者可以停止招募、刪除單一需求或整張單；修改要在管理平台 |
+| **志工媒合** | 志工承接需求、需要時釋出；人數湊滿就自動停止招募。任務狀態由需求自動推算：待處理、處理中、已完成 |
+| **資源站點** | 物資、醫療、避難、充電等站點的位置與營運狀態；登入的使用者都可以建議修改，由管理平台審核後更新 |
+| **分工與調度** | 在地圖上劃責任區、指派給 NGO；標示危險區；大樓與多樓層的現場可以「看各樓層」逐層管理 |
+| **資訊發布** | 公告、志工行前資訊（如何參與、交通、建議攜帶的裝備清單）、單點分享（任務或站點的公開連結） |
+| **重複資料查核** | 新增任務或站點時，系統先比對是否已經有類似的資料並提示；疑似重複的配對由人在管理平台審核，任務可以合併 |
+| **數據儀表板** | 任務數量與狀態、志工需要與缺口、每日趨勢；可以依地區（到村里）、類型、狀態篩選 |
+| **匯入與匯出** | 任務與站點可以用 CSV 或 Excel 批次匯入（有範本可下載）與匯出 |
+| **帳號與團隊** | Email 或手機＋密碼、Google、LINE 登入；用邀請連結或 QR Code 加入團隊；每一次修改都留下歷史紀錄，供災後檢討 |
+
+---
+
+## 角色與他們在系統裡做的事
+
+下面是各角色在救災情境裡主要做的事。每個角色實際能看到、能修改哪些資料，由後端的權限設定決定，部署的單位可以調整。
+
+| 角色 | 在哪裡 | 主要做的事 |
+| :--- | :--- | :--- |
+| **民眾（求助者）** | 前台 | 查看附近的災情與資源站點；送出求助單、說明需要什麼；需求滿足後停止招募；分享求助單給親友 |
+| **志工** | 前台 | 找到需要人力的任務並承接；出發前看行前資訊；在「我的任務」追蹤自己承接的工作；回報站點的最新狀況 |
+| **政府單位** | 管理平台 | 掌握全區災情與缺口；調度所有任務；劃設責任區與危險區、分派給 NGO；管理站點與單位成員 |
+| **NGO（民間救援團隊）** | 管理平台 | 處理自己責任區內的任務與站點；管理團隊成員、用 QR Code 邀請新成員加入 |
+| **資料檢核員** | 管理平台 | 審核疑似重複的任務與站點並合併；確保資料正確 |
+| **平台管理員** | 管理平台 | 設定災害事件、發布公告與行前資訊、管理所有團隊與人員 |
+
+民眾和志工可以在前台申請成為政府單位或 NGO 的成員、或資料檢核員，由團隊管理員或平台管理員審核。
 
 ---
 
 ## 5 分鐘跑起完整系統（Onboarding Guide）
 
+在自己的電腦上跑起完整系統，只有這台電腦看得到。不用申請網域或任何第三方服務。
+
 ### 1. 事前準備
 
 | 工具 | 版本需求 | 用途 |
 | :--- | :--- | :--- |
-| **Docker Desktop**（Linux 裝 Docker Engine 與 Compose 外掛即可） | 最新穩定版 | 執行 PostgreSQL（PostGIS + H3）、Redis 與 FastAPI 後端開發容器 |
-| **Node.js** | `>= 22` | 執行前端 Next.js 與 Nx 工具鏈 |
-| **pnpm** | `corepack enable` 自動啟用 | 管理前端 monorepo 與根目錄啟動指令 |
-| **Python + `uv`** | Python `3.13` | `pnpm setup` 會用它建立後端虛擬環境，所以第一次就要裝；在本機跑後端 `pytest`、或執行 `pnpm schemas:generate` 匯出型別時也會用到 |
+| **Docker Desktop**（Linux 裝 Docker Engine 與 Compose 外掛即可） | 最新穩定版 | 執行 PostgreSQL（PostGIS + H3）、Redis 與後端 |
+| **Node.js** | `>= 22` | 執行前端 |
+| **pnpm** | `corepack enable` 自動啟用 | 管理前端 monorepo 與根目錄的指令 |
+| **Python + `uv`** | Python `3.13` | `pnpm setup` 會用它建立後端虛擬環境 |
 
-### 2. 一鍵初始化與日常啟動
+### 2. 初始化與啟動
 
-在專案根目錄（`/`）直接執行：
+在專案根目錄執行：
 
 ```bash
-# 第一次 clone 下來：
-# 自動複製前後端環境變數檔（Backend/.env 與 Frontend/.env）、
-# 安裝前端套件、建立後端虛擬環境、啟動後端 Docker、執行 Alembic migration 並灌入 RBAC 與測試假資料
+# 第一次：複製環境變數檔、安裝套件、啟動後端 Docker、建立資料庫，並灌入示範資料
 corepack enable
 pnpm setup
 
-# 日常開發：
-# 確保後端 Docker（db, redis, backend）在背景運行，並同時啟動前台 demo、後台 admin 與 Storybook
+# 之後每次：啟動後端、前台、管理平台與 UI 元件庫
 pnpm dev
 ```
 
-啟動後的本機服務一覽：
+| 服務 | 網址 |
+| :--- | :--- |
+| 前台 | <http://localhost:3000> |
+| 管理平台 | <http://localhost:3001> |
+| 後端 API 文件 | <http://localhost:8000/docs>（REST）、<http://localhost:8000/graphql>（GraphQL） |
+| UI 元件庫（Storybook） | <http://localhost:6006> |
 
-| 服務 | 本機網址 / Port | 執行環境 | 說明 |
-| :--- | :--- | :--- | :--- |
-| **民眾前台 (`demo`)** | <http://localhost:3000> | 本機 Node (`pnpm`) | 救災地圖、列表、民眾求援、志工媒合、申請成為後台人員 |
-| **管理後台 (`admin`)** | <http://localhost:3001> | 本機 Node (`pnpm`) | 任務看板、互助地圖、重複審核、據點管理、團隊與成員權限 |
-| **UI 元件庫 (`ui`)** | <http://localhost:6006> | 本機 Node (`pnpm`) | Storybook 設計系統元件預覽 |
-| **後端 API (`backend`)** | <http://localhost:8000> | Docker Container | REST 文件：<http://localhost:8000/docs>｜GraphQL：<http://localhost:8000/graphql> |
-| **PostgreSQL / Redis** | `:5432` / `:6379` | Docker Container | PostGIS + H3 空間資料庫、Session 與 Rate Limit 快取 |
+`pnpm setup` 會灌入兩個示範災害情境的資料（花蓮光復土石流、宜蘭冬山水災），以及各種角色的示範帳號，帳號清單寫在 [`Backend/scripts/seed_mock_scenarios.sql`](Backend/scripts/seed_mock_scenarios.sql) 的開頭。超級管理員和資料檢核員的示範帳號沒有預設密碼，要進只有他們能看的管理平台畫面，先照 [`Backend/README.md` 的種子資料一節](Backend/README.md#資料庫migration-與種子資料)設定密碼。
 
-> 💡 **後端如何熱重載（Hot-reload）？**
-> `Backend/docker-compose.yml` 已將本機 `Backend/` 目錄掛載進 `backend` 容器並開啟 `uvicorn --reload`。直接修改本機的 `.py` 檔案，Docker 內的後端就會自動重新載入，不需重啟容器。
->
-> 💡 **環境變數檔**：
-> 前後端統一使用 `.env`（`Backend/.env` 與 `Frontend/.env`），執行 `pnpm setup` 時會自動從各自的 `.env.example` 複製產生。
+本機跟正式環境的差別：
 
----
+- 簡訊與 Email 驗證碼不會真的寄出，而是印在後端的紀錄裡：`docker compose --project-directory Backend logs -f backend`。
+- 不能用 Google、LINE 登入，改用 Email＋密碼。
+- 地址不會自動定位成座標，但照樣可以存。
 
-## 本機測試帳號與驗證碼查看
-
-執行 `pnpm setup` 後，資料庫會載入兩個災害情境（`scripts/seed_mock_scenarios.sql`）的完整測試資料：
-
-| 帳號（Email） | 角色 / 身分 | 預設密碼 | 用途說明 |
-| :--- | :--- | :--- | :--- |
-| `avol01@mock.test` | 一般民眾（建單者） | `Mock1234!` | 前台「我的任務 › 我建立的」已有 6 張單，可測編輯、刪單、停止招募 |
-| `avol02@mock.test` | 志工（承接者） | `Mock1234!` | 前台「我的任務 › 我承接的」已有 4 筆不同狀態的任務，可測釋出 |
-| `avol03@mock.test` | 新註冊民眾 | `Mock1234!` | 無任務，可測第一次接單或送出「申請成為後台人員」 |
-| `avol04@mock.test` | 申請入隊審核中 | `Mock1234!` | 有一筆待審核的加入團隊申請（可由 `agov01` 或 `asuper01` 核准） |
-| `agov01@mock.test` | 團隊管理員（光復鄉公所） | `Mock1234!` | 可進管理後台（`:3001`），管理本隊成員、產生邀請 QR、查看所有團隊名錄 |
-| `asuper01@mock.test` | 超級管理員（`super_admin`） | 需手動設定（見下） | 全平台最高權限，可進後台看「成員與權限 `/users`」、管理所有團隊與重複審核 |
-| `aaudit01@mock.test` | 資料檢核員（`data_auditor`） | 需手動設定（見下） | 測試後台「重複審核」與檢核員權限邊界 |
-
-- **設定 `asuper01` / `aaudit01` 的本機密碼**：
-  這兩個高權限帳號在 seed 中預設不帶密碼，本機需要測試時執行以下指令即可設定（例如設為 `Mock1234!`）：
-  ```bash
-  docker compose --project-directory Backend exec backend python -m scripts.set_password asuper01@mock.test
-  ```
-- **查看本機註冊／手機驗證碼（OTP）**：
-  本機預設使用 `EMAIL_PROVIDER=console` 與 `SMS_PROVIDER=console`，驗證碼會直接印在後端容器 log：
-  ```bash
-  docker compose --project-directory Backend logs -f backend
-  ```
+開發與測試的細節見 [`Frontend/README.md`](Frontend/README.md) 與 [`Backend/README.md`](Backend/README.md)。
 
 ---
 
-## 執行測試（Frontend & Backend）
+## 系統需求與支援版本
 
-在專案根目錄直接執行 **`pnpm test`** 即可一次跑完前端與後端全部測試：
+### 使用者的瀏覽器
 
-```bash
-pnpm test
-```
+| 裝置 | 支援的瀏覽器 |
+| :--- | :--- |
+| 桌機 | Chrome、Edge、Firefox 111 以上；Safari 16.4 以上 |
+| 手機 | iPhone：Safari 16.4 以上；Android：Chrome 111 以上 |
 
-前端與後端也有各自的測試指令：
+這是前端框架 Next.js 預設支援的範圍。手動測試涵蓋桌機 Chrome、桌機 Safari、iPhone Safari 與 Android Chrome；Edge 與 Firefox 在支援範圍內，但沒有列入手動測試。不支援 Internet Explorer。
 
-| 專案 | 測試框架與規模 | 是否需要啟動 Docker / DB？ | 單獨執行指令 |
-| :--- | :--- | :--- | :--- |
-| **Frontend** | Vitest（約 187 個 `.spec.ts(x)` 測試檔，涵蓋 `ui`、`modules`、`data-access`、`apps`） | **不需要**（純單元與元件邏輯測試，也不依賴 `.env`） | `pnpm --dir Frontend test` |
-| **Backend** | Pytest + pytest-xdist（約 238 個測試檔、1,400+ 個 test cases，測試真實 PostGIS/H3 與 Redis） | **需要 `db` 與 `redis` 容器運行中**（會自動建立隔離的 `disaster_rescue_test` 資料庫，不影響開發資料） | `uv --directory Backend run pytest -n 4` |
+### 部署環境
 
-詳細測試說明請見 [`Frontend/README.md`](Frontend/README.md) 與 [`Backend/README.md`](Backend/README.md#測試)。
+| 項目 | 需求 |
+| :--- | :--- |
+| 作業系統 | Ubuntu 24.04 LTS（[`DEPLOY.md`](DEPLOY.md) 的步驟以這個版本測試） |
+| 容器 | Docker Engine 與 Docker Compose 外掛 |
+| 硬體 | 最低 2 核心、4 GB 記憶體（要照 `DEPLOY.md` 設定 Swap）；建議 8 GB；可用磁碟空間至少 30 GB |
+| 對外連線 | 一個網域，以及 Cloudflare Tunnel 提供 HTTPS |
 
----
+### 元件版本
 
-## 開發流程與必讀規範
+以 Docker 映像固定，部署時不用另外安裝：
 
-動手改程式碼前，請先閱讀根目錄的 **[`CLAUDE.md`](CLAUDE.md)**：
+| 元件 | 版本 | 映像 |
+| :--- | :--- | :--- |
+| 資料庫 | PostgreSQL 16，含 PostGIS 3.4 與 H3 擴充 | `postgis/postgis:16-3.4`，見 [`Backend/docker/postgres-h3/Dockerfile`](Backend/docker/postgres-h3/Dockerfile) |
+| 快取與 session | Redis 7 | `redis:7-alpine` |
+| 後端 | Python 3.13（FastAPI） | `python:3.13-slim`，見 [`Backend/Dockerfile`](Backend/Dockerfile) |
+| 前台與管理平台 | Node.js 22（Next.js 16） | `node:22-alpine`，見 [`Frontend/Dockerfile`](Frontend/Dockerfile) |
 
-1. **前端開發（[`Frontend/README.md`](Frontend/README.md)）**
-   - 動 UI 前必讀 [`Frontend/CLAUDE.md`](Frontend/CLAUDE.md) 與 [`Frontend/docs/design-system.md`](Frontend/docs/design-system.md)。
-   - 顏色、圓角、字級、間距一律從 `@rescue-frontend/ui` 的 `designTokens` 取得，不可在頁面寫死色碼或數字圓角／字級。
-   - 設計稿位於 `origin/sucrelindesign` 分支的 `Design/` 目錄，查閱方式見 [`Design/GUIDE.md`](Design/GUIDE.md)。
-2. **後端開發（[`Backend/README.md`](Backend/README.md)）**
-   - 測試與資料庫規範必讀 [`Backend/CLAUDE.md`](Backend/CLAUDE.md)。
-   - 若修改了 SQLAlchemy Model，需先建立 Alembic migration，測試資料庫（由 `alembic upgrade head` 建立 template DB）才看得到新欄位。
-   - 若修改了 REST API（路徑、參數、Pydantic schema、docstring）或 GraphQL Schema，**必須更新前端型別合約**：
-     ```bash
-     pnpm --dir Frontend schemas:generate
-     ```
-3. **文件索引**
-   - 前端詳細文件與閱讀順序：[`Frontend/docs/README.md`](Frontend/docs/README.md)
-   - 後端開發、測試與疑難排解：[`Backend/README.md`](Backend/README.md)
-   - 雲端部署與維運指南：[`DEPLOY.md`](DEPLOY.md)
-   - Discord 通知設定：[`DISCORD_WEBHOOK_SETUP.md`](DISCORD_WEBHOOK_SETUP.md)
+### 支援哪些版本
+
+版本號照語意化版本（`vX.Y.Z`）。哪些版本會收到資安修正、前一版支援多久，見 [`SECURITY.md`](SECURITY.md) 的「支援的版本」；每一版改了什麼，見 [Releases](https://github.com/GuangFuHero/optimized-version/releases)。
 
 ---
 
-## 共用元件庫模組規劃
+## 部署到伺服器
 
-平台採**模組化架構**，將功能拆分為 12 個職責明確的共用元件。各元件透過標準介面協作、互不直接耦合，使邊界清晰、易於維護與擴充，平台亦可依需求替換或升級特定功能，而不影響其他模組運作。
+要讓別人用網址連進來，照你的情境選一條路，步驟都在 [`DEPLOY.md`](DEPLOY.md)：
 
-### 模組總覽與開發期程
+| 情境 | 從哪裡開始 |
+| :--- | :--- |
+| 在 GCP 從零架設一套（正式環境） | [`DEPLOY.md` 第 10 節：從零架設雲端環境](DEPLOY.md#10-從零架設雲端環境one-time-bootstrap) |
+| 在自己的電腦（Ubuntu＋Docker）架設，讓別人連進來（僅供測試） | [`DEPLOY.md` 第 10 節開頭](DEPLOY.md#在自己的電腦上架設要先知道的事) |
+| 更新已經架好的環境 | [`DEPLOY.md` 第 2 節：日常部署速查](DEPLOY.md#2-日常部署速查tldr) |
 
-| 編號 | 元件名稱 | 優先度 | 開發階段 |
-| :---: | :--- | :---: | :--- |
-| 1 | 二維（2D）底圖圖資呈現 | 高 | 第一階段（115/06/15） |
-| 2 | 使用者登入驗證框架 | 高 | 第一階段（115/06/15） |
-| 3 | 任務回報 | 高 | 第一階段（115/06/15） |
-| 4 | 站點回報 | 高 | 第一階段（115/06/15） |
-| 5 | 志工需求 / 任務媒合 | 高 | 第一階段（115/06/15） |
-| 6 | 單點分享 | 中 | 第一階段（115/06/15） |
-| 7 | 志工行前資訊 | 中 | 第二階段（115/12/15） |
-| 8 | 緊急資訊公布欄 | 中 | 第二階段（115/12/15） |
-| 9 | 數據庫分析儀表板 | 低 | 第二階段（115/12/15） |
-| 10 | 工作區域分配 | 低 | 第二階段（115/12/15） |
-| 11 | 人工智慧（AI）重複資訊查核 | 低 | 第二階段（115/12/15） |
-| 12 | 直立樓層分層標記 | 低 | 第二階段（115/12/15） |
+部署方式：一台主機用 Docker Compose 跑前台、管理平台、後端、資料庫與 Redis，透過 Cloudflare Tunnel 提供 HTTPS。`deploy.sh` 一個指令完成資料庫備份、建置、migration 與健康檢查，也能退回指定版本；備份在每次部署前做一次，保留 30 天，平常沒有排程備份。
 
-### 元件依賴關係
+### 要準備的外部服務
+
+申請方式見 [`DEPLOY.md` 第 10 節 Step 1](DEPLOY.md#step-1事前申請外部第三方服務需提前準備)。有些服務要綁定主機的固定 IP、需要人工審核，請提早申請。
+
+| 服務 | 用途 | 沒設定會怎樣 |
+| :--- | :--- | :--- |
+| GCP 專案（Secret Manager、Cloud Storage） | 存放金鑰與資料庫備份；在自己的電腦架設也需要，但不用建 VM | `deploy.sh` 無法執行 |
+| 網域＋Cloudflare Tunnel | 前台與管理平台的網址、HTTPS | 外面連不進來 |
+| 簡訊服務（目前接簡訊王 KotSMS） | 手機驗證碼 | 不能用手機註冊或驗證手機，也就不能申請後台身分 |
+| Email 服務（目前接 SMTP2GO） | Email 驗證碼與通知信 | 不能用 Email 註冊、重設密碼 |
+| Google OAuth、LINE Login | 第三方帳號登入 | 少了這兩種登入方式，Email、手機＋密碼照樣能用 |
+| 內政部 TGOS 門牌定位 | 地址與座標互轉 | 地址照樣能存，只是不會自動定位 |
+
+各環境要填的環境變數，對照表在 [`DEPLOY.md` 第 6 節](DEPLOY.md#6-環境變數cookiecloudflare-tunnel-與第三方服務設定)；本機的值寫在 [`Backend/.env.example`](Backend/.env.example) 與 [`Frontend/.env.example`](Frontend/.env.example)。地圖底圖與門牌查詢的使用條款見 [`MAP_TERMS.md`](MAP_TERMS.md)。
+
+---
+
+## 用在你的災害
+
+部署好之後，大致照這個順序開始：
+
+1. **建立第一個平台管理員**：見 [`DEPLOY.md` 第 10 節 Step 7](DEPLOY.md#step-7建立第一個超級管理員帳號super_admin)。
+2. **設定災害事件**：在管理平台的「設定」填入災害名稱、災害類型、開始時間與地圖的預設位置。
+3. **建立團隊、邀請成員**：政府單位與 NGO 各自建立團隊，用邀請連結或 QR Code 讓成員加入。
+4. **匯入既有資料**：已經有的站點或任務清單，可以用管理平台的匯入功能（CSV 或 Excel，有範本）一次匯入。
+5. **劃責任區**：在管理平台的互助地圖劃好責任區，分派給負責的團隊。
+6. **換成你的名稱與 Logo**：「島嶼守望」「光復超人」的名稱與 Logo 不在開源授權範圍內，要換的檔案列在 [`LICENSING.md`](LICENSING.md)。
+
+---
+
+## 技術文件導覽
+
+| 想了解 | 看這裡 |
+| :--- | :--- |
+| 前端架構、開發方式 | [`Frontend/README.md`](Frontend/README.md)、[`Frontend/docs/README.md`](Frontend/docs/README.md) |
+| 後端架構、開發方式 | [`Backend/README.md`](Backend/README.md) |
+| 資料庫結構（ER 圖） | [`Backend/Spec/Docs/er-diagram.md`](Backend/Spec/Docs/er-diagram.md)；實際的 schema 以 [`Backend/alembic/versions/`](Backend/alembic/versions/) 的 migration 為準 |
+| 任務與站點的欄位定義 | [`Backend/Spec/Docs/mapping-tasks.csv`](Backend/Spec/Docs/mapping-tasks.csv)、[`Backend/Spec/Docs/mapping-stations.csv`](Backend/Spec/Docs/mapping-stations.csv) |
+| API | 執行中的後端 `/docs`（REST）與 `/graphql`；前端使用的契約檔 [`schema.graphql`](Frontend/libs/data-access/src/graphql/schema.graphql)、[`openapi.json`](Frontend/libs/data-access/src/rest/openapi.json)；摘要見 [`Frontend/docs/database-schema.md`](Frontend/docs/database-schema.md) |
+| 各功能的規格與設計決策 | [`Backend/Spec/`](Backend/Spec/)：每個功能一個資料夾，`spec.md` 是規格，`decisions.md` 是決策紀錄（ADR） |
+| 設計稿與設計系統 | [`Design/GUIDE.md`](Design/GUIDE.md)、[`Frontend/docs/design-system.md`](Frontend/docs/design-system.md) |
+| 部署、備份、金鑰輪替 | [`DEPLOY.md`](DEPLOY.md) |
+| 第三方套件與授權 | [`SBOM/README.md`](SBOM/README.md)、[`LICENSING.md`](LICENSING.md) |
 
 ```text
-二維底圖 ←── 任務回報、站點回報、工作區域分配
-使用者登入驗證 ←── 任務媒合、站點回報（審核）、工作區域分配
-任務回報 ←── 任務媒合、數據分析儀表板、AI 查核、直立樓層救援
-任務媒合 / 站點回報 ←── 數據分析儀表板
+Frontend/   前端 monorepo（Nx + pnpm）：前台 apps/demo、管理平台 apps/admin、共用 UI 與資料存取層
+Backend/    後端（FastAPI + Strawberry GraphQL + PostgreSQL/PostGIS/H3 + Redis，Python 3.13）
+Design/     設計稿導覽（設計稿本身在 sucrelindesign 分支）
+.github/    CI 與自動化設定
 ```
 
-### 關鍵設計決策
+---
 
-- 支援 Email 原生帳號與第三方 OAuth（Google、LINE），平台不儲存第三方密碼。
-- 任務紀錄採僅追加（append-only）設計並保留完整操作紀錄（Action Log），供災後復盤檢討使用。
-- 任務狀態以有限狀態機（State Machine）管理（待媒合 → 媒合中 → 媒合成功，另有刪除／停止招募路徑）。
-- 分享功能使用公開 URL，前端提供一鍵複製連結與動態產生 QR Code。
+## 參與貢獻
+
+歡迎送 issue 和 PR，程式、設計、測試、文件、翻譯都很需要。
+
+- **怎麼貢獻**：[`CONTRIBUTING.md`](CONTRIBUTING.md)。第一次送 PR 要先簽個人貢獻者授權協議（CLA），PR 上會有提示。
+- **行為準則**：[`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)。
+- **資安問題**：**不要**開公開的 issue，照 [`SECURITY.md`](SECURITY.md) 私下通報。
+- **貢獻者**：[`CONTRIBUTORS.md`](CONTRIBUTORS.md)。
 
 ---
 
