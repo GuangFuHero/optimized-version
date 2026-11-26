@@ -93,7 +93,7 @@ pnpm dev:ui
 
 1. 在專案根目錄執行過一次 `pnpm setup`（或依 [`Backend/README.md`](../Backend/README.md) 啟動後端 Docker、跑 migration 與灌入 seed）。
 2. 確認 <http://localhost:8000/docs> 打得開。
-3. 執行 `pnpm dev`，使用預設測試帳號登入（完整帳號列表見根目錄 [`README.md`](../README.md#本機測試帳號與驗證碼查看)，例如志工 `avol01@mock.test` / `Mock1234!`，或團隊管理員 `agov01@mock.test` / `Mock1234!`）。
+3. 執行 `pnpm dev`，使用預設測試帳號登入（完整帳號列表寫在 [`Backend/scripts/seed_mock_scenarios.sql`](../Backend/scripts/seed_mock_scenarios.sql) 的開頭，例如志工 `avol01@mock.test` / `Mock1234!`，或團隊管理員 `agov01@mock.test` / `Mock1234!`）。
 
 ---
 
