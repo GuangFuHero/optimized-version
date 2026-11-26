@@ -20,6 +20,27 @@ jobs:
         with:
           files: "Backend/**/*.py"
 
+      # Every backend Python file starts with the SPDX license line (after
+      # the shebang, if there is one). Unlike the ruff steps, this one fails.
+      - name: SPDX license header
+        if: steps.changed.outputs.any_changed == 'true'
+        env:
+          CHANGED_FILES: ${{ steps.changed.outputs.all_modified_files }}
+        run: |
+          header='# SPDX-License-Identifier: GPL-3.0-only'
+          missing=0
+          for f in $CHANGED_FILES; do
+            first=$(head -n 1 "$f")
+            case "$first" in
+              '#!'*) first=$(sed -n 2p "$f") ;;
+            esac
+            if [ "$first" != "$header" ]; then
+              echo "::error file=$f,line=1::Start the file with: $header"
+              missing=1
+            fi
+          done
+          exit $missing
+
       - name: Set up Python
         if: steps.changed.outputs.any_changed == 'true'
         uses: actions/setup-python@v5

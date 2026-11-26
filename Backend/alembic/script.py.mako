@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """${message}
 
 Revision ID: ${up_revision}

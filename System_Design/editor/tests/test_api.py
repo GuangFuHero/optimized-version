@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """
 Comprehensive pytest tests for FastAPI server in editor/server.py
 
