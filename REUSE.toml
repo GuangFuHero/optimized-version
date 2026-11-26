@@ -18,14 +18,14 @@ path = [
   "System_Design/**",
 ]
 precedence = "aggregate"
-SPDX-FileCopyrightText = "GuangFuHero contributors"
+SPDX-FileCopyrightText = "2026 Wan Guard 島嶼守望 contributors"
 SPDX-License-Identifier = "GPL-3.0-only"
 
 # Design material: illustrations, icons and pictures.
 [[annotations]]
 path = ["Design/**/*.png", "Design/**/*.svg", "Frontend/**/*.png", "Frontend/**/*.svg"]
 precedence = "aggregate"
-SPDX-FileCopyrightText = "光復超人設計團隊"
+SPDX-FileCopyrightText = "2026 島嶼守望團隊 (Wan Guard team)"
 SPDX-License-Identifier = "CC-BY-SA-4.0"
 
 # Components that hold a drawing: the code is GPL, the drawing CC BY-SA.
@@ -36,7 +36,7 @@ path = [
   "Frontend/libs/ui/src/components/Icon/generated/UserAvatarMarkIconSvg.tsx",
 ]
 precedence = "aggregate"
-SPDX-FileCopyrightText = ["GuangFuHero contributors", "光復超人設計團隊"]
+SPDX-FileCopyrightText = ["2026 Wan Guard 島嶼守望 contributors", "2026 島嶼守望團隊 (Wan Guard team)"]
 SPDX-License-Identifier = "GPL-3.0-only AND CC-BY-SA-4.0"
 
 # The project's names and logos are not licensed.
@@ -48,7 +48,7 @@ path = [
   "Frontend/libs/modules/src/brand/guang-fu-brand-icon.tsx",
 ]
 precedence = "aggregate"
-SPDX-FileCopyrightText = "GuangFuHero"
+SPDX-FileCopyrightText = "2026 Wan Guard 島嶼守望"
 SPDX-License-Identifier = "LicenseRef-Trademark"
 
 # Third party: other companies' marks on the sign-in and share buttons.
@@ -100,5 +100,5 @@ path = [
   "Backend/.specify/templates/**",
 ]
 precedence = "aggregate"
-SPDX-FileCopyrightText = ["GitHub, Inc.", "GuangFuHero contributors"]
+SPDX-FileCopyrightText = ["GitHub, Inc.", "2026 Wan Guard 島嶼守望 contributors"]
 SPDX-License-Identifier = "MIT"
