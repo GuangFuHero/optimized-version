@@ -14,7 +14,6 @@ describe('tileOriginOf', () => {
   it("gives a direct layer's tile server, and nothing for a layer the backend proxies", () => {
     expect(tileOriginOf('osm-direct')).toBe('https://tile.openstreetmap.org');
     expect(tileOriginOf('osm')).toBeNull();
-    expect(tileOriginOf('sinica')).toBeNull();
   });
 
   it('connects ahead to the tile server of the layer a map opens on', () => {

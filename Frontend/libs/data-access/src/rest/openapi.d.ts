@@ -1758,19 +1758,17 @@ export interface paths {
     };
     /**
      * Get Tile
-     * @description Proxy a map tile from an upstream source with 7-day Redis caching.
+     * @description Proxy a map tile from an upstream source with Redis caching.
      *
      *     **type** — `satellite` or `road`
      *
      *     **source** — one of:
-     *     - satellite: `nasa_gibs` (image/png), `eox` (image/jpeg), `nlsc` (image/jpeg), `sinica` (image/png)
-     *     - road: `osm` (image/png), `carto` (image/png)
+     *     - satellite: `nasa_gibs` (image/png), `eox` (image/jpeg), `nlsc` (image/jpeg)
+     *     - road: `osm` (image/png)
      *
      *     **z/x/y** — Standard XYZ slippy map tile coordinates (z: 0–19)
      *
-     *     **layer** — Required only for `source=sinica`. Pass the Sinica layer name
-     *     (e.g. `EARTH`, `TAIWAN_MOSAIC`). See https://gis.sinica.edu.tw/worldmap/
-     *     for available layers. Ignored for all other sources.
+     *     Tiles are cached for 7 days, `nasa_gibs` for 1 day, and `osm` for as long as its caching headers say.
      *
      *     Returns the raw tile image bytes with the upstream Content-Type header.
      *     On upstream error, returns a 1×1 transparent PNG.
@@ -8304,9 +8302,7 @@ export interface operations {
   };
   get_tile_api_v1_map_tile__type____source___z___x___y__get: {
     parameters: {
-      query?: {
-        layer?: string | null;
-      };
+      query?: never;
       header?: never;
       path: {
         type_: string;
