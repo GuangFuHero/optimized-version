@@ -8,7 +8,7 @@
 # 後端與規格
 /Backend/               @Taiwanchaoh @zenuie @jujuyuzu
 /Backend/Spec/          @Taiwanchaoh @zenuie
-/Spec/                  @Taiwanchaoh
+/Spec/                  @Taiwanchaoh @zenuie
 /System_Design/         @Taiwanchaoh @jujuyuzu
 
 # 前端
@@ -21,6 +21,9 @@
 /.github/               @jujuyuzu @Taiwanchaoh
 /DEPLOY.md              @jujuyuzu @Taiwanchaoh
 
+# SBOM
+/SBOM/                  @Taiwanchaoh @carolchu1208
+
 # 授權、治理與社群文件
 /LICENSE                @carolchu1208 @Taiwanchaoh
 /LICENSING.md           @carolchu1208 @Taiwanchaoh
@@ -28,3 +31,6 @@
 /CODE_OF_CONDUCT.md     @carolchu1208
 /SECURITY.md            @carolchu1208 @Taiwanchaoh
 /.github/CODEOWNERS     @carolchu1208 @Taiwanchaoh
+/CONTRIBUTORS.md        @carolchu1208 @jujuyuzu
+/.all-contributorsrc    @carolchu1208 @jujuyuzu
+/MAP_TERMS.md           @carolchu1208 @Taiwanchaoh

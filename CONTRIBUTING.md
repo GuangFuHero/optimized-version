@@ -20,12 +20,12 @@
 ## 送進來的內容用什麼授權
 
 - **程式碼與技術文件**：GNU General Public License v3.0 only（`GPL-3.0-only`），全文見 [`LICENSE`](LICENSE)。
-- **設計素材**（插圖、吉祥物「光復寶寶」、UI 設計稿、設計文件）：創用 CC 姓名標示－相同方式分享 4.0 國際（`CC-BY-SA-4.0`）。
+- **設計素材**（圖和畫面：插圖、吉祥物「光復寶寶」、UI 設計稿）：創用 CC 姓名標示－相同方式分享 4.0 國際（`CC-BY-SA-4.0`）。設計的文字說明和原型的程式碼算程式碼與技術文件，用 GPL-3.0-only。
 - **名稱與 Logo**：不在上述授權範圍內。
 
 送 PR 就表示你同意你的貢獻照上面的授權釋出，而且你有權利這樣釋出（是你自己寫的，或是來源的授權允許）。每一類內容的範圍，見 [`LICENSING.md`](LICENSING.md)。
 
-**第一次送 PR 要先簽個人 CLA（Individual Contributor License Agreement）。** PR 開出來之後，CLA Assistant 會在 PR 留言，照連結用 GitHub 帳號簽署即可，簽一次就好。沒簽的話，PR 上的 `license/cla` 檢查不會通過，不能合併。
+**第一次送 PR 要先簽個人 CLA（Individual Contributor License Agreement）。** PR 開出來之後，CLA Assistant 會在 PR 留言，照連結用 GitHub 帳號簽署即可，簽一次就好。沒簽的話，PR 上的 `license/cla` 檢查不會通過，維護者會等它通過才合併。
 
 新增的原始碼檔案，第一行（有 shebang 的放在 shebang 下一行）加上授權標示：
 
@@ -63,7 +63,7 @@
 3. **Commit 訊息**用 [Conventional Commits](https://www.conventionalcommits.org/zh-hant/v1.0.0/) 的格式：`類型(範圍): 做了什麼`，例如 `fix(frontend): upgrade packages with known security advisories`。
 4. **送出前，在自己的電腦上確認**：
    - 前端：`pnpm --dir Frontend typecheck`、`pnpm --dir Frontend lint`、`pnpm --dir Frontend test`，以及有改到的 app 能 build（`pnpm --dir Frontend build:demo`、`build:admin`）。
-   - 後端：`uv --directory Backend run ruff check` 和 `ruff format`，以及 `pytest`。
+   - 後端：`uv --directory Backend run ruff check .` 和 `uv --directory Backend run ruff format --check .`（ruff 的版本鎖在 `Backend/uv.lock`，跟 CI 一樣）。`pytest` 要先開 Docker 的 `db` 和 `redis`，並設定 `PYTHONPATH=. ENV=testing`，跑法見 [`Backend/README.md`](Backend/README.md) 的測試一節。
    - 改了 SQLAlchemy model：一定要附 Alembic migration，而且 `alembic heads` 只能有一個。
    - 改了 REST API 或 GraphQL schema：跑 `pnpm --dir Frontend schemas:generate`，把產生的型別一起 commit，CI 會檢查。
 5. **PR 說明寫三件事**：
@@ -74,21 +74,21 @@
 
 ## 審查與合併
 
-- `main` 有分支保護：**至少要 1 位維護者 approve**，必過的 CI 檢查也要通過，才能合併。不能直接 push 到 `main`。
+- `main` 有分支保護：**至少要 1 位維護者 approve**，必過的 CI 檢查（`alembic-heads`）也要通過，才能合併。不能直接 push 到 `main`。
 - 改到 [`.github/CODEOWNERS`](.github/CODEOWNERS) 列的路徑時，GitHub 會自動請負責的維護者審查。
-- PR 上的 `license/cla` 檢查要通過（見上面的 CLA）。
-- CI 會跑：
-  - `frontend-ci`：重新產生前端型別合約，檢查跟 commit 的一致，再跑型別檢查、lint 和測試。
-  - `backend-tests`：後端 pytest。
-  - `ruff-check`：後端格式和 lint。
+- PR 上的 `license/cla` 檢查要通過，維護者才會合併（見上面的 CLA）。
+- PR 上看得到的 CI 檢查：
+  - `checks`：重新產生前端型別合約，檢查跟 commit 的一致，再跑型別檢查、lint 和測試。
+  - `pytest`：後端測試。
+  - `ruff`：後端格式和 lint。
   - `alembic-heads`：migration 只能有一個 head。
 - 審查的人看：行為對不對、有沒有測試、權限和個資有沒有處理好、文件有沒有跟著改。有不同意見就在 PR 討論，討論的結果寫進 PR 或 ADR，不要只留在聊天群組。
-- 審查意見都處理好、CI 都過了以後，由作者或維護者用 **merge commit** 合併。
+- 審查意見都處理好、CI 都過了以後，由作者或維護者把 PR 加進 merge queue。merge queue 會在最新的 `main` 上再跑一次 CI，通過後用 **merge commit** 合併。
 - 合併以後刪掉分支。
 
 ## 設計稿
 
-設計稿不在 `main`，在設計師的分支 `sucrelindesign`，兩個分支互不合併。怎麼讀、怎麼在兩邊搬檔案，見 [`Design/GUIDE.md`](Design/GUIDE.md)。設計素材用 CC BY-SA 4.0。
+設計稿不在 `main`，在設計師的分支 `sucrelindesign`，兩個分支互不合併。怎麼讀、怎麼在兩邊搬檔案，見 [`Design/GUIDE.md`](Design/GUIDE.md)。設計素材（圖和畫面）用 CC BY-SA 4.0，原型的程式碼和文字說明用 GPL-3.0-only。
 
 ## 用 AI 工具寫的程式
 
@@ -103,9 +103,19 @@
 | 範圍 | 維護者（GitHub 帳號） |
 |---|---|
 | 專案管理、授權、行為準則 | `@carolchu1208` |
-| 後端（`Backend/`）、規格（`Spec/`、`Backend/Spec/`） | `@Taiwanchaoh`、`@zenuie`、`@jujuyuzu` |
+| 後端（`Backend/`） | `@Taiwanchaoh`、`@zenuie`、`@jujuyuzu` |
+| 規格（`Spec/`、`Backend/Spec/`） | `@Taiwanchaoh`、`@zenuie` |
 | 前端（`Frontend/`） | `@jujuyuzu`、`@chingweih`、`@hanhsienlei` |
 | 設計（`Design/`、設計分支） | `@sucrelindesign` |
 | CI、部署（`.github/`、`DEPLOY.md`） | `@jujuyuzu`、`@Taiwanchaoh` |
+| SBOM（`SBOM/`） | `@Taiwanchaoh`、`@carolchu1208` |
+
+### 維護者要做什麼
+
+- **收信**：wanguard25@gmail.com（資安通報、行為準則檢舉、授權與名稱使用的詢問）由 @sucrelindesign 收信，再轉給負責那一塊的維護者。
+- **發版**：由 @jujuyuzu 發布新版本和寫 release notes。
+- **審查 PR**：盡量在一週內給第一次回應。忙不過來時在 PR 留言說一聲，或請同一塊的其他維護者接手。
+- **加入**：在某一塊持續貢獻（送過 PR、幫忙審查）的人，可以由現有維護者提名，大家沒有意見就加進上面的表和 `CODEOWNERS`。
+- **退出**：不想繼續維護，自己提出就好。很久沒有參與的維護者，會先問本人，再從名單拿掉。
 
 實際自動指派審查的規則，以 [`.github/CODEOWNERS`](.github/CODEOWNERS) 為準。
