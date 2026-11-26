@@ -7,7 +7,6 @@
 | 資料夾 | 版本 | Commit | 說明 |
 |---|---|---|---|
 | `v0.1.0-beta.14/` | v0.1.0-beta.14 | `cae08287` | 送源碼檢測的版本，對應 release 附件 `optimized-version-v0.1.0-beta.14-source-for-scan.zip` |
-| `release-v0.1.0-8a59acb/` | release/v0.1.0 | `8a59acb8` | 依源碼檢測與軟體組成分析結果修補相依套件後、送複測前的版本 |
 
 每個版本三個檔：
 
@@ -37,7 +36,7 @@
 
 ## 怎麼重新產生
 
-需要 git、node（用 npx 跑 pnpm）、docker、python 3.11 以上。在 repo 根目錄執行，`TAG` 換成要產生的版本。`make_sbom.py` 會連到 npm 與 PyPI 查授權、作者與雜湊。
+需要 git、node 22（用 npx 跑 pnpm；pnpm 11.24.0 在 node 23 上會當掉）、docker、python 3.11 以上。在 repo 根目錄執行，`TAG` 換成要產生的版本。`make_sbom.py` 會連到 npm 與 PyPI 查授權、作者與雜湊。
 
 先取出那個版本的原始碼：
 
@@ -47,6 +46,13 @@ OUT=$(mktemp -d); mkdir -p "$OUT/src" "$OUT/fe" "$OUT/be"
 git archive "$TAG" Frontend Backend/pyproject.toml | tar -x -C "$OUT/src"
 COMMIT=$(git rev-list -n1 "$TAG")
 TAG_TIME=$(TZ=UTC git log -1 --date=format-local:%Y-%m-%dT%H:%M:%SZ --format=%cd "$TAG")
+```
+
+要產生的是分支而不是 tag 時，`TAG` 要換成那個分支當下的 commit，不要直接寫分支名稱：分支會繼續前進，而且 `release/v0.1.0` 這種名稱會在 `SBOM/` 底下多建一層資料夾。下面的 `--version` 和輸出路徑改用不含斜線的名稱，例如 `release-v0.1.0-<短 commit>`：
+
+```bash
+TAG=$(git rev-parse origin/release/v0.1.0)
+NAME=release-v0.1.0-$(git rev-parse --short=7 "$TAG")   # 下面用到 $TAG 當名稱的地方都改成 $NAME
 ```
 
 前端：照鎖定檔安裝並匯出授權。pnpm 版本照 `Frontend/package.json` 的 `packageManager`；`--ignore-scripts` 不執行任何套件的安裝腳本。
@@ -68,7 +74,7 @@ docker run --rm -v "$OUT/be:/w" -w /w ghcr.io/astral-sh/uv:0.13.6-python3.13-tri
   uv pip compile pyproject.toml --group dev --universal --python-version 3.13 --exclude-newer $TAG_TIME --no-header --annotation-style line -o all.txt"
 ```
 
-產生 JSON 與表格。`make_sbom.py` 只用標準函式庫；`make_table.py` 要 openpyxl。`--zip-name`、`--zip-sha256` 填 release 附件的原始碼壓縮檔與它的 SHA-256（`shasum -a 256 <檔案>`）。
+產生 JSON 與表格。`make_sbom.py` 只用標準函式庫；`make_table.py` 要 openpyxl。`--zip-name`、`--zip-sha256` 只在原始碼壓縮檔有公開（例如放在 release 附件）時填：壓縮檔名與它的 SHA-256（`shasum -a 256 <檔案>`）。沒有公開的壓縮檔就不要填，別人無法核對；表格會改成以 commit 為準。
 
 ```bash
 python3 -I SBOM/tools/make_sbom.py --lock "$OUT/src/Frontend/pnpm-lock.yaml" \
@@ -82,7 +88,7 @@ python3 -m venv "$OUT/venv" && "$OUT/venv/bin/pip" install -q openpyxl
 mkdir -p "SBOM/$TAG"
 "$OUT/venv/bin/python" SBOM/tools/make_table.py --rows "$OUT/out/_rows.json" \
   --out "SBOM/$TAG/元件SBOM表-$TAG.xlsx" --cdx-name "sbom-$TAG.cdx.json" \
-  --zip-name <原始碼壓縮檔名> --zip-sha256 <壓縮檔的 SHA-256> --date "$(date +%F)"
+  [--zip-name <原始碼壓縮檔名> --zip-sha256 <壓縮檔的 SHA-256>] --date "$(date +%F)"
 cp "$OUT/out/sbom-$TAG.cdx.json" "SBOM/$TAG/"
 cp "$OUT/be/runtime.txt" "SBOM/$TAG/backend-resolved-requirements.txt"
 ```

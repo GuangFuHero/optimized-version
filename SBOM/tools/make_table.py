@@ -3,7 +3,7 @@
 
 用法：
   python make_table.py --rows <out>/_rows.json --out <檔名>.xlsx \
-      --zip-name <原始碼壓縮檔名> --zip-sha256 <雜湊> --cdx-name <CycloneDX 檔名>
+      [--zip-name <原始碼壓縮檔名> --zip-sha256 <雜湊>] --cdx-name <CycloneDX 檔名>
 """
 
 import argparse
@@ -91,8 +91,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--rows", required=True)
     ap.add_argument("--out", required=True)
-    ap.add_argument("--zip-name", required=True)
-    ap.add_argument("--zip-sha256", required=True)
+    # 只在原始碼壓縮檔有公開（例如 release 附件）時填；分支快照不填，以 commit 為準。
+    ap.add_argument("--zip-name")
+    ap.add_argument("--zip-sha256")
     ap.add_argument("--cdx-name", required=True)
     ap.add_argument("--date", required=True, help="表格上寫的產生日期（YYYY-MM-DD）")
     args = ap.parse_args()
@@ -255,7 +256,10 @@ def main():
     line("受測標的", f"{meta['repo']}（前台、管理平台、後端 API）", fill=FILL_KEY)
     line("版本", meta["version"], fill=FILL_KEY)
     line("Commit", meta["commit"], fill=FILL_KEY)
-    line("原始碼壓縮檔", f"{args.zip_name}\nSHA-256：{args.zip_sha256}", fill=FILL_KEY)
+    if args.zip_name and args.zip_sha256:
+        line("原始碼壓縮檔", f"{args.zip_name}\nSHA-256：{args.zip_sha256}", fill=FILL_KEY)
+    else:
+        line("原始碼", f"以上面的 commit 為準（`git archive {meta['commit'][:12]}` 可取得同一份原始碼）", fill=FILL_KEY)
     line("本專案授權", "GPL-3.0-only", fill=FILL_KEY)
     line("產生日期", args.date, fill=FILL_KEY)
     line("機器可讀版本", f"{args.cdx_name}（CycloneDX 1.6 JSON，含完整相依關係圖，已通過 CycloneDX 1.6 schema 驗證）", fill=FILL_KEY)
@@ -297,13 +301,14 @@ def main():
                 continue
             runtime = r["scope"] == "runtime"
             scope = "執行期" if runtime else ("開發／建置" if side == "前端" else "開發／測試")
-            key = (0 if runtime else 1, f"{side}{scope}", platform.sub("", r["name"]))
+            key = (0 if runtime else 1, f"{side}{scope}", platform.sub("-*", r["name"]))
             fam = groups.setdefault(r["license"], {})
             fam[key] = fam.get(key, 0) + 1
     for lic, fam in sorted(groups.items()):
         parts = [f"{label}：{name}" + (f"（{n} 個平台版本）" if n > 1 else "") for (_, label, name), n in sorted(fam.items())]
         line(lic, "、".join(parts))
-    line("結論", "套件都有授權資訊。非寬鬆授權的套件為 LGPL-3.0、MPL-2.0（可與 GPL-3.0 併用）與 CC-BY-4.0（資料，須標示來源）。容器映像 PostGIS（GPL-2.0-or-later）與 Redis（7.4 起 RSALv2／SSPLv1）以獨立服務執行，不與本專案程式連結散布。外部服務的確認結果見「外部服務與授權」頁。")
+    lic_list = "、".join(sorted(groups)) or "無"
+    line("結論", f"{'套件都有授權資訊。' if not missing else '有套件缺授權資訊，見「缺授權資訊」。'}非寬鬆授權的套件：{lic_list}，各自的使用範圍見上面幾列。容器映像 PostGIS（GPL-2.0-or-later）與 Redis（7.4 起 RSALv2／SSPLv1）以獨立服務執行，不與本專案程式連結散布。外部服務的確認結果見「外部服務與授權」頁。")
     for r in range(ws.max_row - len(groups) - 1, ws.max_row + 1):
         ws.cell(row=r, column=2).alignment = Alignment(wrap_text=True, vertical="top")
 
@@ -316,7 +321,7 @@ def main():
 
     heading("範圍與限制")
     line("1", "執行期是「安裝時會裝進來」的範圍，比實際打包進網站的檔案多：Next.js 的 standalone 輸出只會帶走執行時真的用到的檔案。")
-    line("2", "後端版本是依 tag 時間解析的結果。容器建置時（Backend/Dockerfile 執行 `uv pip install .`）會取建置當天的最新版本，實際部署版本可能較新。")
+    line("2", "後端版本是依版本 commit 的時間解析的結果。容器建置時（Backend/Dockerfile 執行 `uv pip install .`）會取建置當天的最新版本，實際部署版本可能較新。")
     line("3", "容器映像使用浮動 tag（3.13-slim、22-alpine、7-alpine、latest），未以 digest 固定；映像內作業系統套件不在本表範圍，需另做容器映像掃描。")
     line("4", "本表不含已知漏洞（CVE）資訊，弱點請見源碼檢測（SCA）報告；也不含各元件供應者所在國別。")
     line("5", "外部服務的條款以各服務官方頁面為準；表中標「未確認」的，條款還沒讀到原文。")
