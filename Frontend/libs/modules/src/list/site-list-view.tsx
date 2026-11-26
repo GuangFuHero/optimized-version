@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -63,7 +64,7 @@ import {
 
 const { color } = designTokens;
 
-const ACTION_ICON = { fontSize: 14 } as const;
+const ACTION_ICON = { fontSize: designTokens.iconSize.sm } as const;
 
 /** How long the first cards wait for the buildings above them before they show without them. */
 const BUILDINGS_WAIT_MS = 1000;
@@ -92,7 +93,6 @@ export function SiteListView() {
     routeState: state,
     onRouteStateChange: replace,
     sourceMarkers,
-    filterMarkersByOverlayLayers: false,
     // Tickets were searched by the backend, or wait for a second character; stations still are here.
     filterMarkersBySearch:
       (state.dataType ?? SITE_FALLBACK_DATA_TYPE) !== 'ticket',
@@ -224,12 +224,13 @@ export function SiteListView() {
     );
   }, [controller.selectedMarkerId, module, selectedMarker, state]);
 
+  const { setSelectedMarkerId } = controller;
   const selectLinked = useCallback(
     (id: string | undefined) => {
       if (!id) setDetailOpen(false);
-      controller.setSelectedMarkerId(id);
+      setSelectedMarkerId(id);
     },
-    [controller.setSelectedMarkerId],
+    [setDetailOpen, setSelectedMarkerId],
   );
   const resolveLinked = useCallback<LinkedSelectionOptions['resolve']>(
     (answer) =>

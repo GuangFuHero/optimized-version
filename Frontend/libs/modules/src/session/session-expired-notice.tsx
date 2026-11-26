@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import {
@@ -80,7 +81,11 @@ function ClientSessionExpiredNotice() {
           }}
         >
           <Icons.triangleAlert
-            sx={{ fontSize: 20, mt: '1px', color: color.fg.warning }}
+            sx={{
+              fontSize: designTokens.iconSize.lg,
+              mt: '1px',
+              color: color.fg.warning,
+            }}
           />
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography
@@ -98,7 +103,9 @@ function ClientSessionExpiredNotice() {
               label={
                 <>
                   重新登入
-                  <Icons.chevronRight sx={{ fontSize: 14 }} />
+                  <Icons.chevronRight
+                    sx={{ fontSize: designTokens.iconSize.sm }}
+                  />
                 </>
               }
               sx={{ mt: 1.5, minHeight: 44 }}
@@ -115,7 +122,11 @@ function ClientSessionExpiredNotice() {
               color: color.fg.neutral.subtle,
             }}
           >
-            <Icons.close sx={{ fontSize: 16 }} />
+            <Icons.close
+              sx={{
+                fontSize: designTokens.iconSize[16],
+              }}
+            />
           </ButtonBase>
         </Box>
       </Snackbar>

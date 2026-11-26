@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 // @ts-check
 // Plain CommonJS on purpose: both apps' next.config files load it as-is (the site's is CommonJS,
 // the admin app's is TypeScript), before any bundler runs, so it cannot be TypeScript itself.

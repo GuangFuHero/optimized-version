@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { useForm, useStore } from '@tanstack/react-form';
@@ -311,7 +312,9 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
                       icon={
                         <StationTypeIcon
                           type={option.value}
-                          sx={{ fontSize: 16 }}
+                          sx={{
+                            fontSize: designTokens.iconSize[16],
+                          }}
                           aria-hidden
                         />
                       }

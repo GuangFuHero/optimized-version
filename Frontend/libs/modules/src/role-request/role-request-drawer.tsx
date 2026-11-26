@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { useForm, useStore } from '@tanstack/react-form';
@@ -6,22 +7,23 @@ import {
   Alert,
   AlertTitle,
   Box,
-  Button,
   ButtonBase,
   Stack,
   TextField,
   Typography,
 } from '@mui/material';
-import { useMutation, useQuery } from '@tanstack/react-query';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useMutation } from '@tanstack/react-query';
+import { useEffect, useId, useRef } from 'react';
 
 import {
   SubmitRoleRequestDocument,
+  useCurrentUser,
+  useInvalidateCurrentUser,
   type MyRoleRequestsQuery,
 } from '@rescue-frontend/data-access';
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import { Button, designTokens, displayTextSize } from '@rescue-frontend/ui';
 
-import { getCurrentUserAsync } from '../auth/api/client';
+import { loadPage } from '../route/navigate';
 import { useAuthSession } from '../session/auth-session';
 import { siteGraphqlMutation } from '../session/site-clients';
 import { SiteActionDrawer } from '../shell/site/site-action-drawer';
@@ -127,14 +129,12 @@ export function RoleRequestDrawer({
   const resetWithdraw = withdraw.reset;
   const roleLabelId = useId();
   const userId = useAuthSession().user?.uuid ?? null;
-  // The account as the form needs it, while the drawer is open: the session itself holds only the
-  // uuid and the nickname. Read again once a phone is verified, which makes it the account's.
-  const applicant = useQuery({
-    queryKey: ['users', 'me'],
-    queryFn: getCurrentUserAsync,
-    select: readApplicantAccount,
+  const applicant = useCurrentUser({
+    select: (user) => (user ? readApplicantAccount(user) : NO_ACCOUNT),
     enabled: open,
+    staleTime: 0,
   });
+  const refreshSession = useInvalidateCurrentUser();
   const account = applicant.data ?? NO_ACCOUNT;
   const { keep: keepDraft, take: takeDraft } = useApplyDraft(userId);
   const teamType = teamTypeForRole(values.role);
@@ -148,13 +148,8 @@ export function RoleRequestDrawer({
   const goProveAtLine = async (phone: string) => {
     keepDraft({ ...values, phone });
 
-    try {
-      await getCurrentUserAsync();
-    } catch {
-      // An ended session reloads the tab as a guest by itself; anything else, LINE is tried anyway.
-    }
-
-    window.location.assign(buildPhoneStepUpHref(window.location));
+    await refreshSession();
+    loadPage(buildPhoneStepUpHref(window.location));
   };
 
   const verification = usePhoneVerification({
@@ -283,7 +278,7 @@ export function RoleRequestDrawer({
               ) : null}
               <Stack direction="row" spacing={1}>
                 <Button
-                  variant="outlined"
+                  variant="outline"
                   onClick={withdraw.cancel}
                   disabled={withdraw.submitting}
                   sx={{ flex: 1 }}
@@ -291,7 +286,7 @@ export function RoleRequestDrawer({
                   先不要
                 </Button>
                 <Button
-                  variant="contained"
+                  variant="primary"
                   onClick={() => withdraw.confirm(pending.uuid)}
                   disabled={withdraw.submitting}
                   sx={{ flex: 1 }}
@@ -302,7 +297,7 @@ export function RoleRequestDrawer({
             </Stack>
           ) : (
             <Box>
-              <Button variant="outlined" onClick={() => withdraw.request()}>
+              <Button variant="outline" onClick={() => withdraw.request()}>
                 撤回這筆申請
               </Button>
               {/* Not 「團隊已經用邀請碼讓你加入」 any more: a scan is an application too, and only one
@@ -391,11 +386,11 @@ export function RoleRequestDrawer({
       onClose={onClose}
       footer={
         <>
-          <Button variant="outlined" onClick={onClose} sx={{ flex: 1 }}>
+          <Button variant="outline" onClick={onClose} sx={{ flex: 1 }}>
             取消
           </Button>
           <Button
-            variant="contained"
+            variant="primary"
             onClick={() => void formApi.handleSubmit()}
             disabled={view.paused || submission.isPending}
             sx={{ flex: 2 }}

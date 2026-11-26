@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { useEventCallback } from 'usehooks-ts';
@@ -13,7 +14,7 @@ import type {
   LocationCellMembersPage,
   RescueMapMarkerItem,
 } from '../types';
-import { mapTicketToMarker } from './markers';
+import { mapTicketToMarker } from '../markers';
 import { ticketCellStatuses } from './ticket-cells';
 
 /**

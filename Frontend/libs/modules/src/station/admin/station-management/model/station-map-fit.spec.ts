@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { describe, expect, it } from 'vitest';
 
 import { decideStationFit, type StationFitInput } from './station-map-fit';

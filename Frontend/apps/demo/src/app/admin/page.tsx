@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * Makes `/admin` itself a route: without a page here it answers 404 and the layout never renders.
  */

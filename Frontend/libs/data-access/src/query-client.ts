@@ -1,13 +1,20 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import {
   MutationCache,
   QueryCache,
   QueryClient,
-  type Query,
+  type QueryMeta,
 } from '@tanstack/react-query';
-import { GraphqlError } from '../graphql/request';
-import ApiError from '../rest/api-error';
+import { GraphqlError } from './graphql/request';
+import ApiError from './rest/api-error';
 
-export function isAdminPermissionError(error: Error | null) {
+/**
+ * Set `meta: { [SILENT_ERROR_META]: true }` on a query or mutation that shows its own error state, so
+ * a failure is not also raised through `onError`.
+ */
+export const SILENT_ERROR_META = 'silentError';
+
+export function isPermissionError(error: Error | null) {
   if (error instanceof ApiError) {
     return (
       error.status === 403 &&
@@ -23,24 +30,6 @@ export function isAdminPermissionError(error: Error | null) {
   );
 }
 
-/**
- * Set `meta: { [SILENT_ERROR_META]: true }` on a query that shows its own error state, so a failure
- * is not also raised through `onError` (the admin app toasts it). A 401 is still raised: the
- * app's sign-out on an expired session hangs off `onError`.
- */
-export const SILENT_ERROR_META = 'silentError';
-
-/**
- * Whether a failed query turns the whole page into the shell's 403 page. A silent query shows its
- * own forbidden state, so the rest of the page keeps rendering (ADMIN-023: one section per domain).
- */
-export function forbidsPage(query: Query) {
-  return (
-    query.meta?.[SILENT_ERROR_META] !== true &&
-    isAdminPermissionError(query.state.error)
-  );
-}
-
 /** The HTTP status behind a REST or GraphQL failure; undefined when there was no response. */
 function statusOf(error: Error): number | undefined {
   if (error instanceof ApiError) return error.status;
@@ -48,7 +37,32 @@ function statusOf(error: Error): number | undefined {
   return undefined;
 }
 
-export function createAdminQueryClient(onError: (error: Error) => void) {
+/** The proxy sends 401 after refresh fails. A refused password or step-up proof keeps the session. */
+export function isSessionEndError(error: Error) {
+  return (
+    statusOf(error) === 401 &&
+    !(
+      error instanceof ApiError &&
+      (error.code === 'password_incorrect' || error.code === 'step_up_invalid')
+    )
+  );
+}
+
+/**
+ * `SILENT_ERROR_META`, or `quietErrors` for a read nobody asked for such as a background poll, keeps
+ * a failure from `onError`. An expired session still reaches the app so it can sign out.
+ */
+function keepsQuiet(meta: QueryMeta | undefined, error: Error) {
+  return (
+    (meta?.quietErrors === true || meta?.[SILENT_ERROR_META] === true) &&
+    !isSessionEndError(error)
+  );
+}
+
+export function createAppQueryClient(
+  onError: (error: Error) => void,
+  ignoreQueryError?: (error: Error) => boolean,
+) {
   const reportError = (error: Error) => {
     if (error instanceof ApiError && error.code === 'step_up_required') return;
     onError(
@@ -60,21 +74,16 @@ export function createAdminQueryClient(onError: (error: Error) => void) {
 
   return new QueryClient({
     queryCache: new QueryCache({
-      // A query nobody asked for, such as a background poll, sets `meta.quietErrors`: its failure
-      // is retried on the next poll, not reported.
       onError: (error, query) => {
-        if (query.meta?.quietErrors) return;
-        const silent = query.meta?.[SILENT_ERROR_META] === true;
-        if (silent && statusOf(error) !== 401) return;
-        if (!isAdminPermissionError(error)) reportError(error);
+        if (keepsQuiet(query.meta, error) || ignoreQueryError?.(error)) return;
+        reportError(error);
       },
     }),
     mutationCache: new MutationCache({
-      // A mutation can name the statuses it explains to the user itself, e.g. a review answering
-      // 409 because someone else decided first, or set `meta.quietErrors` when it explains every
-      // failure; those are not reported a second time.
+      // A mutation can also name the statuses it explains to the user itself, e.g. a review
+      // answering 409 because someone else decided first.
       onError: (error, _variables, _context, mutation) => {
-        if (mutation.meta?.quietErrors) return;
+        if (keepsQuiet(mutation.meta, error)) return;
         const handled = mutation.meta?.['handledStatuses'];
         if (
           error instanceof ApiError &&

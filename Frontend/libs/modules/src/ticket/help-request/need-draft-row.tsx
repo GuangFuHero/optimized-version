@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { Box, ButtonBase, Stack, TextField, Typography } from '@mui/material';
@@ -97,7 +98,7 @@ export function NeedDraftRow({
                 fontSize: displayTextSize[12],
               }}
             >
-              <Icons.trash sx={{ fontSize: 14 }} />
+              <Icons.trash sx={{ fontSize: designTokens.iconSize.sm }} />
               移除
             </ButtonBase>
           ) : null}

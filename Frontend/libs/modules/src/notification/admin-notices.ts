@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * The back office's inbox: what the top bar's bell lists for a coordinator, gov or team account.
  * The site's bell (`site-notices.ts`) keeps what is about the viewer's own needs; this one keeps

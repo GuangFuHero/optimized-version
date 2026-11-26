@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import type { AuthIdentityType } from './identity-validation';
 
 /** The tab and the address the login form held when 註冊帳號 was pressed, as typed. */

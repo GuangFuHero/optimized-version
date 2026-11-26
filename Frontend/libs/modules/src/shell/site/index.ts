@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 export { SiteNotFound } from './not-found';
 export { SiteShell } from './shell';
 export {

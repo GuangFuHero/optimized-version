@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * The proof 帳號安全 asks for before a new way into the account: a contact added, or a first password
  * (backend `auth_contact.py`, ADR-215/220/361). The backend decides which proof from the account's
@@ -9,13 +10,17 @@
 
 import { ApiError } from '@rescue-frontend/data-access';
 
+import {
+  OAUTH_START_PATHS,
+  SITE_PATHS,
+  withQuery,
+  type SiteHref,
+} from '../../route/paths';
 import { stripQueryKeys, type ReturnQuery } from '../../route/return-query';
 import { resolveAuthErrorMessage } from '../api/error-messages';
 import type { AuthIdentityType } from '../login';
 import { normalizeIdentityValue } from '../login/utils/identity-validation';
 import type { AccountContact, LoginMethod } from './account-security-view';
-
-export const ACCOUNT_SECURITY_PATH = '/account/security';
 
 /** Something that went wrong: red, or orange for coming back from LINE without the proof (design A1). */
 export interface StepUpProblem {
@@ -264,15 +269,13 @@ const RETURN_KEYS = [RESUME_KEY, STEP_UP_KEY, STEP_UP_ERROR_KEY];
  * Where to send the page to prove the person at LINE (backend ADR-361). It comes back here marked
  * with the action, and the backend adds how it went (`step_up=ok`, or `step_up_error=<code>`).
  */
-export function buildAccountStepUpHref(action: AccountStepUpAction): string {
-  const start = new URLSearchParams({
+export function buildAccountStepUpHref(action: AccountStepUpAction): SiteHref {
+  return withQuery(OAUTH_START_PATHS.line, {
     purpose: 'step_up',
     action,
     app: 'site',
-    return_to: `${ACCOUNT_SECURITY_PATH}?${RESUME_KEY}=${action}`,
+    return_to: `${SITE_PATHS.accountSecurity}?${RESUME_KEY}=${action}`,
   });
-
-  return `/api/v1/auth/oauth/line/start?${start}`;
 }
 
 /** Back from LINE: for which action, and whether the proof was made or what went wrong there. */

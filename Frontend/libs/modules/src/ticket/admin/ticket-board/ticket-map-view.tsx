@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { Box, ButtonBase, IconButton, Typography } from '@mui/material';
@@ -5,11 +6,18 @@ import {
   useTicket,
   useTicketsExtent,
 } from '@rescue-frontend/data-access/admin';
+import { useMapViewport } from '@rescue-frontend/leaflet';
 import { Button, Callout, designTokens, Tag } from '@rescue-frontend/ui';
 import { Building2, ChevronRight, MapPinOff, X } from 'lucide-react';
 import type { Map as LeafletMap } from 'leaflet';
-import { useEffect, useRef, useState, type RefObject } from 'react';
-import { useDebounceCallback, useEventCallback } from 'usehooks-ts';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type RefObject,
+} from 'react';
+import { useEventCallback } from 'usehooks-ts';
 import { createStore, useStore } from 'zustand';
 
 import { Muted } from '../../../admin/shared/muted';
@@ -131,7 +139,9 @@ export function TicketMapView({
     arrivedWithNewFilters,
   });
   // The first load waits for the first framing, so it is of the framed view and not the default.
-  const viewport = useMapViewport(framing.ready ? leafletMap : null);
+  const viewport = useMapViewport(framing.ready ? leafletMap : null, {
+    settleMs: VIEWPORT_DEBOUNCE_MS,
+  });
   const variables = viewport ? toMapVariables(filters, viewport, cutAt) : {};
   const tickets = useTicketPins(variables, { enabled: viewport !== null });
   const rows = tickets.pins;
@@ -369,6 +379,9 @@ function useFrameMatching(
     filtersKey,
     restoredRef,
     arrivedWithNewFilters,
+    frame,
+    getHome,
+    getSelected,
   ]);
 
   return {
@@ -419,7 +432,7 @@ function useFocusSelected(
     if (step.point) {
       map.setView(latLng(step.point), Math.max(map.getZoom(), FOCUS_ZOOM));
     }
-  }, [map, selectedUuid, detailLoaded, ticket]);
+  }, [map, selectedUuid, detailLoaded, ticket, getMarkers]);
 }
 
 /**
@@ -436,37 +449,6 @@ function useSettledSince(
     setMovedFrom({ framed, viewport });
   }
   return movedFrom.framed === framed && viewport !== movedFrom.viewport;
-}
-
-/** The area the map shows, settled after each move; null until the map is built. */
-function useMapViewport(map: LeafletMap | null): MapViewport | null {
-  const [store] = useState(() => createStore<MapViewport | null>(() => null));
-  const viewport = useStore(store);
-  const settle = useDebounceCallback(
-    (next: MapViewport) => store.setState(next, true),
-    VIEWPORT_DEBOUNCE_MS,
-  );
-  useEffect(() => {
-    if (!map) return undefined;
-    const read = (): MapViewport => {
-      const bounds = map.getBounds();
-      return {
-        west: bounds.getWest(),
-        south: bounds.getSouth(),
-        east: bounds.getEast(),
-        north: bounds.getNorth(),
-        zoom: map.getZoom(),
-      };
-    };
-    const onMoveEnd = () => settle(read());
-    store.setState(read(), true);
-    map.on('moveend', onMoveEnd);
-    return () => {
-      settle.cancel();
-      map.off('moveend', onMoveEnd);
-    };
-  }, [map, settle, store]);
-  return viewport;
 }
 
 /**
@@ -496,7 +478,10 @@ function SelectionSync({
     >(() => ({ kind: 'none' })),
   );
   const picked = useStore(store);
-  const clear = () => store.setState({ kind: 'none' }, true);
+  const clear = useCallback(
+    () => store.setState({ kind: 'none' }, true),
+    [store],
+  );
   useEffect(() => {
     if (!selectedMarkerId) return;
     const pickedSpace = spaceIdOfMarker(selectedMarkerId);
@@ -513,7 +498,7 @@ function SelectionSync({
       store.setState({ kind: 'cell', uuids: selection.uuids }, true);
     }
     setSelectedMarkerId(undefined);
-  }, [selectedMarkerId, rows, onOpen, setSelectedMarkerId]);
+  }, [selectedMarkerId, rows, onOpen, setSelectedMarkerId, clear, store]);
 
   const space =
     picked.kind === 'space'

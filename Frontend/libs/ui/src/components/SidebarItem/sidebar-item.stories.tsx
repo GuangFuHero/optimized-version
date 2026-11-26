@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { ClipboardList, MapPin, LayoutDashboard } from 'lucide-react';
 import { Stack } from '@mui/material';
 import type { Meta, StoryObj } from '@storybook/react-vite';

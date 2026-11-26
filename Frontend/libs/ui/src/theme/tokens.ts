@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { designToM3Light } from './bridge';
 import { designTokens as dt, fontStack, withAlpha } from './design-tokens';
 import type { M3ColorScheme, RescueColorMode } from './m3-color-scheme';

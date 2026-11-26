@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * Bottom space for something that meets the foot of a phone's screen: a bottom sheet's last row, a
  * floating button, a bar under the map. `space` px, plus the height of an iPhone's home indicator

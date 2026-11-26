@@ -106,3 +106,21 @@ async def test_it_refuses_and_writes_nothing(db_session, redis, email, password)
         await set_password(db_session, redis, email=email, password=password)
 
     assert await db_session.scalar(select(func.count()).select_from(UserIdentity)) == 0
+
+
+def test_the_success_line_masks_the_email(monkeypatch, capsys):
+    """The address typed on the command line is not echoed back in full."""
+    import scripts.set_password as script
+
+    async def _set(email: str, password: str) -> None:
+        return None
+
+    monkeypatch.setattr(script, "_run", _set)
+    monkeypatch.setattr(script.getpass, "getpass", lambda prompt="": "long-enough-pw")
+    monkeypatch.setattr("sys.argv", ["set_password.py", EMAIL])
+
+    script.main()
+
+    out = capsys.readouterr().out
+    assert EMAIL not in out
+    assert "a***@***.test" in out

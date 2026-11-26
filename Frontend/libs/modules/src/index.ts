@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 export {
   AuthField,
   AuthFooterLinks,
@@ -48,6 +49,16 @@ export type {
   SiteRouteState,
   SiteSubDataTypeOption,
 } from './route';
+export {
+  ACCOUNT_SECURITY_SIGN_IN_HREF,
+  ADMIN_PATHS,
+  BACK_OFFICE_SIGN_IN_HREF,
+  SITE_PATHS,
+  withQuery,
+  type PageHref,
+  type SiteHref,
+} from './route/paths';
+export { loadPage } from './route/navigate';
 
 export { SiteListView } from './list';
 
@@ -58,6 +69,7 @@ export { DEFAULT_TILE_ORIGIN } from './map/constants';
 export { hasRescueMapDetailItem, isLocationCellId } from './map/location-cells';
 export {
   AREA_KIND_LABELS,
+  AREA_KIND_ORDER,
   AREA_LABEL_NAME_MAX,
   type RescueMapAreaKind,
 } from './map/areas';
@@ -66,6 +78,8 @@ export type {
   RescueMapClosureArea,
   RescueMapDraftArea,
   RescueMapEditArea,
+  RescueMapArea,
+  RescueMapAreaTeam,
   RescueMapPublicZone,
   RescueMapBaseLayer,
   RescueMapControllerValue,
@@ -84,7 +98,9 @@ export {
   ADMIN_MAP_ASSIGNMENTS,
   ADMIN_MAP_STATUSES,
   areaErrorMessage,
+  knownAreaErrorMessage,
   boundaryChange,
+  boundsOfArea,
   countInsideArea,
   editableOutline,
   DEFAULT_ADMIN_MAP_FILTERS,
@@ -99,6 +115,16 @@ export {
   polygonSelfIntersects,
   toGeoJsonPolygon,
   holdRequest,
+  EMPTY_AREA_FORM,
+  createAdminAreaEditorStore,
+  useAdminAreaEditor,
+  type AreaFormValues,
+  type DrawEditor,
+  AdminAreaChangesProvider,
+  type AreaChanges,
+  useAdminAreaChanges,
+  showAreaError,
+  AREA_TEAM_LOAD_ERROR,
   UNDO_MS,
   useAdminMapAreas,
   ADMIN_MAP_LIVE_QUERY_LIMIT,
@@ -110,10 +136,11 @@ export {
   type AreaContents,
   type BoundaryChange,
 } from './map/admin';
+export { useMarkerDetail } from './map/hooks/use-marker-detail';
+export { createMapViewportStore } from './map/viewport-store';
+export { dedupeMarkersById } from './map/markers';
 
 export {
-  createSiteMapViewportStore,
-  dedupeMarkersById,
   floorHelpForOpenBuilding,
   MapCellsNotice,
   pinnedBesideBuildings,
@@ -132,7 +159,6 @@ export {
   useSiteMapRouteState,
   useSiteMapViewportState,
   useSiteMapViewportStore,
-  type SiteMapViewportStore,
 } from './map/site';
 
 export {
@@ -142,7 +168,9 @@ export {
   copyPointShareUrl,
   downloadQrSvg,
   createPointShareLinks,
+  lineMessageHref,
   openPointShareLink,
+  openShareTab,
   PointShareDrawer,
   resolvePointShareTargetFromRoute,
   resolvePointShareTargetFromState,
@@ -155,6 +183,7 @@ export type {
   PointShareChannel,
   PointShareLink,
   PointShareTarget,
+  ShareHref,
 } from './point-share';
 
 export { AnnouncementPage } from './admin/announcement';
@@ -162,6 +191,7 @@ export { DashboardPage } from './admin/dashboard';
 export { DedupReviewPage } from './admin/dedup';
 export { SettingsPage } from './admin/settings/settings-page';
 export { BackOfficePlaceholder } from './role-request';
+export { useRoleRequestTeams } from './role-request/use-role-request-teams';
 export {
   AdminErrorPage,
   AdminPlaceholderPage,

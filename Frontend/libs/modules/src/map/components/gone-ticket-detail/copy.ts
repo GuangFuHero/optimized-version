@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import type { RescueMapGoneTicket } from '../../types';
 
 /** The two screens' words, as the design has them, word for word: a change to them starts there. */

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { Box, Typography } from '@mui/material';
@@ -277,7 +278,10 @@ function StationNameCell({ row }: { row: StationRow }) {
           color: tile.fg,
         }}
       >
-        <StationTypeIcon type={row.type} sx={{ fontSize: 18 }} />
+        <StationTypeIcon
+          type={row.type}
+          sx={{ fontSize: designTokens.iconSize.md }}
+        />
       </Box>
       <Box sx={{ minWidth: 0 }}>
         <Typography

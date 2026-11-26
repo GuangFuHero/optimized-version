@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /** The 全部 tile's key: no status filter. */
 export const STAT_TILE_ALL = 'all';
 

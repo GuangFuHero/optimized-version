@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * Reads every page of an offset-paginated query. The page needs the whole scope at once: the
  * official and freshness filters and the sort run in the browser.

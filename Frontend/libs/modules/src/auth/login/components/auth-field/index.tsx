@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import {
@@ -9,7 +10,12 @@ import {
   Typography,
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
-import type { HTMLAttributes, HTMLInputTypeAttribute, ReactNode } from 'react';
+import {
+  useId,
+  type HTMLAttributes,
+  type HTMLInputTypeAttribute,
+  type ReactNode,
+} from 'react';
 
 import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
@@ -55,11 +61,17 @@ export function AuthField({
   required = false,
 }: AuthFieldProps) {
   const authPalette = getAuthColorScheme(useTheme());
+  // The label names the input and the message under it describes it, for a screen reader that
+  // lands on the input: a plain line above it would be read as unrelated text, or not at all.
+  const inputId = useId();
+  const messageId = useId();
+  const message = errorText ?? helperText;
 
   return (
     <Stack spacing={0.5} sx={{ width: '100%' }}>
       <Typography
-        component="div"
+        component="label"
+        htmlFor={inputId}
         sx={{
           color: authPalette.textSecondary,
           fontSize: displayTextSize[12],
@@ -83,9 +95,11 @@ export function AuthField({
           placeholder={placeholder}
           type={type}
           autoComplete={autoComplete}
+          id={inputId}
           inputProps={{
             inputMode,
             'aria-required': required || undefined,
+            'aria-describedby': message ? messageId : undefined,
           }}
           disabled={disabled}
           autoFocus={autoFocus}
@@ -96,7 +110,7 @@ export function AuthField({
             '--wg-field-bg': authPalette.fieldBackground,
             '--wg-field-fg': authPalette.textPrimary,
             height: 40,
-            borderRadius: '16px',
+            borderRadius: `${designTokens.radius[16]}px`,
             bgcolor: authPalette.fieldBackground,
             color: authPalette.textPrimary,
             alignItems: 'center',
@@ -119,7 +133,7 @@ export function AuthField({
               minWidth: 0,
               width: '100%',
               height: '100%',
-              fontSize: 16,
+              fontSize: designTokens.typography.body[400].fontSize,
               lineHeight: '24px',
               color: authPalette.textPrimary,
               '&::placeholder': {
@@ -131,7 +145,7 @@ export function AuthField({
               pr: 1,
             },
             '& .MuiInputAdornment-root': {
-              color: '#6B7280',
+              color: designTokens.color.fg.fieldPlaceholder,
               alignSelf: 'stretch',
               display: 'flex',
               alignItems: 'center',
@@ -146,9 +160,9 @@ export function AuthField({
           }}
         />
 
-        {(errorText ?? helperText) ? (
-          <FormHelperText sx={{ mx: 0, mt: 0.75 }}>
-            {errorText ?? helperText}
+        {message ? (
+          <FormHelperText id={messageId} sx={{ mx: 0, mt: 0.75 }}>
+            {message}
           </FormHelperText>
         ) : null}
       </FormControl>

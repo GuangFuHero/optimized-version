@@ -1,10 +1,10 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import {
   Alert,
   AlertTitle,
   Box,
-  Button,
   Link,
   Stack,
   TextField,
@@ -14,6 +14,7 @@ import { useState } from 'react';
 import { useForm, useStore } from '@tanstack/react-form';
 
 import {
+  Button,
   designTokens,
   displayTextSize,
   Icons,
@@ -132,7 +133,7 @@ export function PhotoLinkEditor({
       >
         <Icons.shieldAlert
           sx={{
-            fontSize: 17,
+            fontSize: designTokens.iconSize[17],
             mt: '1px',
             flexShrink: 0,
             color: color.fg.neutral.muted,
@@ -209,11 +210,12 @@ export function PhotoLinkEditor({
           }}
         />
         <Button
-          variant="outlined"
+          variant="outline"
           onClick={() => void form.handleSubmit()}
           disabled={!draft.trim() || full}
           sx={{
             flexShrink: 0,
+            minHeight: 40,
             height: 40,
             [TOUCH_FIELD_MEDIA]: { height: 48 },
           }}
@@ -257,7 +259,11 @@ export function PhotoLinkEditor({
             fontWeight: 500,
           }}
         >
-          <Icons.externalLink sx={{ fontSize: 15 }} />
+          <Icons.externalLink
+            sx={{
+              fontSize: designTokens.iconSize[15],
+            }}
+          />
           {`還沒有圖片網址？到 ${PHOTO_UPLOAD_HOST.name} 上傳`}
         </Link>
         <Typography

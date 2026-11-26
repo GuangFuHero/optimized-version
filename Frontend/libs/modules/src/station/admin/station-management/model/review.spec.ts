@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import type { AdminStationReviewQuery } from '@rescue-frontend/data-access/admin';
 import type { components } from '@rescue-frontend/data-access/openapi';
 import { describe, expect, it } from 'vitest';

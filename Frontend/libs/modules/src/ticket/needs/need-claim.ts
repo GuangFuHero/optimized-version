@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * What a need's claim button says and does. A volunteer claims a need — one `ticket_tasks` row —
  * never a whole ticket (PUB-PS-140).

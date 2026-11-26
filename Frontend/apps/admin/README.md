@@ -6,9 +6,7 @@ Both apps use shared document layout, UI/session providers, and GraphQL and REST
 
 Authentication, map tiles, and attribution use `/api/v1/*`. The REST proxy forwards bodies and backend error codes, refreshes session cookies, and lets the backend enforce endpoint permissions. Public map GET responses use a seven-day server cache and a one-day browser cache without attaching a session.
 
-Import hooks from `@rescue-frontend/data-access/admin`. For example, `useTickets({ limit: 50 })`, `useUsers({ query: { skip: 0, limit: 50 } })`, and `useCreateStation()` return TanStack Query results with generated request and response types. Mutations take generated GraphQL variables or the REST hook's exported input type, and invalidate the affected queries. REST and GraphQL failures reach the shared toast handler. Multipart upload bodies accept a `Blob` or `File`.
-
-The existing admin placeholder pages and sample map data remain in place. The hooks are ready for screen integration, and the map creation drawers use them.
+Import hooks from `@rescue-frontend/data-access/admin`. For example, `useTickets({ limit: 50 })`, `useUsers({ query: { skip: 0, limit: 50 } })`, and `useCreateStation()` return TanStack Query results with generated request and response types. Mutations take generated GraphQL variables or the REST hook's exported input type, and invalidate the affected queries. REST and GraphQL failures reach the shared toast handler, except a query or mutation that sets `meta: { [SILENT_ERROR_META]: true }` and shows its own error. Multipart upload bodies accept a `Blob` or `File`.
 
 GraphQL uses The Guild's client preset to generate typed documents, sent by `createGraphqlRequest`. TanStack Query owns caching, in the admin and on the site.
 

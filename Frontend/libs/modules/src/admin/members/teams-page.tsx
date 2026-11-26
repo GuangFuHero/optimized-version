@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import {
@@ -497,7 +498,11 @@ function TeamDetail({
         >
           <Typography
             component="h3"
-            sx={{ ...typography.heading[600], fontSize: 17, flex: 1 }}
+            sx={{
+              ...typography.heading[600],
+              fontSize: designTokens.typography.fontSize[17],
+              flex: 1,
+            }}
           >
             成員名單
           </Typography>
@@ -593,7 +598,7 @@ function SuperTeamsView({ siteUrl }: { siteUrl?: string }) {
   if (teamsQuery.isPending || usersQuery.isPending) {
     return <Typography sx={captionSx}>載入中…</Typography>;
   }
-  // A 403 is shown by the shell in place of the page (`isAdminPermissionError`).
+  // A 403 is shown by the shell in place of the page (`isPermissionError`).
   if (teamsQuery.isError || usersQuery.isError) {
     return (
       <Callout tone="danger">

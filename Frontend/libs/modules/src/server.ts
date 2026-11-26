@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * Server-only entry point. These modules read `next/headers` and the backend's login cookies, so
  * they stay out of the client-safe package barrel.

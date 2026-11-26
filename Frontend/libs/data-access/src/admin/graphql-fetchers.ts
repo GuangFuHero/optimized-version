@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import {
@@ -10,6 +11,12 @@ import {
 } from '@tanstack/react-query';
 import { adminGraphql } from './client';
 import { collectAllPages } from './collect-pages';
+import {
+  reverseGeocodeQueryOptions,
+  type AddressLookupSource,
+} from '../graphql/geo/address-cache';
+import { adminMapKeys } from './map-query-keys';
+import { SILENT_ERROR_META } from '../query-client';
 import * as documents from '../graphql/__generated__/graphql';
 import {
   ticketDetailUuid,
@@ -245,38 +252,6 @@ export function useTicket(
   });
 }
 
-export const ticketTasksQuery = (
-  variables: documents.AdminTicketTasksQueryVariables,
-) =>
-  queryOptions({
-    queryKey: [...ticketKeys.tasks(), variables],
-    queryFn: ({ signal }) =>
-      adminGraphql(documents.AdminTicketTasksDocument, variables, signal),
-  });
-
-export function useTicketTasks(
-  variables: documents.AdminTicketTasksQueryVariables,
-  options: AdminQueryOptions = {},
-) {
-  return useQuery({ ...ticketTasksQuery(variables), enabled: options.enabled });
-}
-
-export const stationsQuery = (
-  variables: documents.AdminStationsQueryVariables = {},
-) =>
-  queryOptions({
-    queryKey: ['admin', 'stations', 'stations', variables],
-    queryFn: ({ signal }) =>
-      adminGraphql(documents.AdminStationsDocument, variables, signal),
-  });
-
-export function useStations(
-  variables: documents.AdminStationsQueryVariables = {},
-  options: AdminQueryOptions = {},
-) {
-  return useQuery({ ...stationsQuery(variables), enabled: options.enabled });
-}
-
 export type AllStationsQueryVariables = Omit<
   documents.AdminStationsQueryVariables,
   'skip' | 'limit'
@@ -336,47 +311,23 @@ export function useStation(
   });
 }
 
-/**
- * The nearest 門牌 to a map pin, from the backend's TGOS lookup. Its `addressToken`, sent back with
- * the unchanged `fullAddress`, saves the address as verified. Never stale: a pin's 門牌 doesn't move.
- */
-export const reverseGeocodeQuery = (
-  variables: documents.AdminReverseGeocodeQueryVariables,
-) =>
-  queryOptions({
-    queryKey: ['admin', 'address', 'reverseGeocode', variables],
-    queryFn: ({ signal }) =>
-      adminGraphql(documents.AdminReverseGeocodeDocument, variables, signal),
-    staleTime: Infinity,
-  });
+export const adminAddressLookup = {
+  scope: 'admin',
+  request: adminGraphql,
+} as const satisfies AddressLookupSource;
 
 export function useReverseGeocode(
   position: readonly [number, number] | null | undefined,
 ) {
   const [lat, lng] = position ?? [];
   return useQuery({
-    ...reverseGeocodeQuery({ lat: lat ?? 0, lng: lng ?? 0 }),
+    ...reverseGeocodeQueryOptions(adminAddressLookup, {
+      lat: lat ?? 0,
+      lng: lng ?? 0,
+    }),
     enabled: lat != null && lng != null,
-    // The address is only a head start: a failed lookup leaves the form blank, no toast.
-    retry: false,
-    meta: { quietErrors: true },
   });
 }
-
-/**
- * A typed address line checked against TGOS, with the pin when there is one. Never kept: a token
- * lasts a day, and an `unavailable` kept here would answer a later check of the same line.
- */
-export const normalizeAddressQuery = (
-  variables: documents.AdminNormalizeAddressQueryVariables,
-) =>
-  queryOptions({
-    queryKey: ['admin', 'address', 'normalizeAddress', variables],
-    queryFn: ({ signal }) =>
-      adminGraphql(documents.AdminNormalizeAddressDocument, variables, signal),
-    staleTime: 0,
-    gcTime: 0,
-  });
 
 /** Buildings opened as spaces (BE-036). Their tickets come from `buildingMapTicketsQuery`. */
 export const buildingMapsQuery = (
@@ -675,8 +626,8 @@ export function useUpdateTicket() {
 export function useDeleteTicket() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (variables: documents.AdminDeleteTicketMutationVariables) =>
-      adminGraphql(documents.AdminDeleteTicketDocument, variables),
+    mutationFn: (variables: documents.DeleteTicketMutationVariables) =>
+      adminGraphql(documents.DeleteTicketDocument, variables),
     onSuccess: (_data, variables) =>
       invalidateTicketWrite(queryClient, variables.uuid),
   });
@@ -717,8 +668,8 @@ export function useStopTaskRecruiting() {
 export function useDeleteTicketTask() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (variables: documents.AdminDeleteTicketTaskMutationVariables) =>
-      adminGraphql(documents.AdminDeleteTicketTaskDocument, variables),
+    mutationFn: (variables: documents.DeleteTicketTaskMutationVariables) =>
+      adminGraphql(documents.DeleteTicketTaskDocument, variables),
     onSuccess: () => invalidateTicketWrite(queryClient),
   });
 }
@@ -776,9 +727,8 @@ export function useUpdateTaskAssignment() {
 export function useUnassignTaskActor() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (
-      variables: documents.AdminUnassignTaskActorMutationVariables,
-    ) => adminGraphql(documents.AdminUnassignTaskActorDocument, variables),
+    mutationFn: (variables: documents.ReleaseClaimMutationVariables) =>
+      adminGraphql(documents.ReleaseClaimDocument, variables),
     onSuccess: () => invalidateTicketWrite(queryClient),
   });
 }
@@ -806,8 +756,8 @@ export function useUpdateStation() {
 export function useDeleteStation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (variables: documents.AdminDeleteStationMutationVariables) =>
-      adminGraphql(documents.AdminDeleteStationDocument, variables),
+    mutationFn: (variables: documents.DeleteStationMutationVariables) =>
+      adminGraphql(documents.DeleteStationDocument, variables),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ['admin', 'stations'] }),
   });
@@ -1127,7 +1077,7 @@ export function useHazardousZoneSource(
   options: AdminQueryOptions = {},
 ) {
   return useQuery({
-    queryKey: ['admin', 'areas', 'hazardousZoneSource', variables],
+    queryKey: [...adminMapKeys.hazardSource, variables],
     queryFn: ({ signal }) =>
       adminGraphql(
         documents.AdminHazardousZoneSourceDocument,
@@ -1138,51 +1088,90 @@ export function useHazardousZoneSource(
   });
 }
 
-export function useCreateArea() {
+function refreshAreaWrite(
+  queryClient: QueryClient,
+  {
+    affectsTickets = false,
+    hazardUuid,
+  }: { affectsTickets?: boolean; hazardUuid?: string } = {},
+) {
+  const reads = [
+    queryClient.invalidateQueries({ queryKey: adminMapKeys.areas }),
+  ];
+  if (affectsTickets) {
+    reads.push(
+      queryClient.invalidateQueries({ queryKey: adminMapKeys.markers }),
+      queryClient.invalidateQueries({ queryKey: ticketKeys.lists() }),
+      queryClient.invalidateQueries({ queryKey: ticketKeys.details() }),
+      queryClient.invalidateQueries({ queryKey: SPACE_TICKETS_KEY }),
+    );
+  }
+  if (hazardUuid) {
+    reads.push(
+      queryClient.invalidateQueries({
+        queryKey: [...adminMapKeys.hazardSource, { uuid: hazardUuid }],
+      }),
+    );
+  }
+  return Promise.all(reads);
+}
+
+type AreaRefresh = NonNullable<Parameters<typeof refreshAreaWrite>[1]>;
+type AreaWrite<TVariables> = { variables: TVariables } & Pick<
+  RequestInit,
+  'keepalive'
+>;
+
+function useAreaWrite<TData, TVariables>(
+  document: documents.TypedDocumentString<TData, TVariables>,
+  refresh: (result: TData | undefined, variables: TVariables) => AreaRefresh,
+) {
+  const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (variables: documents.AdminCreateAreaMutationVariables) =>
-      adminGraphql(documents.AdminCreateAreaDocument, variables),
+    mutationFn: ({ variables, keepalive }: AreaWrite<TVariables>) =>
+      adminGraphql(document, variables, undefined, { keepalive }),
+    meta: { [SILENT_ERROR_META]: true },
+    onSettled: (result, _error, { variables }) =>
+      refreshAreaWrite(queryClient, refresh(result, variables)),
   });
+}
+
+export function useCreateArea() {
+  return useAreaWrite(
+    documents.AdminCreateAreaDocument,
+    (_result, { input }) => ({
+      affectsTickets: input.type === 'team_zone',
+    }),
+  );
 }
 
 export function useUpdateArea() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (variables: documents.AdminUpdateAreaMutationVariables) =>
-      adminGraphql(documents.AdminUpdateAreaDocument, variables),
-    onSuccess: () =>
-      queryClient.invalidateQueries({
-        queryKey: ['admin', 'areas', 'hazardousZoneSource'],
-      }),
-  });
+  return useAreaWrite(
+    documents.AdminUpdateAreaDocument,
+    (result, { input, uuid }) => ({
+      affectsTickets:
+        input.geometry != null &&
+        (!result || result.updateArea.type === 'team_zone'),
+      hazardUuid: input.informationSource !== undefined ? uuid : undefined,
+    }),
+  );
 }
 
+const refreshTeamZone = () => ({ affectsTickets: true });
+
 export function useDeleteArea() {
-  return useMutation({
-    mutationFn: (variables: documents.AdminDeleteAreaMutationVariables) =>
-      adminGraphql(documents.AdminDeleteAreaDocument, variables),
-  });
+  return useAreaWrite(documents.AdminDeleteAreaDocument, refreshTeamZone);
 }
 
 export function useAssignZoneToTeam() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (variables: documents.AdminAssignZoneToTeamMutationVariables) =>
-      adminGraphql(documents.AdminAssignZoneToTeamDocument, variables),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ['admin', 'work-zones'] }),
-  });
+  return useAreaWrite(documents.AdminAssignZoneToTeamDocument, refreshTeamZone);
 }
 
 export function useRemoveZoneFromTeam() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (
-      variables: documents.AdminRemoveZoneFromTeamMutationVariables,
-    ) => adminGraphql(documents.AdminRemoveZoneFromTeamDocument, variables),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ['admin', 'work-zones'] }),
-  });
+  return useAreaWrite(
+    documents.AdminRemoveZoneFromTeamDocument,
+    refreshTeamZone,
+  );
 }
 
 export const teamDirectoryQuery = () =>

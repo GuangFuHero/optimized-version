@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * The Material 3 color-role contract, on its own so both sides of the bridge can name it.
  *

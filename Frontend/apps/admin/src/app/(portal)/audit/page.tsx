@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { DedupReviewPage } from '@rescue-frontend/modules';
 import type { Metadata } from 'next';
 import { Suspense } from 'react';

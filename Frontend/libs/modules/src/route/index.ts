@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 export {
   SITE_BASE_LAYERS,
   SITE_DATA_TYPE_LABELS,

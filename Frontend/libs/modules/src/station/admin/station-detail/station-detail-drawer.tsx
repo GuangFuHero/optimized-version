@@ -1,10 +1,11 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import type { ReactNode } from 'react';
 
 import { Box, Stack, Typography } from '@mui/material';
 
-import { displayTextSize } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
 import { AdminDetailModalFrame } from '../../../admin/shared/detail-modal-frame';
 
@@ -33,7 +34,7 @@ function renderFallbackPanel(
     <Box
       sx={{
         p: 3,
-        borderRadius: '32px',
+        borderRadius: `${designTokens.radius.xl}px`,
         bgcolor: stationDetailPalette.cardSurface,
         border: `1px solid ${stationDetailPalette.cardBorder}`,
       }}

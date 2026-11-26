@@ -1,0 +1,21 @@
+# The uv image pin in the backend Dockerfile and CI's setup-uv version are bumped by hand:
+# Dependabot updates only an image named on a FROM line.
+version: 2
+updates:
+  - package-ecosystem: uv
+    directory: /Backend
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Taipei
+    # Changes uv.lock alone; a release outside a range in pyproject.toml needs a person to lift the cap.
+    versioning-strategy: lockfile-only
+    # A release is proposed once it is 14 days old; security updates are not delayed.
+    cooldown:
+      default-days: 14
+    groups:
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch

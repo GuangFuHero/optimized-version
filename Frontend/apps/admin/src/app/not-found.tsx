@@ -1,6 +1,8 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import {
   AdminErrorPage,
   AdminShell,
+  BACK_OFFICE_SIGN_IN_HREF,
   NoBackOfficeAccess,
 } from '@rescue-frontend/modules';
 import {
@@ -16,7 +18,7 @@ export default async function NotFound() {
     'admin',
   );
   if (!user) {
-    redirect('/login?callbackUrl=/');
+    redirect(BACK_OFFICE_SIGN_IN_HREF);
   }
   if (user === NO_BACK_OFFICE_IDENTITY) {
     return <NoBackOfficeAccess siteUrl={process.env.SITE_APP_URL} />;

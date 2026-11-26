@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import {
@@ -9,7 +10,7 @@ import {
   useQueryClient,
   type InfiniteData,
 } from '@tanstack/react-query';
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { useDebounceValue } from 'usehooks-ts';
 
 import type { RescueMapMarkerItem } from '../types';
@@ -19,12 +20,13 @@ import type { ReloadedTicket } from '../../ticket/needs/use-ticket-needs';
 import { resolveTicketStatusQueryValue } from '../../ticket/status';
 import { onTicketCreated } from '../../ticket/ticket-changes';
 import { resolveTicketSearch } from '../../ticket/ticket-search';
+import { markerPage, type MarkerPage } from './list-pages';
 import {
   dedupeMarkersById,
   mapStationToMarker,
   mapTicketToMarker,
   withTicketStatus,
-} from './markers';
+} from '../markers';
 import { nextTicketPageSkip, ticketPageVariables } from './ticket-pages';
 
 const LIST_PAGE_SIZE = 100;
@@ -32,20 +34,7 @@ const LIST_PAGE_SIZE = 100;
 // The header's search box writes every keystroke to the URL; ask the backend once typing pauses.
 const SEARCH_SETTLE_MS = 300;
 
-interface MarkerPage {
-  markers: RescueMapMarkerItem[];
-  /** How far the page went, for where the next one starts. */
-  read: number;
-  hasNextPage: boolean;
-}
-
 type MarkerPages = InfiniteData<MarkerPage, number>;
-
-function placedMarkers(markers: readonly (RescueMapMarkerItem | null)[]) {
-  return dedupeMarkersById(
-    markers.filter((marker): marker is RescueMapMarkerItem => Boolean(marker)),
-  );
-}
 
 /** Each page's markers, `edit`ed. */
 function editPages(
@@ -74,12 +63,16 @@ export function usePaginatedRescueMapMarkers(state?: SiteRouteState) {
   );
   // Tickets only: stations are still filtered on the page, so a search must not reload them.
   const ticketQuery = activeDataType === 'ticket' ? settledQuery : undefined;
-  const queryKey = [
-    'site-list',
-    'markers',
-    activeDataType,
-    { ticketStatus, ticketQuery },
-  ] as const;
+  const queryKey = useMemo(
+    () =>
+      [
+        'site-list',
+        'markers',
+        activeDataType,
+        { ticketStatus, ticketQuery },
+      ] as const,
+    [activeDataType, ticketStatus, ticketQuery],
+  );
 
   const list = useInfiniteQuery({
     ...SITE_READ_OPTIONS,
@@ -92,13 +85,12 @@ export function usePaginatedRescueMapMarkers(state?: SiteRouteState) {
           { bounds: undefined, skip, limit: LIST_PAGE_SIZE },
           signal,
         );
-        const markers = placedMarkers(stations.items.map(mapStationToMarker));
 
-        return {
-          markers,
-          read: markers.length,
-          hasNextPage: stations.pageInfo.hasNextPage,
-        };
+        return markerPage(
+          stations.items,
+          mapStationToMarker,
+          stations.pageInfo.hasNextPage,
+        );
       }
 
       const { tickets } = await siteGraphql(
@@ -112,18 +104,15 @@ export function usePaginatedRescueMapMarkers(state?: SiteRouteState) {
         signal,
       );
 
-      return {
-        markers: placedMarkers(
-          tickets.items.map((ticket) => {
-            const marker = mapTicketToMarker(ticket);
+      return markerPage(
+        tickets.items,
+        (ticket) => {
+          const marker = mapTicketToMarker(ticket);
 
-            return marker && { ...marker, needs: ticket.tasks };
-          }),
-        ),
-        // As the backend counts them, placed or not: the next page goes back from where this one ended.
-        read: tickets.items.length,
-        hasNextPage: tickets.pageInfo.hasNextPage,
-      };
+          return marker && { ...marker, needs: ticket.tasks };
+        },
+        tickets.pageInfo.hasNextPage,
+      );
     },
     getNextPageParam: (last, _pages, skip) => {
       if (!last.hasNextPage) {

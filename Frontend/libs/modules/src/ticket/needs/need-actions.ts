@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * What a ticket's requester can do to one of its needs, from the ⋯ at the end of the need's row:
  * stop recruiting for it, and delete it. Nobody else gets the ⋯.

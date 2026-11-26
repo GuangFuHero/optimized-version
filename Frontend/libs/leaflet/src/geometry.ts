@@ -1,4 +1,7 @@
-type LatLng = [number, number];
+// SPDX-License-Identifier: GPL-3.0-only
+export type PolygonVertex = [latitude: number, longitude: number];
+
+type LatLng = Readonly<PolygonVertex>;
 
 function cross(o: LatLng, a: LatLng, b: LatLng): number {
   return (a[1] - o[1]) * (b[0] - o[0]) - (a[0] - o[0]) * (b[1] - o[1]);
@@ -60,11 +63,8 @@ function foldsBack(p: LatLng, q: LatLng, r: LatLng): boolean {
 }
 
 /**
- * Whether an outline crosses itself (MAP-ZD-131): two of its edges that are not neighbours meet,
- * or two neighbours fold back over each other (a spike, or corners on one line that enclose
- * nothing). The edge from the last corner back to the first counts once there are three corners;
- * before that the outline is a line and cannot cross itself. The backend only checks that it is a
- * polygon, so this is what keeps such an area from being saved.
+ * Whether a local, open ring crosses itself or nearly folds back at a vertex. The
+ * closing edge is included for rings with at least three vertices.
  */
 export function polygonSelfIntersects(points: readonly LatLng[]): boolean {
   const count = points.length;
@@ -109,8 +109,7 @@ const KM_PER_DEGREE_LAT = 110.574;
 const KM_PER_DEGREE_LNG_AT_EQUATOR = 111.32;
 
 /**
- * Area in km², by an equirectangular flattening round the outline's middle. Good enough to show a
- * person how big an area is, and not to decide anything by (prototype `areaKm2`).
+ * Approximate area in km² using an equirectangular projection. Use for display on local maps.
  */
 export function polygonAreaKm2(points: readonly LatLng[]): number {
   if (points.length < 3) {
@@ -138,11 +137,13 @@ export function polygonAreaKm2(points: readonly LatLng[]): number {
 }
 
 /**
- * The outline as GeoJSON for `createArea`: [lng, lat], the order the backend keeps (MAP-ZD-134),
- * and the ring closed, its first corner written again at the end. Leaflet's [lat, lng] sent as it
- * is would not fail, only put the area somewhere else.
+ * Convert an open ring of at least three Leaflet vertices to a closed GeoJSON polygon.
  */
 export function toGeoJsonPolygon(points: readonly LatLng[]) {
+  if (points.length < 3) {
+    throw new RangeError('A polygon needs at least three vertices.');
+  }
+
   const ring = points.map(([lat, lng]) => [lng, lat]);
 
   return {
@@ -152,18 +153,17 @@ export function toGeoJsonPolygon(points: readonly LatLng[]) {
 }
 
 /**
- * The corners of an area that can have its boundary changed here: one polygon with no hole, as an
- * outline without the closing point GeoJSON repeats. A shape of several parts, or with a hole in
- * it, has no such outline (`null`), and keeps the boundary it has.
+ * Return an open outline for a single polygon with no holes. Return null if it
+ * cannot be edited as a single ring.
  */
 export function editableOutline(
   polygons: readonly (readonly (readonly LatLng[])[])[],
-): LatLng[] | null {
+): PolygonVertex[] | null {
   if (polygons.length !== 1 || polygons[0].length !== 1) {
     return null;
   }
 
-  const ring = polygons[0][0].map(([lat, lng]): LatLng => [lat, lng]);
+  const ring = polygons[0][0].map(([lat, lng]): PolygonVertex => [lat, lng]);
   const first = ring[0];
   const last = ring[ring.length - 1];
 
@@ -172,4 +172,79 @@ export function editableOutline(
   }
 
   return ring.length >= 3 ? ring : null;
+}
+
+export type PolygonRings = readonly (readonly LatLng[])[];
+export type GeographicBounds = [
+  west: number,
+  south: number,
+  east: number,
+  north: number,
+];
+
+/** Whether a point lies in a ring, by the ray-casting rule. Points are [lat, lng]. */
+function isInRing([lat, lng]: LatLng, ring: readonly LatLng[]): boolean {
+  let inside = false;
+
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [latI, lngI] = ring[i];
+    const [latJ, lngJ] = ring[j];
+
+    if (
+      lngI > lng !== lngJ > lng &&
+      lat < ((latJ - latI) * (lng - lngI)) / (lngJ - lngI) + latI
+    ) {
+      inside = !inside;
+    }
+  }
+
+  return inside;
+}
+
+/** A polygon is its outer ring less its holes: the first ring, then the rings cut out of it. */
+export function pointInPolygon(point: LatLng, rings: PolygonRings) {
+  const [outer, ...holes] = rings;
+
+  return (
+    outer !== undefined &&
+    isInRing(point, outer) &&
+    !holes.some((hole) => isInRing(point, hole))
+  );
+}
+
+/** The west, south, east and north edges of the supplied polygons. */
+export function boundsOfPolygons(
+  polygons: readonly PolygonRings[],
+): GeographicBounds | null {
+  let west = Infinity;
+  let south = Infinity;
+  let east = -Infinity;
+  let north = -Infinity;
+  for (const polygon of polygons) {
+    for (const ring of polygon) {
+      for (const [lat, lng] of ring) {
+        west = Math.min(west, lng);
+        south = Math.min(south, lat);
+        east = Math.max(east, lng);
+        north = Math.max(north, lat);
+      }
+    }
+  }
+  return west === Infinity ? null : [west, south, east, north];
+}
+
+/** Order polygon sets by bounding-box area so smaller features can be drawn on top. */
+export function polygonsLargestFirst<
+  T extends { polygons: readonly PolygonRings[] },
+>(items: readonly T[]): T[] {
+  return items
+    .map((item) => {
+      const bounds = boundsOfPolygons(item.polygons);
+      const size = bounds
+        ? (bounds[2] - bounds[0]) * (bounds[3] - bounds[1])
+        : 0;
+      return { item, size };
+    })
+    .sort((a, b) => b.size - a.size)
+    .map(({ item }) => item);
 }

@@ -1,17 +1,11 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
-import { QueryClient, useQuery } from '@tanstack/react-query';
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-  type ReactNode,
-} from 'react';
+import { useCurrentUser } from '@rescue-frontend/data-access';
+import { createContext, useContext, useEffect, type ReactNode } from 'react';
 
 import { onAuthChange } from './auth-broadcast';
-import { readAuthSessionAsync, type AuthSession } from './auth-session-store';
-import { siteRestClient } from './site-clients';
+import { toAuthSession, type AuthSession } from './auth-session-store';
 
 /** Until the first answer; the server cannot tell either: the cookies are the browser's. */
 const LOADING: AuthSession = { status: 'loading', user: null };
@@ -25,29 +19,11 @@ const AuthSessionContext = createContext<AuthSession | null>(null);
  * signed in or out (`auth-broadcast.ts`), or the person comes back to this tab — next-auth's
  * refetch on focus did the same. Checks asked for together share one request.
  *
- * In a query client of its own: the back office keys its client on who is signed in
- * (`apps/admin/src/app/providers.tsx`), so the session cannot live inside it. Through
- * `siteRestClient`: a session that turns out ended elsewhere reloads the tab as a guest with the
- * notice, as any other request would.
- *
  * No word either way — the backend out of reach, or the proxy unable to refresh just now (503) —
- * keeps the last answer: a signed-in person stays signed in rather than flashing to a guest. A page
- * still waiting on its first answer is shown a guest, as next-auth did, so it does not wait for good.
+ * keeps the last answer. On the first read, the session stays loading until the retries finish.
  */
 export function AuthSessionProvider({ children }: { children: ReactNode }) {
-  const [queryClient] = useState(() => new QueryClient());
-  const { data, isError, refetch } = useQuery(
-    {
-      queryKey: ['auth-session'],
-      queryFn: () => readAuthSessionAsync(siteRestClient),
-      retry: false,
-      // Asked even when the browser says it is offline: a first check that fails shows a guest.
-      networkMode: 'always',
-      refetchOnWindowFocus: false,
-      refetchOnReconnect: false,
-    },
-    queryClient,
-  );
+  const { data, isError, refetch } = useCurrentUser({ select: toAuthSession });
 
   useEffect(() => {
     const check = () => void refetch({ cancelRefetch: false });

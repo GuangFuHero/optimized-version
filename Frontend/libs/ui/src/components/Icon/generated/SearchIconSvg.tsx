@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only AND CC-BY-SA-4.0
 import type { SVGProps } from 'react';
 
 export function SearchIconSvg(props: SVGProps<SVGSVGElement>) {
