@@ -1,0 +1,36 @@
+# 改到下面的路徑時，GitHub 會自動請列出的維護者審查 PR。
+# 同一個檔案符合多條規則時，以最後一條為準。
+# 維護者分工的說明見 CONTRIBUTING.md。
+
+# 沒有其他規則的檔案
+*                       @jujuyuzu @Taiwanchaoh
+
+# 後端與規格
+/Backend/               @Taiwanchaoh @zenuie @jujuyuzu
+/Backend/Spec/          @Taiwanchaoh @zenuie
+/Spec/                  @Taiwanchaoh @zenuie
+/System_Design/         @Taiwanchaoh @jujuyuzu
+
+# 前端
+/Frontend/              @jujuyuzu @chingweih @hanhsienlei
+
+# 設計（main 上的 Design/ 只放說明與守則；設計稿在 sucrelindesign 分支）
+/Design/                @sucrelindesign
+
+# CI 與部署
+/.github/               @jujuyuzu @Taiwanchaoh
+/DEPLOY.md              @jujuyuzu @Taiwanchaoh
+
+# SBOM
+/SBOM/                  @Taiwanchaoh @carolchu1208
+
+# 授權、治理與社群文件
+/LICENSE                @carolchu1208 @Taiwanchaoh
+/LICENSING.md           @carolchu1208 @Taiwanchaoh
+/CONTRIBUTING.md        @carolchu1208 @Taiwanchaoh
+/CODE_OF_CONDUCT.md     @carolchu1208
+/SECURITY.md            @carolchu1208 @Taiwanchaoh
+/.github/CODEOWNERS     @carolchu1208 @Taiwanchaoh
+/CONTRIBUTORS.md        @carolchu1208 @jujuyuzu
+/.all-contributorsrc    @carolchu1208 @jujuyuzu
+/MAP_TERMS.md           @carolchu1208 @Taiwanchaoh

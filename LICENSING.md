@@ -6,16 +6,16 @@
 
 | 內容 | 授權 |
 |---|---|
-| 程式碼與技術文件：`Backend/`、`Frontend/`、`System_Design/`、`Spec/`、`.github/`、腳本與工具；設計分支 `sucrelindesign` 上原型的 HTML、JavaScript、CSS | GNU General Public License v3.0 only（`GPL-3.0-only`），全文見 [`LICENSE`](LICENSE) |
-| 設計素材：插圖（含吉祥物「光復寶寶」）、UI 設計稿、圖片，以及 `Design/` 和設計分支上的設計文件 | [創用 CC 姓名標示－相同方式分享 4.0 國際](https://creativecommons.org/licenses/by-sa/4.0/deed.zh-hant)（`CC-BY-SA-4.0`），作者標示「光復超人設計團隊」 |
-| 名稱與標誌：「光復超人」「GuangFuHero」「島嶼守望」「Island Watch」等名稱，以及 Logo 檔 | 不在 GPL 或 CC 授權範圍內，未經書面同意不得使用 |
+| 程式碼與技術文件：`Backend/`、`Frontend/`、`System_Design/`、`Spec/`、`.github/`、腳本與工具；設計分支 `sucrelindesign` 上原型的 HTML、JavaScript、CSS；`Design/` 和設計分支上的文字說明（例如 `Design/GUIDE.md`） | GNU General Public License v3.0 only（`GPL-3.0-only`），全文見 [`LICENSE`](LICENSE) |
+| 設計素材（圖和畫面）：介面配置、圖示、插圖（含吉祥物「光復寶寶」）、UI 元件、Figma 原型、畫面設計稿和圖片，包括 `Design/` 和設計分支上的這些圖和畫面 | [創用 CC 姓名標示－相同方式分享 4.0 國際](https://creativecommons.org/licenses/by-sa/4.0/deed.zh-hant)（`CC-BY-SA-4.0`），作者標示「光復超人設計團隊」 |
+| 名稱與標誌：「Wan Guard 島嶼守望-光復超人」（也包括單獨使用的「Wan Guard」「島嶼守望」「光復超人」）、「GuangFuHero」，以及 Logo 檔 | 不在 GPL 或 CC 授權範圍內，未經書面同意不得使用 |
 | 第三方的套件、字型、圖示、圖片、地圖與服務 | 照各自的授權，見下面的「第三方內容」 |
 
 一個檔案裡同時有程式和設計素材時，程式的部分用 GPL-3.0-only，設計素材的部分用 CC BY-SA 4.0。創用 CC 公告過 CC BY-SA 4.0 可以單向併入 GPL v3 的作品，所以設計素材放進 GPL 的程式裡不會衝突。
 
-### 為什麼設計素材不用組織規範的 CC BY-NC-SA
+### 設計素材為什麼用 CC BY-SA，不用 CC BY-NC-SA
 
-GuangFuHero 組織首頁的授權規範寫設計素材用 CC BY-NC-SA 4.0。這個 repo 拿掉「非商業性（NC）」，改用 CC BY-SA 4.0，原因有兩個：
+GuangFuHero 組織原本規定設計素材用 CC BY-NC-SA 4.0，2026 年 11 月起整個組織改用 CC BY-SA 4.0，原因有兩個：
 
 - 這個 repo 要讓各界自由修改、加值使用。政府或 NGO 委託廠商部署、維運，通常會被認定為商業使用，帶 NC 的素材就不能用。
 - CC BY-NC-SA 不能併入 GPL 的程式。光復寶寶這類插圖已經寫在前端程式裡。
@@ -47,6 +47,10 @@ GPL 授權的是程式碼，不包含名稱與 Logo 的使用權。部署自己�
 | `redis:7-alpine`（7.4 起） | RSALv2／SSPLv1，不是 OSI 認可的授權 | 以獨立服務執行，不跟本專案的程式一起散布 |
 | `postgis/postgis` | PostGIS 是 GPL-2.0-or-later；PostgreSQL 是 PostgreSQL License | 以獨立服務執行 |
 | `@img/sharp-libvips-*`（`next` 處理圖片時用到） | LGPL-3.0-or-later | |
+| `certifi`（後端，驗證 HTTPS 憑證用的憑證清單） | MPL-2.0 | 沒有修改，照原樣使用 |
+| `caniuse-lite`（前端，判斷瀏覽器支援度的資料） | CC-BY-4.0 | 沒有修改，照原樣使用 |
+| `shapely`（後端，處理地理圖形）的 Linux 安裝檔 | 內含 GEOS 函式庫，LGPL-2.1 | 沒有修改，照原樣使用 |
+| `numpy`（後端）的 Linux 安裝檔 | 內含 libgfortran（GPL-3.0-or-later WITH GCC-exception-3.1）與 libquadmath（LGPL-2.1-or-later） | 沒有修改，照原樣使用 |
 
 ### 字型
 
@@ -68,7 +72,7 @@ GPL 授權的是程式碼，不包含名稱與 Logo 的使用權。部署自己�
 
 | 圖片 | 授權 | 說明 |
 |---|---|---|
-| 登入頁的地球圖 `Frontend/libs/modules/src/auth/login/assets/login-hero-from-figma.png` | 待確認 | 來源還沒確認，確認前不算本專案的設計素材 |
+| 登入頁的地球圖 `Frontend/libs/modules/src/auth/login/assets/login-hero-from-figma.png` | AI 產生 | 用 Google 的生成式 AI 產生 |
 
 ### 地圖與地址服務
 
@@ -80,4 +84,4 @@ GPL 授權的是程式碼，不包含名稱與 Logo 的使用權。部署自己�
 
 ## 有問題
 
-授權或名稱、Logo 使用的問題，請在 GitHub 開 issue。資安問題請不要開公開的 issue。
+授權或名稱、Logo 使用的問題，請寄信到 wanguard25@gmail.com，或在 GitHub 開 issue。資安問題請不要開公開的 issue。

@@ -1,8 +1,9 @@
 [project]
 name = "backend"
 version = "0.1.0"
-description = "Add your description here"
+description = "島嶼守望（救災資訊平台）後端：FastAPI + Strawberry GraphQL + PostgreSQL/PostGIS"
 readme = "README.md"
+license = "GPL-3.0-only"
 requires-python = ">=3.13, <4.0"
 dependencies = [
     "alembic>=1.18.0",

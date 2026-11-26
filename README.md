@@ -238,9 +238,9 @@ Design/     設計稿導覽（設計稿本身在 sucrelindesign 分支）
 
 ## 授權
 
-- **程式碼與技術文件**：GNU GPL v3.0 only，全文見 [`LICENSE`](LICENSE)。
-- **設計素材**（插圖、吉祥物「光復寶寶」、UI 設計稿、設計文件）：CC BY-SA 4.0，作者標示「光復超人設計團隊」。
-- **名稱與 Logo**（「光復超人」「島嶼守望」等）：不在任何開源或創用 CC 授權範圍內。部署自己的版本時，請換成你自己的名稱與 Logo。
+- **程式碼與技術文件**（包括設計的文字說明）：GNU GPL v3.0 only，全文見 [`LICENSE`](LICENSE)。
+- **設計素材**（圖示、插圖、吉祥物「光復寶寶」、UI 設計稿、畫面）：CC BY-SA 4.0，作者標示「光復超人設計團隊」。
+- **名稱與 Logo**（「Wan Guard 島嶼守望-光復超人」等）：不在任何開源或創用 CC 授權範圍內。部署自己的版本時，請換成你自己的名稱與 Logo。
 - **第三方內容**：套件見 [`SBOM/README.md`](SBOM/README.md)，地圖與地址服務的條款見 [`MAP_TERMS.md`](MAP_TERMS.md)。
 
 每一類內容的範圍、字型與圖示的授權，見 [`LICENSING.md`](LICENSING.md)。
