@@ -1,12 +1,14 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
-import { Box, Button, Stack, Typography } from '@mui/material';
+import { Box, Stack, Typography } from '@mui/material';
 import Link from 'next/link';
+import type { UseQueryResult } from '@tanstack/react-query';
 import type { MouseEvent, ReactNode } from 'react';
-import type { UseQueryState } from 'urql';
 
 import type { MyTicketsQuery } from '@rescue-frontend/data-access';
 import {
+  Button,
   Badge,
   designTokens,
   displayTextSize,
@@ -27,7 +29,7 @@ interface MyRequestsListProps {
    * `myTickets`, read by the drawer at each opening — its tab counts them — so a request filed
    * since shows up, and a need added, deleted or claimed since is counted.
    */
-  result: UseQueryState<MyTicketsQuery>;
+  result: UseQueryResult<MyTicketsQuery>;
   /** Leaving for another page: the drawer lives in the account menu, which stays across pages. */
   onLeave: () => void;
 }
@@ -145,7 +147,7 @@ function NoticeText({ children }: { children: ReactNode }) {
 
 /** 我建立的: the requests the viewer filed, newest first, every status. */
 export function MyRequestsList({
-  result: { data, fetching, error },
+  result: { data, isFetching: fetching, error },
   onLeave,
 }: MyRequestsListProps) {
   const route = useSiteRouteState();
@@ -183,15 +185,24 @@ export function MyRequestsList({
       <Notice
         icon={
           <Icons.clipboardList
-            sx={{ fontSize: 28, color: color.fg.neutral.muted }}
+            sx={{
+              fontSize: designTokens.iconSize[28],
+              color: color.fg.neutral.muted,
+            }}
           />
         }
       >
         <NoticeText>你還沒有送出過求助。</NoticeText>
         <Button
-          variant="contained"
-          size="small"
-          startIcon={<Icons.heartHandshake sx={{ fontSize: 16 }} />}
+          variant="primary"
+          size="sm"
+          startIcon={
+            <Icons.heartHandshake
+              sx={{
+                fontSize: designTokens.iconSize[16],
+              }}
+            />
+          }
           onClick={() => {
             onLeave();
             openHelpRequest();

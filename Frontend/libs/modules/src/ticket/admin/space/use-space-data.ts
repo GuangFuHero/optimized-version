@@ -1,28 +1,19 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
-import { useMemo } from 'react';
 import { useQueries, useQuery } from '@tanstack/react-query';
 
 import {
   buildingMapTicketsQuery,
-  normalizeAddressQuery,
-  reverseGeocodeQuery,
+  SILENT_ERROR_META,
   useBuildingMap,
   useBuildingMaps,
-  useBuildingMapTickets,
   useCurrentUser,
   type AdminBuildingMapFieldsFragment,
   type BoundsInput,
 } from '@rescue-frontend/data-access/admin';
 import type { components } from '@rescue-frontend/data-access/openapi';
 
-import {
-  lookupPoint,
-  readAddressLookup,
-  type AddressCheck,
-  type AddressLookup,
-  type LatLng,
-} from '../../address-lookup';
 import {
   analyzeSpace,
   toSpaceListRow,
@@ -32,6 +23,7 @@ import {
   type SpaceTicket,
 } from './space-analysis';
 import type { SpaceHouseholdTarget } from './household-input';
+import { readSpaceTickets } from './space-partial';
 
 /**
  * What the signed-in identity may do with spaces, from the backend's capability list — never the
@@ -98,27 +90,23 @@ export function useSpaces(bounds?: BoundsInput) {
   // spreading each query's data into the memo's deps changed their count with the spaces.
   const tickets = useQueries({
     queries: items.map((building) => ({
-      ...buildingMapTicketsQuery({ buildingMapUuid: building.uuid }),
+      ...spaceTicketsQuery(building.uuid),
       refetchOnWindowFocus: false,
       staleTime: SPACE_TICKETS_STALE_MS,
     })),
     combine: combineSpaceTickets,
   });
 
-  const spaces = useMemo(
-    () =>
-      items.map((building, index): BoardSpace => {
-        const loaded = tickets.data[index]?.buildingMapTickets;
-        if (loaded) return loadedSpace(building, loaded);
-        const load = tickets.errors[index] ? 'failed' : 'loading';
-        return {
-          building,
-          tickets: null,
-          row: toUnloadedSpaceRow(building, load),
-        };
-      }),
-    [items, tickets.data, tickets.errors],
-  );
+  const spaces = items.map((building, index): BoardSpace => {
+    const loaded = tickets.data[index]?.buildingMapTickets;
+    if (loaded) return loadedSpace(building, loaded);
+    const load = tickets.errors[index] ? 'failed' : 'loading';
+    return {
+      building,
+      tickets: null,
+      row: toUnloadedSpaceRow(building, load),
+    };
+  });
 
   return {
     spaces,
@@ -135,6 +123,20 @@ export function useSpaces(bounds?: BoundsInput) {
 }
 
 const NO_BUILDINGS: AdminBuildingMapFieldsFragment[] = [];
+
+/**
+ * One space's tickets, as the board's rows and the floor view both read them. Each says a failed
+ * read itself (the board's 無法載入空間 重試, the floor view's 讀不到… 重試), so neither wants the
+ * app's toast too: it would stack one more on every failed 重試. Every reader of this key has to
+ * carry the meta, since a query takes the options of whichever reader rendered last — one reader
+ * without it brings the toast back.
+ */
+function spaceTicketsQuery(buildingMapUuid: string) {
+  return {
+    ...buildingMapTicketsQuery({ buildingMapUuid }),
+    meta: { [SILENT_ERROR_META]: true },
+  };
+}
 
 /** How long a space's tickets stand on the board before a remount loads them again. */
 const SPACE_TICKETS_STALE_MS = 5 * 60_000;
@@ -160,22 +162,35 @@ function combineSpaceTickets<T>(
   };
 }
 
-/** One space with its tickets, for the floor view. `space` is null once it's gone. */
+/**
+ * One space for the floor view. `building` is null while it loads, when it failed, and once it's
+ * gone (`isLoading`, `error` tell which). Its tickets are read apart: `space` waits for them, and
+ * `tickets` says whether they are in, on their way, failed, or read earlier with the latest read
+ * failed (`readSpaceTickets`).
+ */
 export function useSpace(uuid: string | null) {
   const building = useBuildingMap({ uuid: uuid ?? '' });
-  const tickets = useBuildingMapTickets({ buildingMapUuid: uuid ?? '' });
+  const ticketsQuery = useQuery({
+    ...spaceTicketsQuery(uuid ?? ''),
+    enabled: Boolean(uuid),
+  });
   const found = building.data?.buildingMap ?? null;
-  const ticketList = tickets.data?.buildingMapTickets;
-
-  const space = useMemo(
-    () => (found ? loadedSpace(found, ticketList ?? []) : null),
-    [found, ticketList],
-  );
+  const tickets = readSpaceTickets({
+    data: ticketsQuery.data?.buildingMapTickets,
+    error: ticketsQuery.error,
+  });
 
   return {
-    space,
-    isLoading: building.isPending || tickets.isPending,
-    error: building.error ?? tickets.error ?? null,
+    building: found,
+    space:
+      found && (tickets.state === 'loaded' || tickets.state === 'stale')
+        ? loadedSpace(found, tickets.tickets)
+        : null,
+    tickets: tickets.state,
+    retryingTickets: ticketsQuery.isFetching,
+    retryTickets: () => void ticketsQuery.refetch(),
+    isLoading: building.isPending,
+    error: building.error ?? null,
   };
 }
 
@@ -187,71 +202,13 @@ export function useSpace(uuid: string | null) {
 export function useHouseholdSpace(buildingMapUuid: string | null | undefined) {
   const building = useBuildingMap({ uuid: buildingMapUuid ?? '' });
   const found = building.data?.buildingMap ?? null;
-  const target = useMemo<SpaceHouseholdTarget | null>(
-    () =>
-      found
-        ? {
-            uuid: found.uuid,
-            name: found.name,
-            floorLabels: found.floors.map((floor) => floor.label),
-          }
-        : null,
-    [found],
-  );
+  const target = found
+    ? {
+        uuid: found.uuid,
+        name: found.name,
+        floorLabels: found.floors.map((floor) => floor.label),
+      }
+    : (null satisfies SpaceHouseholdTarget | null);
   // A disabled query stays pending: only a ticket in a space waits for one.
   return { target, loading: Boolean(buildingMapUuid) && building.isPending };
-}
-
-/**
- * The nearest 門牌 to the pin, asked once for each place it's put down (the small map reports a tap
- * or a drag's end, never the drag). Same answers as the site's `usePinAddressLookup`, over the admin
- * client. Null with no pin.
- */
-export function useSpacePinLookup(pin: LatLng | null): AddressLookup | null {
-  const point = lookupPoint(pin);
-  const query = useQuery({
-    ...reverseGeocodeQuery(point ?? { lat: 0, lng: 0 }),
-    enabled: point !== null,
-    retry: false,
-    meta: { quietErrors: true },
-  });
-
-  return useMemo(
-    () =>
-      point
-        ? readAddressLookup({
-            current: true,
-            fetching: query.isFetching,
-            error: query.error,
-            answer: query.data?.reverseGeocode,
-          })
-        : null,
-    // `point` is rebuilt each render; its numbers are what matter.
-    [point?.lat, point?.lng, query.isFetching, query.error, query.data],
-  );
-}
-
-/** A typed line checked against TGOS once the address field is left. Null until then. */
-export function useSpaceTypedLookup(
-  check: AddressCheck | null,
-): AddressLookup | null {
-  const query = useQuery({
-    ...normalizeAddressQuery(check ?? { address: '' }),
-    enabled: check !== null,
-    retry: false,
-    meta: { quietErrors: true },
-  });
-
-  return useMemo(
-    () =>
-      check
-        ? readAddressLookup({
-            current: true,
-            fetching: query.isFetching,
-            error: query.error,
-            answer: query.data?.normalizeAddress,
-          })
-        : null,
-    [check, query.isFetching, query.error, query.data],
-  );
 }

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 /**
@@ -120,7 +121,7 @@ export function SplitButton({
       </Button>
       <Menu
         id={menuId}
-        anchorEl={anchorRef.current}
+        anchorEl={open ? () => anchorRef.current : null}
         open={open}
         onClose={() => setOpen(false)}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}

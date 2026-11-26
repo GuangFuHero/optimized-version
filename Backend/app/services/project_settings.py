@@ -68,9 +68,7 @@ async def update_project_settings(
     await require_scope(actor, Perm.PROJECT_EDIT, db)
     current = await project_settings_repository.get_singleton(db)
     if not values.get("name") and current is None:
-        raise ProjectSettingsValidationError(
-            "第一次設定必須提供 name（災害名稱）"
-        )
+        raise ProjectSettingsValidationError("第一次設定必須提供 name（災害名稱）")
     if "map_view" in values:
         view = values["map_view"] or {}
         values = {key: value for key, value in values.items() if key != "map_view"} | {
@@ -88,7 +86,8 @@ async def update_project_settings(
         # endpoint maps that to 422, while a bare ValueError escapes as an unexplained 500.
         try:
             validated = await validate_disaster_types(
-                db, values["disaster_types"],
+                db,
+                values["disaster_types"],
                 keep=(current.disaster_types if current else []) or [],
             )
         except ValueError as err:
@@ -124,11 +123,11 @@ async def _unmatched_disaster_types(db: AsyncSession, values: dict) -> tuple[str
         return ()
     logger.warning(
         "project_settings.disaster_types %s match no configured dynamic field (configured: %s)",
-        unmatched, sorted(configured),
+        unmatched,
+        sorted(configured),
     )
     return tuple(
-        f"災害型別「{label}」沒有對應到任何動態欄位，"
-        "請確認拼字，或確認該型別的欄位尚未設定"
+        f"災害型別「{label}」沒有對應到任何動態欄位，請確認拼字，或確認該型別的欄位尚未設定"
         for label in unmatched
     )
 
@@ -150,7 +149,11 @@ async def list_disaster_types(
 
 
 async def upsert_disaster_type(
-    db: AsyncSession, *, actor: User, key: str, label: str | None = None,
+    db: AsyncSession,
+    *,
+    actor: User,
+    key: str,
+    label: str | None = None,
     is_active: bool | None = None,
 ) -> DisasterType:
     """Add a disaster type, or edit an existing one's label / active flag (checkpoint 1 only).
@@ -164,6 +167,4 @@ async def upsert_disaster_type(
     leaving the history readable.
     """
     await require_scope(actor, Perm.PROJECT_EDIT, db)
-    return await disaster_type_repository.upsert(
-        db, key=key, label=label, is_active=is_active
-    )
+    return await disaster_type_repository.upsert(db, key=key, label=label, is_active=is_active)

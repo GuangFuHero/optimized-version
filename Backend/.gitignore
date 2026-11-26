@@ -30,6 +30,7 @@ ENV/
 .env.*
 !.env.example
 *.lock
+!uv.lock
 
 # IDEs
 .idea/

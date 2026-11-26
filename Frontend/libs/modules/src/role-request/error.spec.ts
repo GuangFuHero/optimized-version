@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { describe, expect, it } from 'vitest';
 
 import { isTeamListRefusal, roleRequestErrorMessage } from './error';
@@ -71,7 +72,7 @@ describe('roleRequestErrorMessage', () => {
     );
   });
 
-  it('reads an HTTP 401, which urql hands over as a network error, as a sign-in that ran out', () => {
+  it('reads an HTTP 401, which comes as a network error, as a sign-in that ran out', () => {
     expect(
       roleRequestErrorMessage({
         networkError: new Error('Unauthorized'),

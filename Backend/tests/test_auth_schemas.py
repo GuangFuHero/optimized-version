@@ -8,8 +8,7 @@ from app.schemas.auth import RegisterRequest, ResendVerificationRequest, VerifyR
 
 def test_register_request_email_type():
     """A valid email registration request parses and keeps type == 'email'."""
-    r = RegisterRequest(type="email", value="A@X.com", password="hashed", salt_frontend="abc",
-                        name="Tester")
+    r = RegisterRequest(type="email", value="A@X.com", password="hashed", salt_frontend="abc", name="Tester")
     assert r.type == "email"
 
 
@@ -28,8 +27,7 @@ def test_register_request_name_required_and_stripped():
     with pytest.raises(ValidationError):
         RegisterRequest(type="email", value="a@x.com", password="hashed", salt_frontend="abc", name="   ")
     # (c) surrounding whitespace is stripped
-    r = RegisterRequest(type="email", value="a@x.com", password="hashed", salt_frontend="abc",
-                        name=" Bob ")
+    r = RegisterRequest(type="email", value="a@x.com", password="hashed", salt_frontend="abc", name=" Bob ")
     assert r.name == "Bob"
 
 
@@ -47,6 +45,7 @@ def test_resend_request():
 def test_add_and_verify_contact_requests():
     """AddContactRequest + VerifyContactRequest carry the expected fields."""
     from app.schemas.auth import AddContactRequest, VerifyContactRequest
+
     assert AddContactRequest(type="phone", value="0912345678").type == "phone"
     assert VerifyContactRequest(type="phone", value="0912345678", code="123456").code == "123456"
 
@@ -54,5 +53,6 @@ def test_add_and_verify_contact_requests():
 def test_id_token_request_requires_token():
     """IdTokenRequest rejects an empty id_token (min_length=1)."""
     from app.schemas.auth import IdTokenRequest
+
     with pytest.raises(ValidationError):
         IdTokenRequest(id_token="")

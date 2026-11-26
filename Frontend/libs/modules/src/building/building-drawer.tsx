@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { Alert, Box, ButtonBase, Stack, Typography } from '@mui/material';
@@ -64,7 +65,11 @@ function BuildingNotice() {
       }}
     >
       <Icons.triangleAlert
-        sx={{ flexShrink: 0, fontSize: 18, color: color.fg.warning }}
+        sx={{
+          flexShrink: 0,
+          fontSize: designTokens.iconSize.md,
+          color: color.fg.warning,
+        }}
       />
       <Typography
         sx={{
@@ -391,11 +396,7 @@ export function BuildingDrawer({
   // Kept through the closing slide, so the title and the floors do not blank out on the way.
   const [shownUuid, setShownUuid] = useState(buildingUuid);
 
-  useEffect(() => {
-    if (buildingUuid) {
-      setShownUuid(buildingUuid);
-    }
-  }, [buildingUuid]);
+  if (buildingUuid && buildingUuid !== shownUuid) setShownUuid(buildingUuid);
 
   const uuid = buildingUuid ?? shownUuid;
   const { building, tickets, mayHoldMore, fetching, error, hasData } =

@@ -188,8 +188,10 @@ async def test_assign_role_replaces_existing_platform_role(client, db_session, r
     assert resp.status_code == 200, resp.json()
 
     rows = (
-        await db_session.execute(select(UserRoleAssign).where(UserRoleAssign.user_uuid == target_uuid))
-    ).scalars().all()
+        (await db_session.execute(select(UserRoleAssign).where(UserRoleAssign.user_uuid == target_uuid)))
+        .scalars()
+        .all()
+    )
     assert len(rows) == 1
     assert str(rows[0].role_uuid) == other_role_uuid
 
@@ -423,10 +425,10 @@ async def test_add_team_member_lets_a_user_belong_to_two_teams(client, db_sessio
         assert resp.status_code == 200, resp.json()
 
     rows = (
-        await db_session.execute(
-            select(UserRoleAssign).where(UserRoleAssign.user_uuid == target_uuid)
-        )
-    ).scalars().all()
+        (await db_session.execute(select(UserRoleAssign).where(UserRoleAssign.user_uuid == target_uuid)))
+        .scalars()
+        .all()
+    )
     assert {str(r.team_uuid) for r in rows} == {team_a_uuid, team_b_uuid}
 
 
@@ -483,9 +485,7 @@ async def test_remove_team_member_revokes_every_grant_scoped_to_that_team(client
     team_uuid = await _make_team(db_session, name="Team A", type_="gov")
     team_role_uuid = await _make_role(db_session, name="member", kind="team")
     target_uuid = await _make_plain_user(db_session, name="Departing")
-    db_session.add(
-        UserRoleAssign(user_uuid=target_uuid, role_uuid=team_role_uuid, team_uuid=team_uuid)
-    )
+    db_session.add(UserRoleAssign(user_uuid=target_uuid, role_uuid=team_role_uuid, team_uuid=team_uuid))
     await db_session.commit()
 
     resp = await client.delete(
@@ -496,8 +496,10 @@ async def test_remove_team_member_revokes_every_grant_scoped_to_that_team(client
     assert resp.json()["team_uuid"] is None
 
     remaining = (
-        await db_session.execute(select(UserRoleAssign).where(UserRoleAssign.user_uuid == target_uuid))
-    ).scalars().all()
+        (await db_session.execute(select(UserRoleAssign).where(UserRoleAssign.user_uuid == target_uuid)))
+        .scalars()
+        .all()
+    )
     assert remaining == []
 
 
@@ -518,17 +520,19 @@ async def test_remove_team_member_also_revokes_direct_grants_bound_to_that_team(
     target_uuid = await _make_plain_user(db_session, name="Returning")
     # `_make_super_admin` already created this row and `permissions.key` is unique
     permission = (
-        await db_session.execute(
-            select(Permission).where(Permission.key == Perm.TEAM_MEMBER_MANAGE.value)
-        )
+        await db_session.execute(select(Permission).where(Permission.key == Perm.TEAM_MEMBER_MANAGE.value))
     ).scalar_one()
-    db_session.add_all([
-        UserRoleAssign(user_uuid=target_uuid, role_uuid=team_role_uuid, team_uuid=team_uuid),
-        UserPermissionAssign(
-            user_uuid=target_uuid, permission_uuid=permission.uuid,
-            scope="team", team_uuid=team_uuid,
-        ),
-    ])
+    db_session.add_all(
+        [
+            UserRoleAssign(user_uuid=target_uuid, role_uuid=team_role_uuid, team_uuid=team_uuid),
+            UserPermissionAssign(
+                user_uuid=target_uuid,
+                permission_uuid=permission.uuid,
+                scope="team",
+                team_uuid=team_uuid,
+            ),
+        ]
+    )
     await db_session.commit()
 
     resp = await client.delete(
@@ -538,20 +542,22 @@ async def test_remove_team_member_also_revokes_direct_grants_bound_to_that_team(
     assert resp.status_code == 200, resp.json()
 
     left = (
-        await db_session.execute(
-            select(UserPermissionAssign).where(
-                UserPermissionAssign.user_uuid == target_uuid,
-                UserPermissionAssign.team_uuid == team_uuid,
+        (
+            await db_session.execute(
+                select(UserPermissionAssign).where(
+                    UserPermissionAssign.user_uuid == target_uuid,
+                    UserPermissionAssign.team_uuid == team_uuid,
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     assert left == []
 
 
 @pytest.mark.asyncio
-async def test_remove_team_member_leaves_other_teams_and_the_platform_grant_alone(
-    client, db_session, redis
-):
+async def test_remove_team_member_leaves_other_teams_and_the_platform_grant_alone(client, db_session, redis):
     """The delete keys on this team only — platform rows carry a NULL team and never match."""
     admin_uuid = await _make_super_admin(db_session)
     team_a = await _make_team(db_session, name="Team C", type_="ngo")
@@ -559,11 +565,13 @@ async def test_remove_team_member_leaves_other_teams_and_the_platform_grant_alon
     team_role_uuid = await _make_role(db_session, name="member", kind="team")
     platform_role_uuid = await _make_role(db_session, name="user", kind="platform")
     target_uuid = await _make_plain_user(db_session, name="Multi Hat")
-    db_session.add_all([
-        UserRoleAssign(user_uuid=target_uuid, role_uuid=platform_role_uuid),
-        UserRoleAssign(user_uuid=target_uuid, role_uuid=team_role_uuid, team_uuid=team_a),
-        UserRoleAssign(user_uuid=target_uuid, role_uuid=team_role_uuid, team_uuid=team_b),
-    ])
+    db_session.add_all(
+        [
+            UserRoleAssign(user_uuid=target_uuid, role_uuid=platform_role_uuid),
+            UserRoleAssign(user_uuid=target_uuid, role_uuid=team_role_uuid, team_uuid=team_a),
+            UserRoleAssign(user_uuid=target_uuid, role_uuid=team_role_uuid, team_uuid=team_b),
+        ]
+    )
     await db_session.commit()
 
     resp = await client.delete(
@@ -573,8 +581,10 @@ async def test_remove_team_member_leaves_other_teams_and_the_platform_grant_alon
     assert resp.status_code == 200, resp.json()
 
     remaining = (
-        await db_session.execute(select(UserRoleAssign).where(UserRoleAssign.user_uuid == target_uuid))
-    ).scalars().all()
+        (await db_session.execute(select(UserRoleAssign).where(UserRoleAssign.user_uuid == target_uuid)))
+        .scalars()
+        .all()
+    )
     teams_left = {str(r.team_uuid) if r.team_uuid else None for r in remaining}
     assert teams_left == {None, str(team_b)}  # platform grant + the other team
 

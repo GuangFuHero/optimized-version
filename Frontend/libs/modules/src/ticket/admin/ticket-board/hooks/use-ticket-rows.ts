@@ -1,10 +1,10 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import {
   useTickets,
   type AdminTicketsQueryVariables,
 } from '@rescue-frontend/data-access/admin';
-import { useMemo } from 'react';
 
 import { differsOnlyIn } from '../model/ticket-filters';
 import { toTicketRow, type TicketRow } from '../model/ticket-row';
@@ -29,10 +29,7 @@ export function useTicketRows(
       ? (previous) => differsOnlyIn(previous, variables, keepAcross)
       : false,
   });
-  const rows = useMemo(
-    () => query.data?.tickets.items.map(toTicketRow),
-    [query.data],
-  );
+  const rows = query.data?.tickets.items.map(toTicketRow);
   return {
     rows: rows ?? NO_ROWS,
     /** Every ticket matching the variables, not just the ones loaded; null until known. */

@@ -1,11 +1,12 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import type { ReactElement } from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useState } from 'react';
+import { useIsClient } from 'usehooks-ts';
 
 import {
   Box,
-  Button,
   ButtonBase,
   Drawer,
   IconButton,
@@ -22,9 +23,10 @@ import {
   openPointShareLink,
   sharesThroughDeviceSheet,
 } from './share-links';
-import type { PointShareChannel, PointShareTarget } from './types';
+import type { PointShareChannel, PointShareTarget, ShareHref } from './types';
 
 import {
+  Button,
   designTokens,
   displayTextSize,
   safeAreaBottom,
@@ -66,7 +68,10 @@ const tileSx = {
   fontSize: displayTextSize[10],
   fontWeight: 500,
   whiteSpace: 'nowrap',
-  '& .MuiSvgIcon-root': { fontSize: 20, color: color.fg.neutral.subtle },
+  '& .MuiSvgIcon-root': {
+    fontSize: designTokens.iconSize.lg,
+    color: color.fg.neutral.subtle,
+  },
 } as const;
 
 /**
@@ -84,21 +89,12 @@ export function PointShareDrawer({
   const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle');
   // After mount: the server has no `navigator`, and most desktop browsers have no share sheet —
   // a button that does nothing is left out rather than shown.
-  const [canShareNatively, setCanShareNatively] = useState(false);
+  const isClient = useIsClient();
+  const canShareNatively = isClient && typeof navigator.share === 'function';
   // A finger, not a mouse: where a channel's own app may be installed and take its links.
   const touchScreen = useMediaQuery('(pointer: coarse)');
-  const links = useMemo(
-    () => (target ? createPointShareLinks(target) : []),
-    [target],
-  );
-  const qrDataUrl = useMemo(
-    () => (target ? createQrDataUrl(target.url) : ''),
-    [target],
-  );
-
-  useEffect(() => {
-    setCanShareNatively(typeof navigator.share === 'function');
-  }, []);
+  const links = target ? createPointShareLinks(target) : [];
+  const qrDataUrl = target ? createQrDataUrl(target.url) : '';
 
   const handleCopy = async () => {
     if (!target) {
@@ -110,7 +106,7 @@ export function PointShareDrawer({
     window.setTimeout(() => setCopyState('idle'), 1400);
   };
 
-  const handleNativeShare = (fallbackHref?: string) => {
+  const handleNativeShare = (fallbackHref?: ShareHref) => {
     if (!target) {
       return;
     }
@@ -161,7 +157,7 @@ export function PointShareDrawer({
               sx={{
                 width: 36,
                 height: 4,
-                borderRadius: '999px',
+                borderRadius: `${radius.full}px`,
                 bgcolor: color.border.default,
               }}
             />
@@ -243,7 +239,8 @@ export function PointShareDrawer({
                 給現場的人掃，或長按另存後列印張貼。
               </Typography>
               <Button
-                size="small"
+                variant="ghost"
+                size="sm"
                 startIcon={<Icons.download />}
                 onClick={() => downloadQrSvg(target.url, `${target.title}.svg`)}
                 sx={{ textTransform: 'none' }}
@@ -254,7 +251,7 @@ export function PointShareDrawer({
 
             {canShareNatively ? (
               <Button
-                variant="contained"
+                variant="primary"
                 startIcon={<Icons.share />}
                 onClick={() => handleNativeShare()}
                 sx={{ textTransform: 'none', fontWeight: 700 }}

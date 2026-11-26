@@ -42,12 +42,33 @@ _logger = logging.getLogger("app.graphql")
 
 
 @strawberry.type
-class Query(GeoQuery, RequestQuery, TicketTaskQuery, PropertyConfigQuery, AnnouncementQuery, BriefingQuery, SuggestionQuery, AreaQuery, RoleRequestQuery):  # noqa: E501
+class Query(
+    GeoQuery,
+    RequestQuery,
+    TicketTaskQuery,
+    PropertyConfigQuery,
+    AnnouncementQuery,
+    BriefingQuery,
+    SuggestionQuery,
+    AreaQuery,
+    RoleRequestQuery,
+):  # noqa: E501
     """Root query type composing all domain query mixins."""
 
 
 @strawberry.type
-class Mutation(GeoMutation, StationPropertyMutation, RequestMutation, TicketTaskMutation, PropertyConfigMutation, AnnouncementMutation, BriefingMutation, SuggestionMutation, AreaMutation, RoleRequestMutation):  # noqa: E501
+class Mutation(
+    GeoMutation,
+    StationPropertyMutation,
+    RequestMutation,
+    TicketTaskMutation,
+    PropertyConfigMutation,
+    AnnouncementMutation,
+    BriefingMutation,
+    SuggestionMutation,
+    AreaMutation,
+    RoleRequestMutation,
+):  # noqa: E501
     """Root mutation type composing all domain mutation mixins."""
 
 

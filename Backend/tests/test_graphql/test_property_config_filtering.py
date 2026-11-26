@@ -64,31 +64,50 @@ async def _set_disaster_types(types: list[str]) -> None:
 async def _seed_station_configs() -> None:
     """Seed one field per disaster type plus a universal one, in deliberate reverse order."""
     async with test_db() as db:
-        db.add_all([
-            StationPropertyConfig(
-                station_type="shelter", property_name="土石流深度", data_type="number",
-                disaster_types=["landslide"], sort_order=2,
-            ),
-            StationPropertyConfig(
-                station_type="shelter", property_name="淹水深度", data_type="number",
-                disaster_types=["flood"], sort_order=1,
-            ),
-            StationPropertyConfig(
-                station_type="shelter", property_name="火場溫度", data_type="number",
-                disaster_types=["fire"], sort_order=1,
-            ),
-            StationPropertyConfig(
-                station_type="shelter", property_name="收容人數", data_type="number",
-                sort_order=0, label="目前收容人數",
-            ),
-        ])
+        db.add_all(
+            [
+                StationPropertyConfig(
+                    station_type="shelter",
+                    property_name="土石流深度",
+                    data_type="number",
+                    disaster_types=["landslide"],
+                    sort_order=2,
+                ),
+                StationPropertyConfig(
+                    station_type="shelter",
+                    property_name="淹水深度",
+                    data_type="number",
+                    disaster_types=["flood"],
+                    sort_order=1,
+                ),
+                StationPropertyConfig(
+                    station_type="shelter",
+                    property_name="火場溫度",
+                    data_type="number",
+                    disaster_types=["fire"],
+                    sort_order=1,
+                ),
+                StationPropertyConfig(
+                    station_type="shelter",
+                    property_name="收容人數",
+                    data_type="number",
+                    sort_order=0,
+                    label="目前收容人數",
+                ),
+            ]
+        )
 
 
 async def _query_station_names(client, token) -> list[str]:
     """Run stationPropertyConfigs for shelters and return the property names, in order."""
-    resp = await client.post("/graphql", json={
-        "query": STATION_CONFIGS, "variables": {"stationType": "shelter"},
-    }, headers=auth_header(token))
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": STATION_CONFIGS,
+            "variables": {"stationType": "shelter"},
+        },
+        headers=auth_header(token),
+    )
     assert resp.json().get("errors") is None, resp.json()
     return [c["propertyName"] for c in resp.json()["data"]["stationPropertyConfigs"]]
 
@@ -158,10 +177,14 @@ async def test_deactivated_field_is_hidden(client, coordinator_auth):
     _, token = coordinator_auth
     await _seed_station_configs()
     async with test_db() as db:
-        db.add(StationPropertyConfig(
-            station_type="shelter", property_name="已停用欄位",
-            data_type="text", is_active=False,
-        ))
+        db.add(
+            StationPropertyConfig(
+                station_type="shelter",
+                property_name="已停用欄位",
+                data_type="text",
+                is_active=False,
+            )
+        )
 
     assert "已停用欄位" not in await _query_station_names(client, token)
 
@@ -188,9 +211,14 @@ async def test_display_label_falls_back_to_property_name(client, coordinator_aut
     _, token = coordinator_auth
     await _seed_station_configs()
 
-    resp = await client.post("/graphql", json={
-        "query": STATION_CONFIGS, "variables": {"stationType": "shelter"},
-    }, headers=auth_header(token))
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": STATION_CONFIGS,
+            "variables": {"stationType": "shelter"},
+        },
+        headers=auth_header(token),
+    )
     by_name = {c["propertyName"]: c for c in resp.json()["data"]["stationPropertyConfigs"]}
 
     assert by_name["收容人數"]["label"] == "目前收容人數"
@@ -205,23 +233,36 @@ async def test_task_configs_are_filtered_the_same_way(client, coordinator_auth):
     _, token = coordinator_auth
     await _set_disaster_types(["flood"])
     async with test_db() as db:
-        db.add_all([
-            TaskPropertyConfig(
-                task_type="rescue", property_name="淹水深度", data_type="number",
-                disaster_types=["flood"],
-            ),
-            TaskPropertyConfig(
-                task_type="rescue", property_name="火場溫度", data_type="number",
-                disaster_types=["fire"],
-            ),
-            TaskPropertyConfig(
-                task_type="rescue", property_name="樓層", data_type="number",
-            ),
-        ])
+        db.add_all(
+            [
+                TaskPropertyConfig(
+                    task_type="rescue",
+                    property_name="淹水深度",
+                    data_type="number",
+                    disaster_types=["flood"],
+                ),
+                TaskPropertyConfig(
+                    task_type="rescue",
+                    property_name="火場溫度",
+                    data_type="number",
+                    disaster_types=["fire"],
+                ),
+                TaskPropertyConfig(
+                    task_type="rescue",
+                    property_name="樓層",
+                    data_type="number",
+                ),
+            ]
+        )
 
-    resp = await client.post("/graphql", json={
-        "query": TASK_CONFIGS, "variables": {"taskType": "rescue"},
-    }, headers=auth_header(token))
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": TASK_CONFIGS,
+            "variables": {"taskType": "rescue"},
+        },
+        headers=auth_header(token),
+    )
     names = [c["propertyName"] for c in resp.json()["data"]["taskPropertyConfigs"]]
 
     assert set(names) == {"淹水深度", "樓層"}
@@ -263,13 +304,11 @@ async def _field_viewer_token(redis) -> str:
             db.add(role)
             # The Permission rows already exist (seeded once by the module fixture); reuse
             # the dynamic_field.view one rather than inserting a second.
-            view_perm = (await db.execute(
-                select(Permission).where(Permission.key == Perm.FIELD_VIEW.value)
-            )).scalar_one()
+            view_perm = (
+                await db.execute(select(Permission).where(Permission.key == Perm.FIELD_VIEW.value))
+            ).scalar_one()
             await db.flush()
-            db.add(RolePermissionAssign(
-                role_uuid=role.uuid, permission_uuid=view_perm.uuid, scope="all"
-            ))
+            db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=view_perm.uuid, scope="all"))
         user = User(name=f"viewer_{uuid_mod.uuid4().hex[:8]}")
         db.add(user)
         await db.flush()
@@ -288,16 +327,25 @@ async def test_include_inactive_surfaces_retired_fields(client, coordinator_auth
     _, token = coordinator_auth
     await _seed_station_configs()
     async with test_db() as db:
-        db.add(StationPropertyConfig(
-            station_type="shelter", property_name="已停用欄位",
-            data_type="text", is_active=False,
-        ))
+        db.add(
+            StationPropertyConfig(
+                station_type="shelter",
+                property_name="已停用欄位",
+                data_type="text",
+                is_active=False,
+            )
+        )
 
     assert "已停用欄位" not in await _query_station_names(client, token)
 
-    resp = await client.post("/graphql", json={
-        "query": STATION_CONFIGS_INCLUDING_INACTIVE, "variables": {"stationType": "shelter"},
-    }, headers=auth_header(token))
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": STATION_CONFIGS_INCLUDING_INACTIVE,
+            "variables": {"stationType": "shelter"},
+        },
+        headers=auth_header(token),
+    )
     rows = {c["propertyName"]: c for c in resp.json()["data"]["stationPropertyConfigs"]}
 
     assert rows["已停用欄位"]["isActive"] is False
@@ -309,13 +357,23 @@ async def test_include_inactive_also_works_for_tasks(client, coordinator_auth):
     """The task-side query exposes the same management view."""
     _, token = coordinator_auth
     async with test_db() as db:
-        db.add(TaskPropertyConfig(
-            task_type="rescue", property_name="已停用欄位", data_type="text", is_active=False,
-        ))
+        db.add(
+            TaskPropertyConfig(
+                task_type="rescue",
+                property_name="已停用欄位",
+                data_type="text",
+                is_active=False,
+            )
+        )
 
-    resp = await client.post("/graphql", json={
-        "query": TASK_CONFIGS_INCLUDING_INACTIVE, "variables": {"taskType": "rescue"},
-    }, headers=auth_header(token))
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": TASK_CONFIGS_INCLUDING_INACTIVE,
+            "variables": {"taskType": "rescue"},
+        },
+        headers=auth_header(token),
+    )
 
     assert [c["propertyName"] for c in resp.json()["data"]["taskPropertyConfigs"]] == ["已停用欄位"]
 
@@ -325,19 +383,33 @@ async def test_include_inactive_requires_edit_permission(client, redis):
     """Seeing what someone retired goes with the right to retire it, not with form access."""
     token = await _field_viewer_token(redis)
     async with test_db() as db:
-        db.add(StationPropertyConfig(
-            station_type="shelter", property_name="已停用欄位",
-            data_type="text", is_active=False,
-        ))
+        db.add(
+            StationPropertyConfig(
+                station_type="shelter",
+                property_name="已停用欄位",
+                data_type="text",
+                is_active=False,
+            )
+        )
 
-    ok = await client.post("/graphql", json={
-        "query": STATION_CONFIGS, "variables": {"stationType": "shelter"},
-    }, headers=auth_header(token))
+    ok = await client.post(
+        "/graphql",
+        json={
+            "query": STATION_CONFIGS,
+            "variables": {"stationType": "shelter"},
+        },
+        headers=auth_header(token),
+    )
     assert ok.json().get("errors") is None, ok.json()
 
-    denied = await client.post("/graphql", json={
-        "query": STATION_CONFIGS_INCLUDING_INACTIVE, "variables": {"stationType": "shelter"},
-    }, headers=auth_header(token))
+    denied = await client.post(
+        "/graphql",
+        json={
+            "query": STATION_CONFIGS_INCLUDING_INACTIVE,
+            "variables": {"stationType": "shelter"},
+        },
+        headers=auth_header(token),
+    )
     assert denied.json().get("errors"), denied.json()
 
 
@@ -345,37 +417,49 @@ async def test_include_inactive_requires_edit_permission(client, redis):
 # enum_options survives an edit that does not mention it (ADR-228)
 # --------------------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_editing_the_label_keeps_the_stored_enum_options(client, coordinator_auth):
     """Setting a label on a single_select field must not blank the options the form renders."""
     _, token = coordinator_auth
     async with test_db() as db:
-        db.add(StationPropertyConfig(
-            station_type="all", property_name="crowd_level", data_type="single_select",
-            enum_options=["low", "medium", "high"], sort_order=3,
-        ))
+        db.add(
+            StationPropertyConfig(
+                station_type="all",
+                property_name="crowd_level",
+                data_type="single_select",
+                enum_options=["low", "medium", "high"],
+                sort_order=3,
+            )
+        )
 
-    resp = await client.post("/graphql", json={
-        "query": UPSERT_STATION, "variables": {
-            "stationType": "all",
-            "input": {"propertyName": "crowd_level", "dataType": "single_select", "label": "人潮"},
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": UPSERT_STATION,
+            "variables": {
+                "stationType": "all",
+                "input": {"propertyName": "crowd_level", "dataType": "single_select", "label": "人潮"},
+            },
         },
-    }, headers=auth_header(token))
+        headers=auth_header(token),
+    )
     cfg = resp.json()["data"]["upsertStationPropertyConfig"]
 
     assert cfg["label"] == "人潮"
     assert cfg["enumOptions"] == ["low", "medium", "high"]
     assert cfg["sortOrder"] == 3
     async with test_db() as db:
-        row = (await db.execute(select(StationPropertyConfig).where(
-            StationPropertyConfig.property_name == "crowd_level"))).scalar_one()
+        row = (
+            await db.execute(
+                select(StationPropertyConfig).where(StationPropertyConfig.property_name == "crowd_level")
+            )
+        ).scalar_one()
         assert row.enum_options == ["low", "medium", "high"]
 
 
 @pytest.mark.asyncio
-async def test_null_leaves_a_member_alone_and_the_empty_value_is_how_it_is_cleared(
-    client, coordinator_auth
-):
+async def test_null_leaves_a_member_alone_and_the_empty_value_is_how_it_is_cleared(client, coordinator_auth):
     """`null` never clears; the empty value does — `[]` for the list, `""` for text.
 
     The rule has to hold on every member at once, because `{propertyName, isActive: false}`
@@ -385,17 +469,29 @@ async def test_null_leaves_a_member_alone_and_the_empty_value_is_how_it_is_clear
     """
     _, token = coordinator_auth
     async with test_db() as db:
-        db.add(StationPropertyConfig(
-            station_type="all", property_name="crowd_level", data_type="single_select",
-            enum_options=["low", "high"], label="人潮", unit="人",
-        ))
+        db.add(
+            StationPropertyConfig(
+                station_type="all",
+                property_name="crowd_level",
+                data_type="single_select",
+                enum_options=["low", "high"],
+                label="人潮",
+                unit="人",
+            )
+        )
 
     async def _upsert(members: dict) -> dict:
-        resp = await client.post("/graphql", json={
-            "query": UPSERT_STATION, "variables": {
-                "stationType": "all", "input": {"propertyName": "crowd_level", **members},
+        resp = await client.post(
+            "/graphql",
+            json={
+                "query": UPSERT_STATION,
+                "variables": {
+                    "stationType": "all",
+                    "input": {"propertyName": "crowd_level", **members},
+                },
             },
-        }, headers=auth_header(token))
+            headers=auth_header(token),
+        )
         body = resp.json()
         assert body.get("errors") is None, body
         return body["data"]["upsertStationPropertyConfig"]
@@ -423,30 +519,41 @@ async def test_null_leaves_a_member_alone_and_the_empty_value_is_how_it_is_clear
 # The order is total, including across the 'all' bucket (ADR-227)
 # --------------------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_order_is_stable_when_all_and_own_bucket_rows_tie(client, coordinator_auth):
     """('all', X) and ('shelter', X) tie on (sort_order, property_name) — uuid breaks it."""
     _, token = coordinator_auth
     async with test_db() as db:
-        db.add_all([
-            StationPropertyConfig(station_type="all", property_name="crowd_level",
-                                  data_type="text", sort_order=0),
-            StationPropertyConfig(station_type="shelter", property_name="crowd_level",
-                                  data_type="text", sort_order=0),
-        ])
+        db.add_all(
+            [
+                StationPropertyConfig(
+                    station_type="all", property_name="crowd_level", data_type="text", sort_order=0
+                ),
+                StationPropertyConfig(
+                    station_type="shelter", property_name="crowd_level", data_type="text", sort_order=0
+                ),
+            ]
+        )
 
     async def _types() -> list[str]:
-        resp = await client.post("/graphql", json={
-            "query": STATION_CONFIGS_INCLUDING_INACTIVE, "variables": {"stationType": "shelter"},
-        }, headers=auth_header(token))
+        resp = await client.post(
+            "/graphql",
+            json={
+                "query": STATION_CONFIGS_INCLUDING_INACTIVE,
+                "variables": {"stationType": "shelter"},
+            },
+            headers=auth_header(token),
+        )
         return [c["stationType"] for c in resp.json()["data"]["stationPropertyConfigs"]]
 
     before = await _types()
     # Rewriting a tuple moves it to the end of the heap, which used to flip a seq scan's
     # output order. With uuid in the ORDER BY the result cannot move.
     async with test_db() as db:
-        await db.execute(text(
-            "UPDATE station_property_config SET data_type = 'text' WHERE station_type = :st"
-        ), {"st": before[0]})
+        await db.execute(
+            text("UPDATE station_property_config SET data_type = 'text' WHERE station_type = :st"),
+            {"st": before[0]},
+        )
 
     assert await _types() == before

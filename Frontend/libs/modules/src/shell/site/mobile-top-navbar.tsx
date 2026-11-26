@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { Suspense } from 'react';
@@ -63,7 +64,7 @@ export function SiteMobileTopNavBar({
         sx={{
           width: 40,
           height: 40,
-          borderRadius: '12px',
+          borderRadius: `${designTokens.radius.md}px`,
           color: palette.brandText,
           '&:hover': {
             bgcolor: palette.avatarHover,

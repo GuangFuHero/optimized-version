@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * An address line filled in from TGOS (the backend's `reverseGeocode` and `normalizeAddress`,
  * `Backend/Spec/027-address-normalization/frontend-guide.md`): the nearest 門牌 to the pin once it is
@@ -8,9 +9,10 @@
  * sending: a line with no lookup behind it is saved as unverified.
  */
 
-import type {
-  AddressLookupType,
-  NormalizeAddressQueryVariables,
+import {
+  roundLookupPoint,
+  type AddressLookupType,
+  type NormalizeAddressQueryVariables,
 } from '@rescue-frontend/data-access';
 
 /** The `full_address` column's width (backend `models/secondary_location.py`). */
@@ -75,30 +77,26 @@ export type AddressLookupAnswer = Pick<
 /** The variables of `NormalizeAddress`: a typed line, with the pin if there is one. */
 export type AddressCheck = NormalizeAddressQueryVariables;
 
-const round6 = (value: number) => Math.round(value * 1e6) / 1e6;
-
 /**
  * The pin as it is looked up: to six places (about 10 cm), so a pin dragged back to where it was is
  * the same lookup, not one that differs in the last digit.
  */
 export function lookupPoint(point: LatLng | null): LatLng | null {
-  return point ? { lat: round6(point.lat), lng: round6(point.lng) } : null;
+  return point ? roundLookupPoint(point) : null;
 }
 
 /**
- * A lookup as urql answers it. Any error is taken as no answer — too many lookups, a sign-in run
+ * A lookup as its query answers it. Any error is taken as no answer — too many lookups, a sign-in run
  * out, no network — since none of them stops the form from sending.
  */
 export function readAddressLookup(result: {
-  /** The answer on hand is for the pin or line asked about now, not the one before. */
-  current: boolean;
   fetching: boolean;
   error?: unknown;
   answer?: AddressLookupAnswer | null;
 }): AddressLookup {
-  const { current, fetching, error, answer } = result;
+  const { fetching, error, answer } = result;
 
-  if (!current || fetching) {
+  if (fetching) {
     return { status: 'looking' };
   }
   if (error) {

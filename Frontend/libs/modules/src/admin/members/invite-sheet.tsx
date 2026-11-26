@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import {
@@ -11,7 +12,8 @@ import {
 } from 'lucide-react';
 
 import { Box, Stack, Typography } from '@mui/material';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect } from 'react';
+import { useIsClient } from 'usehooks-ts';
 import { toast } from 'sonner';
 
 import {
@@ -24,6 +26,8 @@ import {
   copyPointShareUrl,
   createQrDataUrl,
   downloadQrPng,
+  lineMessageHref,
+  openShareTab,
 } from '../../point-share';
 import {
   currentInvite,
@@ -35,11 +39,6 @@ import { captionSx, formatDateTime } from './parts';
 import type { Team } from './roster';
 
 const { color, radius, shadow, typography } = designTokens;
-
-/** LINE's own web intent: opens the app's chat picker on a phone, LINE web on a desktop. */
-function lineShareUrl(text: string, url: string) {
-  return `https://line.me/R/msg/text/?${encodeURIComponent(`${text}\n${url}`)}`;
-}
 
 /**
  * 邀請成員 (the prototype's `InviteMemberModal`, 2026-10-20): opening it is creating the invite,
@@ -59,14 +58,15 @@ export function InviteSheet({
   siteUrl?: string;
   onClose: () => void;
 }) {
-  const [canShareNatively, setCanShareNatively] = useState(false);
-  const siteConfigured = useMemo(() => {
+  const isClient = useIsClient();
+  const canShareNatively = isClient && typeof navigator.share === 'function';
+  const siteConfigured = (() => {
     try {
       return Boolean(siteUrl && inviteUrl('check', siteUrl));
     } catch {
       return false;
     }
-  }, [siteUrl]);
+  })();
   const invites = useTeamInvites(team.uuid, { enabled: siteConfigured });
   const createInvite = useCreateTeamInvite();
   const existing = currentInvite(invites.data);
@@ -79,33 +79,30 @@ export function InviteSheet({
   }, [needsInvite, issueInvite, team.uuid]);
 
   const issued = existing ?? createInvite.data ?? null;
-  const invite = useMemo(() => {
+  const invite = (() => {
     if (!issued || !siteUrl) return null;
     try {
       return toTeamInvite(issued, siteUrl);
     } catch {
       return null;
     }
-  }, [issued, siteUrl]);
+  })();
   const loading =
     siteConfigured &&
     (invites.isPending || createInvite.isPending || (needsInvite && !issued));
-  const qr = useMemo(() => {
+  const qr = (() => {
     if (!invite) return null;
     try {
       return createQrDataUrl(invite.url);
     } catch {
       return null;
     }
-  }, [invite]);
+  })();
   const shareText = `邀請你加入「${team.name}」，${INVITE_VALID_HOURS} 小時內點連結或掃 QR，完成手機驗證後由管理員審核`;
   // File names stay ASCII: some Chrome builds save a Chinese one as 「download」.
   const fileName = `wanguard-invite-${team.uuid.slice(0, 8)}.png`;
 
   // After mount: the server has no `navigator`, and most desktops have no share sheet.
-  useEffect(() => {
-    setCanShareNatively(typeof navigator.share === 'function');
-  }, []);
 
   return (
     <Sheet
@@ -162,11 +159,7 @@ export function InviteSheet({
                 size="sm"
                 startIcon={<MessageCircle size={15} />}
                 onClick={() =>
-                  window.open(
-                    lineShareUrl(shareText, invite.url),
-                    '_blank',
-                    'noopener',
-                  )
+                  openShareTab(lineMessageHref(shareText, invite.url))
                 }
               >
                 分享到 LINE

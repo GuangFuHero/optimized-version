@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { signedInLandingAsync } from './signed-in-landing';
@@ -8,8 +9,8 @@ function fakeBackend(respond: () => Response) {
 
   vi.stubGlobal(
     'fetch',
-    async (_input: RequestInfo | URL, init?: RequestInit) => {
-      calls.push(new Headers(init?.headers));
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push(new Request(input, init).headers);
       return respond();
     },
   );

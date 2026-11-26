@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { describe, expect, it } from 'vitest';
 
 import { readReloadedTicket } from './use-ticket-needs';
@@ -12,7 +13,7 @@ const need = {
   myAssignment: null,
 };
 
-/** `GetTicket` as urql hands it over. The fragments' masking is only in the types. */
+/** `GetTicket` as the backend answers it. */
 function answered(ticket: Record<string, unknown> | null) {
   return { data: { ticket } as never };
 }

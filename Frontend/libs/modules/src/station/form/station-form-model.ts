@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import type {
   AdminStationQuery,
   CreateStationInput,
@@ -14,16 +15,20 @@ import { stationPoint } from '../station-point';
 
 export type StationLocationType = 'address' | 'pole';
 
-export interface StationFormState {
-  name: string;
-  type: string;
-  description: string;
-  opHour: string;
+type StationTextFields = {
+  [K in
+    | 'name'
+    | 'type'
+    | 'description'
+    | 'opHour'
+    | 'supplyStatus'
+    | 'contactName'
+    | 'contactPhone'
+    | 'contactEmail']-?: NonNullable<CreateStationInput[K]>;
+};
+
+export interface StationFormState extends StationTextFields {
   operationalStatus: OperationalStatus;
-  supplyStatus: string;
-  contactName: string;
-  contactPhone: string;
-  contactEmail: string;
   latitude: string;
   longitude: string;
   locationType: StationLocationType;

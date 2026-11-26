@@ -10,22 +10,21 @@ Revises: a3f8d1c9e2b5
 Create Date: 2026-07-20 00:00:00.000000
 
 """
+
 from collections.abc import Sequence
 
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = 'f1a2b3c4d5e6'
-down_revision: str | Sequence[str] | None = 'a3f8d1c9e2b5'
+revision: str = "f1a2b3c4d5e6"
+down_revision: str | Sequence[str] | None = "a3f8d1c9e2b5"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
     """Create the GIST index on work_zones.geometry (idempotent)."""
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_work_zones_geometry ON work_zones USING GIST (geometry)"
-    )
+    op.execute("CREATE INDEX IF NOT EXISTS ix_work_zones_geometry ON work_zones USING GIST (geometry)")
 
 
 def downgrade() -> None:

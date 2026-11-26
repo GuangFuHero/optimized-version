@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * 我的任務 › 我建立的: the requests the viewer filed, read for how far each got
  * — every status, a finished one included, since this is the record of what they asked for and

@@ -5,180 +5,188 @@ Revises: ecff746c61a6
 Create Date: 2026-04-09
 
 """
+
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-
 from alembic import op
 
-revision: str = 'a2a8e4d8c51d'
-down_revision: str | Sequence[str] | None = 'ecff746c61a6'
+revision: str = "a2a8e4d8c51d"
+down_revision: str | Sequence[str] | None = "ecff746c61a6"
 branch_labels = None
 depends_on = None
 
 
 def upgrade() -> None:
     # Drop old ticket sub-tables (order matters for FK constraints)
-    op.drop_table('supply_task_items')
-    op.drop_table('hr_task_specialties')
-    op.drop_table('request_photos')
-    op.drop_table('supply_requirements')
-    op.drop_table('hr_requirements')
+    op.drop_table("supply_task_items")
+    op.drop_table("hr_task_specialties")
+    op.drop_table("request_photos")
+    op.drop_table("supply_requirements")
+    op.drop_table("hr_requirements")
 
     # Add missing columns to stations
-    op.add_column('stations', sa.Column('child_station_uuid', sa.UUID(), nullable=True))
-    op.add_column('stations', sa.Column('type', sa.String(50), nullable=True))
-    op.add_column('stations', sa.Column('name', sa.String(), nullable=True))
-    op.add_column('stations', sa.Column('description', sa.String(), nullable=True))
-    op.add_column('stations', sa.Column('source', sa.String(50), nullable=True))
-    op.add_column('stations', sa.Column('visibility', sa.String(50), nullable=True))
-    op.add_column('stations', sa.Column('verification_status', sa.String(50), nullable=True))
-    op.add_column('stations', sa.Column('confidence_score', sa.Float(), nullable=True))
-    op.add_column('stations', sa.Column('is_duplicate', sa.Boolean(), nullable=False, server_default='false'))
-    op.add_column('stations', sa.Column('dedup_group_id', sa.String(), nullable=True))
-    op.add_column('stations', sa.Column('is_temporary', sa.Boolean(), nullable=False, server_default='false'))
-    op.add_column('stations', sa.Column('expires_at', sa.DateTime(timezone=True), nullable=True))
-    op.add_column('stations', sa.Column('is_official', sa.Boolean(), nullable=False, server_default='false'))
-    op.add_column('stations', sa.Column('priority_score', sa.Float(), nullable=True))
-    op.add_column('stations', sa.Column('updated_by', sa.UUID(), nullable=True))
-    op.create_foreign_key(None, 'stations', 'stations', ['child_station_uuid'], ['uuid'])
-    op.create_foreign_key(None, 'stations', 'users', ['updated_by'], ['uuid'])
+    op.add_column("stations", sa.Column("child_station_uuid", sa.UUID(), nullable=True))
+    op.add_column("stations", sa.Column("type", sa.String(50), nullable=True))
+    op.add_column("stations", sa.Column("name", sa.String(), nullable=True))
+    op.add_column("stations", sa.Column("description", sa.String(), nullable=True))
+    op.add_column("stations", sa.Column("source", sa.String(50), nullable=True))
+    op.add_column("stations", sa.Column("visibility", sa.String(50), nullable=True))
+    op.add_column("stations", sa.Column("verification_status", sa.String(50), nullable=True))
+    op.add_column("stations", sa.Column("confidence_score", sa.Float(), nullable=True))
+    op.add_column("stations", sa.Column("is_duplicate", sa.Boolean(), nullable=False, server_default="false"))
+    op.add_column("stations", sa.Column("dedup_group_id", sa.String(), nullable=True))
+    op.add_column("stations", sa.Column("is_temporary", sa.Boolean(), nullable=False, server_default="false"))
+    op.add_column("stations", sa.Column("expires_at", sa.DateTime(timezone=True), nullable=True))
+    op.add_column("stations", sa.Column("is_official", sa.Boolean(), nullable=False, server_default="false"))
+    op.add_column("stations", sa.Column("priority_score", sa.Float(), nullable=True))
+    op.add_column("stations", sa.Column("updated_by", sa.UUID(), nullable=True))
+    op.create_foreign_key(None, "stations", "stations", ["child_station_uuid"], ["uuid"])
+    op.create_foreign_key(None, "stations", "users", ["updated_by"], ["uuid"])
 
     # Add missing columns to tickets
-    op.add_column('tickets', sa.Column('task_type', sa.String(50), nullable=True))
-    op.add_column('tickets', sa.Column('visibility', sa.String(50), nullable=True))
-    op.add_column('tickets', sa.Column('verification_status', sa.String(50), nullable=True))
-    op.add_column('tickets', sa.Column('review_note', sa.String(), nullable=True))
+    op.add_column("tickets", sa.Column("task_type", sa.String(50), nullable=True))
+    op.add_column("tickets", sa.Column("visibility", sa.String(50), nullable=True))
+    op.add_column("tickets", sa.Column("verification_status", sa.String(50), nullable=True))
+    op.add_column("tickets", sa.Column("review_note", sa.String(), nullable=True))
 
     # Remove address columns from base_geometries
-    op.drop_column('base_geometries', 'county')
-    op.drop_column('base_geometries', 'city')
-    op.drop_column('base_geometries', 'lane')
-    op.drop_column('base_geometries', 'alley')
-    op.drop_column('base_geometries', 'no')
-    op.drop_column('base_geometries', 'floor')
-    op.drop_column('base_geometries', 'room')
+    op.drop_column("base_geometries", "county")
+    op.drop_column("base_geometries", "city")
+    op.drop_column("base_geometries", "lane")
+    op.drop_column("base_geometries", "alley")
+    op.drop_column("base_geometries", "no")
+    op.drop_column("base_geometries", "floor")
+    op.drop_column("base_geometries", "room")
 
     # Create photos (before secondary_locations due to pole_photo_uuid reference)
-    op.create_table('photos',
-        sa.Column('ref_uuid', sa.UUID(), nullable=False),
-        sa.Column('ref_type', sa.String(50), nullable=False),
-        sa.Column('url', sa.String(500), nullable=False),
-        sa.Column('created_by', sa.UUID(), nullable=False),
-        sa.Column('uuid', sa.UUID(), nullable=False),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-        sa.Column('delete_at', sa.DateTime(timezone=True), nullable=True),
-        sa.ForeignKeyConstraint(['created_by'], ['users.uuid']),
-        sa.PrimaryKeyConstraint('uuid'),
+    op.create_table(
+        "photos",
+        sa.Column("ref_uuid", sa.UUID(), nullable=False),
+        sa.Column("ref_type", sa.String(50), nullable=False),
+        sa.Column("url", sa.String(500), nullable=False),
+        sa.Column("created_by", sa.UUID(), nullable=False),
+        sa.Column("uuid", sa.UUID(), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column("delete_at", sa.DateTime(timezone=True), nullable=True),
+        sa.ForeignKeyConstraint(["created_by"], ["users.uuid"]),
+        sa.PrimaryKeyConstraint("uuid"),
     )
-    op.create_index('ix_photos_ref', 'photos', ['ref_type', 'ref_uuid'])
+    op.create_index("ix_photos_ref", "photos", ["ref_type", "ref_uuid"])
 
     # Create secondary_locations
-    op.create_table('secondary_locations',
-        sa.Column('geometry_uuid', sa.UUID(), nullable=False),
-        sa.Column('location_type', sa.String(50), nullable=False),
-        sa.Column('county', sa.String(50), nullable=True),
-        sa.Column('city', sa.String(50), nullable=True),
-        sa.Column('lane', sa.String(20), nullable=True),
-        sa.Column('alley', sa.String(20), nullable=True),
-        sa.Column('no', sa.String(20), nullable=True),
-        sa.Column('floor', sa.String(20), nullable=True),
-        sa.Column('room', sa.String(20), nullable=True),
-        sa.Column('pole_id', sa.String(50), nullable=True),
-        sa.Column('pole_type', sa.String(50), nullable=True),
-        sa.Column('pole_photo_uuid', sa.UUID(), nullable=True),
-        sa.Column('pole_note', sa.String(), nullable=True),
-        sa.Column('uuid', sa.UUID(), nullable=False),
-        sa.ForeignKeyConstraint(['geometry_uuid'], ['base_geometries.uuid']),
-        sa.ForeignKeyConstraint(['pole_photo_uuid'], ['photos.uuid'], ondelete='SET NULL'),
-        sa.PrimaryKeyConstraint('uuid'),
+    op.create_table(
+        "secondary_locations",
+        sa.Column("geometry_uuid", sa.UUID(), nullable=False),
+        sa.Column("location_type", sa.String(50), nullable=False),
+        sa.Column("county", sa.String(50), nullable=True),
+        sa.Column("city", sa.String(50), nullable=True),
+        sa.Column("lane", sa.String(20), nullable=True),
+        sa.Column("alley", sa.String(20), nullable=True),
+        sa.Column("no", sa.String(20), nullable=True),
+        sa.Column("floor", sa.String(20), nullable=True),
+        sa.Column("room", sa.String(20), nullable=True),
+        sa.Column("pole_id", sa.String(50), nullable=True),
+        sa.Column("pole_type", sa.String(50), nullable=True),
+        sa.Column("pole_photo_uuid", sa.UUID(), nullable=True),
+        sa.Column("pole_note", sa.String(), nullable=True),
+        sa.Column("uuid", sa.UUID(), nullable=False),
+        sa.ForeignKeyConstraint(["geometry_uuid"], ["base_geometries.uuid"]),
+        sa.ForeignKeyConstraint(["pole_photo_uuid"], ["photos.uuid"], ondelete="SET NULL"),
+        sa.PrimaryKeyConstraint("uuid"),
     )
 
     # Create routes
-    op.create_table('routes',
-        sa.Column('origin_uuid', sa.UUID(), nullable=False),
-        sa.Column('destination_uuid', sa.UUID(), nullable=False),
-        sa.Column('uuid', sa.UUID(), nullable=False),
-        sa.ForeignKeyConstraint(['origin_uuid'], ['base_geometries.uuid']),
-        sa.ForeignKeyConstraint(['destination_uuid'], ['base_geometries.uuid']),
-        sa.PrimaryKeyConstraint('uuid'),
+    op.create_table(
+        "routes",
+        sa.Column("origin_uuid", sa.UUID(), nullable=False),
+        sa.Column("destination_uuid", sa.UUID(), nullable=False),
+        sa.Column("uuid", sa.UUID(), nullable=False),
+        sa.ForeignKeyConstraint(["origin_uuid"], ["base_geometries.uuid"]),
+        sa.ForeignKeyConstraint(["destination_uuid"], ["base_geometries.uuid"]),
+        sa.PrimaryKeyConstraint("uuid"),
     )
 
     # Create ticket_tasks
-    op.create_table('ticket_tasks',
-        sa.Column('ticket_uuid', sa.UUID(), nullable=False),
-        sa.Column('route_uuid', sa.UUID(), nullable=True),
-        sa.Column('task_type', sa.String(50), nullable=False),
-        sa.Column('task_name', sa.String(200), nullable=False),
-        sa.Column('task_description', sa.String(), nullable=True),
-        sa.Column('quantity', sa.Integer(), nullable=True),
-        sa.Column('status', sa.String(50), nullable=False, server_default='pending'),
-        sa.Column('source', sa.String(50), nullable=False, server_default='user'),
-        sa.Column('progress_note', sa.String(), nullable=True),
-        sa.Column('confidence_score', sa.Float(), nullable=True),
-        sa.Column('is_duplicate', sa.Boolean(), nullable=False, server_default='false'),
-        sa.Column('dedup_group_id', sa.String(), nullable=True),
-        sa.Column('moderation_status', sa.String(50), nullable=False, server_default='pending_review'),
-        sa.Column('visibility', sa.String(50), nullable=False, server_default='public'),
-        sa.Column('review_note', sa.String(), nullable=True),
-        sa.Column('created_by', sa.UUID(), nullable=False),
-        sa.Column('uuid', sa.UUID(), nullable=False),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-        sa.Column('delete_at', sa.DateTime(timezone=True), nullable=True),
-        sa.ForeignKeyConstraint(['ticket_uuid'], ['tickets.uuid']),
-        sa.ForeignKeyConstraint(['route_uuid'], ['routes.uuid']),
-        sa.ForeignKeyConstraint(['created_by'], ['users.uuid']),
-        sa.PrimaryKeyConstraint('uuid'),
+    op.create_table(
+        "ticket_tasks",
+        sa.Column("ticket_uuid", sa.UUID(), nullable=False),
+        sa.Column("route_uuid", sa.UUID(), nullable=True),
+        sa.Column("task_type", sa.String(50), nullable=False),
+        sa.Column("task_name", sa.String(200), nullable=False),
+        sa.Column("task_description", sa.String(), nullable=True),
+        sa.Column("quantity", sa.Integer(), nullable=True),
+        sa.Column("status", sa.String(50), nullable=False, server_default="pending"),
+        sa.Column("source", sa.String(50), nullable=False, server_default="user"),
+        sa.Column("progress_note", sa.String(), nullable=True),
+        sa.Column("confidence_score", sa.Float(), nullable=True),
+        sa.Column("is_duplicate", sa.Boolean(), nullable=False, server_default="false"),
+        sa.Column("dedup_group_id", sa.String(), nullable=True),
+        sa.Column("moderation_status", sa.String(50), nullable=False, server_default="pending_review"),
+        sa.Column("visibility", sa.String(50), nullable=False, server_default="public"),
+        sa.Column("review_note", sa.String(), nullable=True),
+        sa.Column("created_by", sa.UUID(), nullable=False),
+        sa.Column("uuid", sa.UUID(), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column("delete_at", sa.DateTime(timezone=True), nullable=True),
+        sa.ForeignKeyConstraint(["ticket_uuid"], ["tickets.uuid"]),
+        sa.ForeignKeyConstraint(["route_uuid"], ["routes.uuid"]),
+        sa.ForeignKeyConstraint(["created_by"], ["users.uuid"]),
+        sa.PrimaryKeyConstraint("uuid"),
     )
 
     # Create task_properties
-    op.create_table('task_properties',
-        sa.Column('task_uuid', sa.UUID(), nullable=False),
-        sa.Column('property_name', sa.String(100), nullable=False),
-        sa.Column('property_value', sa.String(), nullable=False),
-        sa.Column('quantity', sa.Integer(), nullable=True),
-        sa.Column('status', sa.String(50), nullable=True),
-        sa.Column('comment', sa.String(), nullable=True),
-        sa.Column('uuid', sa.UUID(), nullable=False),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-        sa.Column('delete_at', sa.DateTime(timezone=True), nullable=True),
-        sa.ForeignKeyConstraint(['task_uuid'], ['ticket_tasks.uuid']),
-        sa.PrimaryKeyConstraint('uuid'),
+    op.create_table(
+        "task_properties",
+        sa.Column("task_uuid", sa.UUID(), nullable=False),
+        sa.Column("property_name", sa.String(100), nullable=False),
+        sa.Column("property_value", sa.String(), nullable=False),
+        sa.Column("quantity", sa.Integer(), nullable=True),
+        sa.Column("status", sa.String(50), nullable=True),
+        sa.Column("comment", sa.String(), nullable=True),
+        sa.Column("uuid", sa.UUID(), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column("delete_at", sa.DateTime(timezone=True), nullable=True),
+        sa.ForeignKeyConstraint(["task_uuid"], ["ticket_tasks.uuid"]),
+        sa.PrimaryKeyConstraint("uuid"),
     )
 
     # Create task_assignments
-    op.create_table('task_assignments',
-        sa.Column('task_uuid', sa.UUID(), nullable=False),
-        sa.Column('actor_uuid', sa.UUID(), nullable=False),
-        sa.Column('role', sa.String(100), nullable=True),
-        sa.Column('assigned_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-        sa.Column('uuid', sa.UUID(), nullable=False),
-        sa.ForeignKeyConstraint(['task_uuid'], ['ticket_tasks.uuid']),
-        sa.ForeignKeyConstraint(['actor_uuid'], ['users.uuid']),
-        sa.PrimaryKeyConstraint('uuid'),
+    op.create_table(
+        "task_assignments",
+        sa.Column("task_uuid", sa.UUID(), nullable=False),
+        sa.Column("actor_uuid", sa.UUID(), nullable=False),
+        sa.Column("role", sa.String(100), nullable=True),
+        sa.Column("assigned_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column("uuid", sa.UUID(), nullable=False),
+        sa.ForeignKeyConstraint(["task_uuid"], ["ticket_tasks.uuid"]),
+        sa.ForeignKeyConstraint(["actor_uuid"], ["users.uuid"]),
+        sa.PrimaryKeyConstraint("uuid"),
     )
 
     # Create station_property_config
-    op.create_table('station_property_config',
-        sa.Column('station_type', sa.String(50), nullable=False),
-        sa.Column('property_name', sa.String(100), nullable=False),
-        sa.Column('data_type', sa.String(50), nullable=False),
-        sa.Column('enum_options', sa.JSON(), nullable=True),
-        sa.Column('uuid', sa.UUID(), nullable=False),
-        sa.PrimaryKeyConstraint('uuid'),
+    op.create_table(
+        "station_property_config",
+        sa.Column("station_type", sa.String(50), nullable=False),
+        sa.Column("property_name", sa.String(100), nullable=False),
+        sa.Column("data_type", sa.String(50), nullable=False),
+        sa.Column("enum_options", sa.JSON(), nullable=True),
+        sa.Column("uuid", sa.UUID(), nullable=False),
+        sa.PrimaryKeyConstraint("uuid"),
     )
 
     # Create task_property_config
-    op.create_table('task_property_config',
-        sa.Column('task_type', sa.String(50), nullable=False),
-        sa.Column('property_name', sa.String(100), nullable=False),
-        sa.Column('data_type', sa.String(50), nullable=False),
-        sa.Column('enum_options', sa.JSON(), nullable=True),
-        sa.Column('uuid', sa.UUID(), nullable=False),
-        sa.PrimaryKeyConstraint('uuid'),
+    op.create_table(
+        "task_property_config",
+        sa.Column("task_type", sa.String(50), nullable=False),
+        sa.Column("property_name", sa.String(100), nullable=False),
+        sa.Column("data_type", sa.String(50), nullable=False),
+        sa.Column("enum_options", sa.JSON(), nullable=True),
+        sa.Column("uuid", sa.UUID(), nullable=False),
+        sa.PrimaryKeyConstraint("uuid"),
     )
 
     # Seed station_property_config
@@ -239,94 +247,99 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_table('task_property_config')
-    op.drop_table('station_property_config')
-    op.drop_table('task_assignments')
-    op.drop_table('task_properties')
-    op.drop_table('ticket_tasks')
-    op.drop_table('routes')
-    op.drop_table('secondary_locations')
-    op.drop_index('ix_photos_ref', table_name='photos')
-    op.drop_table('photos')
+    op.drop_table("task_property_config")
+    op.drop_table("station_property_config")
+    op.drop_table("task_assignments")
+    op.drop_table("task_properties")
+    op.drop_table("ticket_tasks")
+    op.drop_table("routes")
+    op.drop_table("secondary_locations")
+    op.drop_index("ix_photos_ref", table_name="photos")
+    op.drop_table("photos")
 
     # Restore address cols on base_geometries
-    op.add_column('base_geometries', sa.Column('county', sa.String(50), nullable=True))
-    op.add_column('base_geometries', sa.Column('city', sa.String(50), nullable=True))
-    op.add_column('base_geometries', sa.Column('lane', sa.String(20), nullable=True))
-    op.add_column('base_geometries', sa.Column('alley', sa.String(20), nullable=True))
-    op.add_column('base_geometries', sa.Column('no', sa.String(20), nullable=True))
-    op.add_column('base_geometries', sa.Column('floor', sa.String(20), nullable=True))
-    op.add_column('base_geometries', sa.Column('room', sa.String(20), nullable=True))
+    op.add_column("base_geometries", sa.Column("county", sa.String(50), nullable=True))
+    op.add_column("base_geometries", sa.Column("city", sa.String(50), nullable=True))
+    op.add_column("base_geometries", sa.Column("lane", sa.String(20), nullable=True))
+    op.add_column("base_geometries", sa.Column("alley", sa.String(20), nullable=True))
+    op.add_column("base_geometries", sa.Column("no", sa.String(20), nullable=True))
+    op.add_column("base_geometries", sa.Column("floor", sa.String(20), nullable=True))
+    op.add_column("base_geometries", sa.Column("room", sa.String(20), nullable=True))
 
     # Remove ticket columns
-    op.drop_column('tickets', 'review_note')
-    op.drop_column('tickets', 'verification_status')
-    op.drop_column('tickets', 'visibility')
-    op.drop_column('tickets', 'task_type')
+    op.drop_column("tickets", "review_note")
+    op.drop_column("tickets", "verification_status")
+    op.drop_column("tickets", "visibility")
+    op.drop_column("tickets", "task_type")
 
     # Remove station columns
-    op.drop_column('stations', 'updated_by')
-    op.drop_column('stations', 'priority_score')
-    op.drop_column('stations', 'is_official')
-    op.drop_column('stations', 'expires_at')
-    op.drop_column('stations', 'is_temporary')
-    op.drop_column('stations', 'dedup_group_id')
-    op.drop_column('stations', 'is_duplicate')
-    op.drop_column('stations', 'confidence_score')
-    op.drop_column('stations', 'verification_status')
-    op.drop_column('stations', 'visibility')
-    op.drop_column('stations', 'source')
-    op.drop_column('stations', 'description')
-    op.drop_column('stations', 'name')
-    op.drop_column('stations', 'type')
-    op.drop_column('stations', 'child_station_uuid')
+    op.drop_column("stations", "updated_by")
+    op.drop_column("stations", "priority_score")
+    op.drop_column("stations", "is_official")
+    op.drop_column("stations", "expires_at")
+    op.drop_column("stations", "is_temporary")
+    op.drop_column("stations", "dedup_group_id")
+    op.drop_column("stations", "is_duplicate")
+    op.drop_column("stations", "confidence_score")
+    op.drop_column("stations", "verification_status")
+    op.drop_column("stations", "visibility")
+    op.drop_column("stations", "source")
+    op.drop_column("stations", "description")
+    op.drop_column("stations", "name")
+    op.drop_column("stations", "type")
+    op.drop_column("stations", "child_station_uuid")
 
     # Recreate old tables
-    op.create_table('hr_requirements',
-        sa.Column('uuid', sa.UUID(), nullable=False),
-        sa.ForeignKeyConstraint(['uuid'], ['tickets.uuid']),
-        sa.PrimaryKeyConstraint('uuid'),
+    op.create_table(
+        "hr_requirements",
+        sa.Column("uuid", sa.UUID(), nullable=False),
+        sa.ForeignKeyConstraint(["uuid"], ["tickets.uuid"]),
+        sa.PrimaryKeyConstraint("uuid"),
     )
-    op.create_table('supply_requirements',
-        sa.Column('uuid', sa.UUID(), nullable=False),
-        sa.ForeignKeyConstraint(['uuid'], ['tickets.uuid']),
-        sa.PrimaryKeyConstraint('uuid'),
+    op.create_table(
+        "supply_requirements",
+        sa.Column("uuid", sa.UUID(), nullable=False),
+        sa.ForeignKeyConstraint(["uuid"], ["tickets.uuid"]),
+        sa.PrimaryKeyConstraint("uuid"),
     )
-    op.create_table('hr_task_specialties',
-        sa.Column('req_uuid', sa.UUID(), nullable=False),
-        sa.Column('specialty_description', sa.String(), nullable=False),
-        sa.Column('quantity', sa.Integer(), nullable=False),
-        sa.Column('status', sa.String(50), nullable=False),
-        sa.Column('uuid', sa.UUID(), nullable=False),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-        sa.Column('delete_at', sa.DateTime(timezone=True), nullable=True),
-        sa.ForeignKeyConstraint(['req_uuid'], ['hr_requirements.uuid']),
-        sa.PrimaryKeyConstraint('uuid'),
+    op.create_table(
+        "hr_task_specialties",
+        sa.Column("req_uuid", sa.UUID(), nullable=False),
+        sa.Column("specialty_description", sa.String(), nullable=False),
+        sa.Column("quantity", sa.Integer(), nullable=False),
+        sa.Column("status", sa.String(50), nullable=False),
+        sa.Column("uuid", sa.UUID(), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column("delete_at", sa.DateTime(timezone=True), nullable=True),
+        sa.ForeignKeyConstraint(["req_uuid"], ["hr_requirements.uuid"]),
+        sa.PrimaryKeyConstraint("uuid"),
     )
-    op.create_table('supply_task_items',
-        sa.Column('req_uuid', sa.UUID(), nullable=False),
-        sa.Column('item_name', sa.String(100), nullable=False),
-        sa.Column('item_description', sa.String(), nullable=True),
-        sa.Column('quantity', sa.Integer(), nullable=False),
-        sa.Column('status', sa.String(50), nullable=False),
-        sa.Column('suggestion', sa.String(), nullable=True),
-        sa.Column('uuid', sa.UUID(), nullable=False),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-        sa.Column('delete_at', sa.DateTime(timezone=True), nullable=True),
-        sa.ForeignKeyConstraint(['req_uuid'], ['supply_requirements.uuid']),
-        sa.PrimaryKeyConstraint('uuid'),
+    op.create_table(
+        "supply_task_items",
+        sa.Column("req_uuid", sa.UUID(), nullable=False),
+        sa.Column("item_name", sa.String(100), nullable=False),
+        sa.Column("item_description", sa.String(), nullable=True),
+        sa.Column("quantity", sa.Integer(), nullable=False),
+        sa.Column("status", sa.String(50), nullable=False),
+        sa.Column("suggestion", sa.String(), nullable=True),
+        sa.Column("uuid", sa.UUID(), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column("delete_at", sa.DateTime(timezone=True), nullable=True),
+        sa.ForeignKeyConstraint(["req_uuid"], ["supply_requirements.uuid"]),
+        sa.PrimaryKeyConstraint("uuid"),
     )
-    op.create_table('request_photos',
-        sa.Column('req_uuid', sa.UUID(), nullable=False),
-        sa.Column('url', sa.String(500), nullable=False),
-        sa.Column('created_by', sa.UUID(), nullable=False),
-        sa.Column('uuid', sa.UUID(), nullable=False),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-        sa.Column('delete_at', sa.DateTime(timezone=True), nullable=True),
-        sa.ForeignKeyConstraint(['req_uuid'], ['tickets.uuid']),
-        sa.ForeignKeyConstraint(['created_by'], ['users.uuid']),
-        sa.PrimaryKeyConstraint('uuid'),
+    op.create_table(
+        "request_photos",
+        sa.Column("req_uuid", sa.UUID(), nullable=False),
+        sa.Column("url", sa.String(500), nullable=False),
+        sa.Column("created_by", sa.UUID(), nullable=False),
+        sa.Column("uuid", sa.UUID(), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column("delete_at", sa.DateTime(timezone=True), nullable=True),
+        sa.ForeignKeyConstraint(["req_uuid"], ["tickets.uuid"]),
+        sa.ForeignKeyConstraint(["created_by"], ["users.uuid"]),
+        sa.PrimaryKeyConstraint("uuid"),
     )

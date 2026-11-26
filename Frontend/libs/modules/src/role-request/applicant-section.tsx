@@ -1,9 +1,12 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
-import { Box, Button, Stack, TextField, Typography } from '@mui/material';
-import { useState, type ReactNode } from 'react';
+import { Box, Stack, TextField, Typography } from '@mui/material';
+import type { ReactNode } from 'react';
+import { useForm, useStore } from '@tanstack/react-form';
+import type { components } from '@rescue-frontend/data-access/openapi';
 
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import { Button, designTokens, displayTextSize } from '@rescue-frontend/ui';
 
 import { SiteBadge } from '../shell/site/site-badge';
 import { displayPhone, type ApplicantAccount } from './applicant';
@@ -124,8 +127,25 @@ function PhoneSteps({
   phoneError: string | null;
 }) {
   const { stage, phone, busy, error, notice } = verification;
-  const [password, setPassword] = useState('');
-  const [code, setCode] = useState('');
+  const proof = useForm({
+    defaultValues: { password: '', code: '' } satisfies {
+      password: NonNullable<components['schemas']['StepUp']['password']>;
+      code: components['schemas']['VerifyContactRequest']['code'];
+    },
+    onSubmit: ({ value, formApi }): Promise<void> | void => {
+      switch (stage.kind) {
+        case 'password':
+          return verification.submitPassword(value.password);
+        case 'old-code':
+          verification.submitOldCode(value.code);
+          formApi.setFieldValue('code', '');
+          return;
+        case 'code':
+          return verification.verify(value.code);
+      }
+    },
+  });
+  const { password, code } = useStore(proof.store, (state) => state.values);
 
   if (stage.kind === 'verified') {
     return <VerifiedPhone phone={stage.phone} />;
@@ -143,7 +163,7 @@ function PhoneSteps({
           fullWidth
           value={phone}
           onChange={(event) => {
-            setCode('');
+            proof.setFieldValue('code', '');
             verification.changePhone(event.target.value);
           }}
           placeholder="0912345678"
@@ -155,7 +175,7 @@ function PhoneSteps({
         {/* Away while a proof is asked for: that step has a button of its own. */}
         {proving ? null : (
           <Button
-            variant="outlined"
+            variant="outline"
             onClick={() =>
               codeSent ? void verification.resend() : verification.send()
             }
@@ -180,26 +200,31 @@ function PhoneSteps({
               fullWidth
               autoFocus
               value={password}
-              onChange={(event) => setPassword(event.target.value)}
+              onChange={(event) =>
+                proof.setFieldValue('password', event.target.value)
+              }
               slotProps={{ htmlInput: { autoComplete: 'current-password' } }}
             />
           }
           action="確認並傳送"
           disabled={busy || !password}
-          onAction={() => void verification.submitPassword(password)}
+          onAction={() => void proof.handleSubmit()}
         />
       ) : null}
 
       {stage.kind === 'old-code' ? (
         <StepRow
           hint={stage.message}
-          input={<CodeField value={code} onChange={setCode} label="驗證碼" />}
+          input={
+            <CodeField
+              value={code}
+              onChange={(value) => proof.setFieldValue('code', value)}
+              label="驗證碼"
+            />
+          }
           action="確認"
           disabled={busy || code.length !== 6}
-          onAction={() => {
-            verification.submitOldCode(code);
-            setCode('');
-          }}
+          onAction={() => void proof.handleSubmit()}
         />
       ) : null}
 
@@ -207,11 +232,15 @@ function PhoneSteps({
         <StepRow
           hint={`驗證碼已傳到 ${displayPhone(stage.phone)}，10 分鐘內有效。`}
           input={
-            <CodeField value={code} onChange={setCode} label="簡訊驗證碼" />
+            <CodeField
+              value={code}
+              onChange={(value) => proof.setFieldValue('code', value)}
+              label="簡訊驗證碼"
+            />
           }
           action="確認"
           disabled={busy || code.length !== 6}
-          onAction={() => void verification.verify(code)}
+          onAction={() => void proof.handleSubmit()}
         />
       ) : null}
 
@@ -255,7 +284,7 @@ function StepRow({
       <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
         {input}
         <Button
-          variant="contained"
+          variant="primary"
           onClick={onAction}
           disabled={disabled}
           sx={{ flexShrink: 0, height: 56 }}

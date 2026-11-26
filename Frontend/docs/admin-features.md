@@ -27,15 +27,14 @@ Admin 使用獨立的 Next.js 16 app `apps/admin`，預設 port 為 3001。頁�
 - `admin/field-configuration`
 - `admin/invite-side-sheet`
 - `admin/members`（正式團隊與成員權限頁）
-- `admin/user/user-list`
 - `shell/admin/*`
 - `station/admin/station-create`
 - `station/admin/station-detail`
 - `station/admin/station-drawer`
 - `station/admin/station-management`
 - `ticket/admin/ticket-detail`
-- `ticket/admin/ticket-list`
-- `ticket/admin/ticket-report`
+- `ticket/admin/ticket-board`
+- `ticket/admin/space`
 - `map/*` 與 `map/components/*`
 
 其中有些命名帶 `admin`，有些已被提升成 capability-first 結構，例如地圖核心能力在 `map/*`，而不是 `admin/map/*`。
@@ -167,7 +166,7 @@ Admin 使用獨立的 Next.js 16 app `apps/admin`，預設 port 為 3001。頁�
 
 ## 目前缺口
 
-部分列表與管理頁仍使用 demo 資料或 placeholder。`@rescue-frontend/data-access/admin` 已提供 TanStack Query hooks，REST 使用 generated OpenAPI types，GraphQL 使用 urql 與 The Guild typed documents。後續頁面可直接串接這些 hooks；一般錯誤由共用 query client callback 顯示 error toast。
+部分列表與管理頁仍使用 demo 資料或 placeholder。`@rescue-frontend/data-access/admin` 已提供 TanStack Query hooks，REST 使用 generated OpenAPI types，GraphQL 使用 The Guild typed documents。後續頁面可直接串接這些 hooks；一般錯誤由共用 query client callback 顯示 error toast。
 
 頁面與 shell 的 optional reads 必須用對應的 capability 控制 query 的 `enabled`，取得權限前保持 `false`，失去權限時隱藏 cached data。任一 active admin query 的 permission 403 都會讓 `AdminShell` 在目前 URL 顯示整頁 403；mutation failures 仍走原本的 error handling。
 
@@ -177,5 +176,5 @@ Admin 使用獨立的 Next.js 16 app `apps/admin`，預設 port 為 3001。頁�
 
 1. 先看 `apps/admin/src/app/(portal)/layout.tsx` 與 [admin README](../apps/admin/README.md)
 2. 再看 `libs/modules/src/shell/admin/*`
-3. 再看 `station/admin/*`、`ticket/admin/*`、`admin/user/*`
+3. 再看 `station/admin/*`、`ticket/admin/*`、`admin/members/*`
 4. 地圖相關則補看 `libs/modules/src/map/*`

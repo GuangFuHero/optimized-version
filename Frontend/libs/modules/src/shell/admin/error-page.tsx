@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { Box, Stack, Typography } from '@mui/material';
@@ -75,7 +76,7 @@ export function AdminErrorPage({ code }: { code: '404' | '403' }) {
           component="h2"
           sx={{
             ...typography.heading[700],
-            fontSize: 28,
+            fontSize: designTokens.typography.fontSize[28],
             lineHeight: 1.3,
             mb: '12px',
           }}
@@ -176,7 +177,7 @@ export function AdminErrorPage({ code }: { code: '404' | '403' }) {
               <Typography
                 sx={{
                   ...typography.body[300],
-                  fontSize: 13,
+                  fontSize: designTokens.typography.fontSize[13],
                   lineHeight: 1.5,
                   color: color.fg.neutral.muted,
                 }}

@@ -1,7 +1,8 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { Box, ButtonBase, Stack, Typography } from '@mui/material';
-import { useId, useMemo } from 'react';
+import { useId } from 'react';
 
 import {
   Button,
@@ -14,7 +15,7 @@ import type { RescueMapMarkerItem } from '../map/types';
 import { resolveNeedClaim } from '../ticket/needs/need-claim';
 import { NeedClaimButton } from '../ticket/needs/need-claim-button';
 import { useNeedClaim } from '../ticket/needs/need-claim-provider';
-import { needTypeIcon } from '../ticket/needs/need-parts';
+import { NeedTypeIcon } from '../ticket/needs/need-parts';
 import { formatTicketStatusLabel } from '../ticket/status';
 import {
   formatTicketRowTime,
@@ -84,7 +85,7 @@ function TicketRow({
     .filter(Boolean)
     .join('　·　');
   const quick = quickClaimNeed(ticket, isAuthenticated);
-  const KindIcon = needTypeIcon(marker.ticketMeta?.taskType ?? '');
+
   const textColor = summary.closed
     ? color.fg.neutral.subtle
     : color.fg.neutral.default;
@@ -126,16 +127,17 @@ function TicketRow({
           sx={{
             width: 3,
             flexShrink: 0,
-            borderRadius: '2px',
+            borderRadius: `${designTokens.radius[2]}px`,
             bgcolor: priorityStripe(ticket),
           }}
         />
         {showKind ? (
-          <KindIcon
+          <NeedTypeIcon
+            taskType={marker.ticketMeta?.taskType ?? ''}
             sx={{
               flexShrink: 0,
               mt: '2px',
-              fontSize: 16,
+              fontSize: designTokens.iconSize[16],
               color: summary.closed
                 ? color.fg.neutral.muted
                 : color.fg.neutral.subtle,
@@ -327,13 +329,13 @@ export function FloorSection({
   const hot = summary.rescueOpen > 0;
   // Decided floor by floor: one floor of rented rooms has them, the rest may not.
   const showUnit = tickets.some((ticket) => ticketUnitLabel(ticket) !== null);
-  const shown = useMemo(() => {
+  const shown = (() => {
     const sorted = sortTickets(tickets);
 
     return showClosed
       ? sorted
       : sorted.filter((ticket) => !isClosedTicket(ticket));
-  }, [showClosed, tickets]);
+  })();
   const ChevronIcon = open ? Icons.chevronDown : Icons.chevronRight;
   const bodyText = {
     fontSize: displayTextSize[13],
@@ -382,7 +384,12 @@ export function FloorSection({
         }}
       >
         {onToggle ? (
-          <ChevronIcon sx={{ fontSize: 18, color: color.fg.neutral.muted }} />
+          <ChevronIcon
+            sx={{
+              fontSize: designTokens.iconSize.md,
+              color: color.fg.neutral.muted,
+            }}
+          />
         ) : (
           <Box component="span" sx={{ width: 18, flexShrink: 0 }} />
         )}

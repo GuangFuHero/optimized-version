@@ -1,8 +1,9 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { Box, Typography } from '@mui/material';
 
-import { displayTextSize } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
 import { useStationDetailColorScheme } from './constants';
 import { StationDetailIconSlot } from './station-detail-primitives';
@@ -29,7 +30,7 @@ export function StationResourceTile({ item }: StationResourceTileProps) {
         alignItems: 'center',
         gap: 1,
         p: '9px',
-        borderRadius: '32px',
+        borderRadius: `${designTokens.radius.xl}px`,
         bgcolor: stationDetailPalette.cardSurface,
         border: `1px solid ${stationDetailPalette.cardBorder}`,
       }}

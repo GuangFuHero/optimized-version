@@ -34,11 +34,17 @@ def _auth_sources() -> list[pathlib.Path]:
 async def test_register_conflict_carries_identifier_taken(client, capture_email):
     """A taken identifier answers 409 with the code the register form branches on."""
     email = f"code_{uuid.uuid4().hex[:6]}@t.local"
-    payload = {"type": "email", "value": email, "password": "pw123456", "salt_frontend": "abc",
-               "name": "Test User"}
+    payload = {
+        "type": "email",
+        "value": email,
+        "password": "pw123456",
+        "salt_frontend": "abc",
+        "name": "Test User",
+    }
     await client.post("/api/v1/auth/register", json=payload)
-    await client.post("/api/v1/auth/verify",
-                      json={"type": "email", "value": email, "code": capture_email.last_code})
+    await client.post(
+        "/api/v1/auth/verify", json={"type": "email", "value": email, "code": capture_email.last_code}
+    )
 
     res = await client.post("/api/v1/auth/register", json=payload)
 

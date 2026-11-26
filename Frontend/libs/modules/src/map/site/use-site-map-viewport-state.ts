@@ -1,55 +1,15 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
-import { createContext, useContext, useSyncExternalStore } from 'react';
-
-import type { SiteRouteState } from '../../route/types';
-
-export type SiteMapViewportState = Pick<SiteRouteState, 'position' | 'bbox'>;
-
-export interface SiteMapViewportStore {
-  getSnapshot: () => SiteMapViewportState;
-  setState: (next: SiteMapViewportState) => void;
-  subscribe: (listener: () => void) => () => void;
-}
-
-export function createSiteMapViewportStore(
-  initialState: SiteMapViewportState,
-): SiteMapViewportStore {
-  let snapshot = initialState;
-  const listeners = new Set<() => void>();
-
-  return {
-    getSnapshot: () => snapshot,
-    setState: (next) => {
-      const unchanged =
-        snapshot.position?.zoom === next.position?.zoom &&
-        snapshot.position?.center[0] === next.position?.center[0] &&
-        snapshot.position?.center[1] === next.position?.center[1] &&
-        snapshot.bbox?.[0] === next.bbox?.[0] &&
-        snapshot.bbox?.[1] === next.bbox?.[1] &&
-        snapshot.bbox?.[2] === next.bbox?.[2] &&
-        snapshot.bbox?.[3] === next.bbox?.[3];
-
-      if (unchanged) {
-        return;
-      }
-
-      snapshot = next;
-      listeners.forEach((listener) => listener());
-    },
-    subscribe: (listener) => {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-      };
-    },
-  };
-}
+import { createContext, useContext } from 'react';
+import { useStore } from 'zustand';
+import type { MapViewportStore } from '../viewport-store';
+import type { RescueMapViewportStoreSnapshot } from '../types';
 
 export const SiteMapViewportStoreContext =
-  createContext<SiteMapViewportStore | null>(null);
+  createContext<MapViewportStore | null>(null);
 
-export function useSiteMapViewportStore(): SiteMapViewportStore {
+export function useSiteMapViewportStore(): MapViewportStore {
   const context = useContext(SiteMapViewportStoreContext);
 
   if (!context) {
@@ -61,12 +21,8 @@ export function useSiteMapViewportStore(): SiteMapViewportStore {
   return context;
 }
 
-export function useSiteMapViewportState(): SiteMapViewportState {
+export function useSiteMapViewportState(): RescueMapViewportStoreSnapshot {
   const store = useSiteMapViewportStore();
 
-  return useSyncExternalStore(
-    store.subscribe,
-    store.getSnapshot,
-    store.getSnapshot,
-  );
+  return useStore(store);
 }

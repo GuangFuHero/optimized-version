@@ -1,14 +1,28 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import L from 'leaflet';
+import { useEventCallback } from 'usehooks-ts';
+import { useEffect, useMemo, useRef, type ReactNode } from 'react';
 import {
-  useEffect,
-  useRef,
-  useState,
-  useSyncExternalStore,
-  type ReactNode,
-} from 'react';
-import { createPortal } from 'react-dom';
+  DraftPoint,
+  MapContainer,
+  MarkerLayer,
+  PolygonLayer,
+  TileLayer,
+  type MarkerAppearance,
+  type MarkerClustering,
+  type MarkerLayerHandle,
+  type PolygonLabel,
+  type PolygonLayerHandle,
+  observeMapViewport,
+  readMapViewport,
+  type MapViewport,
+  PolygonDraw,
+  PolygonEditor,
+  useMap,
+} from '@rescue-frontend/leaflet';
+import { createStore, useStore } from 'zustand';
 
 import {
   areaKind,
@@ -17,9 +31,6 @@ import {
   areaPopupLines,
   areaSignature,
   areaTitle,
-  largestAreasFirst,
-  placeAreaLabels,
-  type ScreenBox,
 } from '../../areas';
 import { PUBLIC_ZONE_COLORS } from '../../constants';
 import {
@@ -65,6 +76,7 @@ interface RescueMapCanvasProps {
   editArea?: RescueMapEditArea | null;
   cursor?: string;
   disableDoubleClickZoom?: boolean;
+  editingArea?: boolean;
   /** Draws 責任區 and 標示區 as the admin 互助地圖 does; the site's own look when unset. */
   adminAreaStyle?: boolean;
   onMapClick?: (position: [number, number]) => void;
@@ -96,7 +108,7 @@ interface RescueMapCanvasProps {
  * The crosshair of a picked point: 26px to see, 44px to grab with a gloved thumb (prototype
  * `createCrosshairIcon`, `site-map.jsx:73-95`). White under the stroke, to read on any basemap.
  */
-function createDraftPointIcon(): L.DivIcon {
+function createDraftPointIcon(): L.DivIconOptions {
   const stroke = color.bg.primary.default;
   const halo = color.bg.neutral.default;
   const ring = (colour: string, width: number) =>
@@ -114,64 +126,19 @@ function createDraftPointIcon(): L.DivIcon {
       )
       .join('');
 
-  return L.divIcon({
+  return {
     className: '',
     html: `<div style="cursor:grab;line-height:0"><svg width="44" height="44" viewBox="0 0 44 44" aria-hidden="true">${ring(halo, 4)}${ticks(halo, 4)}${ring(stroke, 2)}${ticks(stroke, 2)}</svg></div>`,
     iconSize: [44, 44],
     iconAnchor: [22, 22],
-  });
+  };
 }
 
 /** moveend／zoomend 後延遲寫回路由狀態，把連續手勢合併成一次提交。 */
 const VIEWPORT_SYNC_DEBOUNCE_MS = 250;
-/** Adds `L.markerClusterGroup` to the global `L` that `leaflet` set, which is why it loads after it. */
-const MARKER_CLUSTER_MODULE_ID = 'leaflet.markercluster';
-const EMPTY_VIEWPORT_STATE: RescueMapViewportStoreSnapshot = {};
-
-interface MarkerHandle {
-  marker: L.Marker;
-  item: RescueMapMarkerItem;
-  iconSignature: string;
-}
-
-interface AreaLabel {
-  shape: L.Polygon;
-  marker: L.Marker;
-  element: HTMLElement;
-  hazard: boolean;
-}
-
-interface AreaHandle {
-  layerGroup: L.FeatureGroup;
-  labels: AreaLabel[];
-  signature: string;
-}
-
-interface MarkerClusterGroupLike extends L.LayerGroup {
-  addLayer(layer: L.Layer): this;
-  removeLayer(layer: L.Layer): this;
-}
-
-interface MarkerClusterOptions {
-  animate: boolean;
-  animateAddingMarkers: boolean;
-  chunkedLoading: boolean;
-  showCoverageOnHover: boolean;
-  spiderfyOnMaxZoom: boolean;
-  disableClusteringAtZoom?: number;
-  iconCreateFunction: (cluster: {
-    getChildCount: () => number;
-    getAllChildMarkers: () => Array<L.Marker & { __rescueDetailType?: string }>;
-  }) => L.DivIcon;
-}
-
-type MarkerClusterFactory = (
-  options: MarkerClusterOptions,
-) => MarkerClusterGroupLike;
-
-type MarkerClusterConstructor = new (
-  options: MarkerClusterOptions,
-) => MarkerClusterGroupLike;
+const EMPTY_VIEWPORT_STORE = createStore<RescueMapViewportStoreSnapshot>()(
+  () => ({}),
+);
 
 /**
  * 畫成圖釘的：站點與精確座標的任務單。概略座標的單（`locationCell`）改由格子層畫 ——
@@ -222,22 +189,23 @@ function getMarkerIconSignature(item: RescueMapMarkerItem): string {
   ].join('|');
 }
 
-/** Binds, rebinds or drops the opt-in hover tooltip (`item.tooltip`). */
-function syncMarkerTooltip(marker: L.Marker, item: RescueMapMarkerItem) {
-  const html = createMapMarkerTooltipHtml(item);
-
-  if (!html) {
-    marker.unbindTooltip();
-    return;
-  }
-
-  marker.unbindTooltip();
-  marker.bindTooltip(html, {
-    direction: 'top',
-    offset: [0, -18],
-    opacity: 1,
-    className: 'map-marker-tooltip',
-  });
+function getMarkerAppearance(item: RescueMapMarkerItem): MarkerAppearance {
+  const content = createMapMarkerTooltipHtml(item);
+  return {
+    icon: createMapMarkerIcon(item, L),
+    zIndexOffset: getMarkerZIndexOffset(item),
+    tooltip: content
+      ? {
+          content,
+          options: {
+            direction: 'top',
+            offset: [0, -18],
+            opacity: 1,
+            className: 'map-marker-tooltip',
+          },
+        }
+      : undefined,
+  };
 }
 
 /**
@@ -254,10 +222,10 @@ function getMarkerZIndexOffset(item: RescueMapMarkerItem): number {
 }
 
 function resolveClusterTone(
-  markers: Array<L.Marker & { __rescueDetailType?: string }>,
+  markers: readonly RescueMapMarkerItem[],
 ): 'station' | 'ticket' {
   const stationCount = markers.filter(
-    (marker) => marker.__rescueDetailType === 'station',
+    (marker) => marker.detailType === 'station',
   ).length;
 
   if (stationCount === 0) {
@@ -353,6 +321,15 @@ function getHazardZoneStyle(area: RescueMapArea): L.PathOptions {
     : HAZARD_ZONE_STYLE;
 }
 
+function getAdminHazardZoneStyle(area: RescueMapArea): L.PathOptions {
+  return {
+    ...HAZARD_ZONE_STYLE,
+    weight: area.highlighted ? 3.5 : 2.5,
+    opacity: area.dimmed ? 0.5 : HAZARD_ZONE_STYLE.opacity,
+    fillOpacity: area.dimmed ? 0.3 : HAZARD_ZONE_STYLE.fillOpacity,
+  };
+}
+
 /**
  * 責任區 and 標示區: a light fill in their kind's colour (prototype `site-map.jsx`, 2026-10-23). A
  * 標示區 the public cannot see (admin only) is drawn dashed and fainter, so an admin can tell it apart.
@@ -421,345 +398,38 @@ function createAreaPopupContent(lines: readonly string[]) {
   return content;
 }
 
-/**
- * The label every area wears, its kind and name (prototype ZONE-STYLE-102), the name cut at 10
- * characters (ZONE-NAME-101). Under the pins, which must stay tappable (prototype
- * `zIndexOffset: -1000`). A tap on it, and only on it, opens the area's popup (prototype
- * ZONE-CLICK-101) — when the popup has more to tell than the label: the teams, a note, or the whole
- * name. Either way the tap stays off the map, as in the prototype.
- */
-function createAreaLabel(
-  shape: L.Polygon,
-  area: RescueMapArea | RescueMapPublicZone,
-): AreaLabel {
+function getAreaLabel(area: RescueMapArea | RescueMapPublicZone): PolygonLabel {
   const hazard = areaKind(area) === 'hazardous_zone';
-  const element = document.createElement('div');
-  element.className = hazard
-    ? 'map-area-label map-area-label--hazard'
-    : 'map-area-label';
-  element.textContent = areaLabelText(area);
-
-  if (element.textContent !== areaTitle(area)) {
-    element.title = areaTitle(area);
-  }
-
-  const marker = L.marker(shape.getBounds().getCenter(), {
-    icon: L.divIcon({
-      className: 'map-area-label-anchor',
-      html: element,
-      iconSize: [0, 0],
-    }),
-    keyboard: false,
-    zIndexOffset: -1000,
-  });
-
-  if (areaLabelOpensPopup(area)) {
-    marker.bindPopup(createAreaPopupContent(areaPopupLines(area)), {
-      className: 'map-area-popup',
-      maxWidth: 260,
-    });
-  } else {
-    marker.on('click', L.DomEvent.stop);
-  }
-
-  return { shape, marker, element, hazard };
+  const text = areaLabelText(area);
+  const title = areaTitle(area);
+  return {
+    text,
+    title: text === title ? undefined : title,
+    className: hazard
+      ? 'map-area-label map-area-label--hazard'
+      : 'map-area-label',
+    anchorClassName: 'map-area-label-anchor',
+    priority: hazard ? 1 : 0,
+    popup: areaLabelOpensPopup(area)
+      ? {
+          content: createAreaPopupContent(areaPopupLines(area)),
+          options: { className: 'map-area-popup', maxWidth: 260 },
+        }
+      : undefined,
+  };
 }
 
-// How far a popup's tip reaches below where it is placed: Leaflet's own offset, less its tip.
-const POPUP_TIP_REACH = -3;
-
-// What an area's label keeps clear of: pins, clusters and cell counts.
 const AREA_LABEL_OBSTACLES =
   '.map-marker-stack, .map-marker-cluster, .map-location-cell';
 
-/**
- * Whether the map itself shows at each corner and the middle of `box`: not a button or a card
- * floating over it (prototype `underUi`), one of the map's own controls, or the page past its edge.
- * The topmost element at a point is taken, and one that lets taps through (`pointer-events: none`)
- * is passed over, so only what would catch a tap counts.
- */
-function isOverMap(
-  host: HTMLElement,
-  { left, top }: DOMRect,
-  box: ScreenBox,
-): boolean {
-  const middleX = (box.left + box.right) / 2;
-  const middleY = (box.top + box.bottom) / 2;
-
-  return [
-    [box.left, box.top],
-    [box.right, box.top],
-    [box.left, box.bottom],
-    [box.right, box.bottom],
-    [middleX, middleY],
-  ].every(([x, y]) => {
-    const element = document.elementFromPoint(left + x, top + y);
-
-    return (
-      element !== null &&
-      host.contains(element) &&
-      element.closest('.leaflet-control') === null
-    );
-  });
-}
-
-/**
- * Puts every area's label where `placeAreaLabels` finds room for it, its middle on that point, and
- * its popup to open just above it. A label with no room is left out until the next time.
- */
-function placeAreaLabelsOnMap(map: L.Map, labels: readonly AreaLabel[]) {
-  const host = map.getContainer();
-
-  // A hidden map has nothing to measure: the labels wait for the next zoom or redraw.
-  if (labels.length === 0 || !host.offsetWidth) {
-    return;
-  }
-
-  labels.forEach(({ element }) => {
-    element.style.display = '';
-  });
-
-  // Every label is measured before any is moved, so the page is laid out once.
-  const sizes = labels.map(({ element }) => ({
-    width: element.offsetWidth,
-    height: element.offsetHeight,
-  }));
-  const hostRect = host.getBoundingClientRect();
-  const obstacles = Array.from(
-    host.querySelectorAll<HTMLElement>(AREA_LABEL_OBSTACLES),
-  )
-    .map((element) => element.getBoundingClientRect())
-    .filter((rect) => rect.width > 0 && rect.height > 0)
-    .map((rect) => ({
-      left: rect.left - hostRect.left,
-      top: rect.top - hostRect.top,
-      right: rect.right - hostRect.left,
-      bottom: rect.bottom - hostRect.top,
-    }));
-  const spots = placeAreaLabels(
-    labels.map(({ shape, hazard }, index) => {
-      const bounds = shape.getBounds();
-      const northWest = map.latLngToContainerPoint(bounds.getNorthWest());
-      const southEast = map.latLngToContainerPoint(bounds.getSouthEast());
-
-      return {
-        hazard,
-        area: {
-          left: northWest.x,
-          top: northWest.y,
-          right: southEast.x,
-          bottom: southEast.y,
-        },
-        label: sizes[index],
-      };
-    }),
-    {
-      width: host.clientWidth,
-      height: host.clientHeight,
-      obstacles,
-      isCovered: (box) => !isOverMap(host, hostRect, box),
-    },
-  );
-
-  labels.forEach(({ marker, element }, index) => {
-    const spot = spots[index];
-    element.dataset.place = spot.place;
-
-    if (!('x' in spot)) {
-      element.style.display = 'none';
-      return;
-    }
-
-    marker.setLatLng(map.containerPointToLatLng([spot.x, spot.y]));
-
-    const popup = marker.getPopup();
-
-    if (popup) {
-      L.setOptions(popup, {
-        offset: L.point(0, -sizes[index].height / 2 - POPUP_TIP_REACH),
-      });
-    }
-  });
-}
-
-/** Each part of the area, with its label. Returns the labels, to be placed. */
-function renderArea<T extends RescueMapArea>(
-  layerGroup: L.FeatureGroup,
-  area: T,
-  style: (area: T) => L.PathOptions,
-): AreaLabel[] {
-  return area.polygons.map((polygon) => {
-    const shape = L.polygon(polygon, style(area));
-    shape.addTo(layerGroup);
-
-    const label = createAreaLabel(shape, area);
-    label.marker.addTo(layerGroup);
-
-    return label;
-  });
-}
-
-/** Draws what changed. The labels are placed afterwards, all together (`placeAreaLabelsOnMap`). */
-function syncAreaLayer<T extends RescueMapArea>({
-  overlayLayer,
-  areas,
-  handles,
-  style,
-}: {
-  overlayLayer: L.LayerGroup;
-  areas: readonly T[];
-  handles: Map<string, AreaHandle>;
-  style: (area: T) => L.PathOptions;
-}) {
-  const nextIds = new Set(areas.map((area) => area.id));
-  const drawn: AreaHandle[] = [];
-
-  handles.forEach((handle, id) => {
-    if (!nextIds.has(id)) {
-      overlayLayer.removeLayer(handle.layerGroup);
-      handles.delete(id);
-    }
-  });
-
-  areas.forEach((area) => {
-    const signature = areaSignature(area);
-    const existing = handles.get(area.id);
-
-    if (!existing) {
-      const layerGroup = L.featureGroup();
-      const labels = renderArea(layerGroup, area, style);
-      overlayLayer.addLayer(layerGroup);
-      const handle = { layerGroup, labels, signature };
-      handles.set(area.id, handle);
-      drawn.push(handle);
-      return;
-    }
-
-    if (existing.signature === signature) {
-      return;
-    }
-
-    existing.layerGroup.clearLayers();
-    existing.labels = renderArea(existing.layerGroup, area, style);
-    existing.signature = signature;
-    drawn.push(existing);
-  });
-
-  if (drawn.length === 0) {
-    return;
-  }
-
-  // A newly drawn area lands on top; stack them again so a smaller one stays over a larger.
-  largestAreasFirst(areas).forEach((area) => {
-    handles.get(area.id)?.layerGroup.bringToFront();
-  });
-}
-
-/** Unsubscribe handle for the no-op store. Named so the empty body reads as deliberate. */
-function unsubscribeNoop() {
-  // Nothing was subscribed, so there is nothing to tear down.
-}
-
-function subscribeViewportStoreNoop() {
-  return unsubscribeNoop;
-}
-
-function getEmptyViewportState(): RescueMapViewportStoreSnapshot {
-  return EMPTY_VIEWPORT_STATE;
-}
-
 function syncViewportStateToController(
-  map: L.Map,
+  { center, zoom, west, south, east, north }: MapViewport,
   controller: RescueMapControllerValue,
 ) {
-  const center = map.getCenter();
-  const bounds = map.getBounds();
-
   controller.setViewportState({
-    center: [center.lat, center.lng],
-    zoom: map.getZoom(),
-    bbox: [
-      bounds.getWest(),
-      bounds.getSouth(),
-      bounds.getEast(),
-      bounds.getNorth(),
-    ],
-  });
-}
-
-function syncMarkerLayer({
-  markerLayer,
-  items,
-  handles,
-  leaflet,
-  onMarkerClickRef,
-}: {
-  markerLayer: MarkerClusterGroupLike;
-  items: readonly RescueMapMarkerItem[];
-  handles: Map<string, MarkerHandle>;
-  leaflet: typeof import('leaflet');
-  onMarkerClickRef: React.MutableRefObject<(item: RescueMapMarkerItem) => void>;
-}) {
-  const nextIds = new Set(items.map((item) => item.id));
-
-  handles.forEach((handle, id) => {
-    if (!nextIds.has(id)) {
-      markerLayer.removeLayer(handle.marker);
-      handles.delete(id);
-    }
-  });
-
-  items.forEach((item) => {
-    const iconSignature = getMarkerIconSignature(item);
-    const existing = handles.get(item.id);
-
-    if (!existing) {
-      const marker = L.marker(item.position, {
-        icon: createMapMarkerIcon(item, leaflet),
-        zIndexOffset: getMarkerZIndexOffset(item),
-      }) as L.Marker & { __rescueDetailType?: string };
-      marker.__rescueDetailType = item.detailType;
-
-      if (item.tooltip) {
-        syncMarkerTooltip(marker, item);
-      }
-
-      marker.on('click', () => {
-        const handle = handles.get(item.id);
-        onMarkerClickRef.current(handle?.item ?? item);
-      });
-
-      markerLayer.addLayer(marker);
-      handles.set(item.id, { marker, item, iconSignature });
-      return;
-    }
-
-    if (
-      existing.item.position[0] !== item.position[0] ||
-      existing.item.position[1] !== item.position[1]
-    ) {
-      existing.marker.setLatLng(item.position);
-    }
-
-    if (existing.iconSignature !== iconSignature) {
-      existing.marker.setIcon(createMapMarkerIcon(item, leaflet));
-
-      if (item.pin || existing.item.pin || item.building) {
-        existing.marker.setZIndexOffset(getMarkerZIndexOffset(item));
-      }
-
-      if (item.tooltip || existing.item.tooltip) {
-        syncMarkerTooltip(existing.marker, item);
-      }
-
-      existing.iconSignature = iconSignature;
-    }
-
-    (
-      existing.marker as L.Marker & { __rescueDetailType?: string }
-    ).__rescueDetailType = item.detailType;
-
-    existing.item = item;
+    center,
+    zoom,
+    bbox: [west, south, east, north],
   });
 }
 
@@ -900,15 +570,13 @@ function syncLocationCellLayer({
   cellLayer,
   cells,
   selectedId,
-  onCellClickRef,
+  clickCell,
 }: {
   map: L.Map;
   cellLayer: L.LayerGroup;
   cells: readonly RescueMapLocationCell[];
   selectedId: string | undefined;
-  onCellClickRef: React.MutableRefObject<
-    ((cell: RescueMapLocationCell) => void) | undefined
-  >;
+  clickCell: ((cell: RescueMapLocationCell) => void) | undefined;
 }): LocationCellLabel[] {
   cellLayer.clearLayers();
 
@@ -916,7 +584,7 @@ function syncLocationCellLayer({
     const selected = cell.id === selectedId;
     const { fill, edge } = getLocationCellColours(cell);
     const corners = locationCellBoundary(cell.cell);
-    const onClick = () => onCellClickRef.current?.(cell);
+    const onClick = () => clickCell?.(cell);
 
     L.polygon(corners, {
       color: edge,
@@ -947,143 +615,249 @@ function syncLocationCellLayer({
 }
 
 /** A corner of a boundary being changed: a white dot with a dark rim, big enough to grab. */
-function createEditCornerIcon(invalid: boolean): L.DivIcon {
+function createEditCornerIcon(invalid: boolean): L.DivIconOptions {
   const stroke = invalid ? color.bg.danger.default : color.fg.neutral.default;
 
-  return L.divIcon({
+  return {
     className: 'rescue-map-edit-corner',
     html: `<span style="display:block;width:16px;height:16px;border-radius:50%;background:${color.bg.neutral.default};border:3px solid ${stroke};box-sizing:border-box;cursor:move"></span>`,
     iconSize: [16, 16],
     iconAnchor: [8, 8],
-  });
+  };
 }
 
-/** The plus between two corners: a click puts a new corner there, to drag where it should go. */
-function createEditMidpointIcon(): L.DivIcon {
-  return L.divIcon({
-    className: 'rescue-map-edit-midpoint',
-    html: `<span style="display:flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:${color.bg.neutral.default};border:1.5px solid ${color.fg.neutral.muted};color:${color.fg.neutral.muted};font:700 11px/1 sans-serif;box-sizing:border-box;cursor:copy">+</span>`,
-    iconSize: [14, 14],
-    iconAnchor: [7, 7],
-  });
+const EDIT_MIDPOINT_ICON: L.DivIconOptions = {
+  className: 'rescue-map-edit-midpoint',
+  html: `<span style="display:flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:${color.bg.neutral.default};border:1.5px solid ${color.fg.neutral.muted};color:${color.fg.neutral.muted};font:700 11px/1 sans-serif;box-sizing:border-box;cursor:copy">+</span>`,
+  iconSize: [14, 14],
+  iconAnchor: [7, 7],
+};
+
+const DRAFT_POINT_ICON = createDraftPointIcon();
+
+const POLYGON_STYLES = [color.fg.neutral.default, color.bg.danger.default].map(
+  (stroke) => ({
+    outline: {
+      color: stroke,
+      weight: 2.5,
+      dashArray: '6 6',
+      fillColor: stroke,
+      fillOpacity: 0.18,
+    },
+    vertex: {
+      radius: 6,
+      color: stroke,
+      weight: 3,
+      fillColor: color.bg.neutral.default,
+      fillOpacity: 1,
+    },
+  }),
+);
+
+const EDIT_CORNER_ICONS = [
+  createEditCornerIcon(false),
+  createEditCornerIcon(true),
+];
+
+export function RescueMapCanvas(props: RescueMapCanvasProps) {
+  const {
+    controller,
+    viewportStore,
+    draftArea,
+    editArea,
+    draftPoint,
+    draftPointAction,
+    onDraftPointChange,
+  } = props;
+  const viewport = useStore(viewportStore ?? EMPTY_VIEWPORT_STORE).position;
+  const draftStyle = POLYGON_STYLES[Number(draftArea?.invalid ?? false)];
+  const editStyle = POLYGON_STYLES[Number(editArea?.invalid ?? false)];
+
+  const labels = useRef<PolygonLayerHandle>(null);
+  const standaloneMarkers = useRef<MarkerLayerHandle>(null);
+  const relayoutLabels = useEventCallback(() => labels.current?.relayout());
+  const closeMarkerTooltips = useEventCallback(() =>
+    standaloneMarkers.current?.closeTooltips(),
+  );
+  const markerItems = useMemo(() => {
+    const pinned = getPinnedMarkers(controller.markers);
+    const standalone = getBuildingMarkers(controller.markers);
+    if (props.editingArea) standalone.push(...pinned);
+    return { standalone, clustered: props.editingArea ? [] : pinned };
+  }, [controller.markers, props.editingArea]);
+  const areas = useMemo(
+    () => [...controller.closureAreas, ...controller.publicZones],
+    [controller.closureAreas, controller.publicZones],
+  );
+  const clusterOptions: MarkerClustering<RescueMapMarkerItem>['options'] = {};
+  if (props.clusterMaxZoom !== undefined) {
+    clusterOptions.disableClusteringAtZoom = props.clusterMaxZoom + 1;
+  }
+  const cluster: MarkerClustering<RescueMapMarkerItem> = {
+    options: clusterOptions,
+    icon: (items, cluster) =>
+      props.clusterAppearance === 'solid'
+        ? createSolidClusterIcon(cluster.getChildCount(), L)
+        : createClusterIcon({
+            count: cluster.getChildCount(),
+            tone: resolveClusterTone(items),
+            leaflet: L,
+          }),
+    onHover:
+      props.clusterAppearance === 'solid'
+        ? (cluster) => {
+            cluster
+              .bindTooltip(cluster.getChildCount() + ' 個站點 · 點擊放大', {
+                direction: 'top',
+                offset: [0, -22],
+                opacity: 1,
+                className: 'map-marker-tooltip',
+              })
+              .openTooltip();
+          }
+        : undefined,
+  };
+  const tile = controller.tileLayer;
+
+  return (
+    <MapContainer
+      center={viewport?.center ?? controller.initialView.center}
+      zoom={viewport?.zoom ?? controller.initialView.zoom}
+      options={{ zoomControl: false, minZoom: 7, maxZoom: 18 }}
+      resizeOptions={{ animate: false }}
+      style={{ width: '100%', height: '100%' }}
+    >
+      <RescueMapLayers
+        {...props}
+        viewport={viewport}
+        relayoutLabels={relayoutLabels}
+        closeMarkerTooltips={closeMarkerTooltips}
+      />
+      {tile?.url && tile.attribution && (
+        <TileLayer
+          key={[tile.url, tile.attribution, tile.maxNativeZoom].join('|')}
+          url={tile.url}
+          options={{
+            attribution: tile.attribution,
+            maxNativeZoom: tile.maxNativeZoom,
+          }}
+        />
+      )}
+      <MarkerLayer
+        items={markerItems.standalone}
+        appearance={getMarkerAppearance}
+        appearanceKey={getMarkerIconSignature}
+        onClick={props.onMarkerClick}
+        onUpdate={relayoutLabels}
+        ref={standaloneMarkers}
+      />
+      <MarkerLayer
+        items={markerItems.clustered}
+        appearance={getMarkerAppearance}
+        appearanceKey={getMarkerIconSignature}
+        onClick={props.onMarkerClick}
+        onUpdate={relayoutLabels}
+        cluster={cluster}
+      />
+      <PolygonLayer<RescueMapArea | RescueMapPublicZone>
+        items={areas}
+        getStyle={(area) =>
+          'kind' in area
+            ? (props.adminAreaStyle ? getAdminZoneStyle : getPublicZoneStyle)(
+                area,
+              )
+            : (props.adminAreaStyle
+                ? getAdminHazardZoneStyle
+                : getHazardZoneStyle)(area)
+        }
+        getLabel={getAreaLabel}
+        getRevision={(area) =>
+          String(Boolean(props.adminAreaStyle)) + areaSignature(area)
+        }
+        obstacleSelector={AREA_LABEL_OBSTACLES}
+        ref={labels}
+      />
+      {draftArea && (
+        <PolygonDraw
+          points={draftArea.points}
+          disableDoubleClickZoom={false}
+          outlineStyle={draftStyle.outline}
+          vertexStyle={draftStyle.vertex}
+          onChange={draftArea.drawing?.onChange}
+          onFinish={draftArea.drawing?.onFinish}
+        />
+      )}
+      {editArea && (
+        <PolygonEditor
+          points={editArea.points}
+          outlineStyle={editStyle.outline}
+          cornerIcon={EDIT_CORNER_ICONS[Number(editArea.invalid)]}
+          midpointIcon={EDIT_MIDPOINT_ICON}
+          onChange={editArea.onChange}
+        />
+      )}
+      <DraftPoint
+        point={draftPoint ?? null}
+        onChange={onDraftPointChange}
+        icon={DRAFT_POINT_ICON}
+        title="拖曳可移動位置"
+      >
+        {draftPointAction}
+      </DraftPoint>
+    </MapContainer>
+  );
 }
 
-export function RescueMapCanvas({
+function RescueMapLayers({
   controller,
-  onMarkerClick,
   locationCells,
   onLocationCellClick,
   previewMarker,
-  draftArea,
-  editArea,
   cursor,
   disableDoubleClickZoom = false,
-  adminAreaStyle = false,
+  editingArea = false,
   onMapClick,
   layoutKey,
   showScale = false,
-  viewportStore,
-  draftPoint,
-  onDraftPointChange,
-  draftPointAction,
-  clusterAppearance = 'default',
-  clusterMaxZoom,
+  viewport,
+  relayoutLabels,
+  closeMarkerTooltips,
   zoomControlPosition,
   onMapReady,
   onViewChange,
-}: RescueMapCanvasProps) {
-  const externalViewportState =
-    useSyncExternalStore<RescueMapViewportStoreSnapshot>(
-      viewportStore?.subscribe ?? subscribeViewportStoreNoop,
-      viewportStore?.getSnapshot ?? getEmptyViewportState,
-      viewportStore?.getSnapshot ?? getEmptyViewportState,
-    );
-  const hostRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<L.Map | null>(null);
-  const tileLayerRef = useRef<L.TileLayer | null>(null);
-  const scaleControlRef = useRef<L.Control.Scale | null>(null);
-  const markerLayerRef = useRef<MarkerClusterGroupLike | null>(null);
-  const overlayLayerRef = useRef<L.LayerGroup | null>(null);
+}: RescueMapCanvasProps & {
+  viewport: RescueMapViewportStoreSnapshot['position'];
+  relayoutLabels: () => void;
+  closeMarkerTooltips: () => void;
+}) {
+  const map = useMap();
   const cellLayerRef = useRef<L.LayerGroup | null>(null);
-  const buildingLayerRef = useRef<L.LayerGroup | null>(null);
-  const buildingHandlesRef = useRef<Map<string, MarkerHandle>>(new Map());
   const cellLayerSignatureRef = useRef<string | null>(null);
   const cellLabelsRef = useRef<LocationCellLabel[]>([]);
-  const previewMarkerRef = useRef<L.Marker | null>(null);
-  const draftAreaLayerRef = useRef<L.LayerGroup | null>(null);
-  const editAreaLayerRef = useRef<L.LayerGroup | null>(null);
-  const draftMarkerRef = useRef<L.Marker | null>(null);
-  const draftBubbleRef = useRef<L.Marker | null>(null);
-  // While the crosshair is dragged, the map autopans: that move is not the person moving the map.
-  const draftDraggingRef = useRef(false);
-  // The element the bubble's content is portaled into, once its marker is on the map.
-  const [draftBubbleHost, setDraftBubbleHost] = useState<HTMLElement | null>(
-    null,
-  );
-  const markerHandlesRef = useRef<Map<string, MarkerHandle>>(new Map());
-  const closureAreaHandlesRef = useRef<Map<string, AreaHandle>>(new Map());
-  const publicZoneHandlesRef = useRef<Map<string, AreaHandle>>(new Map());
-  // Places the areas' labels again, once what is being drawn now is on the map.
-  const queueAreaLabelsRef = useRef<(() => void) | null>(null);
-  const controllerRef = useRef(controller);
-  const onMapClickRef = useRef(onMapClick);
-  const onMarkerClickRef = useRef(onMarkerClick);
-  const onLocationCellClickRef = useRef(onLocationCellClick);
-  const onDraftPointChangeRef = useRef(onDraftPointChange);
-  const onViewChangeRef = useRef(onViewChange);
-  const initialViewportStateRef = useRef(externalViewportState);
+  const getController = useEventCallback(() => controller);
+  const clickMap = useEventCallback(onMapClick);
+  const clickCell = useEventCallback(onLocationCellClick);
+  const changeView = useEventCallback(onViewChange);
   // Read once, when the map is built.
   const mapOptionsRef = useRef({
-    clusterAppearance,
-    clusterMaxZoom,
     zoomControlPosition,
     onMapReady,
   });
 
-  controllerRef.current = controller;
-  onMapClickRef.current = onMapClick;
-  onMarkerClickRef.current = onMarkerClick;
-  onLocationCellClickRef.current = onLocationCellClick;
-  onDraftPointChangeRef.current = onDraftPointChange;
-  onViewChangeRef.current = onViewChange;
-
-  // 地圖實例整個生命週期只建立一次；受控的視角變化由下方 setView 效果套用，
-  // 避免位置寫回路由狀態後反過來把整張地圖銷毀重建。
   useEffect(() => {
-    const host = hostRef.current;
-
-    if (!host || mapRef.current) {
-      return;
-    }
-
-    const initialViewportState = initialViewportStateRef.current;
-    const initialView = initialViewportState.position
-      ? {
-          center: initialViewportState.position.center,
-          zoom:
-            initialViewportState.position.zoom ??
-            controllerRef.current.initialView.zoom,
-        }
-      : controllerRef.current.initialView;
-    const map = L.map(host, {
-      // Added below with Chinese names: Leaflet's own reads "Zoom in" / "Zoom out" to a screen reader.
-      zoomControl: false,
-      minZoom: 7,
-      maxZoom: 18,
-      center: initialView.center,
-      zoom: initialView.zoom,
-    });
-
-    // 移除 Leaflet 預設 attribution 前綴的旗標圖示，與地圖內容無關。
     map.attributionControl.setPrefix(false);
 
-    map.createPane(PUBLIC_ZONE_PANE).style.zIndex = '380';
-    map.createPane(HAZARD_ZONE_PANE).style.zIndex = '390';
+    const publicZonePane =
+      map.getPane(PUBLIC_ZONE_PANE) ?? map.createPane(PUBLIC_ZONE_PANE);
+    const hazardZonePane =
+      map.getPane(HAZARD_ZONE_PANE) ?? map.createPane(HAZARD_ZONE_PANE);
+    publicZonePane.style.zIndex = '380';
+    hazardZonePane.style.zIndex = '390';
 
     const mapOptions = mapOptionsRef.current;
 
     // Always on the map; the `Map` decides whether it shows (`showZoomControl`).
-    L.control
+    const zoomControl = L.control
       .zoom({
         position: mapOptions.zoomControlPosition ?? 'topleft',
         zoomInTitle: '放大',
@@ -1091,209 +865,37 @@ export function RescueMapCanvas({
       })
       .addTo(map);
 
-    const overlayLayer = L.layerGroup();
-    const cellLayer = L.layerGroup();
-    const buildingLayer = L.layerGroup();
-    const markerHandles = markerHandlesRef.current;
-    const buildingHandles = buildingHandlesRef.current;
-    const closureAreaHandles = closureAreaHandlesRef.current;
-    const publicZoneHandles = publicZoneHandlesRef.current;
-    let cancelled = false;
-
-    mapRef.current = map;
-    overlayLayerRef.current = overlayLayer;
+    const cellLayer = L.layerGroup().addTo(map);
     cellLayerRef.current = cellLayer;
-    buildingLayerRef.current = buildingLayer;
 
-    overlayLayer.addTo(map);
-    // Drawn by the cell effect below, which runs after this one in the same commit.
-    cellLayer.addTo(map);
-    buildingLayer.addTo(map);
-    syncMarkerLayer({
-      markerLayer: buildingLayer,
-      items: getBuildingMarkers(controllerRef.current.markers),
-      handles: buildingHandles,
-      leaflet: L,
-      onMarkerClickRef,
-    });
-
-    void import(MARKER_CLUSTER_MODULE_ID).then(() => {
-      if (cancelled || !mapRef.current) {
-        return;
-      }
-
-      const clusterCtor = (
-        L as typeof L & {
-          MarkerClusterGroup?: MarkerClusterConstructor;
-          markerClusterGroup?: MarkerClusterFactory;
-        }
-      ).MarkerClusterGroup;
-      const clusterFactory = (
-        L as typeof L & {
-          MarkerClusterGroup?: MarkerClusterConstructor;
-          markerClusterGroup?: MarkerClusterFactory;
-        }
-      ).markerClusterGroup;
-
-      const clusterOptions: MarkerClusterOptions = {
-        animate: false,
-        animateAddingMarkers: false,
-        chunkedLoading: true,
-        showCoverageOnHover: false,
-        spiderfyOnMaxZoom: true,
-        iconCreateFunction: (cluster) =>
-          mapOptions.clusterAppearance === 'solid'
-            ? createSolidClusterIcon(cluster.getChildCount(), L)
-            : createClusterIcon({
-                count: cluster.getChildCount(),
-                tone: resolveClusterTone(cluster.getAllChildMarkers()),
-                leaflet: L,
-              }),
-        ...(mapOptions.clusterMaxZoom === undefined
-          ? {}
-          : { disableClusteringAtZoom: mapOptions.clusterMaxZoom + 1 }),
-      };
-      const markerLayer =
-        clusterFactory?.(clusterOptions) ??
-        (clusterCtor ? new clusterCtor(clusterOptions) : null);
-
-      if (!markerLayer) {
-        return;
-      }
-
-      if (mapOptions.clusterAppearance === 'solid') {
-        markerLayer.on('clustermouseover', (event) => {
-          const cluster = (
-            event as L.LeafletEvent & {
-              layer: L.Marker & {
-                getChildCount: () => number;
-              };
-            }
-          ).layer;
-
-          cluster
-            .bindTooltip(`${cluster.getChildCount()} 個站點 · 點擊放大`, {
-              direction: 'top',
-              offset: [0, -22],
-              opacity: 1,
-              className: 'map-marker-tooltip',
-            })
-            .openTooltip();
-        });
-      }
-
-      markerLayer.addTo(mapRef.current);
-      markerLayerRef.current = markerLayer;
-      syncMarkerLayer({
-        markerLayer,
-        items: getPinnedMarkers(controllerRef.current.markers),
-        handles: markerHandles,
-        leaflet: L,
-        onMarkerClickRef,
-      });
-      queueAreaLabelsRef.current?.();
-    });
-
-    let viewportSyncTimer: number | undefined;
-
-    const syncViewport = () => {
-      const currentMap = mapRef.current;
-
-      if (!currentMap) {
-        return;
-      }
-
-      syncViewportStateToController(currentMap, controllerRef.current);
-    };
-
-    // Told on the map's own moves, as the prototype's `watchMapLast` is on `moveend`; not on the
-    // first sync below, which only reports where the map opened.
-    const reportViewChange = () => {
-      const center = map.getCenter();
-
-      onViewChangeRef.current?.({
-        center: [center.lat, center.lng],
-        zoom: map.getZoom(),
-      });
-    };
-
-    const scheduleViewportSync = () => {
-      window.clearTimeout(viewportSyncTimer);
-      viewportSyncTimer = window.setTimeout(() => {
-        syncViewport();
-        reportViewChange();
-      }, VIEWPORT_SYNC_DEBOUNCE_MS);
-    };
+    const stopViewport = observeMapViewport(
+      map,
+      (viewport) => {
+        syncViewportStateToController(viewport, getController());
+        changeView?.({ center: viewport.center, zoom: viewport.zoom });
+      },
+      {
+        settleMs: VIEWPORT_SYNC_DEBOUNCE_MS,
+        reportInitial: false,
+        sampleOnSettle: true,
+      },
+    );
 
     const handleMapClick = (event: L.LeafletMouseEvent) => {
-      onMapClickRef.current?.([event.latlng.lat, event.latlng.lng]);
-    };
-
-    // A picked point is let go once the map moves under it, as its bubble would point elsewhere
-    // (prototype site-map.jsx:430-434). Resizing does not start a move; the crosshair's own
-    // autopan does, and is not the person moving the map.
-    const releaseDraftPoint = () => {
-      if (!draftDraggingRef.current) {
-        onDraftPointChangeRef.current?.(null);
-      }
+      clickMap?.([event.latlng.lat, event.latlng.lng]);
     };
 
     // A cell grows and shrinks on screen with the zoom: how much of its label fits changes.
     const fitCellLabels = () =>
       fitLocationCellLabels(map, cellLabelsRef.current);
 
-    // An area's label finds room among the cell counts and pins, which move with the zoom, so it
-    // waits for them: until the zoom's handlers have run, the clusters' among them, which were added
-    // after these; or until the render that redrew them is done. Asked for many times, it is placed
-    // once.
-    let areaLabelsQueued = false;
-    const queueAreaLabels = () => {
-      if (areaLabelsQueued) {
-        return;
-      }
-
-      areaLabelsQueued = true;
-      queueMicrotask(() => {
-        areaLabelsQueued = false;
-
-        if (mapRef.current !== map) {
-          return;
-        }
-
-        placeAreaLabelsOnMap(
-          map,
-          [
-            ...closureAreaHandles.values(),
-            ...publicZoneHandles.values(),
-          ].flatMap((handle) => handle.labels),
-        );
-      });
-    };
-
-    queueAreaLabelsRef.current = queueAreaLabels;
-
-    map.on('moveend', scheduleViewportSync);
-    map.on('zoomend', scheduleViewportSync);
     map.on('zoomend', fitCellLabels);
-    map.on('zoomend', queueAreaLabels);
-    map.on('resize', queueAreaLabels);
     map.on('click', handleMapClick);
-    map.on('movestart', releaseDraftPoint);
-    map.on('zoomstart', releaseDraftPoint);
 
-    const resizeObserver = new ResizeObserver(() => {
+    const initialFrame = window.requestAnimationFrame(() => {
       try {
         map.invalidateSize({ animate: false });
-      } catch {
-        // Ignore resize races while the map is being torn down.
-      }
-    });
-
-    resizeObserver.observe(host);
-    window.requestAnimationFrame(() => {
-      try {
-        map.invalidateSize({ animate: false });
-        syncViewport();
+        syncViewportStateToController(readMapViewport(map), getController());
       } catch {
         // Ignore initial invalidation race during client mount.
       }
@@ -1302,53 +904,24 @@ export function RescueMapCanvas({
     mapOptions.onMapReady?.(map);
 
     return () => {
-      window.clearTimeout(viewportSyncTimer);
-      resizeObserver.disconnect();
-      map.off('moveend', scheduleViewportSync);
-      map.off('zoomend', scheduleViewportSync);
+      stopViewport();
+      window.cancelAnimationFrame(initialFrame);
       map.off('zoomend', fitCellLabels);
-      map.off('zoomend', queueAreaLabels);
-      map.off('resize', queueAreaLabels);
       map.off('click', handleMapClick);
-      map.off('movestart', releaseDraftPoint);
-      map.off('zoomstart', releaseDraftPoint);
-      cancelled = true;
-
-      markerHandles.clear();
-      buildingHandles.clear();
-      closureAreaHandles.clear();
-      publicZoneHandles.clear();
-      markerLayerRef.current = null;
-      overlayLayerRef.current = null;
+      zoomControl.remove();
+      cellLayer.remove();
       cellLayerRef.current = null;
-      buildingLayerRef.current = null;
       cellLayerSignatureRef.current = null;
       cellLabelsRef.current = [];
-      queueAreaLabelsRef.current = null;
-      previewMarkerRef.current = null;
-      draftMarkerRef.current = null;
-      draftBubbleRef.current = null;
-      tileLayerRef.current = null;
-      scaleControlRef.current = null;
-      mapRef.current = null;
-
-      map.remove();
     };
-  }, []);
+  }, [changeView, clickMap, getController, map]);
 
   useEffect(() => {
-    const map = mapRef.current;
-
-    if (!map) {
-      return;
-    }
-
     const currentCenter = map.getCenter();
     const currentZoom = map.getZoom();
     const [nextLat, nextLng] =
-      externalViewportState.position?.center ?? controller.initialView.center;
-    const nextZoom =
-      externalViewportState.position?.zoom ?? controller.initialView.zoom;
+      viewport?.center ?? controller.initialView.center;
+    const nextZoom = viewport?.zoom ?? controller.initialView.zoom;
 
     if (
       currentZoom === nextZoom &&
@@ -1360,94 +933,39 @@ export function RescueMapCanvas({
 
     try {
       map.setView([nextLat, nextLng], nextZoom, { animate: false });
-      syncViewportStateToController(map, controllerRef.current);
+      syncViewportStateToController(readMapViewport(map), getController());
     } catch {
       // Ignore map view races during rapid controlled updates.
     }
   }, [
     controller.initialView.center,
     controller.initialView.zoom,
-    externalViewportState.position,
+    getController,
+    map,
+    viewport,
   ]);
 
   useEffect(() => {
-    const map = mapRef.current;
-
-    if (!map) {
-      return;
-    }
-
     try {
       map.invalidateSize({ animate: false });
     } catch {
       // Ignore resize races triggered by detail drawer layout changes.
     }
-  }, [layoutKey]);
+  }, [layoutKey, map]);
 
   useEffect(() => {
-    const map = mapRef.current;
-
-    if (!map) {
-      return;
-    }
-
     map.getContainer().style.cursor = cursor ?? 'grab';
-  }, [cursor]);
+  }, [cursor, map]);
 
   useEffect(() => {
-    const map = mapRef.current;
-
-    if (!map) {
-      return;
-    }
-
     if (disableDoubleClickZoom) {
       map.doubleClickZoom.disable();
     } else {
       map.doubleClickZoom.enable();
     }
-  }, [disableDoubleClickZoom]);
+  }, [disableDoubleClickZoom, map]);
 
   useEffect(() => {
-    const map = mapRef.current;
-    const currentTileLayer = tileLayerRef.current;
-    const nextTileLayer = controller.tileLayer;
-
-    if (!map) {
-      return;
-    }
-
-    if (currentTileLayer) {
-      currentTileLayer.remove();
-      tileLayerRef.current = null;
-    }
-
-    if (!nextTileLayer?.url || !nextTileLayer?.attribution) {
-      return;
-    }
-
-    const tileLayer = L.tileLayer(nextTileLayer.url, {
-      attribution: nextTileLayer.attribution,
-      maxNativeZoom: nextTileLayer.maxNativeZoom,
-    });
-
-    tileLayer.addTo(map);
-    tileLayerRef.current = tileLayer;
-  }, [controller.tileLayer]);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    const currentControl = scaleControlRef.current;
-
-    if (!map) {
-      return;
-    }
-
-    if (currentControl) {
-      currentControl.remove();
-      scaleControlRef.current = null;
-    }
-
     if (!showScale) {
       return;
     }
@@ -1462,45 +980,21 @@ export function RescueMapCanvas({
     });
 
     scaleControl.addTo(map);
-    scaleControlRef.current = scaleControl;
-  }, [showScale]);
-
-  // 以 id 增量同步 marker：只移除消失的、加入新增的，內容相同時不動 DOM，
-  // 避免每次資料刷新都整批 clearLayers 再重建造成閃爍。
-  useEffect(() => {
-    const buildingLayer = buildingLayerRef.current;
-
-    if (buildingLayer) {
-      syncMarkerLayer({
-        markerLayer: buildingLayer,
-        items: getBuildingMarkers(controller.markers),
-        handles: buildingHandlesRef.current,
-        leaflet: L,
-        onMarkerClickRef,
-      });
-    }
-
-    const markerLayer = markerLayerRef.current;
-
-    if (!markerLayer) {
-      return;
-    }
-
-    syncMarkerLayer({
-      markerLayer,
-      items: getPinnedMarkers(controller.markers),
-      handles: markerHandlesRef.current,
-      leaflet: L,
-      onMarkerClickRef,
-    });
-    queueAreaLabelsRef.current?.();
-  }, [controller.markers]);
+    return () => {
+      scaleControl.remove();
+    };
+  }, [map, showScale]);
 
   useEffect(() => {
-    const map = mapRef.current;
+    if (!editingArea) return;
+    map.closePopup();
+    closeMarkerTooltips();
+  }, [closeMarkerTooltips, editingArea, map]);
+
+  useEffect(() => {
     const cellLayer = cellLayerRef.current;
 
-    if (!map || !cellLayer) {
+    if (!cellLayer) {
       return;
     }
 
@@ -1519,56 +1013,18 @@ export function RescueMapCanvas({
       cellLayer,
       cells: locationCells,
       selectedId: controller.selectedMarkerId,
-      onCellClickRef: onLocationCellClickRef,
+      clickCell: clickCell,
     });
-    queueAreaLabelsRef.current?.();
-  }, [locationCells, controller.selectedMarkerId]);
+    relayoutLabels();
+  }, [
+    clickCell,
+    controller.selectedMarkerId,
+    locationCells,
+    map,
+    relayoutLabels,
+  ]);
 
   useEffect(() => {
-    const overlayLayer = overlayLayerRef.current;
-
-    if (!overlayLayer) {
-      return;
-    }
-
-    syncAreaLayer({
-      overlayLayer,
-      areas: controller.closureAreas,
-      handles: closureAreaHandlesRef.current,
-      style: getHazardZoneStyle,
-    });
-    queueAreaLabelsRef.current?.();
-  }, [controller.closureAreas]);
-
-  useEffect(() => {
-    const overlayLayer = overlayLayerRef.current;
-
-    if (!overlayLayer) {
-      return;
-    }
-
-    syncAreaLayer({
-      overlayLayer,
-      areas: controller.publicZones,
-      handles: publicZoneHandlesRef.current,
-      style: adminAreaStyle ? getAdminZoneStyle : getPublicZoneStyle,
-    });
-    queueAreaLabelsRef.current?.();
-  }, [adminAreaStyle, controller.publicZones]);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    const currentPreviewMarker = previewMarkerRef.current;
-
-    if (!map) {
-      return;
-    }
-
-    if (currentPreviewMarker) {
-      currentPreviewMarker.remove();
-      previewMarkerRef.current = null;
-    }
-
     if (!previewMarker) {
       return;
     }
@@ -1579,265 +1035,32 @@ export function RescueMapCanvas({
     });
 
     marker.addTo(map);
-    previewMarkerRef.current = marker;
-  }, [previewMarker]);
-
-  // The outline being drawn: a dashed line through the corners, filled once there are three, red
-  // while it crosses itself. Not interactive, so a click on it still reaches the map and adds a corner.
-  useEffect(() => {
-    const map = mapRef.current;
-
-    draftAreaLayerRef.current?.remove();
-    draftAreaLayerRef.current = null;
-
-    if (!map || !draftArea || draftArea.points.length === 0) {
-      return;
-    }
-
-    const stroke = draftArea.invalid
-      ? color.bg.danger.default
-      : color.fg.neutral.default;
-    const layer = L.layerGroup();
-
-    if (draftArea.points.length >= 3) {
-      L.polygon(draftArea.points, {
-        interactive: false,
-        color: stroke,
-        weight: 2.5,
-        dashArray: '6 6',
-        fillColor: stroke,
-        fillOpacity: 0.18,
-      }).addTo(layer);
-    } else {
-      L.polyline(draftArea.points, {
-        interactive: false,
-        color: stroke,
-        weight: 2.5,
-        dashArray: '6 6',
-      }).addTo(layer);
-    }
-
-    draftArea.points.forEach((point) => {
-      L.circleMarker(point, {
-        interactive: false,
-        radius: 6,
-        color: stroke,
-        weight: 3,
-        fillColor: color.bg.neutral.default,
-        fillOpacity: 1,
-      }).addTo(layer);
-    });
-
-    layer.addTo(map);
-    draftAreaLayerRef.current = layer;
-
     return () => {
-      layer.remove();
+      marker.remove();
     };
-  }, [draftArea]);
+  }, [map, previewMarker]);
 
-  // The boundary being changed. A corner is dragged on the map's own layers and reported once it is
-  // let go: reported on every step, the corners would be made again under the hand that holds one.
-  useEffect(() => {
-    const map = mapRef.current;
-
-    editAreaLayerRef.current?.remove();
-    editAreaLayerRef.current = null;
-
-    if (!map || !editArea) {
-      return;
-    }
-
-    const { points, invalid, onChange } = editArea;
-    const stroke = invalid ? color.bg.danger.default : color.fg.neutral.default;
-    const layer = L.layerGroup();
-    const corners = points.map((point): [number, number] => [...point]);
-    const outline = L.polygon(corners, {
-      interactive: false,
-      color: stroke,
-      weight: 2.5,
-      dashArray: '6 6',
-      fillColor: stroke,
-      fillOpacity: 0.18,
-    }).addTo(layer);
-    // A click comes right after the drag is let go; it is not a click on the corner.
-    let justDragged = false;
-
-    corners.forEach((corner, index) => {
-      const handle = L.marker(corner, {
-        draggable: true,
-        keyboard: false,
-        icon: createEditCornerIcon(invalid),
-        zIndexOffset: 1000,
-      }).addTo(layer);
-
-      handle.on('drag', () => {
-        const { lat, lng } = handle.getLatLng();
-        corners[index] = [lat, lng];
-        outline.setLatLngs(corners);
-      });
-      handle.on('dragend', () => {
-        justDragged = true;
-        window.setTimeout(() => {
-          justDragged = false;
-        }, 50);
-        onChange(corners.map((point): [number, number] => [...point]));
-      });
-      handle.on('click', () => {
-        // A boundary keeps three corners at the least.
-        if (!justDragged && corners.length > 3) {
-          onChange(
-            corners
-              .filter((_, other) => other !== index)
-              .map((point): [number, number] => [...point]),
-          );
-        }
-      });
-    });
-
-    corners.forEach((corner, index) => {
-      const next = corners[(index + 1) % corners.length];
-      const middle: [number, number] = [
-        (corner[0] + next[0]) / 2,
-        (corner[1] + next[1]) / 2,
-      ];
-
-      L.marker(middle, {
-        keyboard: false,
-        icon: createEditMidpointIcon(),
-      })
-        .on('click', () =>
-          onChange([
-            ...corners.slice(0, index + 1),
-            middle,
-            ...corners.slice(index + 1),
-          ]),
-        )
-        .addTo(layer);
-    });
-
-    layer.addTo(map);
-    editAreaLayerRef.current = layer;
-
-    return () => {
-      layer.remove();
-    };
-  }, [editArea]);
-
-  const draftLat = draftPoint?.lat;
-  const draftLng = draftPoint?.lng;
-
-  // Two markers: the crosshair, which drags, and the bubble, which is not to be dragged by and
-  // keeps up with the crosshair on the way. A real marker rather than a picture floated over the
-  // map, so that a point under an existing pin can be reached by tapping beside it and dragging
-  // across (designer, 2026-09-19).
-  useEffect(() => {
-    const map = mapRef.current;
-
-    if (!map) {
-      return;
-    }
-
-    if (draftLat === undefined || draftLng === undefined) {
-      draftMarkerRef.current?.remove();
-      draftBubbleRef.current?.remove();
-      draftMarkerRef.current = null;
-      draftBubbleRef.current = null;
-      setDraftBubbleHost(null);
-      return;
-    }
-
-    const position: L.LatLngTuple = [draftLat, draftLng];
-
-    if (draftMarkerRef.current) {
-      // After its own drag, Leaflet has already put it there.
-      if (!draftDraggingRef.current) {
-        draftMarkerRef.current.setLatLng(position);
-        draftBubbleRef.current?.setLatLng(position);
-      }
-      return;
-    }
-
-    const crosshair = L.marker(position, {
-      icon: createDraftPointIcon(),
-      draggable: true,
-      autoPan: true,
-      keyboard: false,
-      zIndexOffset: 1000,
-      title: '拖曳可移動位置',
-    });
-    // An empty, zero-size icon at the point: the bubble's content is portaled in and laid out
-    // above it. Interactive, so its buttons take taps.
-    const bubble = L.marker(position, {
-      icon: L.divIcon({
-        className: '',
-        html: '',
-        iconSize: [0, 0],
-        iconAnchor: [0, 0],
-      }),
-      keyboard: false,
-      zIndexOffset: 1100,
-    });
-
-    crosshair.on('dragstart', () => {
-      draftDraggingRef.current = true;
-    });
-    crosshair.on('drag', () => bubble.setLatLng(crosshair.getLatLng()));
-    crosshair.on('dragend', () => {
-      draftDraggingRef.current = false;
-
-      const { lat, lng } = crosshair.getLatLng();
-      onDraftPointChangeRef.current?.({ lat, lng });
-    });
-
-    crosshair.addTo(map);
-    bubble.addTo(map);
-    draftMarkerRef.current = crosshair;
-    draftBubbleRef.current = bubble;
-
-    const bubbleHost = bubble.getElement() ?? null;
-
-    // A tap on the bubble is never the map's, or it picks a new point under the button. Stopped here
-    // rather than left to Leaflet: a button that lets the point go takes the bubble off the map, and
-    // Leaflet, walking up from the button to see whose tap it was, no longer finds the bubble.
-    if (bubbleHost) {
-      L.DomEvent.on(bubbleHost, 'click', L.DomEvent.stopPropagation);
-    }
-
-    setDraftBubbleHost(bubbleHost);
-  }, [draftLat, draftLng]);
-
+  // Keep the SVG rendered so the map can paint with its pattern.
   return (
-    <>
-      <div ref={hostRef} style={{ width: '100%', height: '100%' }} />
-      {/* Not `display: none`, which leaves a pattern unpainted in some browsers. */}
-      <svg
-        width="0"
-        height="0"
-        aria-hidden="true"
-        focusable="false"
-        style={{ position: 'absolute' }}
-      >
-        <defs>
-          <pattern
-            id={HAZARD_STRIPES_ID}
-            patternUnits="userSpaceOnUse"
-            width="16"
-            height="16"
-            patternTransform="rotate(45)"
-          >
-            <rect
-              width="16"
-              height="16"
-              fill={primitives.color.neutral.white}
-            />
-            <rect width="8" height="16" fill={color.bg.warning.default} />
-          </pattern>
-        </defs>
-      </svg>
-      {draftBubbleHost && draftPointAction
-        ? createPortal(draftPointAction, draftBubbleHost)
-        : null}
-    </>
+    <svg
+      width="0"
+      height="0"
+      aria-hidden="true"
+      focusable="false"
+      style={{ position: 'absolute' }}
+    >
+      <defs>
+        <pattern
+          id={HAZARD_STRIPES_ID}
+          patternUnits="userSpaceOnUse"
+          width="16"
+          height="16"
+          patternTransform="rotate(45)"
+        >
+          <rect width="16" height="16" fill={primitives.color.neutral.white} />
+          <rect width="8" height="16" fill={color.bg.warning.default} />
+        </pattern>
+      </defs>
+    </svg>
   );
 }

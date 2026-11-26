@@ -1,33 +1,27 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import {
-  GetStationsDocument,
-  GetAdminMapTicketsDocument,
-  createUrqlClient,
-} from '@rescue-frontend/data-access';
-import { useEffect, useMemo, useState } from 'react';
-import { fetchExchange, type CombinedError } from 'urql';
+  adminMapStationsQuery,
+  adminMapTicketsQuery,
+} from '@rescue-frontend/data-access/admin';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { useStore } from 'zustand';
 
 import type { RescueMapMarkerItem } from '../types';
 import { designTokens } from '@rescue-frontend/ui';
 import { ADMIN_MAP_PRIORITIES } from './map-filter';
-import { sessionExpiryFetch } from '../../session/end-expired-session';
 import {
   dedupeMarkersById,
   mapStationToMarker,
   mapTicketToMarker,
   toBoundsInput,
-} from '../site/markers';
-import type { SiteMapViewportStore } from '../site/use-site-map-viewport-state';
-
-const LIVE_QUERY_CONTEXT = {
-  requestPolicy: 'network-only' as const,
-  suspense: false,
-};
+} from '../markers';
+import type { MapViewportStore } from '../viewport-store';
 
 const { color } = designTokens;
 
-export const ADMIN_MAP_LIVE_QUERY_LIMIT = 200;
+export { ADMIN_MAP_LIVE_QUERY_LIMIT } from '@rescue-frontend/data-access/admin';
 
 /**
  * How a marker is drawn on 互助地圖 (prototype `map-canvas.jsx`): a ticket is a dot in its
@@ -61,134 +55,46 @@ export function toAdminMapPin(
     tooltip: { title: marker.title, subtitle: teams || undefined },
   };
 }
-const LIVE_QUERY_LIMIT = ADMIN_MAP_LIVE_QUERY_LIMIT;
 
-export interface AdminMapLiveMarkers {
-  markers: readonly RescueMapMarkerItem[];
-  isFetching: boolean;
-  error: CombinedError | null;
-  hasFetchedOnce: boolean;
-}
-
-const EMPTY_LIVE_MARKERS: AdminMapLiveMarkers = {
-  markers: [],
-  isFetching: false,
-  error: null,
-  hasFetchedOnce: false,
-};
-
-/**
- * Tickets and stations inside the map's view, both at once: unlike the public map, which shows one
- * kind at a time, 互助地圖 lays them side by side. Fetched again whenever the view moves.
- */
-export function useAdminMapLiveMarkers(
-  viewportStore: SiteMapViewportStore,
-): AdminMapLiveMarkers {
-  const client = useMemo(
-    () =>
-      createUrqlClient({
-        runtime: 'client',
-        url: '/api/graphql',
-        exchanges: [fetchExchange],
-        fetch: sessionExpiryFetch,
-        requestPolicy: 'network-only',
-        suspense: false,
+/** Each source can fail or refetch without hiding the other source's pins. */
+export function useAdminMapLiveMarkers(viewportStore: MapViewportStore) {
+  const viewport = useStore(viewportStore);
+  const bounds = toBoundsInput(viewport);
+  const tickets = useQuery({
+    ...adminMapTicketsQuery(bounds, viewport.position?.zoom),
+    placeholderData: keepPreviousData,
+    select: ({ tickets }) =>
+      tickets.items.flatMap((ticket) => {
+        const marker = mapTicketToMarker(ticket);
+        return marker
+          ? [
+              toAdminMapPin({
+                ...marker,
+                ticketMeta: {
+                  ...marker.ticketMeta,
+                  responsibleTeams: ticket.responsibleTeams,
+                },
+              }),
+            ]
+          : [];
       }),
-    [],
-  );
-  const [liveMarkers, setLiveMarkers] =
-    useState<AdminMapLiveMarkers>(EMPTY_LIVE_MARKERS);
+  });
+  const stations = useQuery({
+    ...adminMapStationsQuery(bounds),
+    placeholderData: keepPreviousData,
+    select: ({ stations }) =>
+      stations.items.flatMap((station) => {
+        const marker = mapStationToMarker(station);
+        return marker ? [toAdminMapPin(marker)] : [];
+      }),
+  });
 
-  useEffect(() => {
-    let cancelled = false;
-    let requestId = 0;
-
-    const load = async () => {
-      const nextRequestId = requestId + 1;
-      requestId = nextRequestId;
-
-      const viewportState = viewportStore.getSnapshot();
-      const bounds = toBoundsInput(viewportState);
-
-      // No view yet: the map reports one once it has laid itself out.
-      if (!bounds) {
-        return;
-      }
-
-      setLiveMarkers((current) => ({ ...current, isFetching: true }));
-
-      const [ticketResult, stationResult] = await Promise.all([
-        client
-          .query(
-            GetAdminMapTicketsDocument,
-            {
-              bounds,
-              skip: 0,
-              limit: LIVE_QUERY_LIMIT,
-              zoom: viewportState.position?.zoom,
-            },
-            LIVE_QUERY_CONTEXT,
-          )
-          .toPromise(),
-        client
-          .query(
-            GetStationsDocument,
-            {
-              bounds,
-              skip: 0,
-              limit: LIVE_QUERY_LIMIT,
-            },
-            LIVE_QUERY_CONTEXT,
-          )
-          .toPromise(),
-      ]);
-
-      if (cancelled || nextRequestId !== requestId) {
-        return;
-      }
-
-      const markers = dedupeMarkersById(
-        [
-          ...(ticketResult.data?.tickets.items ?? []).map((ticket) => {
-            const marker = mapTicketToMarker(ticket);
-
-            return marker
-              ? toAdminMapPin({
-                  ...marker,
-                  ticketMeta: {
-                    ...marker.ticketMeta,
-                    responsibleTeams: ticket.responsibleTeams,
-                  },
-                })
-              : null;
-          }),
-          ...(stationResult.data?.stations.items ?? []).map((station) => {
-            const marker = mapStationToMarker(station);
-
-            return marker ? toAdminMapPin(marker) : null;
-          }),
-        ].filter((marker): marker is RescueMapMarkerItem => Boolean(marker)),
-      );
-
-      setLiveMarkers({
-        markers,
-        isFetching: false,
-        error: ticketResult.error ?? stationResult.error ?? null,
-        hasFetchedOnce: true,
-      });
-    };
-
-    void load();
-    const unsubscribe = viewportStore.subscribe(() => {
-      void load();
-    });
-
-    return () => {
-      cancelled = true;
-      requestId += 1;
-      unsubscribe();
-    };
-  }, [client, viewportStore]);
-
-  return liveMarkers;
+  return {
+    markers: dedupeMarkersById([
+      ...(tickets.data ?? []),
+      ...(stations.data ?? []),
+    ]),
+    ticketReadFailed: tickets.isError,
+    stationReadFailed: stations.isError,
+  };
 }

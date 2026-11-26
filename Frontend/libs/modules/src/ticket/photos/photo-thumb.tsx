@@ -1,16 +1,15 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
-import {
-  Box,
-  Button,
-  ButtonBase,
-  Link,
-  Stack,
-  Typography,
-} from '@mui/material';
+import { Box, ButtonBase, Link, Stack, Typography } from '@mui/material';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
+import {
+  Button,
+  designTokens,
+  displayTextSize,
+  Icons,
+} from '@rescue-frontend/ui';
 
 import { PHOTO_LOAD_TIMEOUT_MS } from './photo-links';
 
@@ -38,7 +37,11 @@ interface PhotoThumbProps {
  * error, an image the host answered with an HTML page (no error, but no width), or none at all
  * in time.
  */
-export function PhotoThumb({
+export function PhotoThumb(props: PhotoThumbProps) {
+  return <PhotoThumbImage key={props.url} {...props} />;
+}
+
+function PhotoThumbImage({
   url,
   index,
   linksOut = false,
@@ -59,15 +62,10 @@ export function PhotoThumb({
     }
   }, []);
 
-  // Read again when the link changes; and an image already in the cache may have loaded before
-  // this ran, when onLoad will not fire again.
-  useEffect(() => {
-    setState('loading');
-
-    if (imageRef.current?.complete) {
-      settle();
-    }
-  }, [settle, url]);
+  const attachImage = useCallback((image: HTMLImageElement | null) => {
+    imageRef.current = image;
+    if (image?.complete) setState(image.naturalWidth > 0 ? 'ok' : 'fail');
+  }, []);
 
   useEffect(() => {
     if (state !== 'loading') {
@@ -86,7 +84,7 @@ export function PhotoThumb({
   const image = (
     <Box
       component="img"
-      ref={imageRef}
+      ref={attachImage}
       src={url}
       alt={alt}
       // Not lazy, unlike the prototype: a lazy image below the fold has not started when the
@@ -152,7 +150,10 @@ export function PhotoThumb({
           }}
         >
           <Icons.imageOff
-            sx={{ fontSize: 20, color: color.fg.neutral.muted }}
+            sx={{
+              fontSize: designTokens.iconSize.lg,
+              color: color.fg.neutral.muted,
+            }}
           />
           <Typography
             sx={{
@@ -218,25 +219,10 @@ export function PhotoThumb({
             圖片本身仍在原網站上，平台刪不掉。
           </Typography>
           <Stack direction="row" sx={{ gap: 0.75 }}>
-            <Button
-              size="small"
-              variant="outlined"
-              color="inherit"
-              onClick={onCancelRemove}
-            >
+            <Button size="sm" variant="neutral" onClick={onCancelRemove}>
               取消
             </Button>
-            <Button
-              size="small"
-              variant="contained"
-              disableElevation
-              onClick={onConfirmRemove}
-              sx={{
-                bgcolor: color.bg.danger.default,
-                color: color.fg.onDanger,
-                '&:hover': { bgcolor: color.bg.danger.hover },
-              }}
-            >
+            <Button size="sm" variant="danger" onClick={onConfirmRemove}>
               移除
             </Button>
           </Stack>
@@ -259,7 +245,7 @@ export function PhotoThumb({
             color: color.fg.neutral.muted,
           }}
         >
-          <Icons.close sx={{ fontSize: 14 }} />
+          <Icons.close sx={{ fontSize: designTokens.iconSize.sm }} />
         </ButtonBase>
       ) : null}
     </Box>

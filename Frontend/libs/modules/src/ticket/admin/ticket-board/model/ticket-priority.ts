@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import type { TagFill, TagTone } from '@rescue-frontend/ui';
 
 import type { TicketPriority } from './ticket-row';

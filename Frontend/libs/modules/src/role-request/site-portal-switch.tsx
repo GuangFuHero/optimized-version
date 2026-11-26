@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { ButtonBase } from '@mui/material';
@@ -16,7 +17,7 @@ const PILL_SX = {
   height: 36,
   px: 1.5,
   flexShrink: 0,
-  borderRadius: 999,
+  borderRadius: `${designTokens.radius.full}px`,
   border: `1px solid ${color.border.default}`,
   bgcolor: color.bg.neutral.default,
   color: color.fg.neutral.default,
@@ -28,7 +29,10 @@ const PILL_SX = {
   '&:hover': { bgcolor: color.bg.neutral.subtle },
 } as const;
 
-const ICON_SX = { fontSize: 16, color: color.fg.neutral.muted } as const;
+const ICON_SX = {
+  fontSize: designTokens.iconSize[16],
+  color: color.fg.neutral.muted,
+} as const;
 
 /**
  * The desktop top bar's back-office entry, after the 公開地圖 badge (prototype `SitePortalSwitch`,

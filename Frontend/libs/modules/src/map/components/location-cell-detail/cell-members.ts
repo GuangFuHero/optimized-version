@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import type { LocationCellMembersPage, RescueMapMarkerItem } from '../../types';
 
 /** A counted cell's tickets as listed so far, read a page at a time. */
@@ -38,12 +39,4 @@ export function withCellMembersPage(
     read: skip + page.read,
     hasMore: page.hasMore,
   };
-}
-
-/**
- * Where the next page starts, for 再顯示 and a retry alike: after every ticket read so far. A page
- * that failed changed nothing, so its retry asks from the same place.
- */
-export function nextCellMembersSkip(list: CellMembersList): number {
-  return list.read;
 }

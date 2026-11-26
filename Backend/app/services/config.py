@@ -76,11 +76,16 @@ async def upsert_station_property_config(
     """
     await require_scope(actor, Perm.FIELD_EDIT, db)
     check_lengths(
-        StationPropertyConfig, station_type=station_type, property_name=property_name,
-        data_type=data_type, label=label, unit=unit,
+        StationPropertyConfig,
+        station_type=station_type,
+        property_name=property_name,
+        data_type=data_type,
+        label=label,
+        unit=unit,
     )
     disaster_types = await _validated_disaster_types(
-        db, disaster_types,
+        db,
+        disaster_types,
         lambda: station_property_config_repository.get_by_key(
             db, station_type=station_type, property_name=property_name
         ),
@@ -120,11 +125,16 @@ async def upsert_task_property_config(
     """
     await require_scope(actor, Perm.FIELD_EDIT, db)
     check_lengths(
-        TaskPropertyConfig, task_type=task_type, property_name=property_name,
-        data_type=data_type, label=label, unit=unit,
+        TaskPropertyConfig,
+        task_type=task_type,
+        property_name=property_name,
+        data_type=data_type,
+        label=label,
+        unit=unit,
     )
     disaster_types = await _validated_disaster_types(
-        db, disaster_types,
+        db,
+        disaster_types,
         lambda: task_property_config_repository.get_by_key(
             db, task_type=task_type, property_name=property_name
         ),
@@ -174,11 +184,16 @@ async def upsert_ticket_property_config(
     """
     await require_scope(actor, Perm.FIELD_EDIT, db)
     check_lengths(
-        TicketPropertyConfig, property_name=property_name, data_type=data_type,
-        label=label, hint=hint, unit=unit,
+        TicketPropertyConfig,
+        property_name=property_name,
+        data_type=data_type,
+        label=label,
+        hint=hint,
+        unit=unit,
     )
     disaster_types = await _validated_disaster_types(
-        db, disaster_types,
+        db,
+        disaster_types,
         lambda: ticket_property_config_repository.get_by_key(db, property_name=property_name),
     )
     return await ticket_property_config_repository.upsert(

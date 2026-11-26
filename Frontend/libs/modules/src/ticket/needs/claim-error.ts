@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * What a volunteer reads when a claim, or giving a place back, is refused — and a requester, when
  * stopping recruitment, adding a need or deleting one is. The backend's messages are contract —
@@ -7,7 +8,7 @@
 
 import { isUnauthorizedError } from '../../session/expiry';
 
-/** The parts of urql's `CombinedError` this reads. */
+/** The parts of `GraphqlError` this reads. */
 export interface ClaimError {
   networkError?: unknown;
   response?: { status?: number };

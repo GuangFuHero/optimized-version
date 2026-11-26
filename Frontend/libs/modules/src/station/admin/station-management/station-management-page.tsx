@@ -1,13 +1,15 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { Box, Stack } from '@mui/material';
 import {
   useDeleteStation,
+  useStationFacets,
   useProjectSettings,
 } from '@rescue-frontend/data-access/admin';
 import { designTokens, Dialog } from '@rescue-frontend/ui';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useMemo, useState } from 'react';
+import { useBoardSearchParams } from '../../../route/use-board-search-params';
+import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 
 import { AdminListPageLayout } from '../../../admin/shared/admin-list-page-layout';
@@ -48,21 +50,11 @@ const SECTION_SX = { px: '28px' };
 const COLUMN_SX = { maxWidth: 1200, mx: 'auto', width: '100%' };
 const LEAD_SX = { ...SECTION_SX, pt: FRAME_GAP, '& > *': COLUMN_SX };
 
-/** What the header's ? explains: the page in one line. */
-
-const PENDING_FILTERS: StationFilters = { ...EMPTY_FILTERS, pending: true };
-
 export function StationManagementPage() {
-  const router = useRouter();
-  const pathname = usePathname() ?? '/stations';
-  const searchParams = useSearchParams();
-  const params = useMemo(
-    () => new URLSearchParams(searchParams?.toString() ?? ''),
-    [searchParams],
-  );
-  const filters = useMemo(() => parseStationFilters(params), [params]);
+  const { params, setParam, replaceParams } = useBoardSearchParams();
+  const filters = parseStationFilters(params);
   // The filters alone, as one string: the map frames its stations again only when this changes.
-  const filtersKey = useMemo(() => stationFiltersKey(filters), [filters]);
+  const filtersKey = stationFiltersKey(filters);
   // The filters the page opened with, by a link or a reload; changed here, they are the page's own.
   const [openedFiltersKey] = useState(filtersKey);
   const view: BoardView = params.get('view') === 'map' ? 'map' : 'table';
@@ -72,26 +64,8 @@ export function StationManagementPage() {
   const [reviewOpen, setReviewOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
 
-  const replaceParams = useCallback(
-    (next: URLSearchParams) => {
-      const query = next.toString();
-      router.replace(query ? `${pathname}?${query}` : pathname, {
-        scroll: false,
-      });
-    },
-    [pathname, router],
-  );
   const setFilters = useCallback(
     (next: StationFilters) => replaceParams(writeStationFilters(params, next)),
-    [params, replaceParams],
-  );
-  const setParam = useCallback(
-    (key: string, value: string | null) => {
-      const next = new URLSearchParams(params);
-      if (value) next.set(key, value);
-      else next.delete(key);
-      replaceParams(next);
-    },
     [params, replaceParams],
   );
 
@@ -99,19 +73,14 @@ export function StationManagementPage() {
   const unfiltered = useStationRows(EMPTY_FILTERS);
   const loadedRows = stations.rows;
   const disasterStartedAt = useProjectSettings().data?.started_at ?? null;
-  const rows = useMemo(
-    () => applyClientFilters(loadedRows, filters, now, disasterStartedAt),
-    [loadedRows, filters, now, disasterStartedAt],
-  );
-  // The review queue's own query: it also counts stations whose only suggestions are on their
-  // resources, which pendingSuggestedFields (station fields only) leaves out.
-  const reviewQueue = useStationRows(PENDING_FILTERS, {
-    enabled: caps.canReview,
-  });
-  const pendingStationCount = caps.canReview ? reviewQueue.rows.length : 0;
+  const rows = applyClientFilters(loadedRows, filters, now, disasterStartedAt);
+  const facets = useStationFacets();
+  const pendingStationCount = caps.canReview
+    ? (facets.data?.stationFacets.pendingReviewCount ?? 0)
+    : 0;
 
   const hasAnyStation = unfiltered.rows.length > 0;
-  const areas = useMemo(() => areaOptions(unfiltered.rows), [unfiltered.rows]);
+  const areas = areaOptions(unfiltered.rows);
   const [selectedUuid, setSelectedUuid] = useState<string | null>(null);
   // The station on view lives in the URL (?station=<uuid>) so notifications can link to it. The
   // station's edit form replaces its details in the same drawer, so cancelling an edit lands back
@@ -150,6 +119,7 @@ export function StationManagementPage() {
         lead={
           <Box sx={LEAD_SX}>
             <StationStatsStrip
+              facets={facets}
               status={filters.status}
               onStatusChange={(status) => setFilters({ ...filters, status })}
             />

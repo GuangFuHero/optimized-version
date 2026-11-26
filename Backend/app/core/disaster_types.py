@@ -68,15 +68,12 @@ async def validate_disaster_types(
     if not to_check:
         return labels
     result = await db.execute(
-        select(DisasterType.key).where(
-            DisasterType.key.in_(to_check), DisasterType.is_active.is_(True)
-        )
+        select(DisasterType.key).where(DisasterType.key.in_(to_check), DisasterType.is_active.is_(True))
     )
     known = set(result.scalars().all())
     unknown = [label for label in to_check if label not in known]
     if unknown:
         raise ValueError(
-            f"未知或已停用的災害型別：{', '.join(unknown)}。"
-            f"請先於災害型別設定新增，或改用既有的代碼。"
+            f"未知或已停用的災害型別：{', '.join(unknown)}。請先於災害型別設定新增，或改用既有的代碼。"
         )
     return labels

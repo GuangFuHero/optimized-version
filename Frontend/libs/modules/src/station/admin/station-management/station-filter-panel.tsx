@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { useTeams } from '@rescue-frontend/data-access/admin';

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import {
@@ -14,10 +15,10 @@ import {
 } from '@rescue-frontend/data-access/admin';
 import { Button, designTokens } from '@rescue-frontend/ui';
 import { Download } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 
-import { getStationTypeIcon } from '../../station-type-icon';
+import { StationTypeIcon } from '../../station-type-icon';
 import { getStationTypeLabel, STATION_TYPE_OPTIONS } from '../../type-options';
 import {
   ExportFormatChoice,
@@ -43,7 +44,7 @@ export function StationExportMenu() {
   // The page already loads the unfiltered list, so this reads the cache.
   const { rows } = useStationRows(EMPTY_FILTERS);
   const teamName = useCurrentUser().data?.active_identity?.team ?? null;
-  const counts = useMemo(() => countExportableByType(rows), [rows]);
+  const counts = countExportableByType(rows);
   // Name the team only when the export stops at it; a gov team's reaches every station.
   const exportsEveryStation = rows.every((row) => row.canExport);
 
@@ -103,7 +104,6 @@ export function StationExportMenu() {
             sx={{ gap: '8px' }}
           >
             {STATION_TYPE_OPTIONS.map((option) => {
-              const TypeIcon = getStationTypeIcon(option.value);
               return (
                 <FormControlLabel
                   key={option.value}
@@ -117,8 +117,12 @@ export function StationExportMenu() {
                     <Box
                       sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}
                     >
-                      <TypeIcon
-                        sx={{ fontSize: 17, color: color.fg.neutral.subtle }}
+                      <StationTypeIcon
+                        type={option.value}
+                        sx={{
+                          fontSize: designTokens.iconSize[17],
+                          color: color.fg.neutral.subtle,
+                        }}
                       />
                       <Typography
                         sx={{

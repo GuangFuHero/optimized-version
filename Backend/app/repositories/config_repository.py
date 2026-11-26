@@ -61,7 +61,11 @@ class StationPropertyConfigRepository(GenericRepository[StationPropertyConfig]):
         super().__init__(StationPropertyConfig)
 
     async def list_by_type(
-        self, db: AsyncSession, station_type: str, *, disaster_types: list[str] | None = None,
+        self,
+        db: AsyncSession,
+        station_type: str,
+        *,
+        disaster_types: list[str] | None = None,
         include_inactive: bool = False,
     ) -> list[StationPropertyConfig]:
         """Return active configs for the station type (plus universal 'all' ones), ordered.
@@ -105,11 +109,17 @@ class StationPropertyConfigRepository(GenericRepository[StationPropertyConfig]):
         return result.scalar_one_or_none()
 
     async def upsert(
-        self, db: AsyncSession, *,
-        station_type: str, property_name: str, data_type: str | None = None,
+        self,
+        db: AsyncSession,
+        *,
+        station_type: str,
+        property_name: str,
+        data_type: str | None = None,
         enum_options: list[str] | None = None,
-        disaster_types: list[str] | None = None, label: str | None = None,
-        sort_order: int | None = None, is_active: bool | None = None,
+        disaster_types: list[str] | None = None,
+        label: str | None = None,
+        sort_order: int | None = None,
+        is_active: bool | None = None,
         unit: str | None = None,
     ) -> StationPropertyConfig:
         """Create or update a config entry for the given station type and property name.
@@ -117,18 +127,22 @@ class StationPropertyConfigRepository(GenericRepository[StationPropertyConfig]):
         `(station_type, property_name)` is the key — `property_name` is immutable (ADR-095),
         so passing a new name creates a new row rather than renaming an existing one.
         """
+
         async def lookup():
-            return await self.get_by_key(
-                db, station_type=station_type, property_name=property_name
-            )
+            return await self.get_by_key(db, station_type=station_type, property_name=property_name)
 
         update_values = _optional_config_fields(
             data_type, enum_options, disaster_types, label, sort_order, is_active, unit
         )
         return await _upsert_with_conflict_retry(
-            self, db, lookup=lookup, update_values=update_values,
+            self,
+            db,
+            lookup=lookup,
+            update_values=update_values,
             create_values={
-                "station_type": station_type, "property_name": property_name, **update_values,
+                "station_type": station_type,
+                "property_name": property_name,
+                **update_values,
             },
         )
 
@@ -141,7 +155,11 @@ class TaskPropertyConfigRepository(GenericRepository[TaskPropertyConfig]):
         super().__init__(TaskPropertyConfig)
 
     async def list_by_type(
-        self, db: AsyncSession, task_type: str, *, disaster_types: list[str] | None = None,
+        self,
+        db: AsyncSession,
+        task_type: str,
+        *,
+        disaster_types: list[str] | None = None,
         include_inactive: bool = False,
     ) -> list[TaskPropertyConfig]:
         """Return active configs for the given task type, ordered.
@@ -181,26 +199,36 @@ class TaskPropertyConfigRepository(GenericRepository[TaskPropertyConfig]):
         return result.scalar_one_or_none()
 
     async def upsert(
-        self, db: AsyncSession, *,
-        task_type: str, property_name: str, data_type: str | None = None,
+        self,
+        db: AsyncSession,
+        *,
+        task_type: str,
+        property_name: str,
+        data_type: str | None = None,
         enum_options: list[str] | None = None,
-        disaster_types: list[str] | None = None, label: str | None = None,
-        sort_order: int | None = None, is_active: bool | None = None,
+        disaster_types: list[str] | None = None,
+        label: str | None = None,
+        sort_order: int | None = None,
+        is_active: bool | None = None,
         unit: str | None = None,
     ) -> TaskPropertyConfig:
         """Create or update a config entry for the given task type and property name."""
+
         async def lookup():
-            return await self.get_by_key(
-                db, task_type=task_type, property_name=property_name
-            )
+            return await self.get_by_key(db, task_type=task_type, property_name=property_name)
 
         update_values = _optional_config_fields(
             data_type, enum_options, disaster_types, label, sort_order, is_active, unit
         )
         return await _upsert_with_conflict_retry(
-            self, db, lookup=lookup, update_values=update_values,
+            self,
+            db,
+            lookup=lookup,
+            update_values=update_values,
             create_values={
-                "task_type": task_type, "property_name": property_name, **update_values,
+                "task_type": task_type,
+                "property_name": property_name,
+                **update_values,
             },
         )
 
@@ -213,7 +241,11 @@ class TicketPropertyConfigRepository(GenericRepository[TicketPropertyConfig]):
         super().__init__(TicketPropertyConfig)
 
     async def list_for_disasters(
-        self, db: AsyncSession, disaster_types: list[str], *, include_inactive: bool = False,
+        self,
+        db: AsyncSession,
+        disaster_types: list[str],
+        *,
+        include_inactive: bool = False,
     ) -> list[TicketPropertyConfig]:
         """Return the fields a ticket with these disaster types should show, ordered.
 
@@ -252,32 +284,32 @@ class TicketPropertyConfigRepository(GenericRepository[TicketPropertyConfig]):
         if not include_inactive:
             conditions.append(self.model.is_active.is_(True))
         result = await db.execute(
-            select(self.model)
-            .where(*conditions)
-            .order_by(self.model.property_name, self.model.uuid)
+            select(self.model).where(*conditions).order_by(self.model.property_name, self.model.uuid)
         )
         return result.scalars().all()
 
-    async def get_by_key(
-        self, db: AsyncSession, *, property_name: str
-    ) -> TicketPropertyConfig | None:
+    async def get_by_key(self, db: AsyncSession, *, property_name: str) -> TicketPropertyConfig | None:
         """Return the row `property_name` identifies, or None.
 
         `property_name` alone is the key here (ADR-247). Same two callers as the siblings:
         `upsert`'s insert-vs-update decision, and the `validate_disaster_types(keep=)` read
         in `app/services/config.py` (ADR-277).
         """
-        result = await db.execute(
-            select(self.model).where(self.model.property_name == property_name)
-        )
+        result = await db.execute(select(self.model).where(self.model.property_name == property_name))
         return result.scalar_one_or_none()
 
     async def upsert(
-        self, db: AsyncSession, *,
-        property_name: str, data_type: str | None = None,
+        self,
+        db: AsyncSession,
+        *,
+        property_name: str,
+        data_type: str | None = None,
         enum_options: list[str] | None = None,
-        disaster_types: list[str] | None = None, label: str | None = None,
-        is_active: bool | None = None, unit: str | None = None, hint: str | None = None,
+        disaster_types: list[str] | None = None,
+        label: str | None = None,
+        is_active: bool | None = None,
+        unit: str | None = None,
+        hint: str | None = None,
     ) -> TicketPropertyConfig:
         """Create or update a ticket disaster-field definition.
 
@@ -285,6 +317,7 @@ class TicketPropertyConfigRepository(GenericRepository[TicketPropertyConfig]):
         creates a new field rather than renaming an existing one, because
         `ticket_disaster_details` points at it by string with no foreign key.
         """
+
         async def lookup():
             return await self.get_by_key(db, property_name=property_name)
 
@@ -292,7 +325,10 @@ class TicketPropertyConfigRepository(GenericRepository[TicketPropertyConfig]):
             data_type, enum_options, disaster_types, label, None, is_active, unit, hint
         )
         return await _upsert_with_conflict_retry(
-            self, db, lookup=lookup, update_values=update_values,
+            self,
+            db,
+            lookup=lookup,
+            update_values=update_values,
             create_values={"property_name": property_name, **update_values},
         )
 
@@ -310,9 +346,7 @@ async def _upsert_with_conflict_retry(repo, db, *, lookup, create_values, update
     if existing is not None:
         return await repo.update(db, db_obj=existing, obj_in=update_values)
     if "data_type" not in create_values:
-        raise PropertyConfigValidationError(
-            "新增動態欄位時必須提供 data_type（既有欄位才可以省略）"
-        )
+        raise PropertyConfigValidationError("新增動態欄位時必須提供 data_type（既有欄位才可以省略）")
     try:
         return await repo.create(db, obj_in=create_values)
     except IntegrityError:
@@ -324,9 +358,14 @@ async def _upsert_with_conflict_retry(repo, db, *, lookup, create_values, update
 
 
 def _optional_config_fields(
-    data_type: str | None, enum_options: list[str] | None, disaster_types: list[str] | None,
-    label: str | None, sort_order: int | None, is_active: bool | None,
-    unit: str | None = None, hint: str | None = None,
+    data_type: str | None,
+    enum_options: list[str] | None,
+    disaster_types: list[str] | None,
+    label: str | None,
+    sort_order: int | None,
+    is_active: bool | None,
+    unit: str | None = None,
+    hint: str | None = None,
 ) -> dict:
     """Keep only the fields the caller actually supplied.
 
@@ -348,11 +387,12 @@ def _optional_config_fields(
     supplied = {
         "data_type": data_type,
         "enum_options": enum_options,
-        "disaster_types": (
-            None if disaster_types is None else normalize_disaster_types(disaster_types)
-        ),
-        "label": label, "sort_order": sort_order, "is_active": is_active,
-        "unit": unit, "hint": hint,
+        "disaster_types": (None if disaster_types is None else normalize_disaster_types(disaster_types)),
+        "label": label,
+        "sort_order": sort_order,
+        "is_active": is_active,
+        "unit": unit,
+        "hint": hint,
     }
     return {k: v for k, v in supplied.items() if v is not None}
 

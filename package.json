@@ -1,0 +1,9 @@
+{
+  "name": "guangfu-hero",
+  "private": true,
+  "scripts": {
+    "setup": "test -f Backend/.env || cp Backend/.env.example Backend/.env; test -f Frontend/.env || cp Frontend/.env.example Frontend/.env; pnpm --dir Frontend install && uv --directory Backend sync && docker compose --project-directory Backend up -d --wait && docker compose --project-directory Backend exec -T backend alembic upgrade head && docker compose --project-directory Backend exec -T backend python -m scripts.seed_rbac && docker compose --project-directory Backend exec -T db psql -U postgres -d postgres -v ON_ERROR_STOP=1 < Backend/scripts/seed_mock_scenarios.sql",
+    "dev": "docker compose --project-directory Backend up -d && pnpm --dir Frontend dev",
+    "test": "pnpm --dir Frontend test && docker compose --project-directory Backend up -d --wait db redis && uv --directory Backend run pytest -n 4"
+  }
+}

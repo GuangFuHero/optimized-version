@@ -1,14 +1,13 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { Box, Stack, Typography } from '@mui/material';
 import { useCallback, useState } from 'react';
-import { useMutation, useQuery } from 'urql';
+import { useMutation } from '@tanstack/react-query';
 
 import {
   DeleteTicketDocument,
-  GetTicketDocument,
-  TicketFieldsFragmentDoc,
-  useFragment,
+  type GraphqlError,
 } from '@rescue-frontend/data-access';
 import {
   designTokens,
@@ -17,13 +16,11 @@ import {
   Icons,
 } from '@rescue-frontend/ui';
 
+import { siteGraphqlMutation } from '../../session/site-clients';
 import { SiteToast } from '../../shell/site/site-toast';
 import { deleteTicketErrorMessage, isTicketAlreadyGone } from './claim-error';
 import { describeTicketDeletion, formatTicketNeedCount } from './delete-ticket';
-import {
-  readTicketNeeds,
-  TICKET_NEEDS_QUERY_CONTEXT,
-} from './use-ticket-needs';
+import { readTicketNeeds, useCachedTicket } from './use-ticket-needs';
 
 const { color, radius } = designTokens;
 
@@ -53,7 +50,9 @@ interface DeleteTicketDialogProps {
 export function useDeleteTicket(
   reloadTicket: (ticketUuid: string) => Promise<unknown>,
 ) {
-  const [, executeDeleteTicket] = useMutation(DeleteTicketDocument);
+  const { mutateAsync: executeDeleteTicket } = useMutation(
+    siteGraphqlMutation(DeleteTicketDocument),
+  );
   // Open is kept apart from the ticket, so the dialog keeps its content while it fades out.
   const [open, setOpen] = useState(false);
   const [ticketUuid, setTicketUuid] = useState<string | null>(null);
@@ -81,10 +80,13 @@ export function useDeleteTicket(
       setError(null);
 
       try {
-        const result = await executeDeleteTicket({ uuid: ticketUuid });
+        const refusal = await executeDeleteTicket({ uuid: ticketUuid }).then(
+          () => null,
+          (failure: GraphqlError) => failure,
+        );
 
         // Gone already — from another tab — is what the requester asked for.
-        if (!result.error || isTicketAlreadyGone(result.error)) {
+        if (!refusal || isTicketAlreadyGone(refusal)) {
           setDeletedTitle(title);
           setOpen(false);
           return;
@@ -92,7 +94,7 @@ export function useDeleteTicket(
 
         // As with deleting a need: read the ticket again, so the dialog shows it as it now stands.
         await reloadTicket(ticketUuid);
-        setError(deleteTicketErrorMessage(result.error));
+        setError(deleteTicketErrorMessage(refusal));
       } finally {
         setSubmitting(false);
       }
@@ -148,29 +150,22 @@ export function DeleteTicketDialog({
   toastOpen,
   onCloseToast,
 }: DeleteTicketDialogProps) {
-  const [{ data, fetching }] = useQuery({
-    query: GetTicketDocument,
-    variables: { uuid: ticketUuid ?? '' },
-    pause: !ticketUuid,
-    context: TICKET_NEEDS_QUERY_CONTEXT,
-  });
-  const ticket = data?.ticket ?? null;
-  const fields = ticket ? useFragment(TicketFieldsFragmentDoc, ticket) : null;
+  const { ticket, fetching } = useCachedTicket({ ticketUuid, open });
   const needs = readTicketNeeds(ticket);
   // Deleted between the tap and the load: nothing to confirm, and the way out is to close.
-  const gone = !fields && !fetching;
+  const gone = !ticket && !fetching;
 
   return (
     <>
       <Dialog
         open={open}
         onClose={onCancel}
-        onConfirm={() => fields && onConfirm(fields.title)}
+        onConfirm={() => ticket && onConfirm(ticket.title)}
         title="刪除整張單？"
         confirmLabel={submitting ? '刪除中…' : '刪除'}
         confirmIcon={<Icons.trash />}
         confirmTone="danger"
-        confirmDisabled={!fields}
+        confirmDisabled={!ticket}
         cancelLabel={gone ? '關閉' : '取消'}
         error={error}
         submitting={submitting}
@@ -184,7 +179,7 @@ export function DeleteTicketDialog({
             border: `1px solid ${color.border.default}`,
           }}
         >
-          {fields ? (
+          {ticket ? (
             <>
               <Typography
                 sx={{
@@ -194,7 +189,7 @@ export function DeleteTicketDialog({
                   fontWeight: 700,
                 }}
               >
-                {fields.title}
+                {ticket.title}
               </Typography>
               <Stack
                 direction="row"
@@ -213,7 +208,7 @@ export function DeleteTicketDialog({
                     placeItems: 'center',
                     height: '1.6em',
                     fontSize: displayTextSize[13],
-                    '& svg': { fontSize: 14 },
+                    '& svg': { fontSize: designTokens.iconSize.sm },
                   }}
                 >
                   <Icons.heartHandshake />
@@ -237,7 +232,7 @@ export function DeleteTicketDialog({
           )}
         </Box>
 
-        {fields ? (
+        {ticket ? (
           <Typography
             sx={{
               color: color.fg.neutral.muted,

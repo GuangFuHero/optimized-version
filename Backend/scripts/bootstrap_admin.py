@@ -42,9 +42,7 @@ async def bootstrap(contact_type: str, contact_value: str, *, force: bool) -> No
     async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     try:
         async with async_session() as db:
-            user = await contact_repository.get_user_by_contact(
-                db, type_=contact_type, value=contact_value
-            )
+            user = await contact_repository.get_user_by_contact(db, type_=contact_type, value=contact_value)
             if user is None:
                 raise SystemExit(f"No verified user found for {contact_type}:{contact_value}")
 

@@ -1,8 +1,9 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { Box, Stack, Typography } from '@mui/material';
 
-import { displayTextSize } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
 import type { SupplyStatusLine } from '../../supply-status';
 import { useStationDetailColorScheme } from './constants';
@@ -51,7 +52,7 @@ export function StationDetailInfoPanel({
             sx={{
               px: 2.5,
               py: 2,
-              borderRadius: '32px',
+              borderRadius: `${designTokens.radius.xl}px`,
               bgcolor: stationDetailPalette.cardSurface,
               border: `1px solid ${stationDetailPalette.cardBorder}`,
             }}

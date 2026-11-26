@@ -1,4 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
+
+import { useForm, useStore } from '@tanstack/react-form';
 
 import {
   Box,
@@ -38,8 +41,9 @@ import {
   X,
   Zap,
 } from 'lucide-react';
-import { useMemo, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
+import { useIntersectionObserver } from 'usehooks-ts';
 
 import { useStationRows } from './hooks/use-station-rows';
 import {
@@ -143,7 +147,12 @@ export function ReviewQueueDialog({
           <GitPullRequestArrow size={20} />
         </Box>
         <Box sx={{ flex: 1 }}>
-          <Typography sx={{ ...typography.heading[600], fontSize: 19 }}>
+          <Typography
+            sx={{
+              ...typography.heading[600],
+              fontSize: designTokens.typography.fontSize[19],
+            }}
+          >
             前台修改建議審查
           </Typography>
           <Typography
@@ -255,32 +264,32 @@ type QueueRow = ReturnType<typeof useStationRows>['rows'][number];
 
 /**
  * A queued station's suggestions, each with its conflict. The list and the detail pane both call
- * it, so every station in the queue can show 衝突 and the selected one reads the same cache.
+ * it, so a station in the queue can show 衝突 and the selected one reads the same cache. `enabled`
+ * holds it back: a row reads only once it has been on screen.
  */
-function useQueuedStation(row: QueueRow | null) {
+function useQueuedStation(row: QueueRow | null, enabled = true) {
   const uuid = row?.uuid ?? '';
   const canViewHistory = row?.raw.viewerCanViewHistory ?? false;
-  const review = useStationReview({ uuid });
+  const review = useStationReview({ uuid }, { enabled });
   // Conflicts come from the station's history; without it they are unknown, never "none".
   const history = useStationHistory(
     { path: { uuid }, query: { limit: HISTORY_PAGE } },
-    { enabled: canViewHistory && Boolean(uuid) },
+    { enabled: enabled && canViewHistory && Boolean(uuid) },
   );
-  const historyPage = useMemo(
-    () =>
-      history.isSuccess && history.data
-        ? { events: history.data.data, total: history.data.meta.total }
-        : null,
-    [history.isSuccess, history.data],
-  );
-  const fields = useMemo(
-    () => (review.data ? buildReviewFields(review.data, historyPage) : []),
-    [review.data, historyPage],
-  );
+  const historyPage =
+    history.isSuccess && history.data
+      ? { events: history.data.data, total: history.data.meta.total }
+      : null;
+  const fields = review.data ? buildReviewFields(review.data, historyPage) : [];
   return { review, history, historyPage, fields, canViewHistory };
 }
 
-/** A station in the queue: 衝突 once a field is known to conflict, else how much waits. */
+/**
+ * A station in the queue: 衝突 once a field is known to conflict, else how much waits. Its review
+ * and history are read once the row scrolls into view, not as the queue opens: the queue can hold
+ * thousands of stations, and reading them all would send two requests for each at once. Until then
+ * it shows how many fields wait, which the list already has.
+ */
 function QueueItem({
   row,
   active,
@@ -290,11 +299,15 @@ function QueueItem({
   active: boolean;
   onSelect: () => void;
 }) {
-  const { fields } = useQueuedStation(row);
+  const { ref, isIntersecting } = useIntersectionObserver({
+    freezeOnceVisible: true,
+  });
+  const { fields } = useQueuedStation(row, isIntersecting || active);
   const { firstSuggestedAt } = suggestionVersions(null, fields);
 
   return (
     <ButtonBase
+      ref={ref}
       onClick={onSelect}
       sx={{
         width: '100%',
@@ -380,20 +393,23 @@ function StationReview({
   onEditStation: (uuid: string) => void;
 }) {
   const merge = useMergeStationSuggestions();
-  const [decisions, setDecisions] = useState<Record<string, FieldDecision>>({});
-  const [note, setNote] = useState('');
+  const initialValues: {
+    decisions: Record<string, FieldDecision>;
+    note: string;
+  } = { decisions: {}, note: '' };
+  const form = useForm({
+    defaultValues: initialValues,
+    onSubmit: (): void => submit(),
+  });
+  const { decisions, note } = useStore(form.store, (state) => state.values);
   // The history's size when the reviewer last re-compared; a later edit grows it and locks again.
   const [resyncedAt, setResyncedAt] = useState<number | null>(null);
   const [resyncing, setResyncing] = useState(false);
 
-  const enumOptions = useMemo(
-    () =>
-      Object.fromEntries(
-        (enumFields ?? [])
-          .filter((f) => f.dataType === 'enum' && f.enumOptions)
-          .map((f) => [f.fieldName, f.enumOptions ?? []]),
-      ),
-    [enumFields],
+  const enumOptions = Object.fromEntries(
+    (enumFields ?? [])
+      .filter((f) => f.dataType === 'enum' && f.enumOptions)
+      .map((f) => [f.fieldName, f.enumOptions ?? []]),
   );
 
   const payload = buildDecisions(fields, decisions);
@@ -428,8 +444,7 @@ function StationReview({
           toast.success(
             `已送出審核：採用 ${approved} 欄、不採用 ${rejected} 欄`,
           );
-          setDecisions({});
-          setNote('');
+          form.reset();
         },
       },
     );
@@ -516,7 +531,10 @@ function StationReview({
                 options={enumOptions[field.fieldName]}
                 decision={decisions[field.key]}
                 onChange={(next) =>
-                  setDecisions((current) => ({ ...current, [field.key]: next }))
+                  form.setFieldValue('decisions', (current) => ({
+                    ...current,
+                    [field.key]: next,
+                  }))
                 }
               />
             ))}
@@ -549,7 +567,7 @@ function StationReview({
         <Box sx={{ flex: 1, minWidth: 240 }}>
           <TextInput
             value={note}
-            onChange={(e) => setNote(e.target.value)}
+            onChange={(e) => form.setFieldValue('note', e.target.value)}
             placeholder="審核備註（會記在這次審核紀錄）"
             inputProps={{ 'aria-label': '審核備註' }}
           />
@@ -566,7 +584,7 @@ function StationReview({
         <Button
           startIcon={<Check size={18} />}
           disabled={payload.length === 0 || blocked || merge.isPending}
-          onClick={submit}
+          onClick={() => void form.handleSubmit()}
         >
           送出審核（{payload.length} 欄）
         </Button>
@@ -586,7 +604,11 @@ function ReviewFieldCard({
   decision: FieldDecision;
   onChange: (next: FieldDecision) => void;
 }) {
-  const [value, setValue] = useState(field.proposedValues[0] ?? '');
+  const [openedValues] = useState(() => ({
+    value: field.proposedValues[0] ?? '',
+  }));
+  const form = useForm({ defaultValues: openedValues });
+  const value = useStore(form.store, (state) => state.values.value);
   const label = (raw: string) => reviewValueLabel(field.fieldName, raw);
   const choice = decision ? (decision.approve ? 'approve' : 'reject') : 'later';
 
@@ -597,7 +619,7 @@ function ReviewFieldCard({
         : { approve: next === 'approve', value: nextValue },
     );
   const setFinal = (next: string) => {
-    setValue(next);
+    form.setFieldValue('value', next);
     if (choice === 'approve') setChoice('approve', next);
   };
 

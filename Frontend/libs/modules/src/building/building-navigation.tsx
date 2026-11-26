@@ -1,9 +1,14 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
-import { Button, Stack, Typography } from '@mui/material';
-import { useMemo } from 'react';
+import { Stack, Typography } from '@mui/material';
 
-import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
+import {
+  Button,
+  designTokens,
+  displayTextSize,
+  Icons,
+} from '@rescue-frontend/ui';
 
 import type { RescueMapMarkerItem } from '../map/types';
 import { buildingTicketOrder } from './summary';
@@ -42,10 +47,7 @@ export function BuildingTicketNavigation({
   onSelectTicket,
 }: BuildingTicketNavigationProps) {
   const { building, tickets } = useBuilding(buildingUuid);
-  const order = useMemo(
-    () => (building ? buildingTicketOrder(building.floors, tickets) : []),
-    [building, tickets],
-  );
+  const order = building ? buildingTicketOrder(building.floors, tickets) : [];
 
   // A building deleted since: the ticket stays, standing alone.
   if (!building) {
@@ -59,7 +61,7 @@ export function BuildingTicketNavigation({
   return (
     <Stack spacing={1} sx={{ pt: 1 }}>
       <Button
-        variant="outlined"
+        variant="outline"
         startIcon={<Icons.building />}
         onClick={() => onOpenBuilding(buildingUuid)}
         sx={{ minHeight: 44 }}
@@ -70,7 +72,7 @@ export function BuildingTicketNavigation({
       {index >= 0 && order.length > 1 ? (
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
           <Button
-            variant="text"
+            variant="ghost"
             disabled={!previous}
             onClick={
               previous ? () => onSelectTicket(previous.marker) : undefined
@@ -91,7 +93,7 @@ export function BuildingTicketNavigation({
             {index + 1} / {order.length}
           </Typography>
           <Button
-            variant="text"
+            variant="ghost"
             disabled={!next}
             onClick={next ? () => onSelectTicket(next.marker) : undefined}
             endIcon={<Icons.chevronRight />}

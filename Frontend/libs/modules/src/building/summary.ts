@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * What the building drawer says of each ticket and each floor, and the order it lists them in
  * (prototype `site-building.jsx`, 2026-09-20 to 09-25).

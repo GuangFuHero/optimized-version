@@ -1,6 +1,11 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
-import { Alert, Button, Stack } from '@mui/material';
+import { useForm, useStore } from '@tanstack/react-form';
+import type { components } from '@rescue-frontend/data-access/openapi';
+
+import { Alert, Stack } from '@mui/material';
+import { Button } from '@rescue-frontend/ui';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { startTransition, useState } from 'react';
 
@@ -26,6 +31,14 @@ function readInitialIdentityType(value: string | null): AuthIdentityType {
 }
 
 /** What is wrong with each field, said under it (design `site-auth.jsx` `ResetView`). */
+type ResetRequest = components['schemas']['ResetPasswordRequest'];
+type ResetValues = Pick<ResetRequest, 'code'> & {
+  identityType: ResetRequest['type'];
+  identity: ResetRequest['value'];
+  password: ResetRequest['new_password'];
+  confirm: ResetRequest['new_password'];
+};
+
 interface FieldErrors {
   identity?: string;
   code?: string;
@@ -44,16 +57,50 @@ export function ResetPasswordFormClient() {
   const callbackUrl = searchParams.get('callbackUrl');
   const accountGiven =
     searchParams.get('type') !== null && searchParams.get('value') !== null;
-  const [identityType, setIdentityType] = useState<AuthIdentityType>(() =>
-    readInitialIdentityType(searchParams.get('type')),
-  );
-  const [identity, setIdentity] = useState(searchParams.get('value') ?? '');
-  const [code, setCode] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [initial] = useState<ResetValues>(() => ({
+    identityType: readInitialIdentityType(searchParams.get('type')),
+    identity: searchParams.get('value') ?? '',
+    code: '',
+    password: '',
+    confirm: '',
+  }));
+  const form = useForm({
+    defaultValues: initial,
+    validators: {
+      onSubmit: ({ value }) => {
+        const identityValidation = validateIdentityValue(
+          value.identityType,
+          value.identity,
+        );
+        const errors: FieldErrors = {
+          identity:
+            identityValidation === true ? undefined : identityValidation,
+          code: value.code.trim() ? undefined : '請輸入驗證碼',
+          ...newPasswordFieldProblems(value.password, value.confirm),
+        };
+        return Object.values(errors).some(Boolean)
+          ? { fields: errors }
+          : undefined;
+      },
+    },
+    onSubmit: (): Promise<void> => handleSubmitAsync(),
+  });
+  const {
+    identityType,
+    identity,
+    code,
+    password,
+    confirm: confirmPassword,
+  } = useStore(form.store, (state) => state.values);
+  const fieldMeta = useStore(form.store, (state) => state.fieldMeta);
+  const fieldErrors = {
+    identity: fieldMeta.identity?.errors[0],
+    code: fieldMeta.code?.errors[0],
+    password: fieldMeta.password?.errors[0],
+    confirm: fieldMeta.confirm?.errors[0],
+  };
+  const isSubmitting = useStore(form.store, (state) => state.isSubmitting);
   const [errorMessage, setErrorMessage] = useState<string>();
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [done, setDone] = useState(false);
 
   const goToLogin = () => {
@@ -64,25 +111,14 @@ export function ResetPasswordFormClient() {
 
   /** A field's own error goes as it is edited; the others stay until the next try. */
   const clearError = (field: keyof FieldErrors) => {
-    setFieldErrors((current) => ({ ...current, [field]: undefined }));
+    form.setFieldMeta(field, (meta) => ({
+      ...meta,
+      errorMap: { ...meta.errorMap, onSubmit: undefined },
+    }));
     setErrorMessage(undefined);
   };
 
   async function handleSubmitAsync() {
-    const identityValidation = validateIdentityValue(identityType, identity);
-    const errors: FieldErrors = {
-      identity: identityValidation === true ? undefined : identityValidation,
-      code: code.trim() ? undefined : '請輸入驗證碼',
-      ...newPasswordFieldProblems(password, confirmPassword),
-    };
-
-    setFieldErrors(errors);
-
-    if (Object.values(errors).some(Boolean)) {
-      return;
-    }
-
-    setIsSubmitting(true);
     setErrorMessage(undefined);
 
     try {
@@ -103,8 +139,6 @@ export function ResetPasswordFormClient() {
       setErrorMessage(
         resolveAuthErrorMessage(error, '重設密碼失敗，請稍後再試。'),
       );
-    } finally {
-      setIsSubmitting(false);
     }
   }
 
@@ -112,11 +146,7 @@ export function ResetPasswordFormClient() {
     return (
       <Stack spacing={2}>
         <AuthActionCard title="密碼已重設" description="用新密碼登入就可以了。">
-          <Button
-            variant="contained"
-            onClick={goToLogin}
-            sx={{ minHeight: 44, borderRadius: '999px' }}
-          >
+          <Button variant="primary" onClick={goToLogin}>
             回到登入
           </Button>
         </AuthActionCard>
@@ -138,8 +168,8 @@ export function ResetPasswordFormClient() {
               value={identityType}
               disabled={isSubmitting}
               onChange={(value) => {
-                setIdentityType(value);
-                setIdentity('');
+                form.setFieldValue('identityType', value);
+                form.setFieldValue('identity', '');
                 clearError('identity');
               }}
             />
@@ -151,7 +181,7 @@ export function ResetPasswordFormClient() {
               autoComplete="username"
               value={identity}
               onChange={(value) => {
-                setIdentity(value);
+                form.setFieldValue('identity', value);
                 clearError('identity');
               }}
               errorText={fieldErrors.identity}
@@ -167,7 +197,7 @@ export function ResetPasswordFormClient() {
           autoComplete="one-time-code"
           value={code}
           onChange={(value) => {
-            setCode(value);
+            form.setFieldValue('code', value);
             clearError('code');
           }}
           errorText={fieldErrors.code}
@@ -180,7 +210,7 @@ export function ResetPasswordFormClient() {
           autoComplete="new-password"
           value={password}
           onChange={(value) => {
-            setPassword(value);
+            form.setFieldValue('password', value);
             clearError('password');
           }}
           errorText={fieldErrors.password}
@@ -192,7 +222,7 @@ export function ResetPasswordFormClient() {
           autoComplete="new-password"
           value={confirmPassword}
           onChange={(value) => {
-            setConfirmPassword(value);
+            form.setFieldValue('confirm', value);
             clearError('confirm');
           }}
           errorText={fieldErrors.confirm}
@@ -202,18 +232,17 @@ export function ResetPasswordFormClient() {
         {errorMessage ? <Alert severity="error">{errorMessage}</Alert> : null}
 
         <Button
-          variant="contained"
+          variant="primary"
           disabled={isSubmitting}
           onClick={() => {
-            void handleSubmitAsync();
+            void form.handleSubmit();
           }}
-          sx={{ minHeight: 44, borderRadius: '999px' }}
         >
           {isSubmitting ? '處理中⋯' : '設定新密碼'}
         </Button>
 
         <Button
-          variant="text"
+          variant="ghost"
           onClick={() => {
             startTransition(() => {
               router.push(authHref('/forgot-password', { callbackUrl }), {
@@ -225,7 +254,7 @@ export function ResetPasswordFormClient() {
           重新取得驗證碼
         </Button>
 
-        <Button variant="text" onClick={goToLogin}>
+        <Button variant="ghost" onClick={goToLogin}>
           回到登入
         </Button>
       </AuthActionCard>

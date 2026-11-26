@@ -1,7 +1,12 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
+import { loadPage } from '../route/navigate';
+import type { PageHref } from '../route/paths';
 import { broadcastAuthChange } from './auth-broadcast';
 import { isSessionExpiredResponse, markSessionExpired } from './expiry';
+
+export const SESSION_ENDING_EVENT = 'wg:session-ending';
 
 let signingOutHere = false;
 
@@ -37,15 +42,16 @@ export function sessionStorageOrNull(): Storage | null {
  * This tab is signed out now — the backend cleared both cookies in its answer (ADR-328) —
  * so it carries on as a guest: the other tabs are told, and read the session again,
  * and this one leaves for `href` or reloads where it is. A whole-page load, not client-side
- * navigation: urql's cache lives in the page and must not go on showing what the signed-in person
+ * navigation: the query cache lives in the page and must not go on showing what the signed-in person
  * could see.
  */
-export function continueSignedOut(href?: string): void {
+export function continueSignedOut(href?: PageHref): void {
   markSigningOutHere();
+  window.dispatchEvent(new Event(SESSION_ENDING_EVENT));
   broadcastAuthChange('signed-out');
 
   if (href) {
-    window.location.assign(href);
+    loadPage(href);
   } else {
     window.location.reload();
   }
@@ -66,7 +72,7 @@ export function endExpiredSession(): void {
 }
 
 /**
- * `fetch` for the site's urql clients: hands the response on as it is, after noticing the proxy's
+ * `fetch` for the site's clients: hands the response on as it is, after noticing the proxy's
  * mark (`SESSION_HEADER`). Does nothing on the server.
  */
 export const sessionExpiryFetch: typeof fetch = async (input, init) => {

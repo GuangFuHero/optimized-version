@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * The board's create and edit form for a ticket: what it holds, what it refuses, and the inputs it
  * sends. A coordinator types in a request taken by phone; the backend marks its needs official, as
@@ -31,14 +32,18 @@ import {
 import type { DetailTicket } from './ticket-detail-view';
 import type { TicketPriority } from './ticket-row';
 
-export interface TicketFormValues {
-  title: string;
-  description: string;
+type TicketTextFields = {
+  [K in
+    | 'title'
+    | 'description'
+    | 'contactName'
+    | 'contactPhone'
+    | 'contactEmail']-?: NonNullable<CreateTicketInput[K]>;
+};
+
+export interface TicketFormValues extends TicketTextFields {
   priority: TicketPriority;
-  disasterTypes: string[];
-  contactName: string;
-  contactPhone: string;
-  contactEmail: string;
+  disasterTypes: NonNullable<CreateTicketInput['disasterTypes']>;
   point: PickedPoint | null;
   fullAddress: string;
   /**
@@ -48,7 +53,7 @@ export interface TicketFormValues {
   addressToken: string;
   floor: string;
   room: string;
-  photoUrls: string[];
+  photoUrls: NonNullable<CreateTicketInput['photoUrls']>;
   needs: NeedDraft[];
 }
 

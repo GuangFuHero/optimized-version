@@ -86,6 +86,7 @@ ROLES_DATA = [
             Perm.ANN_VIEW_ADMIN: "all",
             # ADR-324: every back-office page's shell shows the disaster it is responding to.
             Perm.PROJECT_VIEW: "all",
+            Perm.ANALYTICS_VIEW: "all",
             # ADR-130: audit.view is no longer the ticket into the timeline (that is
             # *.view_history), but it still unlocks its top two tiers — the review columns
             # and the raw audit payload.
@@ -174,6 +175,7 @@ ROLES_DATA = [
                 Perm.AI_DUP_VIEW,
                 Perm.AI_DUP_REVIEW,
                 Perm.AI_DUP_REVOKE,
+                Perm.ANALYTICS_VIEW,
             ],
             "all",
         ),
@@ -224,6 +226,7 @@ ROLES_DATA = [
             Perm.TEAM_AUDIT_VIEW: "team",  # Spec/026 ADR-358: changes to their own team
             Perm.ANN_VIEW_ADMIN: "all",  # staff read admin-page announcements
             Perm.PROJECT_VIEW: "all",  # ADR-324: every back-office page's shell shows the disaster
+            Perm.ANALYTICS_VIEW: "all",
             Perm.ZONE_VIEW: "all",
             Perm.ZONE_ADD: "all",
             Perm.ZONE_EDIT: "all",
@@ -275,6 +278,7 @@ ROLES_DATA = [
             Perm.TEAM_MEMBER_VIEW: "team",  # Spec/026: their own team's member list
             Perm.ANN_VIEW_ADMIN: "all",  # staff read admin-page announcements
             Perm.PROJECT_VIEW: "all",  # ADR-324, see the admin role above
+            Perm.ANALYTICS_VIEW: "all",
             # BE-RBAC-3 B3 (Carol, 2026-11-01 to 2026-11-03): a gov member works as a gov admin does
             # on import, export, the station review queue, 互助地圖 and 開啟空間. All of them are in
             # GOV_MEMBER_ONLY_PERMS, so an NGO member's grant of them resolves to `none`. Scopes as
@@ -315,7 +319,7 @@ async def ensure_role_grant(db: AsyncSession, *, role: Role, permission: Permiss
     if existing is not None:
         return False
     db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope))
-    print(f"為角色 {role.name} 授予 {permission.key} ({scope})")
+    print(f"為角色 {role.name} 授予 {permission.key}")
     return True
 
 

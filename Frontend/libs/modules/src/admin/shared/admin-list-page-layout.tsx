@@ -1,9 +1,11 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { useEffect, useRef, type ReactNode } from 'react';
 
 import { Box } from '@mui/material';
 import type { SxProps, Theme } from '@mui/material/styles';
+import { designTokens } from '@rescue-frontend/ui';
 
 export interface AdminListPageLayoutProps {
   /**
@@ -42,7 +44,7 @@ export function AdminListPageLayout({
   footer,
   minHeight = '100%',
   height = minHeight,
-  canvasColor = '#FFFFFF',
+  canvasColor = designTokens.color.bg.neutral.default,
   filterPanelSx,
   listContainerSx,
 }: AdminListPageLayoutProps) {

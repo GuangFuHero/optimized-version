@@ -373,6 +373,9 @@ OTHER_COMPONENTS = [
     {"group": "容器映像", "name": "node", "version": "22-alpine", "license": "MIT", "supplier": "Docker Official Images", "source": "Frontend/Dockerfile", "purl": "pkg:docker/library/node@22-alpine", "note": "前台、管理平台執行環境（Alpine）。tag 未用 digest 固定"},
     {"group": "容器映像", "name": "postgis/postgis", "version": "16-3.4", "license": "GPL-2.0-or-later（PostGIS）；PostgreSQL（PostgreSQL License）", "supplier": "PostGIS Project", "source": "Backend/docker/postgres-h3/Dockerfile", "purl": "pkg:docker/postgis/postgis@16-3.4", "note": "資料庫。以獨立服務執行，不與本專案程式碼連結"},
     {"group": "作業系統套件", "name": "postgresql-16-h3", "version": "建置時由 apt-archive.postgresql.org 安裝的版本", "license": "Apache-2.0", "supplier": "PostgreSQL Global Development Group（PGDG 套件庫）", "source": "Backend/docker/postgres-h3/Dockerfile", "purl": "pkg:deb/postgresql-16-h3", "note": "h3-pg 擴充。版本未固定"},
+    {"group": "作業系統套件", "name": "build-essential", "version": "建置時由 Debian 套件庫安裝的版本（trixie 為 12.12）", "license": "GPL-2.0-or-later", "supplier": "Debian", "source": "Backend/Dockerfile", "purl": "pkg:deb/debian/build-essential", "note": "只是一份清單（metapackage），會一起裝 gcc、g++、make、libc6-dev 等編譯工具，各自照 Debian 套件的授權。用來編譯 Python 套件；後端只有一個 stage，所以會留在正式環境的映像裡。版本未固定"},
+    {"group": "作業系統套件", "name": "libpq-dev", "version": "建置時由 Debian 套件庫安裝的版本", "license": "PostgreSQL", "supplier": "Debian（PostgreSQL Global Development Group）", "source": "Backend/Dockerfile", "purl": "pkg:deb/debian/libpq-dev", "note": "PostgreSQL 用戶端函式庫的開發檔。後端只有一個 stage，所以會留在正式環境的映像裡。版本未固定"},
+    {"group": "作業系統套件", "name": "libc6-compat", "version": "建置時由 Alpine 套件庫安裝的版本（Alpine 3.22 由 gcompat 1.1.0 提供）", "license": "NCSA", "supplier": "Alpine Linux（gcompat：Adélie Linux）", "source": "Frontend/Dockerfile", "purl": "pkg:apk/alpine/libc6-compat", "note": "glibc 相容層，builder 與 runner 兩個 stage 都裝，所以會留在正式環境的映像裡。版本未固定"},
     {"group": "容器映像", "name": "redis", "version": "7-alpine", "license": "7.2 以前 BSD-3-Clause；7.4 起 RSALv2／SSPLv1", "supplier": "Docker Official Images", "source": "Backend/docker-compose.yml、docker-compose.staging.yml", "purl": "pkg:docker/library/redis@7-alpine", "note": "7-alpine 目前對應 7.4.x，授權為 RSALv2／SSPLv1（非 OSI 認可）。以獨立服務執行，不隨元件散布"},
     {"group": "容器映像", "name": "cloudflare/cloudflared", "version": "latest", "license": "Apache-2.0", "supplier": "Cloudflare", "source": "Backend/docker-compose.staging.yml", "purl": "pkg:docker/cloudflare/cloudflared@latest", "note": "只用在 staging 部署（Cloudflare Tunnel）。latest 未固定版本"},
     {"group": "字型", "name": "Noto Sans TC", "version": "建置時由 next/font 自 Google Fonts 下載", "license": "OFL-1.1", "supplier": "Google", "source": "Frontend/libs/modules/src/document-layout.tsx", "purl": "", "note": "next/font 建置時下載並與網站一起提供（self-host）"},
@@ -418,6 +421,8 @@ PY_LICENSE_NORMALIZE = {
 }
 PY_LICENSE_OVERRIDES = {
     "python-dateutil": ("Apache-2.0 AND BSD-3-Clause", "PyPI 寫「Dual License」；套件 LICENSE：2017-12 以後的貢獻為 Apache-2.0，之前為 BSD-3-Clause"),
+    "shapely": ("BSD-3-Clause AND LGPL-2.1-only", "Linux／macOS／Windows 的 wheel 內含 GEOS 動態函式庫（LGPL-2.1），見 wheel 的 LICENSE_GEOS"),
+    "numpy": ("BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 AND GPL-3.0-or-later WITH GCC-exception-3.1 AND LGPL-2.1-or-later", "Linux wheel 內含 OpenBLAS、libgfortran（GPL-3.0-or-later WITH GCC-exception-3.1）與 libquadmath（LGPL-2.1-or-later），見 wheel 的 LICENSE.txt"),
 }
 PY_LICENSE_NOTES = {
     "BSD": "PyPI 只寫 BSD，沒有寫明是 2 條款或 3 條款",

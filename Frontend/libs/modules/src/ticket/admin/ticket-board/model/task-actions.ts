@@ -1,7 +1,10 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * What the board's drawer offers on a ticket's needs, and how it reads what the backend says
  * back: the ⋯ of each need, the dedup answer of 再加一項需求, and a refusal's 403.
  */
+
+import type { CreateTicketTaskInput } from '@rescue-frontend/data-access/admin';
 
 import type { ClaimError } from '../../../needs/claim-error';
 import {
@@ -85,12 +88,10 @@ export function readCreateResult(result: {
 }
 
 /** 再加一項需求's fields, as typed. */
-export interface NeedDraft {
-  taskType: string;
-  taskName: string;
+export type NeedDraft = Pick<CreateTicketTaskInput, 'taskType' | 'taskName'> & {
   quantity: string;
-  description: string;
-}
+  description: NonNullable<CreateTicketTaskInput['taskDescription']>;
+};
 
 export type NeedDraftErrors = Partial<Record<'taskName' | 'quantity', string>>;
 

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import type { RescueMapTicketDetailOverrides } from '../../map/components/rescue-map-detail-drawer';

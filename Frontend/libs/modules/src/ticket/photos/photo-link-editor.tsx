@@ -1,18 +1,20 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import {
   Alert,
   AlertTitle,
   Box,
-  Button,
   Link,
   Stack,
   TextField,
   Typography,
 } from '@mui/material';
 import { useState } from 'react';
+import { useForm, useStore } from '@tanstack/react-form';
 
 import {
+  Button,
   designTokens,
   displayTextSize,
   Icons,
@@ -50,9 +52,21 @@ export function PhotoLinkEditor({
   label,
   hint,
 }: PhotoLinkEditorProps) {
-  const [draft, setDraft] = useState('');
-  // A refusal or a word about the link just added — said once, cleared by the next keystroke.
-  const [message, setMessage] = useState<string | null>(null);
+  const form = useForm({
+    defaultValues: { url: '' },
+    validators: {
+      onSubmit: ({ value: draft }) => {
+        const checked = checkPhotoLink(draft.url, value);
+        return checked.ok ? undefined : checked.error;
+      },
+    },
+    onSubmitInvalid: () => setNotice(null),
+    onSubmit: (): void => add(),
+  });
+  const draft = useStore(form.store, (state) => state.values.url);
+  const error = useStore(form.store, (state) => state.errorMap.onSubmit);
+  const [notice, setNotice] = useState<string | null>(null);
+  const message = error ?? notice;
   const [pendingRemove, setPendingRemove] = useState<number | null>(null);
   const full = value.length >= PHOTO_LINK_MAX;
 
@@ -60,19 +74,19 @@ export function PhotoLinkEditor({
     const checked = checkPhotoLink(draft, value);
 
     if (!checked.ok) {
-      setMessage(checked.error);
       return;
     }
 
     onChange([...value, checked.link]);
-    setDraft('');
-    setMessage(checked.notice);
+    form.resetField('url');
+    setNotice(checked.notice);
   };
 
   const removeAt = (index: number) => {
     onChange(value.filter((_, at) => at !== index));
     setPendingRemove(null);
-    setMessage(null);
+    form.setErrorMap({ onSubmit: undefined });
+    setNotice(null);
   };
 
   return (
@@ -119,7 +133,7 @@ export function PhotoLinkEditor({
       >
         <Icons.shieldAlert
           sx={{
-            fontSize: 17,
+            fontSize: designTokens.iconSize[17],
             mt: '1px',
             flexShrink: 0,
             color: color.fg.neutral.muted,
@@ -180,13 +194,14 @@ export function PhotoLinkEditor({
           disabled={full}
           error={Boolean(message) && !full && draft.trim() !== ''}
           onChange={(event) => {
-            setDraft(event.target.value);
-            setMessage(null);
+            form.setFieldValue('url', event.target.value);
+            form.setErrorMap({ onSubmit: undefined });
+            setNotice(null);
           }}
           onKeyDown={(event) => {
             if (event.key === 'Enter') {
               event.preventDefault();
-              add();
+              void form.handleSubmit();
             }
           }}
           placeholder="貼上圖片網址，https:// 開頭"
@@ -195,11 +210,12 @@ export function PhotoLinkEditor({
           }}
         />
         <Button
-          variant="outlined"
-          onClick={add}
+          variant="outline"
+          onClick={() => void form.handleSubmit()}
           disabled={!draft.trim() || full}
           sx={{
             flexShrink: 0,
+            minHeight: 40,
             height: 40,
             [TOUCH_FIELD_MEDIA]: { height: 48 },
           }}
@@ -243,7 +259,11 @@ export function PhotoLinkEditor({
             fontWeight: 500,
           }}
         >
-          <Icons.externalLink sx={{ fontSize: 15 }} />
+          <Icons.externalLink
+            sx={{
+              fontSize: designTokens.iconSize[15],
+            }}
+          />
           {`還沒有圖片網址？到 ${PHOTO_UPLOAD_HOST.name} 上傳`}
         </Link>
         <Typography

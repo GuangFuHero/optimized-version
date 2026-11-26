@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -189,7 +190,7 @@ describe('the expired flag across the reload', () => {
 });
 
 describe('isUnauthorizedError', () => {
-  it('reads an HTTP 401, which urql hands over as a network error', () => {
+  it('reads an HTTP 401, which comes as a network error', () => {
     expect(
       isUnauthorizedError({
         networkError: new Error('Unauthorized'),

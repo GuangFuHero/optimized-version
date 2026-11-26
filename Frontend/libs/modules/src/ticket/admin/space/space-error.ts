@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * What a coordinator reads when opening, editing or deleting a space is refused, in place of the
  * backend's English. The refusals are `services/building_map.py`'s, word for word; a 403 is the
@@ -33,7 +34,7 @@ const WORDS: Record<'create' | 'update' | 'delete', RefusalWords> = {
   },
 };
 
-/** `error` is what the write threw: urql's `CombinedError`, or anything else as a plain failure. */
+/** `error` is what the write threw: a `GraphqlError`, or anything else as a plain failure. */
 export function spaceErrorMessage(
   write: 'create' | 'update' | 'delete',
   error: unknown,

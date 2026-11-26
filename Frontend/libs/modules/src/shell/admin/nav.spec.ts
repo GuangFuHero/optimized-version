@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { describe, expect, it } from 'vitest';
 
 import { canOpenAdminHref } from './nav';
@@ -16,6 +17,11 @@ describe('canOpenAdminHref', () => {
   it('keeps 成員與權限 for an identity holding rbac.assign', () => {
     expect(canOpenAdminHref('/users', ['user.view'])).toBe(false);
     expect(canOpenAdminHref('/users', ['rbac.assign'])).toBe(true);
+  });
+
+  it('keeps 總覽儀表板 for an identity holding analytics.view', () => {
+    expect(canOpenAdminHref('/dashboard', ['ticket.view'])).toBe(false);
+    expect(canOpenAdminHref('/dashboard', ['analytics.view'])).toBe(true);
   });
 
   it('opens a link under no sidebar item', () => {

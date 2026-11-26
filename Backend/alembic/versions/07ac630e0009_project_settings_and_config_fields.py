@@ -53,17 +53,18 @@ an earlier version of this docstring called it "feature 012"; that is wrong — 
 account-profile and has nothing to do with this chain (ADR-204).
 
 """
+
 from collections.abc import Sequence
 
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects import postgresql
 
-from alembic import op
 from app.db.triggers import get_audit_trigger_sql
 
 # revision identifiers, used by Alembic.
-revision: str = '07ac630e0009'
-down_revision: str | Sequence[str] | None = 'b7e4c1a90d52'
+revision: str = "07ac630e0009"
+down_revision: str | Sequence[str] | None = "b7e4c1a90d52"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -80,52 +81,85 @@ def upgrade() -> None:
         sa.Column("uuid", sa.UUID(), nullable=False, comment="主鍵 UUID"),
         sa.Column("name", sa.String(100), nullable=False, comment="災害名稱，例如「花蓮 0816」"),
         sa.Column(
-            "disaster_types", postgresql.ARRAY(sa.String()),
-            server_default=sa.text("'{}'"), nullable=False,
+            "disaster_types",
+            postgresql.ARRAY(sa.String()),
+            server_default=sa.text("'{}'"),
+            nullable=False,
             comment="這場災害的型別集合，例如 {landslide,flood}",
         ),
         sa.Column("started_at", sa.DateTime(timezone=True), nullable=True, comment="災害起始時間"),
         sa.Column(
-            "created_at", sa.DateTime(timezone=True),
-            server_default=sa.text("now()"), nullable=False, comment="建立時間",
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+            comment="建立時間",
         ),
         sa.Column(
-            "updated_at", sa.DateTime(timezone=True),
-            server_default=sa.text("now()"), nullable=False, comment="最後更新時間",
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+            comment="最後更新時間",
         ),
         sa.PrimaryKeyConstraint("uuid"),
     )
     # 單列不變式：一個部署 = 一場（混合型）災害（ADR-090）
-    op.execute(
-        "CREATE UNIQUE INDEX uq_project_settings_singleton ON project_settings ((true))"
-    )
+    op.execute("CREATE UNIQUE INDEX uq_project_settings_singleton ON project_settings ((true))")
     # project_settings joins AUDITED_TABLES — changing the disaster types is an audited act.
     op.execute(get_audit_trigger_sql("project_settings"))
 
     for table, type_col in _CONFIG_TABLES:
-        op.add_column(table, sa.Column(
-            "disaster_types", postgresql.ARRAY(sa.String()),
-            server_default=sa.text("'{}'"), nullable=False,
-            comment="啟用於哪些災害型別；空陣列代表全部",
-        ))
-        op.add_column(table, sa.Column(
-            "label", sa.String(100), nullable=True,
-            comment="顯示文字；NULL 時前端回退顯示 property_name",
-        ))
-        op.add_column(table, sa.Column(
-            "sort_order", sa.Integer(), server_default=sa.text("0"), nullable=False,
-            comment="表單欄位順序",
-        ))
-        op.add_column(table, sa.Column(
-            "is_active", sa.Boolean(), server_default=sa.text("true"), nullable=False,
-            comment="停用開關",
-        ))
+        op.add_column(
+            table,
+            sa.Column(
+                "disaster_types",
+                postgresql.ARRAY(sa.String()),
+                server_default=sa.text("'{}'"),
+                nullable=False,
+                comment="啟用於哪些災害型別；空陣列代表全部",
+            ),
+        )
+        op.add_column(
+            table,
+            sa.Column(
+                "label",
+                sa.String(100),
+                nullable=True,
+                comment="顯示文字；NULL 時前端回退顯示 property_name",
+            ),
+        )
+        op.add_column(
+            table,
+            sa.Column(
+                "sort_order",
+                sa.Integer(),
+                server_default=sa.text("0"),
+                nullable=False,
+                comment="表單欄位順序",
+            ),
+        )
+        op.add_column(
+            table,
+            sa.Column(
+                "is_active",
+                sa.Boolean(),
+                server_default=sa.text("true"),
+                nullable=False,
+                comment="停用開關",
+            ),
+        )
         op.create_unique_constraint(f"uq_{table}_key", table, [type_col, "property_name"])
 
-    op.add_column("users", sa.Column(
-        "last_activity_at", sa.DateTime(timezone=True), nullable=True,
-        comment="最後活動時間（refresh token 輪替時寫入）",
-    ))
+    op.add_column(
+        "users",
+        sa.Column(
+            "last_activity_at",
+            sa.DateTime(timezone=True),
+            nullable=True,
+            comment="最後活動時間（refresh token 輪替時寫入）",
+        ),
+    )
 
 
 def downgrade() -> None:

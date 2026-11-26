@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import {
   Building2,
   ClipboardList,
@@ -37,6 +38,7 @@ export const ADMIN_NAV_SECTIONS: readonly {
         href: '/dashboard',
         Icon: LayoutDashboard,
         description: '整體狀況與數字',
+        capability: 'analytics.view',
       },
       {
         id: 'map',

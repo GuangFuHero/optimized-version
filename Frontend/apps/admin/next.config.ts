@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { composePlugins, withNx } from '@nx/next';
 import type { WithNxOptions } from '@nx/next/plugins/with-nx';
 import path from 'node:path';
@@ -18,12 +19,14 @@ const securityHeaders = [
 const nextConfig = {
   nx: {},
   poweredByHeader: false,
+  reactCompiler: true,
   async headers() {
     return [{ source: '/:path*', headers: securityHeaders }];
   },
   transpilePackages: [
     '@rescue-frontend/ui',
     '@rescue-frontend/modules',
+    '@rescue-frontend/leaflet',
     '@rescue-frontend/data-access',
   ],
   output: 'standalone',

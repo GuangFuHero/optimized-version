@@ -28,7 +28,7 @@
 - `design-tokens.ts` 比設計系統的 CSS 匯出新（設計師的裁示先寫進來了）。**不要為了跟 `semantic.css` 一致把它改回去。**
 - 不要改 `../Design/`，也不要動設計分支；那是設計師的。她給的元件在設計分支的 `Design/handoff/`（目前在 `Design/components/`），搬法見 `docs/design-system.md`。
 
-`pnpm lint` 會對 `libs/modules` 與 `apps` 報其中幾項（寫死的顏色、數字圓角與字級、MUI 的 `Button`；目前是 warning），其他規則 lint 抓不到，要自己對照。新寫的程式不可以增加這類 warning。
+`pnpm lint` 會在 `libs/modules` 與 `apps` 擋下寫死的顏色、圓角、字級和 MUI 的 `Button`。既有的樣式值已集中到 `design-tokens.ts`，供設計師審查。其他設計規則仍要自己對照。
 
 ## 原型沒畫到的狀態
 
@@ -40,7 +40,7 @@
 - 對照的原型畫面（設計分支 `Design/` 底下的檔名）。
 - 這個 PR 處理了設計分支 `CHANGELOG.md` 的哪一筆待辦（有的話）。
 - 刻意和原型不同的地方，以及原因。
-- `pnpm lint` 結果：沒有新增 design-system warning。
+- `pnpm lint --max-warnings=0` 結果。
 
 ## 修既有偏差的任務
 

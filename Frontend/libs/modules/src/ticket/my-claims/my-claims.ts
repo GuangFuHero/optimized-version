@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * 我的任務 › 我承接的: the needs a volunteer said they would go to, read for the day they go —
  * where, whom to call, and which need (prototype `MyTasksDrawer`, `site-actions.jsx:1765-1896`).

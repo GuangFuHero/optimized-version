@@ -1,6 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 
 import { Box } from '@mui/material';
 
@@ -136,6 +137,8 @@ function createStationResources(marker: RescueMapMarkerItem) {
   ];
 }
 
+const NO_TICKET_ACTIONS = [] as const;
+
 function createTicketSummary(marker: RescueMapMarkerItem) {
   const [latitude, longitude] = marker.position;
   const contactSummary = [
@@ -235,7 +238,11 @@ function createStationSummary({
   };
 }
 
-export function RescueMapDetailDrawer({
+export function RescueMapDetailDrawer(props: RescueMapDetailDrawerProps) {
+  return <RescueMapDetailDrawerView key={props.marker?.id ?? ''} {...props} />;
+}
+
+function RescueMapDetailDrawerView({
   marker,
   onClose,
   onSelectMarker,
@@ -248,10 +255,6 @@ export function RescueMapDetailDrawer({
 }: RescueMapDetailDrawerProps) {
   const [activeStationTab, setActiveStationTab] =
     useState<StationDetailTabId>('info');
-
-  useEffect(() => {
-    setActiveStationTab('info');
-  }, [marker?.id]);
 
   const closeAction = {
     ariaLabel: '關閉詳情',
@@ -315,6 +318,7 @@ export function RescueMapDetailDrawer({
       {marker.detailType === 'ticket' && !ticketDetailOverrides ? (
         <TicketDetailDrawer
           {...createTicketSummary(marker)}
+          footerActions={NO_TICKET_ACTIONS}
           closeAction={closeAction}
           width="100%"
           height="100%"

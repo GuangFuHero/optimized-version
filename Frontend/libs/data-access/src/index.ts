@@ -1,41 +1,15 @@
+// SPDX-License-Identifier: GPL-3.0-only
 export * from './graphql';
+export { default as ApiError } from './rest/api-error';
+export { createRestClient, responseData } from './rest/openapi-client';
 export {
-  ApiError,
-  createRestClient,
-  responseData,
-  getUserSaltAsync,
-  loginAsync,
-  registerAsync,
-  verifyAsync,
-  resendVerificationAsync,
-  refreshAsync,
-  logoutAsync,
-  logoutAllAsync,
-  forgotPasswordAsync,
-  resetPasswordAsync,
-  googleSsoAsync,
-  lineSsoAsync,
-  linkGoogleAsync,
-  linkLineAsync,
-  changePasswordAsync,
-  setPasswordAsync,
-  addContactAsync,
-  verifyContactAsync,
-  resendContactAsync,
-  getCurrentUserAsync,
-  patchCurrentUserAsync,
-} from './rest';
-export type {
-  AuthIdentityType,
-  IAuthIdentifierPayload,
-  IChangePasswordPayload,
-  IIdTokenPayload,
-  IPasswordResetPayload,
-  IRefreshPayload,
-  IRegisterPayload,
-  ISetPasswordPayload,
-  ITokenPair,
-  IUser,
-  IUserUpdatePayload,
-  IVerifyPayload,
-} from './rest';
+  CurrentUserProvider,
+  useCurrentUser,
+  useInvalidateCurrentUser,
+} from './current-user';
+export {
+  createAppQueryClient,
+  isPermissionError,
+  isSessionEndError,
+  SILENT_ERROR_META,
+} from './query-client';

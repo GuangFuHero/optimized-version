@@ -39,6 +39,7 @@
 
 ### `map/`
 
+- `admin/*`
 - `components/*`
 - `hooks/*`
 - `site/*`
@@ -51,6 +52,7 @@
 
 - 地圖核心能力已集中在 `map/*`
 - site map 專屬 route / viewport / live-data hook 在 `map/site/*`
+- 後台地圖的區域讀取、即時 markers、區域編輯器與待送出的變更在 `map/admin/*`
 
 ### `point-share/`
 
@@ -65,7 +67,9 @@
 - `serialize.ts`
 - `constants.ts`
 - `types.ts`
-- `use-site-route-state.ts`
+- `use-site-route-state.ts`：nuqs 前台 query state 與路徑語意
+- `use-board-search-params.ts`：站點／任務 board URL state
+- `use-return-query.ts`：一次性 sign-in return marker
 - `controls/*`
 
 ### `shell/`
@@ -90,8 +94,9 @@
 ### `ticket/`
 
 - `admin/ticket-detail/*`
-- `admin/ticket-list/*`
-- `admin/ticket-report/*`
+- `admin/ticket-board/*`：任務 board、TanStack Table 列表與 TanStack Form 編輯
+- `admin/space/*`：空間詳情與表單
+- `help-request/*`、`needs/*`：前台請求協助與需求操作
 - `task-match/*`
 - `status.ts`
 
@@ -102,7 +107,9 @@
 - `admin/field-configuration`
 - `admin/invite-side-sheet`
 - `admin/shared/detail-modal-frame`
-- `admin/user/user-list`
+- `admin/members`：正式成員與團隊列表
+- `admin/dedup`：重複比對、merge draft 與審核
+- `admin/settings`、`admin/announcement`
 
 ## App-local 暫留項
 

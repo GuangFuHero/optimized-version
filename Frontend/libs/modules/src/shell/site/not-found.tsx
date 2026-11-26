@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { Box, Stack, Typography } from '@mui/material';
@@ -29,19 +30,19 @@ const NEXT_STEPS: {
     href: '/map',
     label: '救災地圖',
     sub: '看附近的任務與資源站點',
-    icon: <MapIcon sx={{ fontSize: 20 }} />,
+    icon: <MapIcon sx={{ fontSize: designTokens.iconSize.lg }} />,
   },
   {
     href: '/list',
     label: '救災列表',
     sub: '找需要人手的任務',
-    icon: <ListIcon sx={{ fontSize: 20 }} />,
+    icon: <ListIcon sx={{ fontSize: designTokens.iconSize.lg }} />,
   },
   {
     href: BRIEFING_HREF,
     label: '志工行前資訊',
     sub: '出發前要準備什麼',
-    icon: <Icons.bookOpen sx={{ fontSize: 20 }} />,
+    icon: <Icons.bookOpen sx={{ fontSize: designTokens.iconSize.lg }} />,
   },
 ];
 

@@ -1,0 +1,236 @@
+{
+  "projectName": "optimized-version",
+  "projectOwner": "GuangFuHero",
+  "repoType": "github",
+  "repoHost": "https://github.com",
+  "files": [
+    "CONTRIBUTORS.md"
+  ],
+  "imageSize": 80,
+  "contributorsPerLine": 7,
+  "commit": false,
+  "commitType": "docs",
+  "commitConvention": "angular",
+  "linkToUsage": false,
+  "skipCi": true,
+  "types": {
+    "backend": {
+      "symbol": "⚙️",
+      "description": "後端程式",
+      "link": "https://github.com/<%= options.projectOwner %>/<%= options.projectName %>/commits/main/Backend?author=<%= contributor.login %>"
+    },
+    "frontend": {
+      "symbol": "🖥️",
+      "description": "前端程式",
+      "link": "https://github.com/<%= options.projectOwner %>/<%= options.projectName %>/commits/main/Frontend?author=<%= contributor.login %>"
+    }
+  },
+  "contributors": [
+    {
+      "login": "jujuyuzu",
+      "name": "Dan",
+      "avatar_url": "https://avatars.githubusercontent.com/u/52914826?v=4",
+      "profile": "https://github.com/jujuyuzu",
+      "contributions": [
+        "frontend",
+        "backend",
+        "test",
+        "doc",
+        "infra",
+        "security",
+        "review",
+        "maintenance"
+      ]
+    },
+    {
+      "login": "Taiwanchaoh",
+      "name": "Hsun Chao",
+      "avatar_url": "https://avatars.githubusercontent.com/u/14827375?v=4",
+      "profile": "https://github.com/Taiwanchaoh",
+      "contributions": [
+        "backend",
+        "frontend",
+        "test",
+        "doc",
+        "infra",
+        "security",
+        "review",
+        "maintenance"
+      ]
+    },
+    {
+      "login": "zenuie",
+      "name": "zenuie",
+      "avatar_url": "https://avatars.githubusercontent.com/u/30676398?v=4",
+      "profile": "https://github.com/zenuie",
+      "contributions": [
+        "backend",
+        "frontend",
+        "test",
+        "doc",
+        "security",
+        "review"
+      ]
+    },
+    {
+      "login": "hanhsienlei",
+      "name": "hanhsienlei",
+      "avatar_url": "https://avatars.githubusercontent.com/u/79852980?v=4",
+      "profile": "https://github.com/hanhsienlei",
+      "contributions": [
+        "frontend",
+        "backend",
+        "test",
+        "doc",
+        "review"
+      ]
+    },
+    {
+      "login": "chingweih",
+      "name": "Ethan Huang 黃靖緯",
+      "avatar_url": "https://avatars.githubusercontent.com/u/69299174?v=4",
+      "profile": "https://github.com/chingweih",
+      "contributions": [
+        "frontend",
+        "doc",
+        "test",
+        "review"
+      ]
+    },
+    {
+      "login": "sucrelindesign",
+      "name": "sucrelindesign",
+      "avatar_url": "https://avatars.githubusercontent.com/u/263665412?v=4",
+      "profile": "https://github.com/sucrelindesign",
+      "contributions": [
+        "design",
+        "userTesting",
+        "frontend",
+        "test",
+        "security",
+        "review"
+      ]
+    },
+    {
+      "login": "Sam-nnnn",
+      "name": "Sam",
+      "avatar_url": "https://avatars.githubusercontent.com/u/109059570?v=4",
+      "profile": "https://github.com/Sam-nnnn",
+      "contributions": [
+        "frontend",
+        "doc"
+      ]
+    },
+    {
+      "login": "chitienhsiehwork-ai",
+      "name": "ShroomDog and Clawd",
+      "avatar_url": "https://avatars.githubusercontent.com/u/257921125?v=4",
+      "profile": "https://github.com/chitienhsiehwork-ai",
+      "contributions": [
+        "backend",
+        "frontend",
+        "test",
+        "doc"
+      ]
+    },
+    {
+      "login": "13g7895123",
+      "name": "Jarvis",
+      "avatar_url": "https://avatars.githubusercontent.com/u/62543752?v=4",
+      "profile": "https://github.com/13g7895123",
+      "contributions": [
+        "frontend",
+        "test"
+      ]
+    },
+    {
+      "login": "siliconcrystal",
+      "name": "XI-JING,CHANG",
+      "avatar_url": "https://avatars.githubusercontent.com/u/11289561?v=4",
+      "profile": "https://github.com/siliconcrystal",
+      "contributions": [
+        "frontend"
+      ]
+    },
+    {
+      "login": "kiya69",
+      "name": "kiya",
+      "avatar_url": "https://avatars.githubusercontent.com/u/6420706?v=4",
+      "profile": "https://github.com/kiya69",
+      "contributions": [
+        "frontend"
+      ]
+    },
+    {
+      "login": "Seaweed0112",
+      "name": "Kai-Jen Zheng",
+      "avatar_url": "https://avatars.githubusercontent.com/u/49556791?v=4",
+      "profile": "https://github.com/Seaweed0112",
+      "contributions": [
+        "backend",
+        "test",
+        "review"
+      ]
+    },
+    {
+      "login": "ZhuMon",
+      "name": "YX",
+      "avatar_url": "https://avatars.githubusercontent.com/u/30390536?v=4",
+      "profile": "https://github.com/ZhuMon",
+      "contributions": [
+        "doc"
+      ]
+    },
+    {
+      "login": "ChiTienHsieh",
+      "name": "Chi-Tien Hsieh (7.)",
+      "avatar_url": "https://avatars.githubusercontent.com/u/183537743?v=4",
+      "profile": "https://github.com/ChiTienHsieh",
+      "contributions": [
+        "doc",
+        "tool",
+        "review"
+      ]
+    },
+    {
+      "login": "painfulexistence",
+      "name": "Loïc Chen",
+      "avatar_url": "https://avatars.githubusercontent.com/u/30090734?v=4",
+      "profile": "https://github.com/painfulexistence",
+      "contributions": [
+        "doc",
+        "infra",
+        "review"
+      ]
+    },
+    {
+      "login": "poposing",
+      "name": "poposing",
+      "avatar_url": "https://avatars.githubusercontent.com/u/272719556?v=4",
+      "profile": "https://github.com/poposing",
+      "contributions": [
+        "review"
+      ]
+    },
+    {
+      "login": "Nunnie0602",
+      "name": "Bunnie",
+      "avatar_url": "https://avatars.githubusercontent.com/u/205031539?v=4",
+      "profile": "https://github.com/Nunnie0602",
+      "contributions": [
+        "userTesting"
+      ]
+    },
+    {
+      "login": "carolchu1208",
+      "name": "Man Lin, Chu (Carol)",
+      "avatar_url": "https://avatars.githubusercontent.com/u/111946932?v=4",
+      "profile": "https://github.com/carolchu1208",
+      "contributions": [
+        "projectManagement",
+        "security",
+        "doc"
+      ]
+    }
+  ]
+}

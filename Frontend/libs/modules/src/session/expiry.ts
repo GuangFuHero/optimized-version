@@ -1,10 +1,13 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * When a signed-in session has ended without the person signing out: revoked elsewhere (另一台裝置
  * 「登出所有裝置」, an admin's sign-out, an identity removed — backend ADR-096) or past its refresh.
  * The GraphQL proxy decides and marks the response; the browser reads the mark.
  *
- * Pure and import-free: the server route and the browser both use it.
+ * Pure, importing only the import-free path constants: the server route and the browser both use it.
  */
+
+import { SITE_PATHS } from '../route/paths';
 
 /** The response header the proxy marks an ended session with. */
 export const SESSION_HEADER = 'x-wg-session';
@@ -20,7 +23,7 @@ export function reloginHref({
   search,
 }: Pick<Location, 'pathname' | 'search'>): string {
   const callbackUrl = encodeURIComponent(`${pathname}${search}`);
-  return `/login?callbackUrl=${callbackUrl}`;
+  return `${SITE_PATHS.login}?callbackUrl=${callbackUrl}`;
 }
 
 /** `useAuthSession().status` (`auth-session.tsx`), spelled out so this file stays import-free. */
@@ -36,7 +39,7 @@ export interface SessionSeen {
  * The person this tab shows is no longer the one signed in — another tab signed out (on its own,
  * or because its session ended), signed in, or signed out and in as someone else — and this tab
  * has just read its session again (the other tab's broadcast, or a check on focus): reload, so
- * urql's cache stops showing what the last person, or the guest, was shown. A guest's results lack
+ * the query cache stops showing what the last person, or the guest, was shown. A guest's results lack
  * what is the person's own: a need they already took would still offer 接這筆. A tab left in the
  * background may go straight from one person to the next without ever seeing the guest in between.
  *
@@ -69,7 +72,7 @@ export function isSessionExpiredResponse(
   return headers.get(SESSION_HEADER) === SESSION_EXPIRED;
 }
 
-/** The parts of urql's `CombinedError` this looks at. */
+/** The parts of `GraphqlError` this looks at. */
 export interface UnauthorizedCheck {
   /** Not read: an HTTP 401 and a dropped connection both have one; only `response` tells them apart. */
   networkError?: unknown;
@@ -82,7 +85,7 @@ export interface UnauthorizedCheck {
  * end the session first — a fallback: the mark normally gets there before any error shows. It
  * comes two ways:
  * - the backend's GraphQL context turns down a token it cannot validate with an HTTP 401
- *   (`get_context`, backend `graphql/context.py`), whose `{ detail }` body urql cannot read as
+ *   (`get_context`, backend `graphql/context.py`), whose `{ detail }` body cannot be read as
  *   GraphQL: it hands over a `networkError` with the `response` beside it, so this must be asked
  *   before a `networkError` is taken for a dropped connection;
  * - a request sent on as a guest reaches a resolver that needs a person (`require_authenticated`),

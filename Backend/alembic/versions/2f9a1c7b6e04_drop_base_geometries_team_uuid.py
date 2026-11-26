@@ -9,13 +9,14 @@ point falls inside a WorkZone polygon assigned to a team (`zone` scope), not by 
 owning-org. `team_uuid` on base_geometries had no remaining consumer, so it is removed.
 `users.team_uuid` (team membership) is untouched.
 """
+
 from collections.abc import Sequence
 
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = '2f9a1c7b6e04'
-down_revision: str | Sequence[str] | None = '1d52ab265e50'
+revision: str = "2f9a1c7b6e04"
+down_revision: str | Sequence[str] | None = "1d52ab265e50"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -28,9 +29,5 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Recreate the team_uuid column and its index on base_geometries."""
-    op.execute(
-        "ALTER TABLE base_geometries ADD COLUMN IF NOT EXISTS team_uuid UUID REFERENCES teams(uuid)"
-    )
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_base_geometries_team_uuid ON base_geometries(team_uuid)"
-    )
+    op.execute("ALTER TABLE base_geometries ADD COLUMN IF NOT EXISTS team_uuid UUID REFERENCES teams(uuid)")
+    op.execute("CREATE INDEX IF NOT EXISTS ix_base_geometries_team_uuid ON base_geometries(team_uuid)")

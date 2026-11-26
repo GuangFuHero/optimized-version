@@ -1,6 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
-
-import { useMemo } from 'react';
 
 import {
   useBuildingMaps,
@@ -28,7 +27,7 @@ const NONE: SiteMapBuildings = { entries: [], markers: [], drawn: new Set() };
 export function useSiteMapBuildings(shown: boolean): SiteMapBuildings {
   const { buildings } = useBuildingMaps({ enabled: shown });
 
-  return useMemo(() => {
+  return (() => {
     if (!shown) {
       return NONE;
     }
@@ -46,7 +45,7 @@ export function useSiteMapBuildings(shown: boolean): SiteMapBuildings {
         buildings.filter((building) => building.point).map(({ uuid }) => uuid),
       ),
     };
-  }, [buildings, shown]);
+  })();
 }
 
 /**

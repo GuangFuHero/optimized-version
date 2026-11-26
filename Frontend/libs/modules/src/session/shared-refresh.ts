@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * One refresh per refresh token. The backend rotates a refresh token on use and reads any later use
  * as a replay — it revokes the session (backend `session_repository.py` `rotate`). Requests that

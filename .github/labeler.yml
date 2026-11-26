@@ -1,0 +1,20 @@
+# actions/labeler 依 PR 改到的路徑加標籤，給 .github/release.yml 分組用。
+frontend:
+  - changed-files:
+      - any-glob-to-any-file: "Frontend/**"
+backend:
+  - changed-files:
+      - any-glob-to-any-file: "Backend/**"
+infra:
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/**"
+          - "DEPLOY.md"
+          - "**/Dockerfile"
+          - "**/docker-compose*.yml"
+documentation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/*.md"
+          - "Spec/**"
+          - "System_Design/**"

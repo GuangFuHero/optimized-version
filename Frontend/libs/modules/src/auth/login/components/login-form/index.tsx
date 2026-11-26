@@ -1,16 +1,14 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
-import { Alert, Box, Button, Link, Stack, Typography } from '@mui/material';
+import { Alert, Box, Link, Stack, Typography } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
-import { Controller, useForm, useWatch } from 'react-hook-form';
+import { revalidateLogic, useForm, useStore } from '@tanstack/react-form';
+import type { components } from '@rescue-frontend/data-access/openapi';
 
-import {
-  Button as DesignSystemButton,
-  designTokens,
-  displayTextSize,
-} from '@rescue-frontend/ui';
+import { Button, designTokens, displayTextSize } from '@rescue-frontend/ui';
 
 import { getAuthColorScheme } from '../../theme/auth-theme';
 import { AuthFormError } from '../../utils/auth-form-error';
@@ -29,6 +27,10 @@ const { color, radius, shadow } = designTokens;
 
 type AuthAsyncAction = () => Promise<void> | void;
 type AuthFormMode = 'login' | 'register';
+type RegisterRequest = components['schemas']['RegisterRequest'];
+type AuthFormValues = Pick<RegisterRequest, 'name' | 'password'> & {
+  identity: RegisterRequest['value'];
+};
 
 type AuthProviderAction = {
   provider: 'google' | 'line' | 'custom';
@@ -135,31 +137,53 @@ export function LoginForm({
     initialValues?.identityType ?? 'email',
   );
 
-  const {
-    control,
-    handleSubmit,
-    resetField,
-    formState: { isSubmitting },
-  } = useForm<{
-    name: string;
-    identity: string;
-    password: string;
-  }>({
+  const form = useForm({
+    validationLogic: revalidateLogic(),
     defaultValues: {
       name: initialValues?.name ?? '',
       identity: initialValues?.identity ?? '',
       password: '',
+    } satisfies AuthFormValues,
+    onSubmit: async ({ value: values, formApi }) => {
+      setSubmissionError(undefined);
+      setSubmissionSuccess(undefined);
+
+      try {
+        await onSubmitAsync?.({
+          identityType,
+          identity: values.identity.trim(),
+          normalizedIdentity: normalizeIdentityValue(
+            identityType,
+            values.identity,
+          ),
+          password: values.password.trim(),
+          name: mode === 'register' ? values.name.trim() : undefined,
+        });
+        setSubmissionSuccess(resolvedSuccessMessage);
+        if (mode === 'register') {
+          formApi.resetField('password');
+        }
+      } catch (error) {
+        const fallbackMessage =
+          mode === 'login'
+            ? loginFormText.loginFailedMessage
+            : loginFormText.registerFailedMessage;
+
+        setSubmissionError(
+          error instanceof AuthFormError ? error.message : fallbackMessage,
+        );
+      }
     },
   });
-
-  const nameValue = useWatch({ control, name: 'name' }) ?? '';
-  const identityValue = useWatch({ control, name: 'identity' }) ?? '';
-  const passwordValue = useWatch({ control, name: 'password' }) ?? '';
-  const canSubmit =
-    !isSubmitting &&
-    identityValue.trim().length > 0 &&
-    (mode === 'login' || nameValue.trim().length > 0) &&
-    passwordValue.trim().length > 0;
+  const isSubmitting = useStore(form.store, (state) => state.isSubmitting);
+  const canSubmit = useStore(
+    form.store,
+    ({ values, isSubmitting }) =>
+      !isSubmitting &&
+      values.identity.trim().length > 0 &&
+      (mode === 'login' || values.name.trim().length > 0) &&
+      values.password.trim().length > 0,
+  );
 
   async function runAction(action: (() => Promise<void> | void) | undefined) {
     if (!action || isSubmitting) {
@@ -198,37 +222,6 @@ export function LoginForm({
     mode === 'register' &&
     initialValues !== undefined &&
     !initialValues.name?.trim();
-
-  const handleFormSubmit = handleSubmit(async (values) => {
-    setSubmissionError(undefined);
-    setSubmissionSuccess(undefined);
-
-    try {
-      await onSubmitAsync?.({
-        identityType,
-        identity: values.identity.trim(),
-        normalizedIdentity: normalizeIdentityValue(
-          identityType,
-          values.identity,
-        ),
-        password: values.password.trim(),
-        name: mode === 'register' ? values.name.trim() : undefined,
-      });
-      setSubmissionSuccess(resolvedSuccessMessage);
-      if (mode === 'register') {
-        resetField('password');
-      }
-    } catch (error) {
-      const fallbackMessage =
-        mode === 'login'
-          ? loginFormText.loginFailedMessage
-          : loginFormText.registerFailedMessage;
-
-      setSubmissionError(
-        error instanceof AuthFormError ? error.message : fallbackMessage,
-      );
-    }
-  });
 
   return (
     <Stack
@@ -272,25 +265,25 @@ export function LoginForm({
       </Stack>
 
       {mode === 'register' ? (
-        <Controller
+        <form.Field
           name="name"
-          control={control}
-          rules={{
-            validate: (value) =>
-              value.trim().length > 0 ||
-              loginFormText.displayNameRequiredMessage,
+          validators={{
+            onDynamic: ({ value }) =>
+              value.trim().length > 0
+                ? undefined
+                : loginFormText.displayNameRequiredMessage,
           }}
-          render={({ field, fieldState }) => (
+          children={(field) => (
             <AuthField
               label={loginFormText.displayNameLabel}
               required
-              value={field.value ?? ''}
-              onChange={field.onChange}
+              value={field.state.value}
+              onChange={field.handleChange}
               placeholder={loginFormText.displayNamePlaceholder}
               autoComplete="nickname"
               autoFocus={focusesName}
               disabled={isSubmitting}
-              errorText={fieldState.error?.message}
+              errorText={field.state.meta.errors[0]}
             />
           )}
         />
@@ -302,55 +295,55 @@ export function LoginForm({
         onChange={(value) => {
           setIdentityType(value);
           // Emptied, not reset to the one the form opened with: that was the other kind.
-          resetField('identity', { defaultValue: '' });
+          form.resetField('identity');
+          form.setFieldValue('identity', '', { dontValidate: true });
           setSubmissionError(undefined);
           setSubmissionSuccess(undefined);
         }}
       />
 
-      <Controller
+      <form.Field
         name="identity"
-        control={control}
-        rules={{
-          validate: (value) => validateIdentityValue(identityType, value),
+        validators={{
+          onDynamic: ({ value }) => {
+            const problem = validateIdentityValue(identityType, value);
+            return problem === true ? undefined : problem;
+          },
         }}
-        render={({ field, fieldState }) => (
+        children={(field) => (
           <AuthField
             label={identityFieldCopy.label}
             required
-            value={field.value ?? ''}
-            onChange={field.onChange}
+            value={field.state.value}
+            onChange={field.handleChange}
             placeholder={identityFieldCopy.placeholder}
             // `username`, not `email`/`tel`: password managers pair it with the password field.
             autoComplete="username"
             disabled={isSubmitting}
-            errorText={fieldState.error?.message}
+            errorText={field.state.meta.errors[0]}
           />
         )}
       />
 
-      <Controller
+      <form.Field
         name="password"
-        control={control}
-        rules={{
+        validators={{
           // Registering sets a password, so it meets the rule every new password does; signing in
           // only needs one typed.
-          validate: (value) => {
+          onDynamic: ({ value }) => {
             if (value.trim().length === 0) {
               return loginFormText.passwordRequiredMessage;
             }
 
-            return mode === 'register'
-              ? (newPasswordProblem(value) ?? true)
-              : true;
+            return mode === 'register' ? newPasswordProblem(value) : undefined;
           },
         }}
-        render={({ field, fieldState }) => (
+        children={(field) => (
           <AuthPasswordField
             label={loginFormText.passwordLabel}
             required
-            value={field.value ?? ''}
-            onChange={field.onChange}
+            value={field.state.value}
+            onChange={field.handleChange}
             placeholder={
               mode === 'register'
                 ? newPasswordText.placeholder
@@ -361,7 +354,7 @@ export function LoginForm({
             }
             autoFocus={initialValues !== undefined && !focusesName}
             disabled={isSubmitting}
-            errorText={fieldState.error?.message}
+            errorText={field.state.meta.errors[0]}
           />
         )}
       />
@@ -398,12 +391,13 @@ export function LoginForm({
       ) : null}
 
       <Button
-        onClick={handleFormSubmit}
+        variant="primary"
+        onClick={() => void form.handleSubmit()}
         disabled={!canSubmit}
         sx={{
           width: '100%',
           minHeight: 40,
-          borderRadius: '999px',
+          height: 'auto',
           bgcolor: authPalette.primaryAction,
           color: 'common.white',
           px: 2,
@@ -414,12 +408,6 @@ export function LoginForm({
           letterSpacing: '0.7px',
           '&:hover': {
             bgcolor: authPalette.primaryActionHover,
-          },
-          // The design system's disabled look (libs/ui Button): grey, so a form not yet filled in
-          // reads as one that cannot be sent. The orange above would otherwise only fade.
-          '&.Mui-disabled': {
-            bgcolor: designTokens.color.bg.disable,
-            color: designTokens.color.fg.disable,
           },
         }}
       >
@@ -435,14 +423,14 @@ export function LoginForm({
       {/* The design system's outline, as the prototype's 註冊帳號 (site-auth.jsx:303), at the height
           of the button above it. */}
       {secondaryActionLabel && onSecondaryAction ? (
-        <DesignSystemButton
+        <Button
           variant="outline"
           type="button"
           onClick={() => {
             void runAction(() =>
               onSecondaryAction({
                 identityType,
-                identity: identityValue.trim(),
+                identity: form.getFieldValue('identity').trim(),
               }),
             );
           }}
@@ -450,7 +438,7 @@ export function LoginForm({
           sx={{ width: '100%', height: 40, minHeight: 40 }}
         >
           {secondaryActionLabel}
-        </DesignSystemButton>
+        </Button>
       ) : null}
 
       {mode === 'login' && onSmsLoginAsync ? (

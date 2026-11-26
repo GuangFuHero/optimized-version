@@ -1,9 +1,13 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useForm, useStore, type Updater } from '@tanstack/react-form';
+
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 
 import { Box, TextField, Typography } from '@mui/material';
 import {
+  adminAddressLookup,
   useCreateBuildingMap,
   useUpdateBuildingMap,
   type AdminBuildingMapFieldsFragment,
@@ -32,6 +36,10 @@ import {
   type AddressCheck,
   type AddressNote,
 } from '../../address-lookup';
+import {
+  usePinAddressLookup,
+  useTypedAddressLookup,
+} from '../../use-address-lookup';
 import { floorLabelsFor, floorSummary } from './floors';
 import { strandedHeading, ticketsCut } from './space-partial';
 import type { SpaceTicket } from './space-analysis';
@@ -47,11 +55,7 @@ import {
   type SpaceFormValues,
 } from './space-form';
 import { spaceErrorMessage } from './space-error';
-import {
-  useSpacePinLookup,
-  useSpaces,
-  useSpaceTypedLookup,
-} from './use-space-data';
+import { useSpaces } from './use-space-data';
 
 const { color, typography } = designTokens;
 
@@ -99,27 +103,44 @@ function CreateSpaceForm({
   onClose: () => void;
   onCreated?: (uuid: string) => void;
 }) {
-  const [values, setValues] = useState<SpaceFormValues>(emptySpaceForm);
-  const [touched, setTouched] = useState(false);
+  const formApi = useForm({
+    defaultValues: { draft: emptySpaceForm() },
+    validators: {
+      onSubmit: ({ value }): ReturnType<typeof spaceFormErrors> | undefined => {
+        const errors = spaceFormErrors(value.draft, 'create');
+        return Object.keys(errors).length ? errors : undefined;
+      },
+    },
+    onSubmit: (): Promise<void> => submit(),
+  });
+  const values = useStore(formApi.store, (state) => state.values.draft);
+  const touched = useStore(
+    formApi.store,
+    (state) => state.submissionAttempts > 0,
+  );
+  const setValues = useCallback(
+    (next: Updater<SpaceFormValues>) => formApi.setFieldValue('draft', next),
+    [formApi],
+  );
   const [check, setCheck] = useState<AddressCheck | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const create = useCreateBuildingMap();
   const { spaces } = useSpaces();
 
-  const pinLookup = useSpacePinLookup(values.pin);
-  const typedLookup = useSpaceTypedLookup(check);
+  const pinLookup = usePinAddressLookup(values.pin, adminAddressLookup);
+  const typedLookup = useTypedAddressLookup(check, adminAddressLookup);
 
   // BM-11/12: a 門牌 found for the pin fills the line until someone writes in it.
   useEffect(() => {
     setValues((current) => applyPinLookup(current, pinLookup));
-  }, [pinLookup]);
+  }, [pinLookup, setValues]);
   useEffect(() => {
     if (check) {
       setValues((current) =>
         applyTypedLookup(current, check.address, typedLookup),
       );
     }
-  }, [check, typedLookup]);
+  }, [check, typedLookup, setValues]);
 
   const set = <K extends keyof SpaceFormValues>(
     key: K,
@@ -144,8 +165,6 @@ function CreateSpaceForm({
   );
 
   const submit = async () => {
-    setTouched(true);
-    if (Object.keys(errors).length) return;
     setSubmitError(null);
     try {
       const result = await create.mutateAsync({
@@ -169,7 +188,7 @@ function CreateSpaceForm({
       title={<ModalTitle icon={<MapPinPlus size={20} />}>開啟空間</ModalTitle>}
       onSubmit={(event) => {
         event.preventDefault();
-        void submit();
+        void formApi.handleSubmit();
       }}
       footer={
         <FormFooter
@@ -277,13 +296,28 @@ function SpaceEditForm({
   tickets: readonly SpaceTicket[];
   onClose: () => void;
 }) {
-  const [values, setValues] = useState<SpaceFormValues>(() => ({
-    ...emptySpaceForm(),
-    address: building.secondaryLocation?.fullAddress ?? '',
-    name: building.name,
-    above: String(building.floorsAboveGround),
-    below: String(building.floorsBelowGround),
+  const [openedValues] = useState(() => ({
+    draft: {
+      ...emptySpaceForm(),
+      address: building.secondaryLocation?.fullAddress ?? '',
+      name: building.name,
+      above: String(building.floorsAboveGround),
+      below: String(building.floorsBelowGround),
+    },
   }));
+  const formApi = useForm({
+    defaultValues: openedValues,
+    validators: {
+      onSubmit: ({ value }): ReturnType<typeof spaceFormErrors> | undefined => {
+        const errors = spaceFormErrors(value.draft, 'edit');
+        return Object.keys(errors).length ? errors : undefined;
+      },
+    },
+    onSubmit: (): Promise<void> => submit(),
+  });
+  const values = useStore(formApi.store, (state) => state.values.draft);
+  const setValues = (next: Updater<SpaceFormValues>) =>
+    formApi.setFieldValue('draft', next);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const update = useUpdateBuildingMap();
 
@@ -294,25 +328,21 @@ function SpaceEditForm({
 
   const errors = spaceFormErrors(values, 'edit');
   const { above, below } = floorCounts(values);
-  const stranded = useMemo(
-    () =>
-      above !== null && below !== null
-        ? strandedTickets(
-            building.floors.map((floor) => floor.label),
-            above,
-            below,
-            tickets,
-          )
-        : [],
-    [above, below, building.floors, tickets],
-  );
+  const stranded =
+    above !== null && below !== null
+      ? strandedTickets(
+          building.floors.map((floor) => floor.label),
+          above,
+          below,
+          tickets,
+        )
+      : [];
   const cut = ticketsCut(tickets.length);
   const floorsCut =
     (above !== null && above < building.floorsAboveGround) ||
     (below !== null && below < building.floorsBelowGround);
 
   const submit = async () => {
-    if (Object.keys(errors).length) return;
     const input = toUpdateBuildingMapInput(building, values);
     if (!Object.keys(input).length) {
       onClose();
@@ -337,7 +367,7 @@ function SpaceEditForm({
       title={<ModalTitle icon={<PenLine size={20} />}>編輯空間</ModalTitle>}
       onSubmit={(event) => {
         event.preventDefault();
-        void submit();
+        void formApi.handleSubmit();
       }}
       footer={
         <FormFooter

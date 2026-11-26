@@ -1,6 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 
 import { Box, Tab } from '@mui/material';
 import { useCurrentUser, useStation } from '@rescue-frontend/data-access/admin';
@@ -70,8 +71,11 @@ export function StationDetailSheet({
   const query = useStation({ uuid: uuid ?? '' }, { enabled: Boolean(uuid) });
   const station = query.data?.station;
   const [activeTab, setActiveTab] = useState<DetailTab>('info');
-
-  useEffect(() => setActiveTab('info'), [uuid]);
+  const [previousUuid, setPreviousUuid] = useState(uuid);
+  if (previousUuid !== uuid) {
+    setPreviousUuid(uuid);
+    setActiveTab('info');
+  }
 
   let content: ReactNode;
   if (uuid && editing) {

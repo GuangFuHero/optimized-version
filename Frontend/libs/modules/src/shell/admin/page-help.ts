@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * 這一頁怎麼用 in the back office (prototype `Design/後台/js/shared/wg-help.jsx`): what each page is
  * for, in one place, as the site's (`shell/site/page-help`). A page without an entry gets no ？.

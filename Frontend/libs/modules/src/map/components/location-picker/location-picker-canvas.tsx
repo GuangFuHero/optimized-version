@@ -1,10 +1,16 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import 'leaflet/dist/leaflet.css';
 
 import L from 'leaflet';
-import { useEffect, useRef } from 'react';
-
+import { useEffect } from 'react';
+import {
+  MapContainer,
+  PointPicker,
+  TileLayer,
+  useMap,
+} from '@rescue-frontend/leaflet';
 import { designTokens } from '@rescue-frontend/ui';
 
 import { BASE_LAYER_CONFIG } from '../../constants';
@@ -12,140 +18,70 @@ import type { RescueMapView } from '../../types';
 import type { PickedPoint } from './types';
 
 const { color } = designTokens;
-
-/** Close enough to tell which street the pin is on. */
 const PICKED_ZOOM = 17;
-/** The main map's default base layer (`use-rescue-map-controller.ts`), so its tiles are cached. */
 const BASE_LAYER = BASE_LAYER_CONFIG['osm-direct'];
+const TILE_OPTIONS = { attribution: BASE_LAYER.attribution, maxZoom: 19 };
+
+const PIN_HTML = `<div style="padding:8px;line-height:0;cursor:grab"><span style="display:block;width:24px;height:24px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:${color.bg.primary.default};border:2px solid ${color.bg.neutral.default};box-shadow:${designTokens.elevationShadow.locationPin}"></span></div>`;
+
+const PIN_ICON: L.DivIconOptions = {
+  className: '',
+  html: PIN_HTML,
+  iconSize: [40, 40],
+  iconAnchor: [20, 34],
+};
 
 interface LocationPickerCanvasProps {
   value: PickedPoint | null;
   onPick: (point: { lat: number; lng: number }) => void;
-  /**
-   * Where the map opens with no point yet: the event's view, else all of Taiwan (prototype
-   * `tk-locpicker.jsx` `startView`, 49a668bd). Never where it was last left: only the maps people
-   * browse remember that (MAP-VIEW-104).
-   */
   startView: RescueMapView;
 }
 
-// A teardrop in the ticket's own orange, with room around it to grab (prototype `pinHtml`).
-const PIN_HTML = `<div style="padding:8px;line-height:0;cursor:grab"><span style="display:block;width:24px;height:24px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:${color.bg.primary.default};border:2px solid ${color.bg.neutral.default};box-shadow:0 4px 12px rgba(0,0,0,.28)"></span></div>`;
-
-function createPinIcon() {
-  return L.divIcon({
-    className: '',
-    html: PIN_HTML,
-    iconSize: [40, 40],
-    iconAnchor: [20, 34],
-  });
-}
-
-/**
- * The Leaflet part of `LocationPicker`, loaded only in the browser. A tap moves the pin there and
- * the pin drags; either way the point goes up through `onPick`. A point found by the device or
- * brought from the main map moves the view to it; one placed by hand leaves the view alone.
- */
-export function LocationPickerCanvas({
+function LocationPickerView({
   value,
-  onPick,
-  startView,
-}: LocationPickerCanvasProps) {
-  const hostRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<L.Map | null>(null);
-  const pinRef = useRef<L.Marker | null>(null);
-  const onPickRef = useRef(onPick);
-  const initialValueRef = useRef(value);
-  const startViewRef = useRef(startView);
-
-  onPickRef.current = onPick;
+}: Pick<LocationPickerCanvasProps, 'value'>) {
+  const map = useMap();
 
   useEffect(() => {
-    const host = hostRef.current;
-
-    if (!host || mapRef.current) {
-      return;
-    }
-
-    const initial = initialValueRef.current;
-    const map = L.map(host, {
-      center: initial
-        ? [initial.lat, initial.lng]
-        : startViewRef.current.center,
-      zoom: initial ? PICKED_ZOOM : startViewRef.current.zoom,
-      zoomControl: false,
-    });
-
     map.attributionControl.setPrefix(false);
-    L.control.zoom({ position: 'topright' }).addTo(map);
-    L.tileLayer(BASE_LAYER.url, {
-      attribution: BASE_LAYER.attribution,
-      maxZoom: 19,
-    }).addTo(map);
-    map.on('click', (event) =>
-      onPickRef.current({ lat: event.latlng.lat, lng: event.latlng.lng }),
-    );
-    mapRef.current = map;
-
-    // The drawer slides in, so the map is first laid out at a size it does not keep.
-    const resizeObserver = new ResizeObserver(() => map.invalidateSize());
-    resizeObserver.observe(host);
-
+    const zoom = L.control.zoom({ position: 'topright' }).addTo(map);
     return () => {
-      resizeObserver.disconnect();
-      map.remove();
-      mapRef.current = null;
-      pinRef.current = null;
+      zoom.remove();
     };
-  }, []);
+  }, [map]);
 
   const lat = value?.lat;
   const lng = value?.lng;
   const source = value?.source;
 
   useEffect(() => {
-    const map = mapRef.current;
-
-    if (!map) {
-      return;
-    }
-
-    if (lat === undefined || lng === undefined) {
-      pinRef.current?.remove();
-      pinRef.current = null;
-      return;
-    }
-
-    if (pinRef.current) {
-      pinRef.current.setLatLng([lat, lng]);
-    } else {
-      const pin = L.marker([lat, lng], {
-        draggable: true,
-        icon: createPinIcon(),
-        keyboard: false,
-      });
-
-      pin.on('dragend', () => {
-        const point = pin.getLatLng();
-        onPickRef.current({ lat: point.lat, lng: point.lng });
-      });
-      pin.addTo(map);
-      pinRef.current = pin;
-    }
-
-    if (source !== 'manual') {
+    if (lat !== undefined && lng !== undefined && source !== 'manual') {
       map.setView([lat, lng], Math.max(map.getZoom(), PICKED_ZOOM));
     }
-  }, [lat, lng, source]);
+  }, [lat, lng, map, source]);
 
+  return null;
+}
+
+export function LocationPickerCanvas({
+  value,
+  onPick,
+  startView,
+}: LocationPickerCanvasProps) {
   return (
-    <div
-      ref={hostRef}
+    <MapContainer
+      center={value ?? startView.center}
+      zoom={value ? PICKED_ZOOM : startView.zoom}
+      options={{ zoomControl: false }}
       style={{
         position: 'absolute',
         inset: 0,
         cursor: value ? 'grab' : 'crosshair',
       }}
-    />
+    >
+      <TileLayer url={BASE_LAYER.url} options={TILE_OPTIONS} />
+      <PointPicker point={value} onPick={onPick} icon={PIN_ICON} />
+      <LocationPickerView value={value} />
+    </MapContainer>
   );
 }

@@ -1,89 +1,49 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
-import {
-  Box,
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  MenuItem,
-  Stack,
-  TextField,
-  Tooltip,
-  Typography,
-} from '@mui/material';
+import { useForm, useStore } from '@tanstack/react-form';
+import type { UpdateAreaInput } from '@rescue-frontend/data-access/admin';
+
+import { Box, Stack, TextField, Tooltip, Typography } from '@mui/material';
 import { useState } from 'react';
 
-import { AREA_LABEL_NAME_MAX } from '@rescue-frontend/modules';
-
-import type { AdminAreaListItem } from './admin-area-list-panel';
 import {
-  countNameCharacters,
-  type AreaTeamOption,
-} from './admin-area-draw-panels';
-import { designTokens } from '@rescue-frontend/ui';
+  AREA_LABEL_NAME_MAX,
+  AREA_TEAM_LOAD_ERROR,
+  type RescueMapAreaTeam,
+} from '@rescue-frontend/modules';
+
+import type { AdminAreaListItem } from './admin-map-area-projection';
+import { AreaNameField, countAreaNameCharacters } from './area-name-field';
+import { AreaTeamSelect } from './area-team-select';
+import { Button, Dialog, designTokens } from '@rescue-frontend/ui';
 
 const { color, typography } = designTokens;
 
 /** What an area form changes: only what changed is sent. `informationSource` is a 危險區's alone. */
-export interface AreaChanges {
-  name?: string;
-  note?: string | null;
-  informationSource?: string | null;
-}
+export type AreaChanges = Pick<
+  UpdateAreaInput,
+  'name' | 'note' | 'informationSource'
+>;
 
 /** What an admin may do to an area, and how. Absent for someone who may only look. */
 export interface AreaActions {
   canEdit: boolean;
   canDelete: boolean;
   canAssign: boolean;
+  isPending: boolean;
   /** The active teams, for adding one to a 責任區. */
-  teamOptions: readonly AreaTeamOption[];
+  teamOptions: readonly RescueMapAreaTeam[];
+  teamListError: boolean;
   /** Sent at once, not on save: the switch is a setting, and takes effect as it is pressed. */
   onTogglePublic: (isPublic: boolean) => void;
   /** Whether the shape has a boundary that can be changed here: one polygon, with no hole. */
   canEditBounds: boolean;
   onEditBounds: () => void;
-  onSave: (changes: AreaChanges) => void;
+  onSave: (changes: AreaChanges) => Promise<boolean>;
   onDelete: () => void;
   onAddTeam: (teamUuid: string) => void;
   onRemoveTeam: (teamUuid: string) => void;
-}
-
-export function AreaConfirmDialog({
-  open,
-  title,
-  body,
-  confirmLabel,
-  onConfirm,
-  onClose,
-}: {
-  open: boolean;
-  title: string;
-  body: string;
-  confirmLabel: string;
-  onConfirm: () => void;
-  onClose: () => void;
-}) {
-  return (
-    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogTitle sx={{ ...typography.label[500] }}>{title}</DialogTitle>
-      <DialogContent>
-        <Typography sx={{ ...typography.body[300], lineHeight: 1.7 }}>
-          {body}
-        </Typography>
-      </DialogContent>
-      <DialogActions>
-        <Button variant="outlined" onClick={onClose}>
-          取消
-        </Button>
-        <Button variant="contained" color="error" onClick={onConfirm}>
-          {confirmLabel}
-        </Button>
-      </DialogActions>
-    </Dialog>
-  );
 }
 
 /**
@@ -97,13 +57,17 @@ export function AreaTeamsSection({
   item: AdminAreaListItem;
   actions: AreaActions | undefined;
 }) {
-  const [adding, setAdding] = useState('');
-  const assigned = item.teams.map((name, index) => ({
-    name,
-    uuid: item.teamUuids[index],
-  }));
+  const form = useForm({
+    defaultValues: { adding: '' },
+    onSubmit: ({ value, formApi }): void => {
+      actions?.onAddTeam(value.adding);
+      formApi.reset();
+    },
+  });
+  const adding = useStore(form.store, (state) => state.values.adding);
+  const assigned = item.teams;
   const addable = (actions?.teamOptions ?? []).filter(
-    (team) => !item.teamUuids.includes(team.uuid),
+    (team) => !assigned.some(({ uuid }) => uuid === team.uuid),
   );
   const canChange = actions?.canAssign === true;
 
@@ -120,7 +84,7 @@ export function AreaTeamsSection({
       </Typography>
       {assigned.map((team) => (
         <Stack
-          key={team.uuid ?? team.name}
+          key={team.uuid}
           direction="row"
           spacing={1}
           sx={{ alignItems: 'center' }}
@@ -128,11 +92,12 @@ export function AreaTeamsSection({
           <Typography sx={{ flex: 1, ...typography.label[400] }}>
             {team.name}
           </Typography>
-          {canChange && team.uuid ? (
+          {canChange ? (
             <Button
-              size="small"
-              color="error"
-              disabled={assigned.length <= 1}
+              size="sm"
+              variant="outline"
+              tone="danger"
+              disabled={actions?.isPending || assigned.length <= 1}
               onClick={() => actions?.onRemoveTeam(team.uuid)}
             >
               移除
@@ -147,29 +112,27 @@ export function AreaTeamsSection({
           責任區至少要有一個團隊，最後一個不能移除。要移除請刪除這個區域。
         </Typography>
       ) : null}
+      {canChange && actions?.teamListError ? (
+        <Typography sx={{ ...typography.body[300], color: color.fg.danger }}>
+          {AREA_TEAM_LOAD_ERROR}
+        </Typography>
+      ) : null}
       {canChange && addable.length > 0 ? (
         <Stack direction="row" spacing={1}>
-          <TextField
-            select
+          <AreaTeamSelect
             size="small"
             label="加入團隊"
+            teams={addable}
+            disabled={actions?.isPending}
             value={adding}
-            onChange={(event) => setAdding(event.target.value)}
-            sx={{ flex: 1 }}
-          >
-            {addable.map((team) => (
-              <MenuItem key={team.uuid} value={team.uuid}>
-                {team.name}
-              </MenuItem>
-            ))}
-          </TextField>
+            onChange={(uuid) => form.setFieldValue('adding', uuid)}
+          />
           <Button
-            variant="outlined"
-            disabled={adding === ''}
-            onClick={() => {
-              actions?.onAddTeam(adding);
-              setAdding('');
-            }}
+            variant="outline"
+            disabled={
+              actions?.isPending || !addable.some(({ uuid }) => uuid === adding)
+            }
+            onClick={() => void form.handleSubmit()}
           >
             加入
           </Button>
@@ -183,73 +146,81 @@ export function AreaTeamsSection({
 export function AreaEditForm({
   item,
   informationSource,
+  saveDisabled,
   onSave,
   onCancel,
 }: {
   item: AdminAreaListItem;
   /** A 危險區's source as it stands; the list does not carry it, so the caller reads it. */
   informationSource?: string | null;
-  onSave: (changes: AreaChanges) => void;
+  saveDisabled: boolean;
+  onSave: (changes: AreaChanges) => Promise<boolean>;
   onCancel: () => void;
 }) {
-  const [name, setName] = useState(item.name ?? '');
-  const [note, setNote] = useState(item.note ?? '');
-  const length = countNameCharacters(name);
-  const over = length > AREA_LABEL_NAME_MAX;
-  const nameChanged = name.trim() !== (item.name ?? '');
-  const noteChanged = note.trim() !== (item.note ?? '');
-  const [source, setSource] = useState(informationSource ?? '');
+  const [openedValues] = useState(() => ({
+    name: item.name ?? '',
+    note: item.note ?? '',
+    source: informationSource ?? '',
+  }));
   const hasSource = item.kind === 'hazardous_zone';
-  const sourceChanged =
-    hasSource && source.trim() !== (informationSource ?? '');
+  const getChanges = (values: typeof openedValues): AreaChanges => {
+    const changes: AreaChanges = {};
+    if (values.name.trim() !== openedValues.name.trim())
+      changes.name = values.name.trim();
+    if (values.note.trim() !== openedValues.note.trim())
+      changes.note = values.note.trim() || null;
+    if (hasSource && values.source.trim() !== openedValues.source.trim()) {
+      changes.informationSource = values.source.trim() || null;
+    }
+    return changes;
+  };
+  const form = useForm({
+    defaultValues: openedValues,
+    onSubmit: async ({ value }) => {
+      await onSave(getChanges(value));
+    },
+  });
+  const { values, isSubmitting } = useStore(form.store);
+  const { name, note, source } = values;
+  const length = countAreaNameCharacters(name);
   const canSave =
-    length > 0 && !over && (nameChanged || noteChanged || sourceChanged);
+    length > 0 &&
+    length <= AREA_LABEL_NAME_MAX &&
+    Object.keys(getChanges(values)).length > 0;
 
   return (
     <Stack spacing={1.5}>
-      <TextField
-        label="名稱"
-        required
+      <AreaNameField
         value={name}
-        onChange={(event) => setName(event.target.value)}
-        error={over}
-        helperText={
-          over
-            ? `超過 ${length - AREA_LABEL_NAME_MAX} 個字。名稱會顯示在前台地圖上，太長會蓋住旁邊`
-            : `${length}／${AREA_LABEL_NAME_MAX}`
-        }
+        disabled={isSubmitting}
+        onChange={(event) => form.setFieldValue('name', event.target.value)}
       />
       <TextField
         label="備註（選填）"
+        disabled={isSubmitting}
         value={note}
-        onChange={(event) => setNote(event.target.value)}
+        onChange={(event) => form.setFieldValue('note', event.target.value)}
         multiline
         minRows={3}
       />
       {hasSource ? (
         <TextField
           label="資料來源（選填）"
+          disabled={isSubmitting}
           value={source}
-          onChange={(event) => setSource(event.target.value)}
+          onChange={(event) => form.setFieldValue('source', event.target.value)}
           placeholder="例如：機關名稱或網址"
         />
       ) : null}
       <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end' }}>
-        <Button variant="outlined" onClick={onCancel}>
+        <Button variant="outline" disabled={isSubmitting} onClick={onCancel}>
           取消
         </Button>
         <Button
-          variant="contained"
-          disabled={!canSave}
-          onClick={() =>
-            onSave({
-              ...(nameChanged ? { name: name.trim() } : {}),
-              ...(noteChanged ? { note: note.trim() || null } : {}),
-              ...(sourceChanged
-                ? { informationSource: source.trim() || null }
-                : {}),
-            })
-          }
+          variant="primary"
+          disabled={saveDisabled || !canSave}
+          loading={isSubmitting}
+          onClick={() => void form.handleSubmit()}
         >
           儲存
         </Button>
@@ -292,13 +263,22 @@ export function AreaDetailFooter({
         }}
       >
         {actions.canDelete ? (
-          <Button color="error" onClick={() => setConfirming(true)}>
+          <Button
+            variant="outline"
+            tone="danger"
+            disabled={editing || actions.isPending}
+            onClick={() => setConfirming(true)}
+          >
             {item.kind === 'hazardous_zone' ? '解除危險區' : '刪除區域'}
           </Button>
         ) : null}
         <Box sx={{ flex: 1 }} />
         {actions.canEdit ? (
-          <Button variant="outlined" disabled={editing} onClick={onEdit}>
+          <Button
+            variant="outline"
+            disabled={editing || actions.isPending}
+            onClick={onEdit}
+          >
             編輯
           </Button>
         ) : null}
@@ -312,8 +292,10 @@ export function AreaDetailFooter({
           >
             <span>
               <Button
-                variant="outlined"
-                disabled={editing || !actions.canEditBounds}
+                variant="outline"
+                disabled={
+                  editing || actions.isPending || !actions.canEditBounds
+                }
                 onClick={actions.onEditBounds}
               >
                 調整範圍
@@ -324,25 +306,27 @@ export function AreaDetailFooter({
       </Stack>
       {/* A 危險區 does not expire: someone lifts it, to say the danger is past, which 刪除 would
           read as a drawing mistake (design review, 2026-11-02). */}
-      <AreaConfirmDialog
+      <Dialog
         open={confirming}
         title={
           item.kind === 'hazardous_zone'
             ? `解除「${name}」？`
             : `刪除「${name}」？`
         }
-        body={
-          item.kind === 'hazardous_zone'
-            ? '危險區會從地圖上移除，前台也看不到。只有按下後的 5 秒內可以復原。'
-            : '區域會從地圖上移除，前台也看不到。刪除後沒有辦法還原，只有按下後的 5 秒內可以復原。'
-        }
+        confirmTone="danger"
         confirmLabel={item.kind === 'hazardous_zone' ? '解除' : '刪除'}
         onClose={() => setConfirming(false)}
         onConfirm={() => {
           setConfirming(false);
           actions.onDelete();
         }}
-      />
+      >
+        <Typography sx={{ ...typography.body[300], lineHeight: 1.7 }}>
+          {item.kind === 'hazardous_zone'
+            ? '危險區會從地圖上移除，前台也看不到。只有按下後的 5 秒內可以復原。'
+            : '區域會從地圖上移除，前台也看不到。刪除後沒有辦法還原，只有按下後的 5 秒內可以復原。'}
+        </Typography>
+      </Dialog>
     </>
   );
 }

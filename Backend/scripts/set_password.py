@@ -4,7 +4,7 @@ The mock seed's back-office test accounts, asuper01 (super_admin) and aaudit01 (
 no password in the repo: the mock password is published in the seed header, and the back office is
 on a public host. Their `@mock.test` addresses receive nothing, so forgot-password cannot reach
 them either. Run this once on the VM; SEED_MOCK keeps both accounts and their password
-(Backend/DEPLOY.md):
+(DEPLOY.md):
 
     docker compose -f docker-compose.staging.yml run --rm -e PYTHONPATH=/app backend \
         python scripts/set_password.py asuper01@mock.test
@@ -30,6 +30,7 @@ from app.core import security
 from app.core.config import settings
 from app.core.normalize import normalize_email
 from app.core.redis import create_redis_client
+from app.graphql.masking import mask_email
 from app.models.auth import UserIdentity
 from app.repositories.auth_repository import contact_repository, identity_repository
 from app.repositories.session_repository import SessionRepository
@@ -93,7 +94,7 @@ def main() -> None:
         asyncio.run(_run(args.email, password))
     except ValueError as err:
         raise SystemExit(f"{err}; nothing was changed") from err
-    print(f"Password set for {args.email}; its sessions are signed out")
+    print(f"Password set for {mask_email(args.email)}; its sessions are signed out")
 
 
 if __name__ == "__main__":

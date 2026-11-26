@@ -70,9 +70,7 @@ def upgrade() -> None:
     op.add_column("role_requests", sa.Column("applicant_name", sa.String(length=100), nullable=True))
     op.add_column("role_requests", sa.Column("applicant_phone", sa.String(length=20), nullable=True))
     op.add_column("role_requests", sa.Column("applicant_email", sa.String(length=320), nullable=True))
-    op.create_foreign_key(
-        "role_requests_team_uuid_fkey", "role_requests", "teams", ["team_uuid"], ["uuid"]
-    )
+    op.create_foreign_key("role_requests_team_uuid_fkey", "role_requests", "teams", ["team_uuid"], ["uuid"])
     op.create_foreign_key(
         "role_requests_invite_uuid_fkey", "role_requests", "team_invites", ["invite_uuid"], ["uuid"]
     )
@@ -89,9 +87,7 @@ def upgrade() -> None:
     op.add_column("users", sa.Column("real_name", sa.String(length=100), nullable=True))
     op.add_column("teams", sa.Column("contact_name", sa.String(length=100), nullable=True))
     op.add_column("teams", sa.Column("contact_phone", sa.String(length=20), nullable=True))
-    op.create_check_constraint(
-        "ck_teams_status", "teams", "status IN ('active', 'suspended')"
-    )
+    op.create_check_constraint("ck_teams_status", "teams", "status IN ('active', 'suspended')")
 
     op.execute(
         sa.text(
@@ -116,7 +112,12 @@ def downgrade() -> None:
     op.drop_constraint("role_requests_invite_uuid_fkey", "role_requests", type_="foreignkey")
     op.drop_constraint("role_requests_team_uuid_fkey", "role_requests", type_="foreignkey")
     added = (
-        "applicant_email", "applicant_phone", "applicant_name", "invite_uuid", "new_team_name", "team_uuid"
+        "applicant_email",
+        "applicant_phone",
+        "applicant_name",
+        "invite_uuid",
+        "new_team_name",
+        "team_uuid",
     )
     for column in added:
         op.drop_column("role_requests", column)

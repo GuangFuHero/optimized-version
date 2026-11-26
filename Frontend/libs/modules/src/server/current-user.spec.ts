@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -19,10 +20,8 @@ function fakeBackend(respond: () => Response) {
   vi.stubGlobal(
     'fetch',
     async (input: RequestInfo | URL, init?: RequestInit) => {
-      calls.push({
-        url: new URL(String(input)),
-        headers: new Headers(init?.headers),
-      });
+      const request = new Request(input, init);
+      calls.push({ url: new URL(request.url), headers: request.headers });
       return respond();
     },
   );

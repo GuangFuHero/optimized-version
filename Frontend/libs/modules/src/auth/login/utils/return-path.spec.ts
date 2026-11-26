@@ -1,6 +1,33 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { describe, expect, it } from 'vitest';
 
-import { oauthStartHref, safeReturnPath } from './return-path';
+import {
+  acceptedReturnPath,
+  oauthStartHref,
+  safeReturnPath,
+} from './return-path';
+
+describe('acceptedReturnPath', () => {
+  it('is the callbackUrl when it is a page on this site', () => {
+    expect(acceptedReturnPath('/map/ticket/t-1?claim=n-1')).toBe(
+      '/map/ticket/t-1?claim=n-1',
+    );
+  });
+
+  it.each([
+    null,
+    '',
+    'map',
+    'https://evil.example/login',
+    '//this-site.invalid/map',
+    '/\\this-site.invalid/map',
+    '/\t/this-site.invalid/map',
+    '//one.invalid/map',
+    '/\\two.invalid/map',
+  ])('is null for %j, which the sign-in will not go back to', (callbackUrl) => {
+    expect(acceptedReturnPath(callbackUrl)).toBeNull();
+  });
+});
 
 describe('safeReturnPath', () => {
   it("keeps a page on this site, with what its address says (A's claim=)", () => {

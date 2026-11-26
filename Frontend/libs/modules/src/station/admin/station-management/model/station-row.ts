@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import type { AdminStationFieldsFragment } from '@rescue-frontend/data-access/admin';
 
 import type { OperationalStatus } from '../../../operational-status';

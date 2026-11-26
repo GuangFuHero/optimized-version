@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * What an applicant reads when sending or withdrawing an application is refused. The backend's
  * messages are contract — only a `ValueError` or an `HTTPException` reaches the client unmasked
@@ -7,7 +8,7 @@
 
 import { isUnauthorizedError } from '../session/expiry';
 
-/** The parts of urql's `CombinedError` this reads. */
+/** The parts of `GraphqlError` this reads. */
 export interface RoleRequestError {
   networkError?: unknown;
   response?: { status?: number };

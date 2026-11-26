@@ -1,27 +1,31 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
+
+import { useForm, useStore } from '@tanstack/react-form';
 
 import {
   Alert,
   AlertTitle,
   Box,
-  Button,
   ButtonBase,
   Stack,
   TextField,
   Typography,
 } from '@mui/material';
-import { useQuery } from '@tanstack/react-query';
-import { useEffect, useId, useRef, useState } from 'react';
-import { useMutation } from 'urql';
+import { useMutation } from '@tanstack/react-query';
+import { useEffect, useId, useRef } from 'react';
 
 import {
   SubmitRoleRequestDocument,
+  useCurrentUser,
+  useInvalidateCurrentUser,
   type MyRoleRequestsQuery,
 } from '@rescue-frontend/data-access';
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import { Button, designTokens, displayTextSize } from '@rescue-frontend/ui';
 
-import { getCurrentUserAsync } from '../auth/api/client';
+import { loadPage } from '../route/navigate';
 import { useAuthSession } from '../session/auth-session';
+import { siteGraphqlMutation } from '../session/site-clients';
 import { SiteActionDrawer } from '../shell/site/site-action-drawer';
 import { readApplicantAccount } from './applicant';
 import { ApplicantSection } from './applicant-section';
@@ -97,26 +101,40 @@ export function RoleRequestDrawer({
   applyReturn = null,
   onApplyReturnHandled,
 }: RoleRequestDrawerProps) {
-  const [values, setValues] = useState<RoleRequestFormValues>(EMPTY_FORM);
-  // The name starts from the nickname until the person types one of their own.
-  const [nameEdited, setNameEdited] = useState(false);
-  const [touched, setTouched] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [{ fetching: submitting }, submitRoleRequest] = useMutation(
-    SubmitRoleRequestDocument,
+  const formApi = useForm({
+    defaultValues: EMPTY_FORM,
+    validators: {
+      onSubmit: (): ReturnType<typeof validateRoleRequestForm> | undefined =>
+        problems.length ? errors : undefined,
+    },
+    onSubmit: () => submit(),
+  });
+  const values = useStore(formApi.store, (state) => state.values);
+  const touched = useStore(
+    formApi.store,
+    (state) => state.submissionAttempts > 0,
   );
+  const nameEdited = useStore(
+    formApi.store,
+    (state) => state.fieldMeta.name?.isDirty ?? false,
+  );
+  const submission = useMutation(
+    siteGraphqlMutation(SubmitRoleRequestDocument),
+  );
+  const { reset: resetSubmission } = submission;
+  const submitError = submission.error
+    ? roleRequestErrorMessage(submission.error)
+    : null;
   const withdraw = useWithdrawRoleRequest(onSubmitted);
   const resetWithdraw = withdraw.reset;
   const roleLabelId = useId();
   const userId = useAuthSession().user?.uuid ?? null;
-  // The account as the form needs it, while the drawer is open: the session itself holds only the
-  // uuid and the nickname. Read again once a phone is verified, which makes it the account's.
-  const applicant = useQuery({
-    queryKey: ['users', 'me'],
-    queryFn: getCurrentUserAsync,
-    select: readApplicantAccount,
+  const applicant = useCurrentUser({
+    select: (user) => (user ? readApplicantAccount(user) : NO_ACCOUNT),
     enabled: open,
+    staleTime: 0,
   });
+  const refreshSession = useInvalidateCurrentUser();
   const account = applicant.data ?? NO_ACCOUNT;
   const { keep: keepDraft, take: takeDraft } = useApplyDraft(userId);
   const teamType = teamTypeForRole(values.role);
@@ -130,13 +148,8 @@ export function RoleRequestDrawer({
   const goProveAtLine = async (phone: string) => {
     keepDraft({ ...values, phone });
 
-    try {
-      await getCurrentUserAsync();
-    } catch {
-      // An ended session reloads the tab as a guest by itself; anything else, LINE is tried anyway.
-    }
-
-    window.location.assign(buildPhoneStepUpHref(window.location));
+    await refreshSession();
+    loadPage(buildPhoneStepUpHref(window.location));
   };
 
   const verification = usePhoneVerification({
@@ -157,14 +170,19 @@ export function RoleRequestDrawer({
     wasOpen.current = open;
 
     if (opening && !applyReturn) {
-      setValues(EMPTY_FORM);
-      setNameEdited(false);
-      setTouched(false);
-      setSubmitError(null);
+      formApi.reset(EMPTY_FORM, { keepDefaultValues: true });
+      resetSubmission();
       resetWithdraw();
       resetVerification();
     }
-  }, [applyReturn, open, resetVerification, resetWithdraw]);
+  }, [
+    applyReturn,
+    formApi,
+    open,
+    resetSubmission,
+    resetVerification,
+    resetWithdraw,
+  ]);
 
   useEffect(() => {
     if (!open || !applyReturn || !userId) {
@@ -173,27 +191,31 @@ export function RoleRequestDrawer({
 
     const draft = takeDraft();
 
-    setTouched(false);
-    setSubmitError(null);
+    resetSubmission();
 
     if (draft) {
-      setValues({
-        role: draft.role,
-        team: draft.team,
-        newTeamName: draft.newTeamName,
-        reason: draft.reason,
-        name: draft.name,
-      });
-      setNameEdited(true);
+      formApi.reset(
+        {
+          role: draft.role,
+          team: draft.team,
+          newTeamName: draft.newTeamName,
+          reason: draft.reason,
+          name: draft.name,
+        },
+        { keepDefaultValues: true },
+      );
+      formApi.setFieldValue('name', draft.name);
       resumeVerification(draft.phone, applyReturn.stepUp);
     }
 
     onApplyReturnHandled?.();
   }, [
     applyReturn,
+    formApi,
     onApplyReturnHandled,
     open,
     resumeVerification,
+    resetSubmission,
     takeDraft,
     userId,
   ]);
@@ -202,9 +224,9 @@ export function RoleRequestDrawer({
 
   useEffect(() => {
     if (open && nickname && !nameEdited) {
-      setValues((current) => ({ ...current, name: nickname }));
+      formApi.setFieldValue('name', nickname, { dontUpdateMeta: true });
     }
-  }, [nameEdited, nickname, open]);
+  }, [formApi, nameEdited, nickname, open]);
 
   if (!myRoleRequests) {
     return null;
@@ -256,7 +278,7 @@ export function RoleRequestDrawer({
               ) : null}
               <Stack direction="row" spacing={1}>
                 <Button
-                  variant="outlined"
+                  variant="outline"
                   onClick={withdraw.cancel}
                   disabled={withdraw.submitting}
                   sx={{ flex: 1 }}
@@ -264,8 +286,8 @@ export function RoleRequestDrawer({
                   先不要
                 </Button>
                 <Button
-                  variant="contained"
-                  onClick={() => void withdraw.confirm(pending.uuid)}
+                  variant="primary"
+                  onClick={() => withdraw.confirm(pending.uuid)}
                   disabled={withdraw.submitting}
                   sx={{ flex: 1 }}
                 >
@@ -275,7 +297,7 @@ export function RoleRequestDrawer({
             </Stack>
           ) : (
             <Box>
-              <Button variant="outlined" onClick={() => withdraw.request()}>
+              <Button variant="outline" onClick={() => withdraw.request()}>
                 撤回這筆申請
               </Button>
               {/* Not 「團隊已經用邀請碼讓你加入」 any more: a scan is an application too, and only one
@@ -319,7 +341,7 @@ export function RoleRequestDrawer({
   });
   const problems = roleRequestFormProblems(errors, values.role);
   const set = (field: 'name' | 'reason' | 'newTeamName') => (value: string) =>
-    setValues((current) => ({ ...current, [field]: value }));
+    formApi.setFieldValue(field, value);
   const invite = inviteHint(values.role);
   // A new name already on the list is said at once, not only after 送出申請 (prototype).
   const nameTaken = Boolean(
@@ -329,35 +351,31 @@ export function RoleRequestDrawer({
   );
 
   // Another identity picks from another list: the team picked for the last one is dropped.
-  const pickRole = (role: RoleRequestFormValues['role']) =>
-    setValues((current) =>
-      current.role === role
-        ? current
-        : { ...current, role, team: null, newTeamName: '' },
-    );
+  const pickRole = (role: RoleRequestFormValues['role']) => {
+    if (formApi.state.values.role === role) return;
+    formApi.setFieldValue('role', role);
+    formApi.setFieldValue('team', null);
+    formApi.setFieldValue('newTeamName', '');
+  };
 
-  const submit = async () => {
-    setTouched(true);
-
+  const submit = () => {
     if (problems.length || !values.role) {
       return;
     }
 
-    setSubmitError(null);
-    const result = await submitRoleRequest({
-      input: toSubmitRoleRequestInput({ ...values, role: values.role }),
-    });
-
-    if (result.error) {
-      setSubmitError(roleRequestErrorMessage(result.error));
-
-      if (isTeamListRefusal(result.error)) {
-        teamList.reload();
-      }
-    }
-
-    // Either way the list may have moved on (a pending one from another tab, say): read it again.
-    onSubmitted();
+    resetSubmission();
+    submission.mutate(
+      { input: toSubmitRoleRequestInput({ ...values, role: values.role }) },
+      {
+        onError: (error) => {
+          if (isTeamListRefusal(error)) {
+            void teamList.reload();
+          }
+        },
+        // Either way the list may have moved on (a pending one from another tab, say): read it again.
+        onSettled: () => onSubmitted(),
+      },
+    );
   };
 
   return (
@@ -368,13 +386,13 @@ export function RoleRequestDrawer({
       onClose={onClose}
       footer={
         <>
-          <Button variant="outlined" onClick={onClose} sx={{ flex: 1 }}>
+          <Button variant="outline" onClick={onClose} sx={{ flex: 1 }}>
             取消
           </Button>
           <Button
-            variant="contained"
-            onClick={() => void submit()}
-            disabled={view.paused || submitting}
+            variant="primary"
+            onClick={() => void formApi.handleSubmit()}
+            disabled={view.paused || submission.isPending}
             sx={{ flex: 2 }}
           >
             送出申請
@@ -454,7 +472,7 @@ export function RoleRequestDrawer({
             failed={teamList.failed}
             onReload={teamList.reload}
             team={values.team}
-            onPick={(team) => setValues((current) => ({ ...current, team }))}
+            onPick={(team) => formApi.setFieldValue('team', team)}
             newTeamName={values.newTeamName}
             onNewTeamName={set('newTeamName')}
             teamError={touched ? (errors.team ?? null) : null}
@@ -469,7 +487,6 @@ export function RoleRequestDrawer({
             account={applicant.data}
             name={values.name}
             onNameChange={(name) => {
-              setNameEdited(true);
               set('name')(name);
             }}
             nameError={touched ? (errors.name ?? null) : null}

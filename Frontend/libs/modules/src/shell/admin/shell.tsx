@@ -1,12 +1,8 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { Box, Drawer, useMediaQuery, useTheme } from '@mui/material';
-import {
-  useEffect,
-  useState,
-  useSyncExternalStore,
-  type ReactNode,
-} from 'react';
+import { useState, useSyncExternalStore, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { usePathname } from 'next/navigation';
 
@@ -78,9 +74,7 @@ export function AdminShell({
   );
 
   // Widening past the breakpoint closes the drawer, so it does not reopen on the next narrowing.
-  useEffect(() => {
-    if (!mobile) setOpenedOn(null);
-  }, [mobile]);
+  if (!mobile && openedOn !== null) setOpenedOn(null);
 
   return (
     <Box

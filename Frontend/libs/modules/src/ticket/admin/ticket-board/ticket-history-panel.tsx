@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { Box, Typography } from '@mui/material';
@@ -13,7 +14,7 @@ import {
   designTokens,
   Timeline,
 } from '@rescue-frontend/ui';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 
 import { historyLabels } from '../../../admin/shared/model/history-labels';
 
@@ -34,17 +35,10 @@ export function TicketHistoryPanel({ uuid }: { uuid: string }) {
   });
   // Active types only, as the drawer's own read; a retired key shows as itself.
   const disasterTypes = useDisasterTypes({ includeInactive: false });
-  const labels = useMemo(
-    () =>
-      historyLabels(
-        Object.fromEntries(
-          (disasterTypes.data?.disasterTypes ?? []).map((d) => [
-            d.key,
-            d.label,
-          ]),
-        ),
-      ),
-    [disasterTypes.data],
+  const labels = historyLabels(
+    Object.fromEntries(
+      (disasterTypes.data?.disasterTypes ?? []).map((d) => [d.key, d.label]),
+    ),
   );
   const events = history.data?.data ?? [];
   const total = history.data?.meta?.total ?? 0;

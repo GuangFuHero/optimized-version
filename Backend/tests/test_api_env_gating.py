@@ -44,6 +44,10 @@ def test_unset_env_is_production(tmp_path):
     # Run from an empty directory so a developer's .env cannot supply ENV.
     out = subprocess.run(
         [sys.executable, "-c", "from app.core.config import settings; print(settings.ENV)"],
-        cwd=tmp_path, env=env, capture_output=True, text=True, check=True,
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
     )
     assert out.stdout.strip() == "production"

@@ -1,8 +1,11 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
+
+import { useEventCallback } from 'usehooks-ts';
 
 import { CircleAlert, LocateFixed, Move, MapPin } from 'lucide-react';
 
-import { Box, Button, Stack, Typography } from '@mui/material';
+import { Box, Stack, Typography } from '@mui/material';
 import dynamic from 'next/dynamic';
 import {
   useCallback,
@@ -12,7 +15,7 @@ import {
   type ReactNode,
 } from 'react';
 
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import { Button, designTokens, displayTextSize } from '@rescue-frontend/ui';
 
 import { useEventMapView } from '../../hooks/use-event-map-view';
 import { shouldAutoLocate } from './auto-locate';
@@ -73,7 +76,11 @@ function HintPill({
         boxShadow: shadow.sm,
         color: color.fg.neutral.subtle,
         pointerEvents: 'none',
-        '& svg': { fontSize: 13, color: color.fg.neutral.muted, flexShrink: 0 },
+        '& svg': {
+          fontSize: designTokens.iconSize[13],
+          color: color.fg.neutral.muted,
+          flexShrink: 0,
+        },
       }}
     >
       {icon}
@@ -106,53 +113,54 @@ export function LocationPicker({
   autoLocate = true,
 }: LocationPickerProps) {
   const [status, setStatus] = useState<LocateStatus>('idle');
-  const onChangeRef = useRef(onChange);
+  const changePoint = useEventCallback(onChange);
   const mountedRef = useRef(true);
-  const initialValueRef = useRef(value);
+  const [initialValue] = useState(value);
   // Read once, on opening, like the initial value.
   const autoLocateRef = useRef(autoLocate);
   const pickedByHandRef = useRef(false);
   // With no point to open at, the map opens at the event's view, so it waits for it.
   const eventMapView = useEventMapView();
-  const mapShown = Boolean(initialValueRef.current) || eventMapView.ready;
-
-  onChangeRef.current = onChange;
+  const mapShown = Boolean(initialValue) || eventMapView.ready;
 
   /** `asked`: pressed 用目前定位, which overwrites; the first, automatic look does not. */
-  const locate = useCallback((asked: boolean) => {
-    if (!('geolocation' in navigator)) {
-      setStatus('error');
-      return;
-    }
+  const locate = useCallback(
+    (asked: boolean) => {
+      if (!('geolocation' in navigator)) {
+        setStatus('error');
+        return;
+      }
 
-    setStatus('locating');
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        if (!mountedRef.current) {
-          return;
-        }
+      setStatus('locating');
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          if (!mountedRef.current) {
+            return;
+          }
 
-        setStatus('idle');
+          setStatus('idle');
 
-        // A pin placed by hand while the device was still looking stays where it was put.
-        if (!asked && pickedByHandRef.current) {
-          return;
-        }
+          // A pin placed by hand while the device was still looking stays where it was put.
+          if (!asked && pickedByHandRef.current) {
+            return;
+          }
 
-        onChangeRef.current({
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-          source: 'gps',
-        });
-      },
-      () => {
-        if (mountedRef.current) {
-          setStatus('error');
-        }
-      },
-      { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 },
-    );
-  }, []);
+          changePoint({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+            source: 'gps',
+          });
+        },
+        () => {
+          if (mountedRef.current) {
+            setStatus('error');
+          }
+        },
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 },
+      );
+    },
+    [changePoint],
+  );
 
   useEffect(() => {
     mountedRef.current = true;
@@ -161,7 +169,7 @@ export function LocationPicker({
     if (
       shouldAutoLocate({
         autoLocate: autoLocateRef.current,
-        hasInitialValue: Boolean(initialValueRef.current),
+        hasInitialValue: Boolean(initialValue),
       })
     ) {
       locate(false);
@@ -170,14 +178,17 @@ export function LocationPicker({
     return () => {
       mountedRef.current = false;
     };
-  }, [locate]);
+  }, [initialValue, locate]);
 
-  const handlePick = useCallback((point: { lat: number; lng: number }) => {
-    pickedByHandRef.current = true;
-    // Marked by hand, the point no longer waits on the device: what failed no longer matters.
-    setStatus((current) => (current === 'error' ? 'idle' : current));
-    onChangeRef.current({ ...point, source: 'manual' });
-  }, []);
+  const handlePick = useCallback(
+    (point: { lat: number; lng: number }) => {
+      pickedByHandRef.current = true;
+      // Marked by hand, the point no longer waits on the device: what failed no longer matters.
+      setStatus((current) => (current === 'error' ? 'idle' : current));
+      changePoint({ ...point, source: 'manual' });
+    },
+    [changePoint],
+  );
 
   return (
     <Stack spacing={1.25}>
@@ -216,8 +227,8 @@ export function LocationPicker({
         sx={{ alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}
       >
         <Button
-          variant="outlined"
-          size="small"
+          variant="outline"
+          size="sm"
           startIcon={
             <Box component={LocateFixed} sx={{ width: 16, height: 16 }} />
           }

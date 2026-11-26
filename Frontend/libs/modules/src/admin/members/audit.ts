@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * 操作紀錄 / 團隊紀錄 from `GET /admin/audit-logs` (Spec/026, ADR-358). A row is a raw trigger
  * snapshot — table, INSERT/UPDATE/DELETE, the row's old and new values — so this turns the rows

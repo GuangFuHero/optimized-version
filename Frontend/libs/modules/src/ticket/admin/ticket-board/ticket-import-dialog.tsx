@@ -1,4 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
+
+import { useForm, useStore } from '@tanstack/react-form';
 
 import {
   Box,
@@ -48,6 +51,12 @@ import { needTypeLabel, type NeedType } from './model/ticket-row';
 const { color, typography } = designTokens;
 
 type Preview = components['schemas']['BulkPreviewResponse'];
+type ImportDraft = {
+  taskType: NeedType | null;
+  file: File | null;
+  pasted: string;
+};
+
 type Result = components['schemas']['BulkImportResponse'];
 
 /** Pasted text settles this long before it is sent for a preview. */
@@ -60,9 +69,6 @@ const PASTE_PREVIEW_DEBOUNCE_MS = 600;
  * the file is previewed as soon as it is chosen.
  */
 export function TicketImportDialog({ onClose }: { onClose: () => void }) {
-  const [taskType, setTaskType] = useState<NeedType | null>(null);
-  const [file, setFile] = useState<File | null>(null);
-  const [pasted, setPasted] = useState('');
   const [preview, setPreview] = useState<Preview | null>(null);
   const [result, setResult] = useState<Result | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -71,6 +77,15 @@ export function TicketImportDialog({ onClose }: { onClose: () => void }) {
   const previewImport = usePreviewTicketImport();
   const commitImport = useCommitTicketImport();
   const exportTemplate = useExportTickets();
+  const initialValues: ImportDraft = { taskType: null, file: null, pasted: '' };
+  const form = useForm({
+    defaultValues: initialValues,
+    onSubmit: (): void => commit(),
+  });
+  const { taskType, file, pasted } = useStore(
+    form.store,
+    (state) => state.values,
+  );
   const busy = previewImport.isPending || commitImport.isPending;
   // Closing mid-import would unmount the dialog: the import still happens, but its report is lost.
   // A preview in flight would land after the dialog is gone too, so both hold it open.
@@ -78,7 +93,7 @@ export function TicketImportDialog({ onClose }: { onClose: () => void }) {
 
   const previewFile = (nextFile: File | null) => {
     latestFile.current = nextFile;
-    setFile(nextFile);
+    form.setFieldValue('file', nextFile);
     setPreview(null);
     if (!nextFile || !taskType) return;
     previewImport.mutate(
@@ -102,15 +117,15 @@ export function TicketImportDialog({ onClose }: { onClose: () => void }) {
   const chooseFile = (nextFile: File | undefined) => {
     if (!nextFile || !taskType) return;
     previewPasted.cancel();
-    setPasted('');
+    form.setFieldValue('pasted', '');
     previewFile(nextFile);
   };
 
   const paste = (text: string) => {
-    setPasted(text);
+    form.setFieldValue('pasted', text);
     // Typing replaces a chosen file; its preview no longer stands.
     latestFile.current = null;
-    setFile(null);
+    form.setFieldValue('file', null);
     setPreview(null);
     previewPasted(text);
   };
@@ -118,9 +133,9 @@ export function TicketImportDialog({ onClose }: { onClose: () => void }) {
   const chooseType = (type: NeedType) => {
     previewPasted.cancel();
     latestFile.current = null;
-    setTaskType(type);
-    setFile(null);
-    setPasted('');
+    form.setFieldValue('taskType', type);
+    form.setFieldValue('file', null);
+    form.setFieldValue('pasted', '');
     setPreview(null);
   };
 
@@ -403,7 +418,7 @@ export function TicketImportDialog({ onClose }: { onClose: () => void }) {
               取消
             </Button>
             <Button
-              onClick={commit}
+              onClick={() => void form.handleSubmit()}
               startIcon={<Upload size={17} />}
               disabled={!summary?.canCommit || busy}
             >

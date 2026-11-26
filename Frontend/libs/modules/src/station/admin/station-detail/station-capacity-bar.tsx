@@ -1,8 +1,9 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { Box, Stack, Typography } from '@mui/material';
 
-import { displayTextSize } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
 import { useStationDetailColorScheme } from './constants';
 import type { StationCapacityBarProps } from './types';
@@ -69,7 +70,7 @@ export function StationCapacityBar({
           width: '100%',
           height: 1,
           minHeight: 8,
-          borderRadius: '999px',
+          borderRadius: `${designTokens.radius.full}px`,
           overflow: 'hidden',
           bgcolor: stationDetailPalette.capacityTrack,
         }}
@@ -78,7 +79,7 @@ export function StationCapacityBar({
           sx={{
             width: `${resolvedProgress}%`,
             height: '100%',
-            borderRadius: '999px',
+            borderRadius: `${designTokens.radius.full}px`,
             bgcolor: stationDetailPalette.capacityFill,
           }}
         />

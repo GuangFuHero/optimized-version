@@ -1,6 +1,8 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { Box } from '@mui/material';
+import type { SvgIconProps } from '@mui/material';
 
 import { designTokens, Icons } from '@rescue-frontend/ui';
 
@@ -14,8 +16,13 @@ const NEED_TYPE_ICONS: Record<string, typeof Icons.clipboardList> = {
   medical: Icons.briefcaseMedical,
 };
 
-export function needTypeIcon(taskType: string) {
-  return NEED_TYPE_ICONS[taskType.trim().toLowerCase()] ?? Icons.clipboardList;
+export function NeedTypeIcon({
+  taskType,
+  ...props
+}: SvgIconProps & { taskType: string }) {
+  const Icon =
+    NEED_TYPE_ICONS[taskType.trim().toLowerCase()] ?? Icons.clipboardList;
+  return <Icon {...props} />;
 }
 
 interface NeedProgressBarProps {
@@ -26,7 +33,11 @@ interface NeedProgressBarProps {
   height: number;
 }
 
-export function NeedProgressBar({ fraction, full, height }: NeedProgressBarProps) {
+export function NeedProgressBar({
+  fraction,
+  full,
+  height,
+}: NeedProgressBarProps) {
   return (
     <Box
       sx={{

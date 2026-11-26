@@ -1,10 +1,12 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
+
+import { useForm, useStore, type Updater } from '@tanstack/react-form';
 
 import {
   Alert,
   AlertTitle,
   Box,
-  Button,
   ButtonBase,
   CircularProgress,
   Stack,
@@ -13,6 +15,7 @@ import {
 } from '@mui/material';
 import {
   Fragment,
+  useCallback,
   useEffect,
   useId,
   useRef,
@@ -22,10 +25,17 @@ import {
   type Ref,
 } from 'react';
 
-import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
+import type { AddressLookupSource } from '@rescue-frontend/data-access';
+import {
+  Button,
+  designTokens,
+  displayTextSize,
+  Icons,
+} from '@rescue-frontend/ui';
 
 import { useBuilding } from '../../building/use-building';
 import { LocationPicker } from '../../map/components/location-picker';
+import { siteGraphql } from '../../session/site-clients';
 import { SiteActionDrawer } from '../../shell/site/site-action-drawer';
 import { SiteBadge } from '../../shell/site/site-badge';
 import {
@@ -64,9 +74,14 @@ import { NeedDraftRow } from './need-draft-row';
 import {
   usePinAddressLookup,
   useTypedAddressLookup,
-} from './use-address-lookup';
+} from '../use-address-lookup';
 
 const { color, radius } = designTokens;
+
+const siteAddressLookup = {
+  scope: 'site',
+  request: siteGraphql,
+} as const satisfies AddressLookupSource;
 
 const TITLE = '請求協助';
 
@@ -163,11 +178,11 @@ function GuestHelpRequestDrawer({
       onClose={onClose}
       footer={
         <>
-          <Button variant="outlined" onClick={onClose} sx={{ flex: 1 }}>
+          <Button variant="outline" onClick={onClose} sx={{ flex: 1 }}>
             取消
           </Button>
           <Button
-            variant="contained"
+            variant="primary"
             startIcon={<Icons.logIn />}
             onClick={onSignIn}
             sx={{ flex: 2 }}
@@ -289,17 +304,20 @@ function NoteOffer({
 }) {
   return (
     <Button
-      size="small"
-      variant="outlined"
+      size="sm"
+      variant="outline"
       onClick={onClick}
       // A click or a tap leaves the focus in the address field: leaving it would check the line
       // about to be replaced. A Tab here is not leaving it either (`leaveAddress`).
       onMouseDown={(event) => event.preventDefault()}
       sx={{
+        height: 'auto',
         py: 0.25,
         fontSize: displayTextSize[12],
         lineHeight: 1.5,
         textAlign: 'left',
+        whiteSpace: 'normal',
+        overflowWrap: 'anywhere',
       }}
     >
       {children}
@@ -400,8 +418,30 @@ function HelpRequestFormDrawer({
   const [draft] = useState(() =>
     userId ? draftHold.read(sessionDraftStorage(), userId) : null,
   );
-  const [form, setForm] = useState<HelpRequestForm>(
+  const [openedValues] = useState(
     () => draft ?? emptyHelpRequestForm(seed, place),
+  );
+  const formApi = useForm({
+    defaultValues: { draft: openedValues },
+    validators: {
+      onSubmit: ({
+        value,
+      }): ReturnType<typeof findMissingFields> | undefined => {
+        const missing = findMissingFields(value.draft, floorAreas);
+        return missing.length ? missing : undefined;
+      },
+    },
+    onSubmitInvalid: () => scrollToMissing(),
+    onSubmit: ({ value }) => onSubmit(value.draft),
+  });
+  const form = useStore(formApi.store, (state) => state.values.draft);
+  const touched = useStore(
+    formApi.store,
+    (state) => state.submissionAttempts > 0,
+  );
+  const setForm = useCallback(
+    (next: Updater<HelpRequestForm>) => formApi.setFieldValue('draft', next),
+    [formApi],
   );
   const notesLabelId = useId();
   const addressId = useId();
@@ -411,19 +451,18 @@ function HelpRequestFormDrawer({
   // into the photo box goes.
   const [round, setRound] = useState(0);
   // Marked red only after a first try to send, not while it is still being filled in.
-  const [touched, setTouched] = useState(false);
   const formRef = useRef<HTMLDivElement | null>(null);
   const addressRef = useRef<HTMLInputElement | null>(null);
   const addressNoteRef = useRef<HTMLDivElement | null>(null);
   // The typed line last checked, once the address field was left.
   const [check, setCheck] = useState<AddressCheck | null>(null);
-  const pinLookup = usePinAddressLookup(form.landmark);
-  const typedLookup = useTypedAddressLookup(check);
+  const pinLookup = usePinAddressLookup(form.landmark, siteAddressLookup);
+  const typedLookup = useTypedAddressLookup(check, siteAddressLookup);
 
   // The pin's 門牌 into the line. Again on 清空重填, whose blank line the same answer is for.
   useEffect(() => {
     setForm((current) => applyPinLookup(current, pinLookup));
-  }, [pinLookup, round]);
+  }, [pinLookup, round, setForm]);
 
   useEffect(() => {
     if (check) {
@@ -431,7 +470,7 @@ function HelpRequestFormDrawer({
         applyTypedLookup(current, check.address, typedLookup),
       );
     }
-  }, [check, typedLookup]);
+  }, [check, typedLookup, setForm]);
 
   // Not once closed: what is left of the form then was sent, or let go of on 取消.
   useEffect(() => {
@@ -562,17 +601,6 @@ function HelpRequestFormDrawer({
       ?.focus({ preventScroll: true });
   };
 
-  const submit = () => {
-    setTouched(true);
-
-    if (missing.length) {
-      scrollToMissing();
-      return;
-    }
-
-    onSubmit(form);
-  };
-
   /** 取消 lets go of what was typed; ✕, the scrim and Escape only put it away for later. */
   const cancel = () => {
     if (userId) {
@@ -584,10 +612,12 @@ function HelpRequestFormDrawer({
 
   /** As a fresh opening would be — at the map's point, or the building's floor, if it was opened at one. */
   const startOver = () => {
-    setForm(emptyHelpRequestForm(seed, place));
+    formApi.reset(
+      { draft: emptyHelpRequestForm(seed, place) },
+      { keepDefaultValues: true },
+    );
     setCheck(null);
     setRestored(false);
-    setTouched(false);
     setRound((current) => current + 1);
   };
 
@@ -599,12 +629,12 @@ function HelpRequestFormDrawer({
       onClose={onClose}
       footer={
         <>
-          <Button variant="outlined" onClick={cancel} sx={{ flex: 1 }}>
+          <Button variant="outline" onClick={cancel} sx={{ flex: 1 }}>
             取消
           </Button>
           <Button
-            variant="contained"
-            onClick={submit}
+            variant="primary"
+            onClick={() => void formApi.handleSubmit()}
             disabled={submitting}
             sx={{ flex: 2 }}
           >
@@ -627,11 +657,11 @@ function HelpRequestFormDrawer({
             severity="info"
             action={
               <Button
-                color="inherit"
-                size="small"
+                variant="ghost"
+                size="sm"
                 onClick={startOver}
                 // On a phone the words wrap instead: a button broken over two lines reads as two.
-                sx={{ whiteSpace: 'nowrap' }}
+                sx={{ color: 'inherit', whiteSpace: 'nowrap' }}
               >
                 清空重填
               </Button>
@@ -903,7 +933,11 @@ function HelpRequestFormDrawer({
                 fontWeight: 500,
               }}
             >
-              <Icons.plus sx={{ fontSize: 16 }} />
+              <Icons.plus
+                sx={{
+                  fontSize: designTokens.iconSize[16],
+                }}
+              />
               還需要別的嗎？
             </ButtonBase>
           ) : null}

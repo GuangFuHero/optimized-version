@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * 你的基本資料 on an application (prototype G-2, `Design/前台/更新說明.md`, 🔒 2026-10-05): a name,
  * and a mobile phone verified by a code before the application goes. The phone is the account's

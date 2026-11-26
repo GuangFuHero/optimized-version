@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * Tells this browser's other tabs that someone signed in or out here. next-auth used to do this for
  * us (its sign-out broadcast); since the login moved to the backend the

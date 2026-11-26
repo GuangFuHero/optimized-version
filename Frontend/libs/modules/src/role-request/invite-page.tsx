@@ -1,4 +1,9 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
+
+import { useReturnQuery } from '../route/use-return-query';
+
+import { useForm, useStore } from '@tanstack/react-form';
 
 import {
   Alert,
@@ -11,19 +16,24 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 
-import { ApiError } from '@rescue-frontend/data-access';
+import {
+  ApiError,
+  useCurrentUser,
+  useInvalidateCurrentUser,
+} from '@rescue-frontend/data-access';
 import type { components } from '@rescue-frontend/data-access/openapi';
 import { Button, designTokens } from '@rescue-frontend/ui';
 
-import { getCurrentUserAsync } from '../auth/api/client';
 import { authHref } from '../auth/login/utils/auth-href';
 import { useAuthSession } from '../session/auth-session';
 import { readApplicantAccount } from './applicant';
 import { ApplicantSection } from './applicant-section';
+import { loadPage } from '../route/navigate';
+import { SITE_PATHS } from '../route/paths';
 import {
+  APPLY_HREF,
   buildPhoneStepUpHref,
   readApplyReturn,
-  stripApplyReturn,
 } from './apply-return';
 import { roleRequestErrorMessage } from './error';
 import {
@@ -66,12 +76,9 @@ export function TeamInvitePage({ token }: { token: string }) {
     retry: false,
     meta: { quietErrors: true },
   });
-  const applicant = useQuery({
-    queryKey: ['users', 'me', user?.uuid],
-    queryFn: getCurrentUserAsync,
+  const applicant = useCurrentUser({
     enabled: status === 'authenticated',
-    retry: false,
-    meta: { quietErrors: true },
+    staleTime: 0,
   });
   const authLink = authHref('/login', { callbackUrl });
 
@@ -140,17 +147,14 @@ export function TeamInvitePage({ token }: { token: string }) {
             >
               重新載入
             </Button>
-            {(invite.error instanceof ApiError &&
-              invite.error.status === 401) ||
-            (applicant.error instanceof ApiError &&
-              applicant.error.status === 401) ? (
+            {invite.error instanceof ApiError && invite.error.status === 401 ? (
               <Button variant="ghost" href={authLink}>
                 重新登入
               </Button>
             ) : null}
             <BackToSite />
           </>
-        ) : (
+        ) : applicant.data ? (
           <InviteDetails
             key={`${user?.uuid}:${token}`}
             token={token}
@@ -159,19 +163,16 @@ export function TeamInvitePage({ token }: { token: string }) {
             refreshInvite={() => void invite.refetch()}
             refreshAccount={() => void applicant.refetch()}
           />
-        )}
+        ) : null}
       </Stack>
     </Container>
   );
 }
 
-/** 前台: the public map, where 申請管理權限 also opens (`?apply=1`, `apply-return.ts`). */
-const SITE_HREF = '/map';
-const APPLY_HREF = '/map?apply=1';
-
+/** 前台: the public map, where 申請管理權限 also opens (`APPLY_HREF`, `apply-return.ts`). */
 function BackToSite({ label = '回到前台' }: { label?: string }) {
   return (
-    <Button href={SITE_HREF} variant="ghost">
+    <Button href={SITE_PATHS.map} variant="ghost">
       {label}
     </Button>
   );
@@ -274,7 +275,7 @@ function InviteDetails({
                     variant="outline"
                     tone="danger"
                     disabled={withdraw.submitting}
-                    onClick={() => void withdraw.confirm(myRequest.uuid)}
+                    onClick={() => withdraw.confirm(myRequest.uuid)}
                   >
                     確定撤回
                   </Button>
@@ -353,7 +354,7 @@ function PendingElsewhere({
           <Button
             variant="primary"
             disabled={withdraw.submitting}
-            onClick={() => void withdraw.confirm(pending.uuid)}
+            onClick={() => withdraw.confirm(pending.uuid)}
           >
             撤回，改申請{teamName}
           </Button>
@@ -393,16 +394,35 @@ function InviteForm({
   refreshInvite: () => void;
   refreshAccount: () => void;
 }) {
+  const consumeReturn = useReturnQuery();
   const account = readApplicantAccount(user);
-  const [name, setName] = useState(account.nickname);
-  const [reason, setReason] = useState('');
-  const [touched, setTouched] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [openedValues] = useState(
+    () =>
+      ({ name: account.nickname, reason: '' }) satisfies Parameters<
+        typeof joinThroughInvite
+      >[1],
+  );
+  const formApi = useForm({
+    defaultValues: openedValues,
+    validators: {
+      onSubmit: (): ReturnType<typeof validateRoleRequestForm> | undefined =>
+        Object.keys(errors).length ? errors : undefined,
+    },
+    onSubmitInvalid: () => setError(null),
+    onSubmit: (): Promise<void> => submit(),
+  });
+  const { name, reason } = useStore(formApi.store, (state) => state.values);
+  const touched = useStore(
+    formApi.store,
+    (state) => state.submissionAttempts > 0,
+  );
+  const busy = useStore(formApi.store, (state) => state.isSubmitting);
   const [error, setError] = useState<string | null>(null);
   // ⑪: the invite stopped working while this was being filled in (404 on sending).
   const [lapsed, setLapsed] = useState(false);
   const lapsedRef = useRef<HTMLDivElement>(null);
   const { keep, take } = useApplyDraft(user.uuid);
+  const refreshSession = useInvalidateCurrentUser();
   const verification = usePhoneVerification({
     account,
     onVerified: refreshAccount,
@@ -416,12 +436,8 @@ function InviteForm({
         phone,
       });
       // Refresh cookies through the API proxy before a whole-page navigation to LINE.
-      try {
-        await getCurrentUserAsync();
-      } catch {
-        // The session layer handles an ended session; LINE can retry a transient failure.
-      }
-      window.location.assign(buildPhoneStepUpHref(window.location));
+      await refreshSession();
+      loadPage(buildPhoneStepUpHref(window.location));
     },
   });
   const resumed = useRef(false);
@@ -432,18 +448,13 @@ function InviteForm({
     const back = readApplyReturn(new URLSearchParams(window.location.search));
     if (!back) return;
     const draft = take();
-    const href = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-    window.history.replaceState(
-      window.history.state,
-      '',
-      stripApplyReturn(href),
-    );
+    consumeReturn(['apply', 'step_up', 'step_up_error']);
     if (draft?.team === invite.team.uuid) {
-      setName(draft.name);
-      setReason(draft.reason);
+      formApi.setFieldValue('name', draft.name);
+      formApi.setFieldValue('reason', draft.reason);
       resumeVerification(draft.phone, back.stepUp);
     }
-  }, [invite.team.uuid, resumeVerification, take]);
+  }, [consumeReturn, formApi, invite.team.uuid, resumeVerification, take]);
 
   const errors = validateRoleRequestForm(
     {
@@ -462,11 +473,7 @@ function InviteForm({
   );
 
   const submit = async () => {
-    if (busy) return;
-    setTouched(true);
     setError(null);
-    if (Object.keys(errors).length > 0) return;
-    setBusy(true);
     try {
       await joinThroughInvite(token, {
         name: name.trim(),
@@ -483,8 +490,6 @@ function InviteForm({
       if (cause instanceof ApiError && cause.status === 409) refreshInvite();
       if (cause instanceof ApiError && [409, 422].includes(cause.status))
         refreshAccount();
-    } finally {
-      setBusy(false);
     }
   };
 
@@ -505,7 +510,7 @@ function InviteForm({
       reason,
       phone: verification.phone,
     });
-    window.location.assign(APPLY_HREF);
+    loadPage(APPLY_HREF);
   };
 
   return (
@@ -514,7 +519,7 @@ function InviteForm({
       noValidate
       onSubmit={(event) => {
         event.preventDefault();
-        void submit();
+        void formApi.handleSubmit();
       }}
       sx={{ gap: 3 }}
     >
@@ -533,7 +538,7 @@ function InviteForm({
       <ApplicantSection
         account={account}
         name={name}
-        onNameChange={setName}
+        onNameChange={(value) => formApi.setFieldValue('name', value)}
         nameError={touched ? (errors.name ?? null) : null}
         phoneError={touched ? (errors.phone ?? null) : null}
         verification={verification}
@@ -545,7 +550,9 @@ function InviteForm({
         minRows={3}
         fullWidth
         value={reason}
-        onChange={(event) => setReason(event.target.value)}
+        onChange={(event) =>
+          formApi.setFieldValue('reason', event.target.value)
+        }
         error={touched && Boolean(errors.reason)}
         helperText={
           touched && errors.reason

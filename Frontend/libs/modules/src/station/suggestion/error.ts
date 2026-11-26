@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * What someone reads when a suggestion is refused. The backend's messages are contract — only a
  * `ValueError` or an `HTTPException` reaches the client unmasked (backend `graphql/schema.py`) — so
@@ -6,7 +7,7 @@
 
 import { isUnauthorizedError } from '../../session/expiry';
 
-/** The parts of urql's `CombinedError` this reads. */
+/** The parts of `GraphqlError` this reads. */
 export interface StationSuggestionError {
   networkError?: unknown;
   response?: { status?: number };

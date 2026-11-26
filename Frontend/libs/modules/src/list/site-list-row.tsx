@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { Box, ButtonBase, Stack, Typography } from '@mui/material';
@@ -12,7 +13,7 @@ import {
 import type { RescueMapMarkerItem } from '../map/types';
 import { SiteBadge } from '../shell/site/site-badge';
 import { resolveStationAvailability } from '../station/availability';
-import { getStationTypeIcon } from '../station/station-type-icon';
+import { StationTypeIcon } from '../station/station-type-icon';
 import { NeedLine, type TicketNeed } from '../ticket/needs';
 import { TicketPriorityBadge } from '../ticket/priority-badge';
 import { getTicketStatusTone } from '../ticket/status';
@@ -57,9 +58,6 @@ export function SiteListRow({
   onShare,
 }: SiteListRowProps) {
   const isStation = marker.detailType === 'station';
-  const TypeIcon = isStation
-    ? getStationTypeIcon(marker.stationMeta?.type)
-    : Icons.clipboardList;
   const needs =
     marker.detailType === 'ticket' ? (listedNeeds ?? marker.needs ?? []) : [];
   const availability = isStation
@@ -110,10 +108,15 @@ export function SiteListRow({
             }}
           >
             {/* Named for a screen reader: the badge on the right no longer says the type. */}
-            <TypeIcon
-              titleAccess={isStation ? marker.label : undefined}
-              sx={{ fontSize: ICON_SIZE }}
-            />
+            {isStation ? (
+              <StationTypeIcon
+                type={marker.stationMeta?.type}
+                titleAccess={marker.label}
+                sx={{ fontSize: ICON_SIZE }}
+              />
+            ) : (
+              <Icons.clipboardList sx={{ fontSize: ICON_SIZE }} />
+            )}
           </Box>
 
           <Box sx={{ flex: 1, minWidth: 0, containerType: 'inline-size' }}>
@@ -166,7 +169,11 @@ export function SiteListRow({
                 {/* 官方認定：只有官方站點掛 chip，非官方不掛。 */}
                 {isStation && marker.stationMeta?.isOfficial ? (
                   <SiteBadge tone="secondary" variant="subtle">
-                    <Icons.shieldCheck sx={{ fontSize: 12 }} />
+                    <Icons.shieldCheck
+                      sx={{
+                        fontSize: designTokens.iconSize[12],
+                      }}
+                    />
                     官方
                   </SiteBadge>
                 ) : null}
@@ -174,7 +181,11 @@ export function SiteListRow({
                     front that this ticket's place is a region (ADR-281). */}
                 {marker.locationCell ? (
                   <SiteBadge tone="neutral" variant="subtle">
-                    <Icons.hexagon sx={{ fontSize: 12 }} />
+                    <Icons.hexagon
+                      sx={{
+                        fontSize: designTokens.iconSize[12],
+                      }}
+                    />
                     概略位置
                   </SiteBadge>
                 ) : null}

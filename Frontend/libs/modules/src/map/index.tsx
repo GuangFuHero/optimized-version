@@ -1,19 +1,11 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 
-import {
-  memo,
-  useCallback,
-  useEffect,
-  useMemo,
-  useReducer,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react';
+import { memo, useCallback, useRef, useState, type ReactNode } from 'react';
 
 import { Box, Drawer, GlobalStyles, useMediaQuery } from '@mui/material';
 import type { Map as LeafletMap } from 'leaflet';
@@ -32,7 +24,7 @@ import { RescueMapLayerPanel } from './components/rescue-map-layer-panel';
 import { RescueMapStatusMessage } from './components/rescue-map-status-message';
 import { RescueMapTopBar } from './components/rescue-map-top-bar';
 import { RESCUE_MAP_DESKTOP_DETAIL_DRAWER_WIDTH } from './constants';
-import { countDetailOpenings } from './detail-openings';
+import { useMarkerDetail } from './hooks/use-marker-detail';
 import {
   designTokens,
   displayTextSizeCss,
@@ -63,7 +55,7 @@ import type {
 
 const { color, iconSize, primitives, radius, shadow } = designTokens;
 
-const MAP_LOADING_MESSAGE = '救災寶加載地圖中…';
+const MAP_LOADING_MESSAGE = '光復寶寶載入地圖中…';
 
 const RescueMapCanvas = dynamic(
   () =>
@@ -106,7 +98,7 @@ const MAP_STATIC_GLOBAL_STYLES = {
   '.map-marker-cluster': {
     display: 'grid',
     placeItems: 'center',
-    borderRadius: '999px',
+    borderRadius: `${radius.full}px`,
     border: `3px solid ${color.bg.neutral.default}`,
     boxShadow: shadow.lg,
     fontWeight: 800,
@@ -143,11 +135,13 @@ const MAP_STATIC_GLOBAL_STYLES = {
   '.map-marker-cluster--solid': {
     color: color.fg.onPrimary,
     background: color.bg.primary.default,
-    boxShadow: '0 3px 10px rgba(15, 23, 42, 0.28)',
+    boxShadow: `0 3px 10px ${withAlpha(color.fg.neutral.default, 0.28)}`,
     // Admin chrome: the design system's px, not the public site's display scale.
-    fontSize: 15,
+    fontSize: designTokens.typography.fontSize[15],
   },
-  '.map-marker-cluster--solid-dense': { fontSize: 13 },
+  '.map-marker-cluster--solid-dense': {
+    fontSize: designTokens.typography.fontSize[13],
+  },
   '.map-marker-cluster__count': {
     display: 'block',
     transform: 'translateY(0.5px)',
@@ -195,8 +189,7 @@ const MAP_STATIC_GLOBAL_STYLES = {
   '.map-area-popup__name': {
     fontWeight: 700,
   },
-  // An area's label, 「責任區・大平村」 (rescue-map-canvas `createAreaLabel`; prototype `前台地圖 Site
-  // Map.html`, 2026-10-23). Centred on the point `placeAreaLabels` found room at (ZONE-LABEL-102).
+  // Center the area label on the point `placeLabels` found room for it (ZONE-LABEL-102).
   '.map-area-label-anchor': {
     background: 'none',
     border: 'none',
@@ -207,11 +200,11 @@ const MAP_STATIC_GLOBAL_STYLES = {
     top: 0,
     transform: 'translate(-50%, -50%)',
     padding: '3px 8px',
-    borderRadius: 6,
+    borderRadius: radius.sm,
     border: `1px solid ${color.border.default}`,
     backgroundColor: color.bg.neutral.default,
     color: color.fg.neutral.default,
-    boxShadow: '0 1px 2px rgba(15, 23, 42, 0.15)',
+    boxShadow: `0 1px 2px ${withAlpha(color.fg.neutral.default, 0.15)}`,
     ...displayTextSizeCss(12),
     fontWeight: 700,
     lineHeight: 1.3,
@@ -261,6 +254,7 @@ interface MapProps {
   cursor?: string;
   /** A double-click then adds a corner (or nothing) instead of zooming. */
   disableDoubleClickZoom?: boolean;
+  editingArea?: boolean;
   /** Draws 責任區 and 標示區 as the admin 互助地圖 does (canvas `getAdminZoneStyle`). */
   adminAreaStyle?: boolean;
   /**
@@ -341,6 +335,7 @@ export const Map = memo(function Map({
   editArea,
   cursor,
   disableDoubleClickZoom,
+  editingArea,
   adminAreaStyle,
   draftPoint,
   onDraftPointChange,
@@ -365,7 +360,7 @@ export const Map = memo(function Map({
   // the map opens, at once. Without one, the map waits to know where to open (MAP-VIEW-101–104);
   // so does one from a `bbox` alone, which names no zoom, for the event's.
   const [addressPosition] = useState(
-    () => viewportStore?.getSnapshot().position ?? routeState?.position,
+    () => viewportStore?.getState().position ?? routeState?.position,
   );
   const opening = useMapOpening({
     memoryKey: viewMemoryKey,
@@ -408,80 +403,52 @@ export const Map = memo(function Map({
 
   // 訪客的概略區塊不在 markers 裡（見 buildLocationCells），但一樣可以被選取、開詳情。後端數好的
   // 格子（`locationCells`）優先：markers 只有一頁。
-  const locationCells = useMemo(
-    () => countedCells ?? buildLocationCells(controller.markers),
-    [controller.markers, countedCells],
-  );
-  const selectedMarker = useMemo<RescueMapDetailItem | null>(
-    () =>
-      controller.markers.find(
-        (marker) => marker.id === controller.selectedMarkerId,
-      ) ??
-      locationCells.find((cell) => cell.id === controller.selectedMarkerId) ??
-      (linkedItem && linkedItem.id === controller.selectedMarkerId
-        ? linkedItem
-        : null),
-    [
-      controller.markers,
-      controller.selectedMarkerId,
-      linkedItem,
-      locationCells,
-    ],
-  );
+  const locationCells = countedCells ?? buildLocationCells(controller.markers);
+  const selectedMarker =
+    controller.markers.find(
+      (marker) => marker.id === controller.selectedMarkerId,
+    ) ??
+    locationCells.find((cell) => cell.id === controller.selectedMarkerId) ??
+    ((linkedItem && linkedItem.id === controller.selectedMarkerId
+      ? linkedItem
+      : null) satisfies RescueMapDetailItem | null);
   const isTicketTone = controller.dataType === 'ticket';
-  const globalStyles = useMemo(
-    () => ({
-      ...rescueMapMarkerStyles,
-      ...MAP_STATIC_GLOBAL_STYLES,
-      '.leaflet-control-scale-line': {
-        padding: '2px 8px',
-        // Leaflet's own chrome stays off the display scale — `site.css` pins the scale line,
-        // attribution and tooltip to raw px. It is map furniture, not content to be read at arm's
-        // length, and it has to fit Leaflet's fixed control geometry.
-        fontSize: 11,
-        fontWeight: 700,
-        color: color.fg.neutral.default,
-        lineHeight: '16px',
-        background: isTicketTone
-          ? color.bg.primary.subtle
-          : color.bg.secondary.subtle,
-        backdropFilter: 'blur(6px)',
-        border: 'none',
-        borderTop: `5px solid ${
-          isTicketTone
-            ? color.bg.primary.default
-            : color.brand.secondary.default
-        }`,
-        borderRadius: `0 0 ${radius.md}px ${radius.md}px`,
-        boxShadow: shadow.sm,
-      },
-    }),
-    [isTicketTone],
-  );
+  const globalStyles = {
+    ...rescueMapMarkerStyles,
+    ...MAP_STATIC_GLOBAL_STYLES,
+    '.leaflet-control-scale-line': {
+      padding: '2px 8px',
+      // Leaflet's own chrome stays off the display scale — `site.css` pins the scale line,
+      // attribution and tooltip to raw px. It is map furniture, not content to be read at arm's
+      // length, and it has to fit Leaflet's fixed control geometry.
+      fontSize: designTokens.typography.fontSize[11],
+      fontWeight: 700,
+      color: color.fg.neutral.default,
+      lineHeight: '16px',
+      background: isTicketTone
+        ? color.bg.primary.subtle
+        : color.bg.secondary.subtle,
+      backdropFilter: 'blur(6px)',
+      border: 'none',
+      borderTop: `5px solid ${
+        isTicketTone ? color.bg.primary.default : color.brand.secondary.default
+      }`,
+      borderRadius: `0 0 ${radius.md}px ${radius.md}px`,
+      boxShadow: shadow.sm,
+    },
+  };
 
   // 保留最後選取的標記，讓行動版抽屜在關閉動畫期間仍有內容可渲染。
-  const [displayMarker, setDisplayMarker] =
-    useState<RescueMapDetailItem | null>(selectedMarker);
-  const [{ open: detailOpen, openings: detailOpenings }, setDetailOpen] =
-    useReducer(countDetailOpenings, {
-      open: Boolean(selectedMarker),
-      openings: 0,
-    });
+  const {
+    displayMarker,
+    detailOpen,
+    detailOpenings,
+    setDetailOpen,
+    setDisplayMarker,
+  } = useMarkerDetail(selectedMarker, Boolean(controller.selectedMarkerId));
   // The phone's drawer opens on a phone only. Hidden by CSS on a wider screen, it was still an open
   // modal, and MUI hid the rest of the page — the map, the detail panel — from screen readers.
   const isPhone = useMediaQuery((theme) => theme.breakpoints.down('tablet'));
-
-  useEffect(() => {
-    if (selectedMarker) {
-      setDisplayMarker(selectedMarker);
-      setDetailOpen(true);
-      return;
-    }
-
-    if (!controller.selectedMarkerId) {
-      setDetailOpen(false);
-    }
-  }, [controller.selectedMarkerId, selectedMarker]);
 
   const closeDetail = () => {
     setDetailOpen(false);
@@ -498,6 +465,7 @@ export const Map = memo(function Map({
   };
 
   const handleMarkerClick = (marker: RescueMapMarkerItem) => {
+    if (editingArea) return;
     controller.closeLayerPanel();
 
     if (marker.building) {
@@ -509,6 +477,7 @@ export const Map = memo(function Map({
   };
 
   const handleLocationCellClick = (cell: RescueMapLocationCell) => {
+    if (editingArea) return;
     controller.closeLayerPanel();
     controller.setSelectedMarkerId(cell.id);
   };
@@ -573,6 +542,10 @@ export const Map = memo(function Map({
             minHeight: 0,
             position: 'relative',
             overflow: 'hidden',
+            '& .leaflet-marker-icon:not(.rescue-map-edit-corner):not(.rescue-map-edit-midpoint), & .leaflet-container .map-area-label-anchor .map-area-label, & .leaflet-container .map-location-cell':
+              {
+                pointerEvents: editingArea ? 'none' : undefined,
+              },
           }}
         >
           {opensAtOnce || opening ? (
@@ -586,6 +559,7 @@ export const Map = memo(function Map({
               editArea={editArea}
               cursor={cursor}
               disableDoubleClickZoom={disableDoubleClickZoom}
+              editingArea={editingArea}
               adminAreaStyle={adminAreaStyle}
               onMapClick={onMapClick}
               layoutKey={drawerOpen ? 'detail-open' : 'detail-closed'}

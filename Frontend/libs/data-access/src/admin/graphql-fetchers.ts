@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import {
@@ -8,9 +9,15 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
-import { adminGraphqlClient, graphqlResponseData } from './client';
+import { adminGraphql } from './client';
 import { collectAllPages } from './collect-pages';
-import * as documents from './graphql/__generated__/graphql';
+import {
+  reverseGeocodeQueryOptions,
+  type AddressLookupSource,
+} from '../graphql/geo/address-cache';
+import { adminMapKeys } from './map-query-keys';
+import { SILENT_ERROR_META } from '../query-client';
+import * as documents from '../graphql/__generated__/graphql';
 import {
   ticketDetailUuid,
   ticketKeys,
@@ -126,12 +133,7 @@ export const ticketsQuery = (
   queryOptions({
     queryKey: [...ticketKeys.lists(), variables],
     queryFn: ({ signal }) =>
-      adminGraphqlClient
-        .query(documents.AdminTicketsDocument, variables, {
-          fetchOptions: { credentials: 'include', signal },
-        })
-        .toPromise()
-        .then(graphqlResponseData),
+      adminGraphql(documents.AdminTicketsDocument, variables, signal),
   });
 
 /**
@@ -173,12 +175,7 @@ export const ticketMapPinsQuery = (
   queryOptions({
     queryKey: [...ticketKeys.mapPins(), variables],
     queryFn: ({ signal }) =>
-      adminGraphqlClient
-        .query(documents.AdminTicketMapPinsDocument, variables, {
-          fetchOptions: { credentials: 'include', signal },
-        })
-        .toPromise()
-        .then(graphqlResponseData),
+      adminGraphql(documents.AdminTicketMapPinsDocument, variables, signal),
   });
 
 export function useTicketMapPins(
@@ -201,12 +198,7 @@ export const ticketsExtentQuery = (
   queryOptions({
     queryKey: [...ticketKeys.extents(), variables],
     queryFn: ({ signal }) =>
-      adminGraphqlClient
-        .query(documents.AdminTicketsExtentDocument, variables, {
-          fetchOptions: { credentials: 'include', signal },
-        })
-        .toPromise()
-        .then(graphqlResponseData),
+      adminGraphql(documents.AdminTicketsExtentDocument, variables, signal),
   });
 
 export function useTicketsExtent(
@@ -224,14 +216,7 @@ export const ticketStatsQuery = () =>
   queryOptions({
     queryKey: ticketKeys.stats(),
     queryFn: ({ signal }) =>
-      adminGraphqlClient
-        .query(
-          documents.AdminTicketStatsDocument,
-          {},
-          { fetchOptions: { credentials: 'include', signal } },
-        )
-        .toPromise()
-        .then(graphqlResponseData),
+      adminGraphql(documents.AdminTicketStatsDocument, {}, signal),
   });
 
 export function useTicketStats(options: AdminQueryOptions = {}) {
@@ -243,14 +228,7 @@ export const ticketFacetsQuery = () =>
   queryOptions({
     queryKey: ticketKeys.facets(),
     queryFn: ({ signal }) =>
-      adminGraphqlClient
-        .query(
-          documents.AdminTicketFacetsDocument,
-          {},
-          { fetchOptions: { credentials: 'include', signal } },
-        )
-        .toPromise()
-        .then(graphqlResponseData),
+      adminGraphql(documents.AdminTicketFacetsDocument, {}, signal),
   });
 
 export function useTicketFacets(options: AdminQueryOptions = {}) {
@@ -261,12 +239,7 @@ export const ticketQuery = (variables: documents.AdminTicketQueryVariables) =>
   queryOptions({
     queryKey: [...ticketKeys.details(), variables],
     queryFn: ({ signal }) =>
-      adminGraphqlClient
-        .query(documents.AdminTicketDocument, variables, {
-          fetchOptions: { credentials: 'include', signal },
-        })
-        .toPromise()
-        .then(graphqlResponseData),
+      adminGraphql(documents.AdminTicketDocument, variables, signal),
   });
 
 export function useTicket(
@@ -277,48 +250,6 @@ export function useTicket(
     ...ticketQuery(variables),
     enabled: Boolean(variables.uuid) && options.enabled !== false,
   });
-}
-
-export const ticketTasksQuery = (
-  variables: documents.AdminTicketTasksQueryVariables,
-) =>
-  queryOptions({
-    queryKey: [...ticketKeys.tasks(), variables],
-    queryFn: ({ signal }) =>
-      adminGraphqlClient
-        .query(documents.AdminTicketTasksDocument, variables, {
-          fetchOptions: { credentials: 'include', signal },
-        })
-        .toPromise()
-        .then(graphqlResponseData),
-  });
-
-export function useTicketTasks(
-  variables: documents.AdminTicketTasksQueryVariables,
-  options: AdminQueryOptions = {},
-) {
-  return useQuery({ ...ticketTasksQuery(variables), enabled: options.enabled });
-}
-
-export const stationsQuery = (
-  variables: documents.AdminStationsQueryVariables = {},
-) =>
-  queryOptions({
-    queryKey: ['admin', 'stations', 'stations', variables],
-    queryFn: ({ signal }) =>
-      adminGraphqlClient
-        .query(documents.AdminStationsDocument, variables, {
-          fetchOptions: { credentials: 'include', signal },
-        })
-        .toPromise()
-        .then(graphqlResponseData),
-  });
-
-export function useStations(
-  variables: documents.AdminStationsQueryVariables = {},
-  options: AdminQueryOptions = {},
-) {
-  return useQuery({ ...stationsQuery(variables), enabled: options.enabled });
 }
 
 export type AllStationsQueryVariables = Omit<
@@ -332,14 +263,11 @@ export const allStationsQuery = (variables: AllStationsQueryVariables = {}) =>
     queryKey: ['admin', 'stations', 'all', variables],
     queryFn: ({ signal }) =>
       collectAllPages(async (skip, limit) => {
-        const data = await adminGraphqlClient
-          .query(
-            documents.AdminStationsDocument,
-            { ...variables, skip, limit },
-            { fetchOptions: { credentials: 'include', signal } },
-          )
-          .toPromise()
-          .then(graphqlResponseData);
+        const data = await adminGraphql(
+          documents.AdminStationsDocument,
+          { ...variables, skip, limit },
+          signal,
+        );
         return {
           items: data.stations.items,
           hasNextPage: data.stations.pageInfo.hasNextPage,
@@ -359,14 +287,7 @@ export const stationFacetsQuery = () =>
   queryOptions({
     queryKey: ['admin', 'stations', 'facets'],
     queryFn: ({ signal }) =>
-      adminGraphqlClient
-        .query(
-          documents.AdminStationFacetsDocument,
-          {},
-          { fetchOptions: { credentials: 'include', signal } },
-        )
-        .toPromise()
-        .then(graphqlResponseData),
+      adminGraphql(documents.AdminStationFacetsDocument, {}, signal),
   });
 
 export function useStationFacets(options: AdminQueryOptions = {}) {
@@ -377,12 +298,7 @@ export const stationQuery = (variables: documents.AdminStationQueryVariables) =>
   queryOptions({
     queryKey: ['admin', 'stations', 'station', variables],
     queryFn: ({ signal }) =>
-      adminGraphqlClient
-        .query(documents.AdminStationDocument, variables, {
-          fetchOptions: { credentials: 'include', signal },
-        })
-        .toPromise()
-        .then(graphqlResponseData),
+      adminGraphql(documents.AdminStationDocument, variables, signal),
   });
 
 export function useStation(
@@ -395,57 +311,23 @@ export function useStation(
   });
 }
 
-/**
- * The nearest 門牌 to a map pin, from the backend's TGOS lookup. Its `addressToken`, sent back with
- * the unchanged `fullAddress`, saves the address as verified. Never stale: a pin's 門牌 doesn't move.
- */
-export const reverseGeocodeQuery = (
-  variables: documents.AdminReverseGeocodeQueryVariables,
-) =>
-  queryOptions({
-    queryKey: ['admin', 'address', 'reverseGeocode', variables],
-    queryFn: ({ signal }) =>
-      adminGraphqlClient
-        .query(documents.AdminReverseGeocodeDocument, variables, {
-          fetchOptions: { credentials: 'include', signal },
-        })
-        .toPromise()
-        .then(graphqlResponseData),
-    staleTime: Infinity,
-  });
+export const adminAddressLookup = {
+  scope: 'admin',
+  request: adminGraphql,
+} as const satisfies AddressLookupSource;
 
 export function useReverseGeocode(
   position: readonly [number, number] | null | undefined,
 ) {
   const [lat, lng] = position ?? [];
   return useQuery({
-    ...reverseGeocodeQuery({ lat: lat ?? 0, lng: lng ?? 0 }),
+    ...reverseGeocodeQueryOptions(adminAddressLookup, {
+      lat: lat ?? 0,
+      lng: lng ?? 0,
+    }),
     enabled: lat != null && lng != null,
-    // The address is only a head start: a failed lookup leaves the form blank, no toast.
-    retry: false,
-    meta: { quietErrors: true },
   });
 }
-
-/**
- * A typed address line checked against TGOS, with the pin when there is one. Never kept: a token
- * lasts a day, and an `unavailable` kept here would answer a later check of the same line.
- */
-export const normalizeAddressQuery = (
-  variables: documents.AdminNormalizeAddressQueryVariables,
-) =>
-  queryOptions({
-    queryKey: ['admin', 'address', 'normalizeAddress', variables],
-    queryFn: ({ signal }) =>
-      adminGraphqlClient
-        .query(documents.AdminNormalizeAddressDocument, variables, {
-          fetchOptions: { credentials: 'include', signal },
-        })
-        .toPromise()
-        .then(graphqlResponseData),
-    staleTime: 0,
-    gcTime: 0,
-  });
 
 /** Buildings opened as spaces (BE-036). Their tickets come from `buildingMapTicketsQuery`. */
 export const buildingMapsQuery = (
@@ -454,12 +336,7 @@ export const buildingMapsQuery = (
   queryOptions({
     queryKey: ['admin', 'buildingMaps', 'list', variables],
     queryFn: ({ signal }) =>
-      adminGraphqlClient
-        .query(documents.AdminBuildingMapsDocument, variables, {
-          fetchOptions: { credentials: 'include', signal },
-        })
-        .toPromise()
-        .then(graphqlResponseData),
+      adminGraphql(documents.AdminBuildingMapsDocument, variables, signal),
   });
 
 export function useBuildingMaps(
@@ -478,12 +355,7 @@ export const buildingMapQuery = (
   queryOptions({
     queryKey: ['admin', 'buildingMaps', 'one', variables],
     queryFn: ({ signal }) =>
-      adminGraphqlClient
-        .query(documents.AdminBuildingMapDocument, variables, {
-          fetchOptions: { credentials: 'include', signal },
-        })
-        .toPromise()
-        .then(graphqlResponseData),
+      adminGraphql(documents.AdminBuildingMapDocument, variables, signal),
   });
 
 export function useBuildingMap(
@@ -503,12 +375,11 @@ export const buildingMapTicketsQuery = (
   queryOptions({
     queryKey: ['admin', 'buildingMaps', 'tickets', variables],
     queryFn: ({ signal }) =>
-      adminGraphqlClient
-        .query(documents.AdminBuildingMapTicketsDocument, variables, {
-          fetchOptions: { credentials: 'include', signal },
-        })
-        .toPromise()
-        .then(graphqlResponseData),
+      adminGraphql(
+        documents.AdminBuildingMapTicketsDocument,
+        variables,
+        signal,
+      ),
   });
 
 export function useBuildingMapTickets(
@@ -526,15 +397,11 @@ export const assignableStationTeamsQuery = () =>
   queryOptions({
     queryKey: ['admin', 'teams', 'AssignableStationTeams'],
     queryFn: ({ signal }) =>
-      adminGraphqlClient
-        .query(
-          documents.AdminAssignableStationTeamsDocument,
-          {},
-          { fetchOptions: { credentials: 'include', signal } },
-        )
-        .toPromise()
-        .then(graphqlResponseData)
-        .then((data) => data.assignableStationTeams),
+      adminGraphql(
+        documents.AdminAssignableStationTeamsDocument,
+        {},
+        signal,
+      ).then((data) => data.assignableStationTeams),
   });
 
 /** Every team a station can be assigned to; the backend refuses callers who cannot assign. */
@@ -551,12 +418,7 @@ export const stationReviewQuery = (
   queryOptions({
     queryKey: ['admin', 'stations', 'review', variables],
     queryFn: ({ signal }) =>
-      adminGraphqlClient
-        .query(documents.AdminStationReviewDocument, variables, {
-          fetchOptions: { credentials: 'include', signal },
-        })
-        .toPromise()
-        .then(graphqlResponseData),
+      adminGraphql(documents.AdminStationReviewDocument, variables, signal),
   });
 
 export function useStationReview(
@@ -575,12 +437,7 @@ export const announcementsQuery = (
   queryOptions({
     queryKey: ['admin', 'announcements', 'announcements', variables],
     queryFn: ({ signal }) =>
-      adminGraphqlClient
-        .query(documents.AdminAnnouncementsDocument, variables, {
-          fetchOptions: { credentials: 'include', signal },
-        })
-        .toPromise()
-        .then(graphqlResponseData),
+      adminGraphql(documents.AdminAnnouncementsDocument, variables, signal),
   });
 
 export function useAnnouncements(
@@ -599,12 +456,7 @@ export const briefingsQuery = (
   queryOptions({
     queryKey: ['admin', 'briefings', 'briefings', variables],
     queryFn: ({ signal }) =>
-      adminGraphqlClient
-        .query(documents.AdminBriefingsDocument, variables, {
-          fetchOptions: { credentials: 'include', signal },
-        })
-        .toPromise()
-        .then(graphqlResponseData),
+      adminGraphql(documents.AdminBriefingsDocument, variables, signal),
   });
 
 export function useBriefings(
@@ -620,12 +472,7 @@ export const briefingTemplatesQuery = (
   queryOptions({
     queryKey: ['admin', 'briefings', 'briefingTemplates', variables],
     queryFn: ({ signal }) =>
-      adminGraphqlClient
-        .query(documents.AdminBriefingTemplatesDocument, variables, {
-          fetchOptions: { credentials: 'include', signal },
-        })
-        .toPromise()
-        .then(graphqlResponseData),
+      adminGraphql(documents.AdminBriefingTemplatesDocument, variables, signal),
   });
 
 export function useBriefingTemplates(
@@ -644,12 +491,11 @@ export const stationPropertyConfigsQuery = (
   queryOptions({
     queryKey: ['admin', 'config', 'stationPropertyConfigs', variables],
     queryFn: ({ signal }) =>
-      adminGraphqlClient
-        .query(documents.AdminStationPropertyConfigsDocument, variables, {
-          fetchOptions: { credentials: 'include', signal },
-        })
-        .toPromise()
-        .then(graphqlResponseData),
+      adminGraphql(
+        documents.AdminStationPropertyConfigsDocument,
+        variables,
+        signal,
+      ),
   });
 
 export function useStationPropertyConfigs(
@@ -668,12 +514,11 @@ export const taskPropertyConfigsQuery = (
   queryOptions({
     queryKey: ['admin', 'config', 'taskPropertyConfigs', variables],
     queryFn: ({ signal }) =>
-      adminGraphqlClient
-        .query(documents.AdminTaskPropertyConfigsDocument, variables, {
-          fetchOptions: { credentials: 'include', signal },
-        })
-        .toPromise()
-        .then(graphqlResponseData),
+      adminGraphql(
+        documents.AdminTaskPropertyConfigsDocument,
+        variables,
+        signal,
+      ),
   });
 
 export function useTaskPropertyConfigs(
@@ -692,12 +537,11 @@ export const ticketPropertyConfigsQuery = (
   queryOptions({
     queryKey: ['admin', 'config', 'ticketPropertyConfigs', variables],
     queryFn: ({ signal }) =>
-      adminGraphqlClient
-        .query(documents.AdminTicketPropertyConfigsDocument, variables, {
-          fetchOptions: { credentials: 'include', signal },
-        })
-        .toPromise()
-        .then(graphqlResponseData),
+      adminGraphql(
+        documents.AdminTicketPropertyConfigsDocument,
+        variables,
+        signal,
+      ),
   });
 
 export function useTicketPropertyConfigs(
@@ -716,12 +560,7 @@ export const disasterTypesQuery = (
   queryOptions({
     queryKey: ['admin', 'config', 'disasterTypes', variables],
     queryFn: ({ signal }) =>
-      adminGraphqlClient
-        .query(documents.AdminDisasterTypesDocument, variables, {
-          fetchOptions: { credentials: 'include', signal },
-        })
-        .toPromise()
-        .then(graphqlResponseData),
+      adminGraphql(documents.AdminDisasterTypesDocument, variables, signal),
   });
 
 export function useDisasterTypes(
@@ -741,14 +580,7 @@ export const currentDisasterQuery = () =>
   queryOptions({
     queryKey: ['admin', 'settings', 'currentDisaster'],
     queryFn: ({ signal }) =>
-      adminGraphqlClient
-        .query(
-          documents.AdminCurrentDisasterDocument,
-          {},
-          { fetchOptions: { credentials: 'include', signal } },
-        )
-        .toPromise()
-        .then(graphqlResponseData),
+      adminGraphql(documents.AdminCurrentDisasterDocument, {}, signal),
     meta: { quietErrors: true },
   });
 
@@ -767,10 +599,7 @@ export function useCreateTicket() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (variables: documents.AdminCreateTicketMutationVariables) =>
-      adminGraphqlClient
-        .mutation(documents.AdminCreateTicketDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
+      adminGraphql(documents.AdminCreateTicketDocument, variables),
     onSuccess: (data) =>
       invalidateTicketWrite(
         queryClient,
@@ -788,10 +617,7 @@ export function useUpdateTicket() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (variables: documents.AdminUpdateTicketMutationVariables) =>
-      adminGraphqlClient
-        .mutation(documents.AdminUpdateTicketDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
+      adminGraphql(documents.AdminUpdateTicketDocument, variables),
     onSuccess: (_data, variables) =>
       invalidateTicketWrite(queryClient, variables.uuid),
   });
@@ -800,11 +626,8 @@ export function useUpdateTicket() {
 export function useDeleteTicket() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (variables: documents.AdminDeleteTicketMutationVariables) =>
-      adminGraphqlClient
-        .mutation(documents.AdminDeleteTicketDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
+    mutationFn: (variables: documents.DeleteTicketMutationVariables) =>
+      adminGraphql(documents.DeleteTicketDocument, variables),
     onSuccess: (_data, variables) =>
       invalidateTicketWrite(queryClient, variables.uuid),
   });
@@ -816,10 +639,7 @@ export function useSetTicketDisasterDetails() {
     mutationFn: (
       variables: documents.AdminSetTicketDisasterDetailsMutationVariables,
     ) =>
-      adminGraphqlClient
-        .mutation(documents.AdminSetTicketDisasterDetailsDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
+      adminGraphql(documents.AdminSetTicketDisasterDetailsDocument, variables),
     onSuccess: (_data, variables) =>
       invalidateTicketWrite(queryClient, variables.uuid),
   });
@@ -829,10 +649,7 @@ export function useCreateTicketTask() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (variables: documents.AdminCreateTicketTaskMutationVariables) =>
-      adminGraphqlClient
-        .mutation(documents.AdminCreateTicketTaskDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
+      adminGraphql(documents.AdminCreateTicketTaskDocument, variables),
     onSuccess: (_data, variables) =>
       invalidateTicketWrite(queryClient, variables.input.ticketUuid),
   });
@@ -842,10 +659,7 @@ export function useStopTaskRecruiting() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (variables: documents.AdminStopRecruitingMutationVariables) =>
-      adminGraphqlClient
-        .mutation(documents.AdminStopRecruitingDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
+      adminGraphql(documents.AdminStopRecruitingDocument, variables),
     onSuccess: (data) =>
       invalidateTicketWrite(queryClient, data.stopRecruiting.ticketUuid),
   });
@@ -854,11 +668,8 @@ export function useStopTaskRecruiting() {
 export function useDeleteTicketTask() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (variables: documents.AdminDeleteTicketTaskMutationVariables) =>
-      adminGraphqlClient
-        .mutation(documents.AdminDeleteTicketTaskDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
+    mutationFn: (variables: documents.DeleteTicketTaskMutationVariables) =>
+      adminGraphql(documents.DeleteTicketTaskDocument, variables),
     onSuccess: () => invalidateTicketWrite(queryClient),
   });
 }
@@ -868,11 +679,7 @@ export function useAttachTicketPhoto() {
   return useMutation({
     mutationFn: (
       variables: documents.AdminAttachTicketPhotoMutationVariables,
-    ) =>
-      adminGraphqlClient
-        .mutation(documents.AdminAttachTicketPhotoDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
+    ) => adminGraphql(documents.AdminAttachTicketPhotoDocument, variables),
     onSuccess: (_data, variables) =>
       invalidateTicketWrite(queryClient, variables.ticketUuid),
   });
@@ -883,11 +690,7 @@ export function useDetachTicketPhoto() {
   return useMutation({
     mutationFn: (
       variables: documents.AdminDetachTicketPhotoMutationVariables,
-    ) =>
-      adminGraphqlClient
-        .mutation(documents.AdminDetachTicketPhotoDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
+    ) => adminGraphql(documents.AdminDetachTicketPhotoDocument, variables),
     onSuccess: () => invalidateTicketWrite(queryClient),
   });
 }
@@ -896,10 +699,7 @@ export function useUpdateTicketTask() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (variables: documents.AdminUpdateTicketTaskMutationVariables) =>
-      adminGraphqlClient
-        .mutation(documents.AdminUpdateTicketTaskDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
+      adminGraphql(documents.AdminUpdateTicketTaskDocument, variables),
     onSuccess: (data) =>
       invalidateTicketWrite(queryClient, data.updateTicketTask.ticketUuid),
   });
@@ -909,10 +709,7 @@ export function useAssignTaskActor() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (variables: documents.AdminAssignTaskActorMutationVariables) =>
-      adminGraphqlClient
-        .mutation(documents.AdminAssignTaskActorDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
+      adminGraphql(documents.AdminAssignTaskActorDocument, variables),
     onSuccess: () => invalidateTicketWrite(queryClient),
   });
 }
@@ -922,11 +719,7 @@ export function useUpdateTaskAssignment() {
   return useMutation({
     mutationFn: (
       variables: documents.AdminUpdateTaskAssignmentMutationVariables,
-    ) =>
-      adminGraphqlClient
-        .mutation(documents.AdminUpdateTaskAssignmentDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
+    ) => adminGraphql(documents.AdminUpdateTaskAssignmentDocument, variables),
     onSuccess: () => invalidateTicketWrite(queryClient),
   });
 }
@@ -934,13 +727,8 @@ export function useUpdateTaskAssignment() {
 export function useUnassignTaskActor() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (
-      variables: documents.AdminUnassignTaskActorMutationVariables,
-    ) =>
-      adminGraphqlClient
-        .mutation(documents.AdminUnassignTaskActorDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
+    mutationFn: (variables: documents.ReleaseClaimMutationVariables) =>
+      adminGraphql(documents.ReleaseClaimDocument, variables),
     onSuccess: () => invalidateTicketWrite(queryClient),
   });
 }
@@ -949,10 +737,7 @@ export function useCreateStation() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (variables: documents.AdminCreateStationMutationVariables) =>
-      adminGraphqlClient
-        .mutation(documents.AdminCreateStationDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
+      adminGraphql(documents.AdminCreateStationDocument, variables),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ['admin', 'stations'] }),
   });
@@ -962,10 +747,7 @@ export function useUpdateStation() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (variables: documents.AdminUpdateStationMutationVariables) =>
-      adminGraphqlClient
-        .mutation(documents.AdminUpdateStationDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
+      adminGraphql(documents.AdminUpdateStationDocument, variables),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ['admin', 'stations'] }),
   });
@@ -974,11 +756,8 @@ export function useUpdateStation() {
 export function useDeleteStation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (variables: documents.AdminDeleteStationMutationVariables) =>
-      adminGraphqlClient
-        .mutation(documents.AdminDeleteStationDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
+    mutationFn: (variables: documents.DeleteStationMutationVariables) =>
+      adminGraphql(documents.DeleteStationDocument, variables),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ['admin', 'stations'] }),
   });
@@ -989,11 +768,7 @@ export function useCreateBuildingMap() {
   return useMutation({
     mutationFn: (
       variables: documents.AdminCreateBuildingMapMutationVariables,
-    ) =>
-      adminGraphqlClient
-        .mutation(documents.AdminCreateBuildingMapDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
+    ) => adminGraphql(documents.AdminCreateBuildingMapDocument, variables),
     onSuccess: () => invalidateBuildingMapWrite(queryClient, 'create'),
   });
 }
@@ -1003,11 +778,7 @@ export function useUpdateBuildingMap() {
   return useMutation({
     mutationFn: (
       variables: documents.AdminUpdateBuildingMapMutationVariables,
-    ) =>
-      adminGraphqlClient
-        .mutation(documents.AdminUpdateBuildingMapDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
+    ) => adminGraphql(documents.AdminUpdateBuildingMapDocument, variables),
     onSuccess: (_, variables) =>
       invalidateBuildingMapWrite(queryClient, 'update', variables.uuid),
   });
@@ -1019,11 +790,7 @@ export function useDeleteBuildingMap() {
   return useMutation({
     mutationFn: (
       variables: documents.AdminDeleteBuildingMapMutationVariables,
-    ) =>
-      adminGraphqlClient
-        .mutation(documents.AdminDeleteBuildingMapDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
+    ) => adminGraphql(documents.AdminDeleteBuildingMapDocument, variables),
     onSuccess: (_, variables) =>
       invalidateBuildingMapWrite(queryClient, 'delete', variables.uuid),
   });
@@ -1035,10 +802,7 @@ export function useMergeStationSuggestions() {
     mutationFn: (
       variables: documents.AdminMergeStationSuggestionsMutationVariables,
     ) =>
-      adminGraphqlClient
-        .mutation(documents.AdminMergeStationSuggestionsDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
+      adminGraphql(documents.AdminMergeStationSuggestionsDocument, variables),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ['admin', 'stations'] }),
   });
@@ -1048,10 +812,7 @@ export function useAssignStation() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (variables: documents.AdminAssignStationMutationVariables) =>
-      adminGraphqlClient
-        .mutation(documents.AdminAssignStationDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
+      adminGraphql(documents.AdminAssignStationDocument, variables),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ['admin', 'stations'] }),
   });
@@ -1061,10 +822,7 @@ export function useUnassignStation() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (variables: documents.AdminUnassignStationMutationVariables) =>
-      adminGraphqlClient
-        .mutation(documents.AdminUnassignStationDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
+      adminGraphql(documents.AdminUnassignStationDocument, variables),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ['admin', 'stations'] }),
   });
@@ -1075,11 +833,7 @@ export function useAttachStationPhoto() {
   return useMutation({
     mutationFn: (
       variables: documents.AdminAttachStationPhotoMutationVariables,
-    ) =>
-      adminGraphqlClient
-        .mutation(documents.AdminAttachStationPhotoDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
+    ) => adminGraphql(documents.AdminAttachStationPhotoDocument, variables),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ['admin', 'stations'] }),
   });
@@ -1090,11 +844,7 @@ export function useDetachStationPhoto() {
   return useMutation({
     mutationFn: (
       variables: documents.AdminDetachStationPhotoMutationVariables,
-    ) =>
-      adminGraphqlClient
-        .mutation(documents.AdminDetachStationPhotoDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
+    ) => adminGraphql(documents.AdminDetachStationPhotoDocument, variables),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ['admin', 'stations'] }),
   });
@@ -1105,11 +855,7 @@ export function useCreateStationProperty() {
   return useMutation({
     mutationFn: (
       variables: documents.AdminCreateStationPropertyMutationVariables,
-    ) =>
-      adminGraphqlClient
-        .mutation(documents.AdminCreateStationPropertyDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
+    ) => adminGraphql(documents.AdminCreateStationPropertyDocument, variables),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ['admin', 'stations'] }),
   });
@@ -1120,11 +866,7 @@ export function useUpdateStationProperty() {
   return useMutation({
     mutationFn: (
       variables: documents.AdminUpdateStationPropertyMutationVariables,
-    ) =>
-      adminGraphqlClient
-        .mutation(documents.AdminUpdateStationPropertyDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
+    ) => adminGraphql(documents.AdminUpdateStationPropertyDocument, variables),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ['admin', 'stations'] }),
   });
@@ -1135,11 +877,7 @@ export function useCreateTaskProperty() {
   return useMutation({
     mutationFn: (
       variables: documents.AdminCreateTaskPropertyMutationVariables,
-    ) =>
-      adminGraphqlClient
-        .mutation(documents.AdminCreateTaskPropertyDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
+    ) => adminGraphql(documents.AdminCreateTaskPropertyDocument, variables),
     onSuccess: () => invalidateTicketWrite(queryClient),
   });
 }
@@ -1149,11 +887,7 @@ export function useUpdateTaskProperty() {
   return useMutation({
     mutationFn: (
       variables: documents.AdminUpdateTaskPropertyMutationVariables,
-    ) =>
-      adminGraphqlClient
-        .mutation(documents.AdminUpdateTaskPropertyDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
+    ) => adminGraphql(documents.AdminUpdateTaskPropertyDocument, variables),
     onSuccess: () => invalidateTicketWrite(queryClient),
   });
 }
@@ -1163,11 +897,7 @@ export function useCreateAnnouncement() {
   return useMutation({
     mutationFn: (
       variables: documents.AdminCreateAnnouncementMutationVariables,
-    ) =>
-      adminGraphqlClient
-        .mutation(documents.AdminCreateAnnouncementDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
+    ) => adminGraphql(documents.AdminCreateAnnouncementDocument, variables),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ['admin', 'announcements'] }),
   });
@@ -1178,11 +908,7 @@ export function useUpdateAnnouncement() {
   return useMutation({
     mutationFn: (
       variables: documents.AdminUpdateAnnouncementMutationVariables,
-    ) =>
-      adminGraphqlClient
-        .mutation(documents.AdminUpdateAnnouncementDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
+    ) => adminGraphql(documents.AdminUpdateAnnouncementDocument, variables),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ['admin', 'announcements'] }),
   });
@@ -1193,11 +919,7 @@ export function useDeleteAnnouncement() {
   return useMutation({
     mutationFn: (
       variables: documents.AdminDeleteAnnouncementMutationVariables,
-    ) =>
-      adminGraphqlClient
-        .mutation(documents.AdminDeleteAnnouncementDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
+    ) => adminGraphql(documents.AdminDeleteAnnouncementDocument, variables),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ['admin', 'announcements'] }),
   });
@@ -1208,11 +930,7 @@ export function useSetAnnouncementActive() {
   return useMutation({
     mutationFn: (
       variables: documents.AdminSetAnnouncementActiveMutationVariables,
-    ) =>
-      adminGraphqlClient
-        .mutation(documents.AdminSetAnnouncementActiveDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
+    ) => adminGraphql(documents.AdminSetAnnouncementActiveDocument, variables),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ['admin', 'announcements'] }),
   });
@@ -1222,10 +940,7 @@ export function useGenerateBriefing() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (variables: documents.AdminGenerateBriefingMutationVariables) =>
-      adminGraphqlClient
-        .mutation(documents.AdminGenerateBriefingDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
+      adminGraphql(documents.AdminGenerateBriefingDocument, variables),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ['admin', 'briefings'] }),
   });
@@ -1235,10 +950,7 @@ export function useUpdateBriefing() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (variables: documents.AdminUpdateBriefingMutationVariables) =>
-      adminGraphqlClient
-        .mutation(documents.AdminUpdateBriefingDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
+      adminGraphql(documents.AdminUpdateBriefingDocument, variables),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ['admin', 'briefings'] }),
   });
@@ -1248,10 +960,7 @@ export function usePublishBriefing() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (variables: documents.AdminPublishBriefingMutationVariables) =>
-      adminGraphqlClient
-        .mutation(documents.AdminPublishBriefingDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
+      adminGraphql(documents.AdminPublishBriefingDocument, variables),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ['admin', 'briefings'] }),
   });
@@ -1261,10 +970,7 @@ export function useTakeDownBriefing() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (variables: documents.AdminTakeDownBriefingMutationVariables) =>
-      adminGraphqlClient
-        .mutation(documents.AdminTakeDownBriefingDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
+      adminGraphql(documents.AdminTakeDownBriefingDocument, variables),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ['admin', 'briefings'] }),
   });
@@ -1274,10 +980,7 @@ export function useDeleteBriefing() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (variables: documents.AdminDeleteBriefingMutationVariables) =>
-      adminGraphqlClient
-        .mutation(documents.AdminDeleteBriefingDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
+      adminGraphql(documents.AdminDeleteBriefingDocument, variables),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ['admin', 'briefings'] }),
   });
@@ -1288,11 +991,7 @@ export function useCreateBriefingTemplate() {
   return useMutation({
     mutationFn: (
       variables: documents.AdminCreateBriefingTemplateMutationVariables,
-    ) =>
-      adminGraphqlClient
-        .mutation(documents.AdminCreateBriefingTemplateDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
+    ) => adminGraphql(documents.AdminCreateBriefingTemplateDocument, variables),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ['admin', 'briefings'] }),
   });
@@ -1303,11 +1002,7 @@ export function useUpdateBriefingTemplate() {
   return useMutation({
     mutationFn: (
       variables: documents.AdminUpdateBriefingTemplateMutationVariables,
-    ) =>
-      adminGraphqlClient
-        .mutation(documents.AdminUpdateBriefingTemplateDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
+    ) => adminGraphql(documents.AdminUpdateBriefingTemplateDocument, variables),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ['admin', 'briefings'] }),
   });
@@ -1318,11 +1013,7 @@ export function useDeleteBriefingTemplate() {
   return useMutation({
     mutationFn: (
       variables: documents.AdminDeleteBriefingTemplateMutationVariables,
-    ) =>
-      adminGraphqlClient
-        .mutation(documents.AdminDeleteBriefingTemplateDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
+    ) => adminGraphql(documents.AdminDeleteBriefingTemplateDocument, variables),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ['admin', 'briefings'] }),
   });
@@ -1334,10 +1025,10 @@ export function useUpsertStationPropertyConfig() {
     mutationFn: (
       variables: documents.AdminUpsertStationPropertyConfigMutationVariables,
     ) =>
-      adminGraphqlClient
-        .mutation(documents.AdminUpsertStationPropertyConfigDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
+      adminGraphql(
+        documents.AdminUpsertStationPropertyConfigDocument,
+        variables,
+      ),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ['admin', 'config'] }),
   });
@@ -1349,10 +1040,7 @@ export function useUpsertTaskPropertyConfig() {
     mutationFn: (
       variables: documents.AdminUpsertTaskPropertyConfigMutationVariables,
     ) =>
-      adminGraphqlClient
-        .mutation(documents.AdminUpsertTaskPropertyConfigDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
+      adminGraphql(documents.AdminUpsertTaskPropertyConfigDocument, variables),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ['admin', 'config'] }),
   });
@@ -1364,10 +1052,10 @@ export function useUpsertTicketPropertyConfig() {
     mutationFn: (
       variables: documents.AdminUpsertTicketPropertyConfigMutationVariables,
     ) =>
-      adminGraphqlClient
-        .mutation(documents.AdminUpsertTicketPropertyConfigDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
+      adminGraphql(
+        documents.AdminUpsertTicketPropertyConfigDocument,
+        variables,
+      ),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ['admin', 'config'] }),
   });
@@ -1378,11 +1066,7 @@ export function useUpsertDisasterType() {
   return useMutation({
     mutationFn: (
       variables: documents.AdminUpsertDisasterTypeMutationVariables,
-    ) =>
-      adminGraphqlClient
-        .mutation(documents.AdminUpsertDisasterTypeDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
+    ) => adminGraphql(documents.AdminUpsertDisasterTypeDocument, variables),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ['admin', 'config'] }),
   });
@@ -1393,93 +1077,108 @@ export function useHazardousZoneSource(
   options: AdminQueryOptions = {},
 ) {
   return useQuery({
-    queryKey: ['admin', 'areas', 'hazardousZoneSource', variables],
+    queryKey: [...adminMapKeys.hazardSource, variables],
     queryFn: ({ signal }) =>
-      adminGraphqlClient
-        .query(documents.AdminHazardousZoneSourceDocument, variables, {
-          fetchOptions: { credentials: 'include', signal },
-        })
-        .toPromise()
-        .then(graphqlResponseData),
+      adminGraphql(
+        documents.AdminHazardousZoneSourceDocument,
+        variables,
+        signal,
+      ),
     enabled: Boolean(variables.uuid) && options.enabled !== false,
   });
 }
 
-export function useCreateArea() {
+function refreshAreaWrite(
+  queryClient: QueryClient,
+  {
+    affectsTickets = false,
+    hazardUuid,
+  }: { affectsTickets?: boolean; hazardUuid?: string } = {},
+) {
+  const reads = [
+    queryClient.invalidateQueries({ queryKey: adminMapKeys.areas }),
+  ];
+  if (affectsTickets) {
+    reads.push(
+      queryClient.invalidateQueries({ queryKey: adminMapKeys.markers }),
+      queryClient.invalidateQueries({ queryKey: ticketKeys.lists() }),
+      queryClient.invalidateQueries({ queryKey: ticketKeys.details() }),
+      queryClient.invalidateQueries({ queryKey: SPACE_TICKETS_KEY }),
+    );
+  }
+  if (hazardUuid) {
+    reads.push(
+      queryClient.invalidateQueries({
+        queryKey: [...adminMapKeys.hazardSource, { uuid: hazardUuid }],
+      }),
+    );
+  }
+  return Promise.all(reads);
+}
+
+type AreaRefresh = NonNullable<Parameters<typeof refreshAreaWrite>[1]>;
+type AreaWrite<TVariables> = { variables: TVariables } & Pick<
+  RequestInit,
+  'keepalive'
+>;
+
+function useAreaWrite<TData, TVariables>(
+  document: documents.TypedDocumentString<TData, TVariables>,
+  refresh: (result: TData | undefined, variables: TVariables) => AreaRefresh,
+) {
+  const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (variables: documents.AdminCreateAreaMutationVariables) =>
-      adminGraphqlClient
-        .mutation(documents.AdminCreateAreaDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
+    mutationFn: ({ variables, keepalive }: AreaWrite<TVariables>) =>
+      adminGraphql(document, variables, undefined, { keepalive }),
+    meta: { [SILENT_ERROR_META]: true },
+    onSettled: (result, _error, { variables }) =>
+      refreshAreaWrite(queryClient, refresh(result, variables)),
   });
+}
+
+export function useCreateArea() {
+  return useAreaWrite(
+    documents.AdminCreateAreaDocument,
+    (_result, { input }) => ({
+      affectsTickets: input.type === 'team_zone',
+    }),
+  );
 }
 
 export function useUpdateArea() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (variables: documents.AdminUpdateAreaMutationVariables) =>
-      adminGraphqlClient
-        .mutation(documents.AdminUpdateAreaDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
-    onSuccess: () =>
-      queryClient.invalidateQueries({
-        queryKey: ['admin', 'areas', 'hazardousZoneSource'],
-      }),
-  });
+  return useAreaWrite(
+    documents.AdminUpdateAreaDocument,
+    (result, { input, uuid }) => ({
+      affectsTickets:
+        input.geometry != null &&
+        (!result || result.updateArea.type === 'team_zone'),
+      hazardUuid: input.informationSource !== undefined ? uuid : undefined,
+    }),
+  );
 }
 
+const refreshTeamZone = () => ({ affectsTickets: true });
+
 export function useDeleteArea() {
-  return useMutation({
-    mutationFn: (variables: documents.AdminDeleteAreaMutationVariables) =>
-      adminGraphqlClient
-        .mutation(documents.AdminDeleteAreaDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
-  });
+  return useAreaWrite(documents.AdminDeleteAreaDocument, refreshTeamZone);
 }
 
 export function useAssignZoneToTeam() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (variables: documents.AdminAssignZoneToTeamMutationVariables) =>
-      adminGraphqlClient
-        .mutation(documents.AdminAssignZoneToTeamDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ['admin', 'work-zones'] }),
-  });
+  return useAreaWrite(documents.AdminAssignZoneToTeamDocument, refreshTeamZone);
 }
 
 export function useRemoveZoneFromTeam() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (
-      variables: documents.AdminRemoveZoneFromTeamMutationVariables,
-    ) =>
-      adminGraphqlClient
-        .mutation(documents.AdminRemoveZoneFromTeamDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ['admin', 'work-zones'] }),
-  });
+  return useAreaWrite(
+    documents.AdminRemoveZoneFromTeamDocument,
+    refreshTeamZone,
+  );
 }
 
 export const teamDirectoryQuery = () =>
   queryOptions({
     queryKey: ['admin', 'teams', 'TeamDirectory'],
     queryFn: ({ signal }) =>
-      adminGraphqlClient
-        .query(
-          documents.AdminTeamDirectoryDocument,
-          {},
-          { fetchOptions: { credentials: 'include', signal } },
-        )
-        .toPromise()
-        .then(graphqlResponseData),
+      adminGraphql(documents.AdminTeamDirectoryDocument, {}, signal),
   });
 
 /** Every active team, name and type only (Spec/026 `roleRequestTeams`). */

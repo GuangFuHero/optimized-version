@@ -1,7 +1,9 @@
-import type { AuthIdentityType } from '@rescue-frontend/data-access';
+// SPDX-License-Identifier: GPL-3.0-only
+import type { components } from '@rescue-frontend/data-access/openapi';
 import { PhoneNumberFormat, PhoneNumberUtil } from 'google-libphonenumber';
 
-export type { AuthIdentityType };
+export type AuthIdentityType =
+  components['schemas']['AddContactRequest']['type'];
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const phoneNumberUtil = PhoneNumberUtil.getInstance();
