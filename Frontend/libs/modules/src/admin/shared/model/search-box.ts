@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * The search box's text against the URL's `?q=`. `draft` is what the box shows, `sent` the last
  * query it sent (trimmed, as the page writes `?q=`) and `seen` the last `?q=` it saw.

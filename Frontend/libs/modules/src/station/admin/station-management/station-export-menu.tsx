@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import {
@@ -118,7 +119,10 @@ export function StationExportMenu() {
                     >
                       <StationTypeIcon
                         type={option.value}
-                        sx={{ fontSize: 17, color: color.fg.neutral.subtle }}
+                        sx={{
+                          fontSize: designTokens.iconSize[17],
+                          color: color.fg.neutral.subtle,
+                        }}
                       />
                       <Typography
                         sx={{

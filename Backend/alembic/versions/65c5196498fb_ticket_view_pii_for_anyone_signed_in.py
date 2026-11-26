@@ -18,13 +18,14 @@ Downgrade moves those three roles back from `all` to their old defaults. It cann
 that was already `all` before this revision, but none of these three could have been unless set
 so by hand.
 """
+
 from collections.abc import Sequence
 
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = '65c5196498fb'
-down_revision: str | Sequence[str] | None = '6c5a9d3d3444'
+revision: str = "65c5196498fb"
+down_revision: str | Sequence[str] | None = "6c5a9d3d3444"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

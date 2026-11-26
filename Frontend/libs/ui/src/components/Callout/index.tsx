@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { CircleAlert, CircleCheck, Info, TriangleAlert } from 'lucide-react';
 
 import { Box, Stack } from '@mui/material';

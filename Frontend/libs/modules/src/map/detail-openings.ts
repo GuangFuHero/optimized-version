@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * Whether a point's detail is open, and how many times it has been opened. Closed, the desktop
  * panel keeps its content — only the phone's drawer lets go of it, once shut — so the map and the

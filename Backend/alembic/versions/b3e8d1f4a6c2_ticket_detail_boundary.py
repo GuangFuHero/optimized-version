@@ -25,13 +25,14 @@ Revises: e7b249d0af31
 Create Date: 2026-09-19
 
 """
+
 from collections.abc import Sequence
 
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = 'b3e8d1f4a6c2'
-down_revision: str | Sequence[str] | None = 'e7b249d0af31'
+revision: str = "b3e8d1f4a6c2"
+down_revision: str | Sequence[str] | None = "e7b249d0af31"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

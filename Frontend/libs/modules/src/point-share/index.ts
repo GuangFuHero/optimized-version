@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 export {
   pointForMetadata,
   SITE_LIST_METADATA,
@@ -15,7 +16,9 @@ export { SITE_OPEN_GRAPH, SITE_SHARE_CARD } from './share-card';
 export {
   copyPointShareUrl,
   createPointShareLinks,
+  lineMessageHref,
   openPointShareLink,
+  openShareTab,
 } from './share-links';
 export {
   createPointShareTarget,
@@ -26,4 +29,5 @@ export type {
   PointShareChannel,
   PointShareLink,
   PointShareTarget,
+  ShareHref,
 } from './types';

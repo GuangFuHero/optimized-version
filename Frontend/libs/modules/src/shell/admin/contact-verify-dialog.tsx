@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { Box, Stack, Typography } from '@mui/material';
@@ -60,7 +61,7 @@ function CodeInput({
                   ? `0 0 0 2px ${color.bg.primary.subtle}`
                   : 'none',
                 ...typography.data[500],
-                fontSize: 22,
+                fontSize: designTokens.typography.fontSize[22],
                 color: color.fg.neutral.default,
               }}
             >

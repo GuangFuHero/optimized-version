@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { Box, ButtonBase, Stack, Typography } from '@mui/material';
@@ -135,7 +136,7 @@ export function SitePinnedFilterRow({
         },
         '&::-webkit-scrollbar-thumb': {
           backgroundColor: color.border.default,
-          borderRadius: 999,
+          borderRadius: `${designTokens.radius.full}px`,
         },
       }}
     >
@@ -168,7 +169,7 @@ export function SitePinnedFilterRow({
                 sx={{
                   display: 'inline-flex',
                   alignItems: 'center',
-                  borderRadius: 999,
+                  borderRadius: `${designTokens.radius.full}px`,
                   px: 1.5,
                   py: 1,
                   color: active

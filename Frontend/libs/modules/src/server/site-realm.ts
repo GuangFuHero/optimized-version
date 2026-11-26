@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * The marker the site puts on every request it sends to the backend (Backend Spec/019, ADR-289).
  *

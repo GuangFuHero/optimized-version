@@ -1,8 +1,9 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { Box, ButtonBase, Typography } from '@mui/material';
 
-import { displayTextSize, Icons } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
 
 import { useStationDetailColorScheme } from './constants';
 import { StationDetailIconSlot } from './station-detail-primitives';
@@ -70,7 +71,7 @@ export function StationDetailHeader({
           sx={{
             width: 40,
             height: 40,
-            borderRadius: '999px',
+            borderRadius: `${designTokens.radius.full}px`,
             color: stationDetailPalette.heading,
             flexShrink: 0,
             display: 'inline-flex',

@@ -1,4 +1,5 @@
-export { areaErrorMessage } from './area-errors';
+// SPDX-License-Identifier: GPL-3.0-only
+export { areaErrorMessage, knownAreaErrorMessage } from './area-errors';
 export {
   activeFilterCount,
   ADMIN_MAP_PRIORITIES,
@@ -14,6 +15,7 @@ export {
 } from './map-filter';
 export {
   boundaryChange,
+  boundsOfArea,
   countInsideArea,
   isInArea,
   isInView,
@@ -27,9 +29,23 @@ export {
   polygonAreaKm2,
   polygonSelfIntersects,
   toGeoJsonPolygon,
-} from './polygon';
+} from '@rescue-frontend/leaflet/geometry';
 export { AdminMapPinPanel } from './admin-map-pin-panel';
 export { holdRequest, UNDO_MS } from './hold-request';
+export {
+  EMPTY_AREA_FORM,
+  createAdminAreaEditorStore,
+  useAdminAreaEditor,
+  type AreaFormValues,
+  type DrawEditor,
+} from './area-editor';
+export {
+  AdminAreaChangesProvider,
+  type AreaChanges,
+  useAdminAreaChanges,
+  showAreaError,
+  AREA_TEAM_LOAD_ERROR,
+} from './area-changes';
 export { useAdminMapAreas, type AdminMapAreas } from './use-admin-map-areas';
 export {
   ADMIN_MAP_LIVE_QUERY_LIMIT,

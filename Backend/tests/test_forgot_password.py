@@ -1,4 +1,5 @@
 """Integration tests for logged-out forgot/reset password."""
+
 import asyncio
 import re
 
@@ -15,8 +16,12 @@ from app.services.auth_account import create_account
 async def _email_pw_user(db_session, email="owner@x.com", pw="secret"):
     """Create an email + password account."""
     return await create_account(
-        db_session, contact_type="email", value=email,
-        password_hash=get_password_hash(pw, generate_salt()), name="Tester")
+        db_session,
+        contact_type="email",
+        value=email,
+        password_hash=get_password_hash(pw, generate_salt()),
+        name="Tester",
+    )
 
 
 # --- Task 2: VerificationRepository ---
@@ -97,8 +102,13 @@ async def test_forgot_email_password_account_sends_code(client, db_session, capt
 async def test_forgot_phone_password_account_sends_code(client, db_session, capture_sms):
     """Password account (phone) -> 202 + SMS reset code. Endpoint normalizes the local number."""
     # create_account does NOT normalize -> store the E.164 form the endpoint will look up
-    await create_account(db_session, contact_type="phone", value="+886912345678",
-                         password_hash=get_password_hash("secret", generate_salt()), name="T")
+    await create_account(
+        db_session,
+        contact_type="phone",
+        value="+886912345678",
+        password_hash=get_password_hash("secret", generate_salt()),
+        name="T",
+    )
     r = await client.post("/api/v1/auth/forgot-password", json={"type": "phone", "value": "0912345678"})
     assert r.status_code == 202
     assert capture_sms.last_code is not None
@@ -107,12 +117,18 @@ async def test_forgot_phone_password_account_sends_code(client, db_session, capt
 @pytest.mark.asyncio
 async def test_forgot_sso_only_sends_notice_no_code(client, db_session, capture_email):
     """SSO-only account (Google email, no password) -> 202 + a notice WITHOUT a code."""
-    await create_account(db_session, name="G", provider="google", provider_subject="g-1",
-                         contact_type="email", value="ssouser@x.com")
+    await create_account(
+        db_session,
+        name="G",
+        provider="google",
+        provider_subject="g-1",
+        contact_type="email",
+        value="ssouser@x.com",
+    )
     r = await client.post("/api/v1/auth/forgot-password", json={"type": "email", "value": "ssouser@x.com"})
     assert r.status_code == 202
-    assert len(capture_email.messages) == 1     # a message WAS sent...
-    assert capture_email.last_code is None      # ...but it carries NO code
+    assert len(capture_email.messages) == 1  # a message WAS sent...
+    assert capture_email.last_code is None  # ...but it carries NO code
 
 
 @pytest.mark.asyncio
@@ -120,8 +136,9 @@ async def test_forgot_anti_enumeration_identical_response(client, db_session, ca
     """Known and unknown identifiers return the identical status + body."""
     await _email_pw_user(db_session, email="real@x.com")
     known = await client.post("/api/v1/auth/forgot-password", json={"type": "email", "value": "real@x.com"})
-    unknown = await client.post("/api/v1/auth/forgot-password",
-                                json={"type": "email", "value": "ghost@x.com"})
+    unknown = await client.post(
+        "/api/v1/auth/forgot-password", json={"type": "email", "value": "ghost@x.com"}
+    )
     assert known.status_code == unknown.status_code == 202
     assert known.json() == unknown.json()
 
@@ -134,9 +151,16 @@ async def test_reset_happy_path_email(client, db_session, capture_email):
     await client.post("/api/v1/auth/forgot-password", json={"type": "email", "value": "owner@x.com"})
     code = capture_email.last_code
     assert code
-    r = await client.post("/api/v1/auth/reset-password", json={
-        "type": "email", "value": "owner@x.com", "code": code,
-        "new_password": "newsecret", "salt_frontend": "webtest"})
+    r = await client.post(
+        "/api/v1/auth/reset-password",
+        json={
+            "type": "email",
+            "value": "owner@x.com",
+            "code": code,
+            "new_password": "newsecret",
+            "salt_frontend": "webtest",
+        },
+    )
     assert r.status_code == 204
     old = await client.post("/api/v1/auth/login", data={"username": "owner@x.com", "password": "secret"})
     assert old.status_code == 401
@@ -147,14 +171,26 @@ async def test_reset_happy_path_email(client, db_session, capture_email):
 @pytest.mark.asyncio
 async def test_reset_happy_path_phone(client, db_session, capture_sms):
     """Phone round-trip: forgot (local form) -> SMS code -> reset -> login by phone with the new password."""
-    await create_account(db_session, contact_type="phone", value="+886912345678",
-                         password_hash=get_password_hash("secret", generate_salt()), name="P")
+    await create_account(
+        db_session,
+        contact_type="phone",
+        value="+886912345678",
+        password_hash=get_password_hash("secret", generate_salt()),
+        name="P",
+    )
     await client.post("/api/v1/auth/forgot-password", json={"type": "phone", "value": "0912345678"})
     code = capture_sms.last_code
     assert code
-    r = await client.post("/api/v1/auth/reset-password", json={
-        "type": "phone", "value": "0912345678", "code": code,
-        "new_password": "newsecret", "salt_frontend": "webtest"})
+    r = await client.post(
+        "/api/v1/auth/reset-password",
+        json={
+            "type": "phone",
+            "value": "0912345678",
+            "code": code,
+            "new_password": "newsecret",
+            "salt_frontend": "webtest",
+        },
+    )
     assert r.status_code == 204
     new = await client.post("/api/v1/auth/login", data={"username": "0912345678", "password": "newsecret"})
     assert new.status_code == 200
@@ -163,11 +199,18 @@ async def test_reset_happy_path_phone(client, db_session, capture_sms):
 @pytest.mark.asyncio
 async def test_forgot_sso_only_and_unknown_identical(client, db_session, capture_email):
     """The subtlest branch: SSO-only and unknown return identical status + body (no existence leak)."""
-    await create_account(db_session, name="G", provider="google", provider_subject="g-3",
-                         contact_type="email", value="ssouser@x.com")
+    await create_account(
+        db_session,
+        name="G",
+        provider="google",
+        provider_subject="g-3",
+        contact_type="email",
+        value="ssouser@x.com",
+    )
     sso = await client.post("/api/v1/auth/forgot-password", json={"type": "email", "value": "ssouser@x.com"})
-    unknown = await client.post("/api/v1/auth/forgot-password",
-                                json={"type": "email", "value": "ghost@x.com"})
+    unknown = await client.post(
+        "/api/v1/auth/forgot-password", json={"type": "email", "value": "ghost@x.com"}
+    )
     assert sso.status_code == unknown.status_code == 202
     assert sso.json() == unknown.json()
 
@@ -177,9 +220,16 @@ async def test_reset_wrong_code_400(client, db_session, capture_email):
     """A wrong code -> 400."""
     await _email_pw_user(db_session)
     await client.post("/api/v1/auth/forgot-password", json={"type": "email", "value": "owner@x.com"})
-    r = await client.post("/api/v1/auth/reset-password", json={
-        "type": "email", "value": "owner@x.com", "code": "000000",
-        "new_password": "newsecret", "salt_frontend": "webtest"})
+    r = await client.post(
+        "/api/v1/auth/reset-password",
+        json={
+            "type": "email",
+            "value": "owner@x.com",
+            "code": "000000",
+            "new_password": "newsecret",
+            "salt_frontend": "webtest",
+        },
+    )
     assert r.status_code == 400
     assert len(capture_email.messages) == 1  # only the code: a failed reset tells no one
 
@@ -188,9 +238,16 @@ async def test_reset_wrong_code_400(client, db_session, capture_email):
 async def test_reset_no_pending_400(client, db_session):
     """Reset with no pending request -> 400."""
     await _email_pw_user(db_session)
-    r = await client.post("/api/v1/auth/reset-password", json={
-        "type": "email", "value": "owner@x.com", "code": "123456",
-        "new_password": "newsecret", "salt_frontend": "webtest"})
+    r = await client.post(
+        "/api/v1/auth/reset-password",
+        json={
+            "type": "email",
+            "value": "owner@x.com",
+            "code": "123456",
+            "new_password": "newsecret",
+            "salt_frontend": "webtest",
+        },
+    )
     assert r.status_code == 400
 
 
@@ -202,9 +259,16 @@ async def test_reset_revokes_sessions(client, db_session, capture_email):
     old_refresh = login.json()["refresh_token"]
     await client.post("/api/v1/auth/forgot-password", json={"type": "email", "value": "owner@x.com"})
     code = capture_email.last_code
-    await client.post("/api/v1/auth/reset-password", json={
-        "type": "email", "value": "owner@x.com", "code": code,
-        "new_password": "newsecret", "salt_frontend": "webtest"})
+    await client.post(
+        "/api/v1/auth/reset-password",
+        json={
+            "type": "email",
+            "value": "owner@x.com",
+            "code": code,
+            "new_password": "newsecret",
+            "salt_frontend": "webtest",
+        },
+    )
     r = await client.post("/api/v1/auth/refresh", json={"refresh_token": old_refresh})
     assert r.status_code == 401
 
@@ -214,25 +278,47 @@ async def test_a_reset_tells_every_contact_on_the_account(client, db_session, ca
     """As set-password and change-password do (ADR-218): each contact hears the password changed."""
     user = await _email_pw_user(db_session)
     await contact_repository.create_verified(
-        db_session, user_uuid=user.uuid, type_="phone", value="+886912345678")
+        db_session, user_uuid=user.uuid, type_="phone", value="+886912345678"
+    )
     await client.post("/api/v1/auth/forgot-password", json={"type": "email", "value": "owner@x.com"})
     code = capture_email.last_code
-    r = await client.post("/api/v1/auth/reset-password", json={
-        "type": "email", "value": "owner@x.com", "code": code,
-        "new_password": "newsecret", "salt_frontend": "webtest"})
+    r = await client.post(
+        "/api/v1/auth/reset-password",
+        json={
+            "type": "email",
+            "value": "owner@x.com",
+            "code": code,
+            "new_password": "newsecret",
+            "salt_frontend": "webtest",
+        },
+    )
     assert r.status_code == 204
     assert [(to, "已變更" in subject) for to, subject, _, _ in capture_email.messages[1:]] == [
-        ("owner@x.com", True)]
+        ("owner@x.com", True)
+    ]
     assert [(to, "變更了" in body) for to, body in capture_sms.messages] == [("+886912345678", True)]
 
 
 @pytest.mark.asyncio
 async def test_sso_only_cannot_reset(client, db_session, capture_email):
     """An SSO-only account never receives a code, so any reset attempt -> 400."""
-    await create_account(db_session, name="G", provider="google", provider_subject="g-2",
-                         contact_type="email", value="ssouser@x.com")
+    await create_account(
+        db_session,
+        name="G",
+        provider="google",
+        provider_subject="g-2",
+        contact_type="email",
+        value="ssouser@x.com",
+    )
     await client.post("/api/v1/auth/forgot-password", json={"type": "email", "value": "ssouser@x.com"})
-    r = await client.post("/api/v1/auth/reset-password", json={
-        "type": "email", "value": "ssouser@x.com", "code": "123456",
-        "new_password": "newsecret", "salt_frontend": "webtest"})
+    r = await client.post(
+        "/api/v1/auth/reset-password",
+        json={
+            "type": "email",
+            "value": "ssouser@x.com",
+            "code": "123456",
+            "new_password": "newsecret",
+            "salt_frontend": "webtest",
+        },
+    )
     assert r.status_code == 400

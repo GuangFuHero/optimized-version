@@ -1,11 +1,17 @@
+// SPDX-License-Identifier: GPL-3.0-only
+import {
+  withQuery,
+  type SiteHref,
+  type SITE_PATHS,
+} from '../../../route/paths';
 import type { AuthIdentityType } from './identity-validation';
 
 /** The pages a sign-in can pass through on its way back to where it started. */
-export type AuthPage =
-  | '/login'
-  | '/register'
-  | '/forgot-password'
-  | '/reset-password';
+export type AuthPage = (typeof SITE_PATHS)[
+  | 'login'
+  | 'register'
+  | 'forgotPassword'
+  | 'resetPassword'];
 
 /**
  * A link between the sign-in pages that keeps `?callbackUrl=` — the page the sign-in should end on —
@@ -23,7 +29,7 @@ export function authHref(
     callbackUrl: string | null;
     identity?: { type: AuthIdentityType; value: string };
   },
-): string {
+): SiteHref {
   const query = new URLSearchParams();
 
   if (identity) {
@@ -35,7 +41,5 @@ export function authHref(
     query.set('callbackUrl', callbackUrl);
   }
 
-  const search = query.toString();
-
-  return search ? `${page}?${search}` : page;
+  return withQuery(page, query);
 }

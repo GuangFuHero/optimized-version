@@ -1,24 +1,15 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { createContext, useContext } from 'react';
-import { createStore, useStore } from 'zustand';
-
-import type { SiteRouteState } from '../../route/types';
-
-export type SiteMapViewportState = Pick<SiteRouteState, 'position' | 'bbox'>;
-
-export type SiteMapViewportStore = ReturnType<
-  typeof createSiteMapViewportStore
->;
-
-export function createSiteMapViewportStore(initialState: SiteMapViewportState) {
-  return createStore<SiteMapViewportState>()(() => initialState);
-}
+import { useStore } from 'zustand';
+import type { MapViewportStore } from '../viewport-store';
+import type { RescueMapViewportStoreSnapshot } from '../types';
 
 export const SiteMapViewportStoreContext =
-  createContext<SiteMapViewportStore | null>(null);
+  createContext<MapViewportStore | null>(null);
 
-export function useSiteMapViewportStore(): SiteMapViewportStore {
+export function useSiteMapViewportStore(): MapViewportStore {
   const context = useContext(SiteMapViewportStoreContext);
 
   if (!context) {
@@ -30,7 +21,7 @@ export function useSiteMapViewportStore(): SiteMapViewportStore {
   return context;
 }
 
-export function useSiteMapViewportState(): SiteMapViewportState {
+export function useSiteMapViewportState(): RescueMapViewportStoreSnapshot {
   const store = useSiteMapViewportStore();
 
   return useStore(store);

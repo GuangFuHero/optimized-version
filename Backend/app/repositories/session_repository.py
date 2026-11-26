@@ -64,9 +64,7 @@ class SessionRepository:
         """Decode a JSON record stored in Redis, or return None if absent."""
         return json.loads(raw) if raw else None
 
-    async def create_session(
-        self, user_uuid: str, device: str, *, act: str | None = None
-    ) -> tuple[str, str]:
+    async def create_session(self, user_uuid: str, device: str, *, act: str | None = None) -> tuple[str, str]:
         """Create a new session; return (sid, raw_refresh_token).
 
         `act` is the identity this session is acting as (ADR-188). Stored here rather than
@@ -78,9 +76,12 @@ class SessionRepository:
         rt_hash = self._hash(raw)
         now = datetime.now(UTC).isoformat()
         session = {
-            "user_uuid": user_uuid, "current_rt_hash": rt_hash, "device": device,
+            "user_uuid": user_uuid,
+            "current_rt_hash": rt_hash,
+            "device": device,
             "act": act,
-            "created_at": now, "last_used_at": now,
+            "created_at": now,
+            "last_used_at": now,
         }
         await self.redis.set(self.SESSION + sid, json.dumps(session), ex=self.ttl)
         await self.redis.set(
@@ -128,9 +129,7 @@ class SessionRepository:
             return
         session["act"] = act
         ttl = await self.redis.ttl(self.SESSION + sid)
-        await self.redis.set(
-            self.SESSION + sid, json.dumps(session), ex=ttl if ttl and ttl > 0 else self.ttl
-        )
+        await self.redis.set(self.SESSION + sid, json.dumps(session), ex=ttl if ttl and ttl > 0 else self.ttl)
 
     def is_current(self, session: dict, raw_token: str) -> bool:
         """Whether `raw_token` is the refresh token `session` last issued, not an older one (ADR-415).

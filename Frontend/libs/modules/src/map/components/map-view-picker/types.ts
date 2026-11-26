@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /** A map's centre and zoom, as an event's map view is stored (ADR-395). */
 export interface MapViewValue {
   lat: number;

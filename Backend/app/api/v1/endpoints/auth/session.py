@@ -35,14 +35,16 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.post("/login",
-             response_model=TokenPair,
-             dependencies=[Depends(get_rate_limiter(5, 60, bucket=PASSWORD_SIGN_IN_BUCKET))])
+@router.post(
+    "/login",
+    response_model=TokenPair,
+    dependencies=[Depends(get_rate_limiter(5, 60, bucket=PASSWORD_SIGN_IN_BUCKET))],
+)
 async def login(
-        request: Request,
-        form_data: OAuth2PasswordRequestForm = Depends(),
-        db: AsyncSession = Depends(security.get_db),
-        redis=Depends(get_redis),
+    request: Request,
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: AsyncSession = Depends(security.get_db),
+    redis=Depends(get_redis),
 ):
     """Email/phone + password login: contact → user → password identity → verify."""
     user = await auth_session.authenticate_password(db, form_data.username, form_data.password)
@@ -64,13 +66,11 @@ async def login(
     return await issue_token_pair(redis, request, str(user.uuid), identity=identity)
 
 
-@router.post("/refresh",
-             response_model=TokenPair,
-             dependencies=[Depends(get_rate_limiter(10, 60))])
+@router.post("/refresh", response_model=TokenPair, dependencies=[Depends(get_rate_limiter(10, 60))])
 async def refresh(
-        body: RefreshRequest,
-        db: AsyncSession = Depends(security.get_db),
-        redis=Depends(get_redis),
+    body: RefreshRequest,
+    db: AsyncSession = Depends(security.get_db),
+    redis=Depends(get_redis),
 ):
     """以 refresh token 換發新的 access token，並 rotate refresh token。
 
@@ -81,21 +81,23 @@ async def refresh(
         db, redis, body.refresh_token, body.identity
     )
     return TokenPair(
-        access_token=access_token, refresh_token=new_refresh,
+        access_token=access_token,
+        refresh_token=new_refresh,
         expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         identity=identity.to_view() if identity else None,
     )
 
 
-@router.post("/switch-identity", response_model=AccessTokenResponse,
-             dependencies=[Depends(get_rate_limiter(10, 60))])
+@router.post(
+    "/switch-identity", response_model=AccessTokenResponse, dependencies=[Depends(get_rate_limiter(10, 60))]
+)
 async def switch_identity(
-        body: SwitchIdentityRequest,
-        request: Request,
-        session=Depends(security.get_current_session),
-        current_user: User = Depends(security.get_current_user),
-        db: AsyncSession = Depends(security.get_db),
-        redis=Depends(get_redis),
+    body: SwitchIdentityRequest,
+    request: Request,
+    session=Depends(security.get_current_session),
+    current_user: User = Depends(security.get_current_user),
+    db: AsyncSession = Depends(security.get_db),
+    redis=Depends(get_redis),
 ):
     """Act as a different identity you already hold; returns a re-signed access token.
 
@@ -115,15 +117,16 @@ async def switch_identity(
     _user_uuid, sid = session
     access_token, identity = await auth_session.switch_identity(db, redis, current_user, sid, body)
     return AccessTokenResponse(
-        access_token=access_token, expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        access_token=access_token,
+        expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         identity=identity.to_view(),
     )
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 async def logout(
-        session=Depends(security.get_current_session),
-        redis=Depends(get_redis),
+    session=Depends(security.get_current_session),
+    redis=Depends(get_redis),
 ):
     """Log out the CURRENT device only: revoke this session (its refresh token).
 
@@ -154,10 +157,10 @@ async def logout(
 
 @router.post("/logout-all", status_code=status.HTTP_204_NO_CONTENT)
 async def logout_all(
-        request: Request,
-        response: Response,
-        session=Depends(security.get_current_session),
-        redis=Depends(get_redis),
+    request: Request,
+    response: Response,
+    session=Depends(security.get_current_session),
+    redis=Depends(get_redis),
 ):
     """Log out EVERY device: revoke all of the user's sessions.
 

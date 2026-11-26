@@ -11,14 +11,15 @@ Revises: 8ebfc3903041
 Create Date: 2026-08-07
 
 """
+
 from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = 'a1b2c3d4e5f6'
-down_revision: str | Sequence[str] | None = '8ebfc3903041'
+revision: str = "a1b2c3d4e5f6"
+down_revision: str | Sequence[str] | None = "8ebfc3903041"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -26,12 +27,12 @@ depends_on: str | Sequence[str] | None = None
 def upgrade() -> None:
     """Add station operational_status/status_changed_at and task completed_at/canceled_at."""
     op.add_column(
-        'stations',
-        sa.Column('operational_status', sa.String(20), nullable=False, server_default='active'),
+        "stations",
+        sa.Column("operational_status", sa.String(20), nullable=False, server_default="active"),
     )
-    op.add_column('stations', sa.Column('status_changed_at', sa.DateTime(timezone=True), nullable=True))
-    op.add_column('ticket_tasks', sa.Column('completed_at', sa.DateTime(timezone=True), nullable=True))
-    op.add_column('ticket_tasks', sa.Column('canceled_at', sa.DateTime(timezone=True), nullable=True))
+    op.add_column("stations", sa.Column("status_changed_at", sa.DateTime(timezone=True), nullable=True))
+    op.add_column("ticket_tasks", sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True))
+    op.add_column("ticket_tasks", sa.Column("canceled_at", sa.DateTime(timezone=True), nullable=True))
 
     # Backfill rows that reached these states before the columns existed. Analytics reads
     # `status` to decide a task is done or called off, but plots it by timestamp — so a NULL
@@ -73,7 +74,7 @@ def upgrade() -> None:
 def downgrade() -> None:
     """Drop the task timestamps and station operational_status/status_changed_at."""
     op.execute("ALTER TABLE stations DROP CONSTRAINT IF EXISTS ck_stations_operational_status")
-    op.drop_column('ticket_tasks', 'canceled_at')
-    op.drop_column('ticket_tasks', 'completed_at')
-    op.drop_column('stations', 'status_changed_at')
-    op.drop_column('stations', 'operational_status')
+    op.drop_column("ticket_tasks", "canceled_at")
+    op.drop_column("ticket_tasks", "completed_at")
+    op.drop_column("stations", "status_changed_at")
+    op.drop_column("stations", "operational_status")

@@ -1,10 +1,16 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { FileX, SearchX } from 'lucide-react';
 
-import { Box, Button, IconButton, Stack, Typography } from '@mui/material';
+import { Box, IconButton, Stack, Typography } from '@mui/material';
 
-import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
+import {
+  Button,
+  designTokens,
+  displayTextSize,
+  Icons,
+} from '@rescue-frontend/ui';
 
 import { formatTicketNumber } from '../../../ticket/ticket-number';
 import type { RescueMapGoneTicket } from '../../types';
@@ -123,7 +129,7 @@ export function GoneTicketDetail({
           任務單編號 {formatTicketNumber(ticket.id)}
         </Typography>
         <Button
-          variant="contained"
+          variant="primary"
           onClick={onClose}
           sx={{
             alignSelf: 'flex-start',

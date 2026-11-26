@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { Box, IconButton, Stack, Typography } from '@mui/material';
@@ -274,7 +275,12 @@ export function PageHelpPanel({
   return (
     <Stack spacing={1.5}>
       <Stack direction="row" sx={{ alignItems: 'center', gap: 1 }}>
-        <Icons.support sx={{ fontSize: 18, color: color.bg.primary.default }} />
+        <Icons.support
+          sx={{
+            fontSize: designTokens.iconSize.md,
+            color: color.bg.primary.default,
+          }}
+        />
         <Typography
           id={titleId}
           sx={{
@@ -292,7 +298,7 @@ export function PageHelpPanel({
           onClick={onClose}
           sx={{ mr: -0.5, color: color.fg.neutral.muted }}
         >
-          <Icons.close sx={{ fontSize: 18 }} />
+          <Icons.close sx={{ fontSize: designTokens.iconSize.md }} />
         </IconButton>
       </Stack>
 
@@ -350,7 +356,7 @@ export function PageHelpPanel({
           sx={{
             px: 1.375,
             py: 1.125,
-            borderRadius: '8px',
+            borderRadius: `${designTokens.radius[8]}px`,
             bgcolor: color.bg.neutral.subtle,
             color: color.fg.neutral.subtle,
             fontSize: displayTextSize[12],

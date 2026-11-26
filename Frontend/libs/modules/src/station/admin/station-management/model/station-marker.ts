@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { designTokens } from '@rescue-frontend/ui';
 
 import type { RescueMapMarkerItem } from '../../../../map/types';
@@ -18,7 +19,7 @@ const c = primitives.color;
  * The map's own legend and pins read this, nothing else — the table's type tone stays its own.
  */
 export const STATION_TYPE_PIN_COLORS: Record<StationTypeValue, string> = {
-  shelter: '#7B5EA7', // prototype; no violet in our primitives
+  shelter: designTokens.color.bg.map.shelterStation,
   supply: c.orange[400],
   medical: c.red[500],
   water: c.blue[400],

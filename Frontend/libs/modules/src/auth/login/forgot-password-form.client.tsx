@@ -1,9 +1,11 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { useForm, useStore } from '@tanstack/react-form';
 import type { components } from '@rescue-frontend/data-access/openapi';
 
-import { Alert, AlertTitle, Button, Stack } from '@mui/material';
+import { Alert, AlertTitle, Stack } from '@mui/material';
+import { Button } from '@rescue-frontend/ui';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { startTransition, useState } from 'react';
 
@@ -125,7 +127,8 @@ export function ForgotPasswordFormClient() {
 
         {sentTo ? (
           <Button
-            variant="contained"
+            variant="primary"
+            sx={{ height: 'auto', py: 1, whiteSpace: 'normal' }}
             onClick={() => {
               startTransition(() => {
                 router.push(
@@ -137,31 +140,29 @@ export function ForgotPasswordFormClient() {
                 );
               });
             }}
-            sx={{ minHeight: 44, borderRadius: '999px' }}
           >
             我收到驗證碼了，去重設密碼
           </Button>
         ) : (
           <Button
-            variant="contained"
+            variant="primary"
             disabled={isSubmitting || identity.trim().length === 0}
             onClick={() => {
               void form.handleSubmit();
             }}
-            sx={{ minHeight: 44, borderRadius: '999px' }}
           >
             {isSubmitting ? '送出中⋯' : '寄送驗證碼'}
           </Button>
         )}
 
         {sentTo ? (
-          <Button variant="text" onClick={() => setSentTo(undefined)}>
+          <Button variant="ghost" onClick={() => setSentTo(undefined)}>
             重新取得驗證碼
           </Button>
         ) : null}
 
         <Button
-          variant="text"
+          variant="ghost"
           onClick={() => {
             startTransition(() => {
               router.push(authHref('/login', { callbackUrl }), {

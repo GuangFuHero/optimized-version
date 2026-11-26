@@ -17,13 +17,14 @@ Downgrade turns every station `team` grant back into `zone`. It cannot tell whic
 before this revision, but none were: `team` on a station could never match until ADR-285 gave
 stations a team_uuid, so nothing had a reason to hold it.
 """
+
 from collections.abc import Sequence
 
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = 'e3b8f1a6c2d7'
-down_revision: str | Sequence[str] | None = 'd4a7e2c9b1f5'
+revision: str = "e3b8f1a6c2d7"
+down_revision: str | Sequence[str] | None = "d4a7e2c9b1f5"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

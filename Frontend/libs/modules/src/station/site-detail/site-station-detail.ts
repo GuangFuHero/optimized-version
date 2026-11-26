@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * A station's detail as the site shows it, read from a map marker. The back office's map opens the
  * same marker in `station/admin/station-detail`, which stays as it is; this is the site's own.

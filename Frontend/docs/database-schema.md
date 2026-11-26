@@ -4,7 +4,7 @@
 
 - GraphQL：`libs/data-access/src/graphql/schema.graphql`
 - REST OpenAPI：`libs/data-access/src/rest/openapi.json`
-- Frontend queries：`libs/data-access/src/graphql/**/*.graphql`
+- Frontend queries：`libs/data-access/src/graphql/**/*.graphql`，排除 `schema.graphql`
 
 ## 前端目前主要依賴的實體
 

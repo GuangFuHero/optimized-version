@@ -15,6 +15,7 @@ Revises: 07ac630e0009
 Create Date: 2026-08-22
 
 """
+
 from collections.abc import Sequence
 
 from alembic import op

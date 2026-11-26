@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * The announcement banner's height, written on the document while it shows (the prototype's
  * `--wg-banner-h`, `an-banner.jsx:61-79`). Whatever fills the screen takes it off, so the banner

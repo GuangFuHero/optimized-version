@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /** Whether items this wide fit one line of a flex row `rowWidth` wide, `gap` apart. */
 export function fitsOneRow(
   widths: readonly number[],

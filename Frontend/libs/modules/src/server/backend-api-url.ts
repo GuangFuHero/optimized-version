@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 const DEFAULT_API_BASE_URL = 'http://localhost:8000/api';
 
 function normalizeApiBaseUrl(url: string) {

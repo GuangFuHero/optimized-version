@@ -1,25 +1,17 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { ArrowLeft, ChevronRight, Eye, EyeOff, MapPinned } from 'lucide-react';
 
-import {
-  Box,
-  Button,
-  ButtonBase,
-  Stack,
-  Switch,
-  Typography,
-} from '@mui/material';
-import { useEffect, useRef, useState } from 'react';
+import { Box, ButtonBase, Stack, Switch, Typography } from '@mui/material';
+import { useEffect, useRef } from 'react';
 
 import {
   ADMIN_MAP_PRIORITIES,
   AREA_KIND_LABELS,
-  type AreaContents,
+  AREA_KIND_ORDER,
   type RescueMapAreaKind,
-  type RescueMapClosureArea,
   type RescueMapMarkerItem,
-  type RescueMapPublicZone,
 } from '@rescue-frontend/modules';
 
 import {
@@ -29,100 +21,27 @@ import {
   type AreaActions,
 } from './admin-area-detail-actions';
 import { AreaSwatch } from './area-swatch';
+import type { AdminAreaListItem } from './admin-map-area-projection';
 import { useHazardousZoneSource } from '@rescue-frontend/data-access/admin';
-import { designTokens } from '@rescue-frontend/ui';
+import { Button, designTokens } from '@rescue-frontend/ui';
 
 const { color, radius, typography } = designTokens;
 
-/** One area as the list shows it: any of the three kinds, with what lies inside it. */
-export interface AdminAreaListItem {
-  id: string;
-  kind: RescueMapAreaKind;
-  name: string | null;
-  note: string | null;
-  teams: readonly string[];
-  teamUuids: readonly string[];
-  /** Whether the public map shows it; always true except for a 標示區. */
-  isPublic: boolean;
-  contents: AreaContents;
-  /**
-   * Of the tickets inside a 責任區, how many are answered for by its team (the prototype's 「N 張已歸屬」).
-   * Null where there is nothing to say: another kind of area, or a viewer not told the teams.
-   */
-  attributedTickets: number | null;
-}
-
-// 危險區 first: the first thing to see on opening the page is where not to go (prototype `map-panel.jsx`).
-const KIND_ORDER: readonly RescueMapAreaKind[] = [
-  'hazardous_zone',
-  'team_zone',
-  'mark_zone',
-];
-
-export function toAdminAreaListItems({
-  closureAreas,
-  publicZones,
-  countContents,
-  countAttributed,
-}: {
-  closureAreas: readonly RescueMapClosureArea[];
-  publicZones: readonly RescueMapPublicZone[];
-  countContents: (area: { polygons: [number, number][][][] }) => AreaContents;
-  countAttributed: (
-    area: { polygons: [number, number][][][] },
-    teams: readonly string[],
-  ) => number | null;
-}): AdminAreaListItem[] {
-  return [
-    ...closureAreas.map(
-      (area): AdminAreaListItem => ({
-        id: area.id,
-        kind: 'hazardous_zone',
-        name: area.name,
-        note: area.comment ?? null,
-        teams: [],
-        teamUuids: [],
-        isPublic: true,
-        contents: countContents(area),
-        attributedTickets: null,
-      }),
-    ),
-    ...publicZones.map(
-      (zone): AdminAreaListItem => ({
-        id: zone.id,
-        kind: zone.kind,
-        name: zone.name,
-        note: zone.comment ?? null,
-        teams: zone.teams,
-        teamUuids: zone.teamUuids ?? [],
-        isPublic: zone.isPublic !== false,
-        contents: countContents(zone),
-        attributedTickets:
-          zone.kind === 'team_zone' ? countAttributed(zone, zone.teams) : null,
-      }),
-    ),
-  ];
-}
-
 function summaryOf(item: AdminAreaListItem) {
+  const { tickets, stations } = item.contents;
   if (item.kind === 'team_zone') {
-    // 「慈濟基金會 · 區內 53 張，4 張已歸屬」 (prototype `ZoneList`)
-    const inside = `區內 ${item.contents.tickets} 張${
+    const inside = `區內 ${tickets ?? '—'} 張${
       item.attributedTickets === null
         ? ''
         : `，${item.attributedTickets} 張已歸屬`
     }`;
 
     return item.teams.length > 0
-      ? `${item.teams.join('、')} · ${inside}`
+      ? `${item.teams.map(({ name }) => name).join('、')} · ${inside}`
       : inside;
   }
 
-  const inside = `區內 ${item.contents.tickets} 張任務單、${item.contents.stations} 個站點`;
-
-  return item.teams.length > 0
-    ? `${item.teams.join('、')} · ${inside}`
-    : inside;
+  return `區內 ${tickets ?? '—'} 張任務單、${stations ?? '—'} 個站點`;
 }
 
 function AreaRow({
@@ -249,7 +168,7 @@ function EmptyState({ canDraw }: { canDraw: boolean }) {
           : '超級管理員或政府圈選區域後，會出現在這裡。'}
       </Typography>
       <Stack spacing={1} sx={{ width: '100%', pt: 1 }}>
-        {KIND_ORDER.map((kind) => (
+        {AREA_KIND_ORDER.map((kind) => (
           <Stack
             key={kind}
             direction="row"
@@ -295,16 +214,14 @@ function EmptyState({ canDraw }: { canDraw: boolean }) {
   );
 }
 
-/**
- * 互助地圖's right panel, read-only for now: the areas by kind (prototype `ZoneList`), 危險區 first.
- * A row zooms the map to its area and marks it.
- */
 export function AdminAreaListPanel({
   items,
   selectedId,
   isLoading,
   hasError,
+  truncated = false,
   canDraw = false,
+  hasDraft,
   onSelect,
   onStartDraw,
 }: {
@@ -312,8 +229,11 @@ export function AdminAreaListPanel({
   selectedId: string | null;
   isLoading: boolean;
   hasError: boolean;
+  /** Whether more areas exist than the map reads: the list says so rather than reading as whole. */
+  truncated?: boolean;
   /** Whether this viewer may draw areas: the button below is theirs, and the empty state says so. */
   canDraw?: boolean;
+  hasDraft: boolean;
   onSelect: (id: string) => void;
   onStartDraw?: () => void;
 }) {
@@ -349,7 +269,14 @@ export function AdminAreaListPanel({
             區域載入失敗，請重新整理。
           </Typography>
         ) : null}
-        {KIND_ORDER.map((kind) => {
+        {truncated ? (
+          <Typography
+            sx={{ ...typography.body[300], color: color.fg.neutral.muted }}
+          >
+            區域數量超過上限，僅列出部分。
+          </Typography>
+        ) : null}
+        {AREA_KIND_ORDER.map((kind) => {
           const group = items.filter((item) => item.kind === kind);
 
           if (group.length === 0) {
@@ -381,7 +308,7 @@ export function AdminAreaListPanel({
           <EmptyState canDraw={canDraw} />
         ) : null}
       </Stack>
-      {canDraw && onStartDraw ? (
+      {canDraw ? (
         <Stack
           direction="row"
           sx={{
@@ -391,8 +318,12 @@ export function AdminAreaListPanel({
             borderTop: `1px solid ${color.border.default}`,
           }}
         >
-          <Button variant="contained" onClick={onStartDraw}>
-            圈選新區域
+          <Button
+            variant="primary"
+            disabled={!onStartDraw}
+            onClick={onStartDraw}
+          >
+            {hasDraft ? '繼續編輯草稿' : '圈選新區域'}
           </Button>
         </Stack>
       ) : null}
@@ -446,27 +377,26 @@ function DetailSection({
   );
 }
 
-/**
- * One area, read-only (prototype `ZoneDetail`): what it is, who has it, what lies inside. Each ticket
- * inside opens that ticket's detail, the one a pin opens.
- */
 export function AdminAreaDetailPanel({
   item,
   tickets,
   selectedTicketId,
   actions,
+  editing,
+  onEditingChange,
   onBack,
   onSelectTicket,
 }: {
   item: AdminAreaListItem;
-  tickets: readonly RescueMapMarkerItem[];
+  tickets: readonly RescueMapMarkerItem[] | null;
   selectedTicketId: string | undefined;
   /** What this viewer may do to the area; none for one who may only look. */
   actions?: AreaActions;
+  editing: boolean;
+  onEditingChange: (editing: boolean) => void;
   onBack: () => void;
   onSelectTicket: (ticket: RescueMapMarkerItem) => void;
 }) {
-  const [editing, setEditing] = useState(false);
   const isHazard = item.kind === 'hazardous_zone';
   const source = useHazardousZoneSource(
     { uuid: item.id },
@@ -487,8 +417,8 @@ export function AdminAreaDetailPanel({
         }}
       >
         <ButtonBase
-          onClick={onBack}
-          aria-label="返回區域清單"
+          onClick={editing ? () => onEditingChange(false) : onBack}
+          aria-label={editing ? '取消編輯' : '返回區域清單'}
           sx={{
             width: 32,
             height: 32,
@@ -530,11 +460,13 @@ export function AdminAreaDetailPanel({
         {editing && actions && !(isHazard && source.isPending) ? (
           <AreaEditForm
             item={item}
+            saveDisabled={actions.isPending}
             informationSource={informationSource}
-            onCancel={() => setEditing(false)}
-            onSave={(changes) => {
-              setEditing(false);
-              actions.onSave(changes);
+            onCancel={() => onEditingChange(false)}
+            onSave={async (changes) => {
+              const saved = await actions.onSave(changes);
+              if (saved) onEditingChange(false);
+              return saved;
             }}
           />
         ) : item.note ? (
@@ -550,7 +482,10 @@ export function AdminAreaDetailPanel({
           </DetailSection>
         ) : null}
         {item.kind === 'team_zone' ? (
-          <AreaTeamsSection item={item} actions={actions} />
+          <AreaTeamsSection
+            item={item}
+            actions={editing ? undefined : actions}
+          />
         ) : null}
         <Stack
           direction="row"
@@ -576,7 +511,7 @@ export function AdminAreaDetailPanel({
                 {label}
               </Typography>
               <Typography sx={{ ...typography.heading[600] }}>
-                {count}
+                {count ?? '—'}
               </Typography>
             </Box>
           ))}
@@ -586,6 +521,7 @@ export function AdminAreaDetailPanel({
             <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
               <Switch
                 checked={item.isPublic}
+                disabled={editing || actions.isPending}
                 onChange={(event) =>
                   actions.onTogglePublic(event.target.checked)
                 }
@@ -620,8 +556,12 @@ export function AdminAreaDetailPanel({
             {visibilityNote(item)}
           </Typography>
         </DetailSection>
-        <DetailSection title={`區內任務單（${tickets.length}）`}>
-          {tickets.length === 0 ? (
+        <DetailSection title={`區內任務單（${tickets?.length ?? '—'}）`}>
+          {tickets === null ? (
+            <Typography role="status" sx={{ ...typography.body[300] }}>
+              任務單載入失敗。
+            </Typography>
+          ) : tickets.length === 0 ? (
             <Typography
               sx={{ ...typography.body[300], color: color.fg.neutral.subtle }}
             >
@@ -686,7 +626,7 @@ export function AdminAreaDetailPanel({
           item={item}
           actions={actions}
           editing={editing}
-          onEdit={() => setEditing(true)}
+          onEdit={() => onEditingChange(true)}
         />
       ) : null}
     </Stack>

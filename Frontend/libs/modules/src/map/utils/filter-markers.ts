@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import type { RescueMapMarkerItem, RescueMapRouteState } from '../types';
 import { matchesTicketStatusSelection } from '../../ticket/status';
 

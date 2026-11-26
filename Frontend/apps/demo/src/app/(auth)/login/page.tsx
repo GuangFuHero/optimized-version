@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import { AuthShell, LoginFormClient } from '@rescue-frontend/modules';
 import { Metadata } from 'next';
 import { Suspense } from 'react';

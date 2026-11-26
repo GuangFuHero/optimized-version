@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * What the requester reads before deleting their whole ticket: the 「刪除整張單」 of the
  * ⋯ at the top of its drawer.

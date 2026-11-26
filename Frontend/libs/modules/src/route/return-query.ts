@@ -1,9 +1,12 @@
+// SPDX-License-Identifier: GPL-3.0-only
 /**
  * What the site's ways back share (`ticket/help-request/help-return.ts`, `ticket/needs/claim-return.ts`,
  * `station/suggestion/suggestion-return.ts`, `role-request/apply-return.ts`): a button that needs the
  * person signed in sends them away with a marker in the address, and the page they come back to reads
  * the marker and takes it off. Each way back keeps its own keys and how it reads them.
  */
+
+import { SITE_PATHS } from './paths';
 
 /** What reading a query needs: `URLSearchParams`, or Next's read-only one. */
 export type ReturnQuery = Pick<URLSearchParams, 'get'>;
@@ -44,5 +47,5 @@ export function buildSignInHref(
     query.set(key, value);
   }
 
-  return `/login?callbackUrl=${encodeURIComponent(`${location.pathname}?${query}`)}`;
+  return `${SITE_PATHS.login}?callbackUrl=${encodeURIComponent(`${location.pathname}?${query}`)}`;
 }

@@ -4,6 +4,7 @@ Every set is a two-call flow since ADR-215: the first call delivers a step-up co
 account's own contact and answers 422, the second spends it. A session alone cannot mint a
 credential that would outlive it.
 """
+
 import pytest
 
 from app.models.auth import UserContact
@@ -17,8 +18,13 @@ FIRST_PASSWORD = {"password": "hashedpw", "salt_frontend": SALT}
 
 async def _google_user(db_session, redis):
     user = await create_account(
-        db_session, name="G", provider="google", provider_subject="g-sp-1",
-        contact_type="email", value="g@x.com")
+        db_session,
+        name="G",
+        provider="google",
+        provider_subject="g-sp-1",
+        contact_type="email",
+        value="g@x.com",
+    )
     headers = await auth_headers_for(redis, user.uuid)
     return user, headers
 
@@ -29,7 +35,8 @@ async def _set_password(client, headers, capture_email, password="hashedpw", sal
     asked = await client.post(SET_PASSWORD_URL, headers=headers, json=body)
     assert asked.status_code == 422, asked.text
     return await client.post(
-        SET_PASSWORD_URL, headers=headers,
+        SET_PASSWORD_URL,
+        headers=headers,
         json={**body, "step_up": {"old_channel_code": capture_email.last_code}},
     )
 
@@ -41,8 +48,7 @@ async def test_set_password_then_login_works(client, db_session, redis, capture_
     res = await _set_password(client, headers, capture_email)
     assert res.status_code == 204, res.text
     # email + password login now works
-    login = await client.post("/api/v1/auth/login",
-                              data={"username": "g@x.com", "password": "hashedpw"})
+    login = await client.post("/api/v1/auth/login", data={"username": "g@x.com", "password": "hashedpw"})
     assert login.status_code == 200
 
 
@@ -64,8 +70,9 @@ async def test_set_password_twice_409(client, db_session, redis, capture_email):
     await _set_password(client, headers, capture_email)
     # set-password revokes every session (ADR-160), so the second call needs a fresh one
     headers = await auth_headers_for(redis, user_uuid)
-    res = await client.post(SET_PASSWORD_URL, headers=headers,
-                            json={"password": "otherpw", "salt_frontend": SALT})  # >=6 chars (min_length)
+    res = await client.post(
+        SET_PASSWORD_URL, headers=headers, json={"password": "otherpw", "salt_frontend": SALT}
+    )  # >=6 chars (min_length)
     assert res.status_code == 409, res.text
 
 
@@ -107,6 +114,5 @@ async def test_an_unverified_contact_does_not_count(client, db_session, redis, c
 @pytest.mark.asyncio
 async def test_set_password_requires_auth(client):
     """Setting a password without a Bearer token is rejected with 401."""
-    res = await client.post("/api/v1/auth/set-password",
-                            json={"password": "hashedpw", "salt_frontend": SALT})
+    res = await client.post("/api/v1/auth/set-password", json={"password": "hashedpw", "salt_frontend": SALT})
     assert res.status_code == 401

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { Box, IconButton, Stack, Typography } from '@mui/material';
@@ -146,7 +147,7 @@ function SiteSidebarNav({
             onClick={onClose}
             sx={{ color: color.fg.neutral.subtle }}
           >
-            <Icons.close sx={{ fontSize: 20 }} />
+            <Icons.close sx={{ fontSize: designTokens.iconSize.lg }} />
           </IconButton>
         </Stack>
       ) : null}

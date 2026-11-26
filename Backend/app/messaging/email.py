@@ -24,15 +24,21 @@ _TAIWAN = ZoneInfo("Asia/Taipei")
 # --- inline style fragments (email clients strip <style> blocks, so every rule lives on the element) ---
 # Font names use SINGLE quotes: the style="..." attribute is double-quoted, so double-quoted font names
 # would prematurely close the attribute and make clients (Gmail) drop the whole declaration.
-_FONT = ("'Noto Sans TC','Nunito',-apple-system,'Segoe UI',Roboto,"
-         "'PingFang TC','Microsoft JhengHei',Arial,sans-serif")
+_FONT = (
+    "'Noto Sans TC','Nunito',-apple-system,'Segoe UI',Roboto,"
+    "'PingFang TC','Microsoft JhengHei',Arial,sans-serif"
+)
 _S_WRAP = "max-width:560px;margin:0 auto;"
 _S_LOGO = "margin:0 0 12px;padding:0 4px;"
 _S_LOGO_IMG = "vertical-align:middle;display:inline-block;"
-_S_LOGO_BRAND = (f"vertical-align:middle;display:inline-block;margin-left:8px;color:#0f172a;"
-                 f"font-size:22px;font-weight:700;letter-spacing:1px;font-family:{_FONT};")
-_S_CARD = ("background:#ffffff;border:1px solid #DCC1B1;border-radius:32px;overflow:hidden;"
-           "box-shadow:0 4px 20px rgba(227,121,30,0.10);")
+_S_LOGO_BRAND = (
+    f"vertical-align:middle;display:inline-block;margin-left:8px;color:#0f172a;"
+    f"font-size:22px;font-weight:700;letter-spacing:1px;font-family:{_FONT};"
+)
+_S_CARD = (
+    "background:#ffffff;border:1px solid #DCC1B1;border-radius:32px;overflow:hidden;"
+    "box-shadow:0 4px 20px rgba(227,121,30,0.10);"
+)
 _S_BODY = f"padding:32px 32px 28px;font-family:{_FONT};"
 _S_H1 = f"margin:0 0 24px;font-size:22px;line-height:1.35;color:#151C22;font-weight:700;font-family:{_FONT};"
 _S_P_ZH = f"margin:0 0 2px;font-size:15px;color:#006685;font-weight:700;font-family:{_FONT};"
@@ -70,8 +76,14 @@ def _notice(zh: str, en: str) -> str:
     return f'{zh}<br><span style="{_S_NOTICE_EN}">{en}</span>'
 
 
-def _render_email(*, h1: str, notices: list[str], footer_lines: list[str],
-                  intro: tuple[str, str] | None = None, code: str | None = None) -> str:
+def _render_email(
+    *,
+    h1: str,
+    notices: list[str],
+    footer_lines: list[str],
+    intro: tuple[str, str] | None = None,
+    code: str | None = None,
+) -> str:
     """Assemble the branded, fully-inlined HTML body shared by every email."""
     parts: list[str] = []
     if intro is not None:
@@ -92,15 +104,15 @@ def _render_email(*, h1: str, notices: list[str], footer_lines: list[str],
         f'<div style="{_S_LOGO}">'
         f'<img src="cid:logo" width="22" height="22" alt="{_BRAND_ZH}" style="{_S_LOGO_IMG}">'
         f'<span style="{_S_LOGO_BRAND}">{_BRAND_ZH}</span>'
-        f'</div>'
+        f"</div>"
         f'<div style="{_S_CARD}">'
         f'<div style="{_S_BODY}">'
         f'<h1 style="{_S_H1}">{h1}</h1>'
-        f'{"".join(parts)}'
-        f'</div>'
+        f"{''.join(parts)}"
+        f"</div>"
         f'<div style="{_S_FOOTER}">{footer}</div>'
-        f'</div>'
-        f'</div>'
+        f"</div>"
+        f"</div>"
     )
 
 
@@ -112,17 +124,23 @@ def build_verification_email(code: str) -> tuple[str, str, str]:
         intro=("以下是您的驗證碼：", "Here is your verification code:"),
         code=code,
         notices=[
-            _notice("此驗證碼 <strong>10 分鐘</strong>內有效，請輸入以完成註冊。",
-                    "This code is valid for <strong>10 minutes</strong>. "
-                    "Enter it to finish creating your account."),
-            _notice("<strong>請勿將此驗證碼提供給任何人</strong>，我們絕不會以電話或郵件向您索取。",
-                    "<strong>Please don't share this code with anyone</strong> — "
-                    "we'll never ask for it by phone or email."),
+            _notice(
+                "此驗證碼 <strong>10 分鐘</strong>內有效，請輸入以完成註冊。",
+                "This code is valid for <strong>10 minutes</strong>. "
+                "Enter it to finish creating your account.",
+            ),
+            _notice(
+                "<strong>請勿將此驗證碼提供給任何人</strong>，我們絕不會以電話或郵件向您索取。",
+                "<strong>Please don't share this code with anyone</strong> — "
+                "we'll never ask for it by phone or email.",
+            ),
         ],
         footer_lines=[
-            ("您會收到這封郵件，是因為有人為此地址請求驗證碼。若這不是您本人，請忽略本郵件。<br>"
-             "You received this because a verification code was requested for this address. "
-             "If this wasn't you, ignore it."),
+            (
+                "您會收到這封郵件，是因為有人為此地址請求驗證碼。若這不是您本人，請忽略本郵件。<br>"
+                "You received this because a verification code was requested for this address. "
+                "If this wasn't you, ignore it."
+            ),
             _FOOTER_BRAND,
         ],
     )
@@ -145,11 +163,14 @@ def build_contact_verification_email(code: str) -> tuple[str, str, str]:
         intro=("以下是您的驗證碼：", "Here is your verification code:"),
         code=code,
         notices=[
-            _notice("此驗證碼 <strong>10 分鐘</strong>內有效，請輸入以驗證此電子郵件地址。",
-                    "This code is valid for <strong>10 minutes</strong>. "
-                    "Enter it to verify this email address."),
-            _notice("<strong>請勿將此驗證碼提供給任何人。</strong>",
-                    "<strong>Please don't share this code with anyone.</strong>"),
+            _notice(
+                "此驗證碼 <strong>10 分鐘</strong>內有效，請輸入以驗證此電子郵件地址。",
+                "This code is valid for <strong>10 minutes</strong>. Enter it to verify this email address.",
+            ),
+            _notice(
+                "<strong>請勿將此驗證碼提供給任何人。</strong>",
+                "<strong>Please don't share this code with anyone.</strong>",
+            ),
         ],
         footer_lines=[
             "若您並未提出此請求，請忽略本郵件。 If you did not request this, ignore this email.",
@@ -175,14 +196,20 @@ def build_password_reset_email(code: str) -> tuple[str, str, str]:
         intro=("以下是您的密碼重設驗證碼：", "Here is your password reset code:"),
         code=code,
         notices=[
-            _notice("此驗證碼 <strong>10 分鐘</strong>內有效，請輸入以設定新密碼。",
-                    "This code is valid for <strong>10 minutes</strong>. Enter it to set a new password."),
-            _notice("<strong>請勿將此驗證碼提供給任何人。</strong>",
-                    "<strong>Please don't share this code with anyone.</strong>"),
+            _notice(
+                "此驗證碼 <strong>10 分鐘</strong>內有效，請輸入以設定新密碼。",
+                "This code is valid for <strong>10 minutes</strong>. Enter it to set a new password.",
+            ),
+            _notice(
+                "<strong>請勿將此驗證碼提供給任何人。</strong>",
+                "<strong>Please don't share this code with anyone.</strong>",
+            ),
         ],
         footer_lines=[
-            ("若您並未提出此請求，請忽略本郵件，您的密碼不會變更。<br>"
-             "If you did not request this, ignore this email; your password stays unchanged."),
+            (
+                "若您並未提出此請求，請忽略本郵件，您的密碼不會變更。<br>"
+                "If you did not request this, ignore this email; your password stays unchanged."
+            ),
             _FOOTER_BRAND,
         ],
     )
@@ -204,9 +231,11 @@ def build_sso_notice_email() -> tuple[str, str, str]:
         h1="關於密碼重設 Password reset",
         notices=[
             "此帳號使用第三方登入，並未設定密碼。請使用您當初登入的第三方服務進行登入；登入後即可設定密碼。",
-            ('<span style="' + _S_NOTICE_EN + '">This account signs in with a third-party login and has '
-             'no password set. Please sign in with the provider you used; you can set a password '
-             'afterwards.</span>'),
+            (
+                '<span style="' + _S_NOTICE_EN + '">This account signs in with a third-party login and has '
+                "no password set. Please sign in with the provider you used; you can set a password "
+                "afterwards.</span>"
+            ),
         ],
         footer_lines=[
             "若您並未提出此請求，請忽略本郵件。 If you did not request this, ignore this email.",
@@ -228,6 +257,7 @@ def get_email_sender() -> EmailSender:
     """FastAPI dependency selecting the configured email sender."""
     if settings.EMAIL_PROVIDER == "smtp2go":
         from app.messaging.smtp2go import Smtp2goEmailSender  # noqa: PLC0415 — optional adapter
+
         return Smtp2goEmailSender()
     return ConsoleEmailSender()
 
@@ -244,8 +274,10 @@ def build_contact_changed_email(masked_new_value: str) -> tuple[str, str, str]:
         h1="聯絡方式已變更 Contact changed",
         notices=[
             f"您帳號的聯絡方式已變更為 {masked_new_value}。",
-            ('<span style="' + _S_NOTICE_EN + '">Your account contact was changed to '
-             f'{masked_new_value}.</span>'),
+            (
+                '<span style="' + _S_NOTICE_EN + '">Your account contact was changed to '
+                f"{masked_new_value}.</span>"
+            ),
         ],
         footer_lines=[
             "若非本人操作，請立即聯繫我們。 If this was not you, contact us immediately.",
@@ -274,9 +306,11 @@ def build_contact_added_email(added_type: str, masked_value: str) -> tuple[str, 
         h1="帳號新增了聯絡方式 Contact added",
         notices=[
             f"您的帳號新增了{label} {masked_value}，它可以用來登入與重設密碼。",
-            ('<span style="' + _S_NOTICE_EN + '">The '
-             f'{added_type} {masked_value} was added to your account, and can be used to '
-             'sign in and to reset the password.</span>'),
+            (
+                '<span style="' + _S_NOTICE_EN + '">The '
+                f"{added_type} {masked_value} was added to your account, and can be used to "
+                "sign in and to reset the password.</span>"
+            ),
         ],
         footer_lines=[
             "若非本人操作，請立即移除它並變更密碼。 If this was not you, remove it and change "
@@ -307,8 +341,10 @@ def build_contact_removed_email(removed_type: str, masked_value: str) -> tuple[s
         h1="聯絡方式已移除 Contact removed",
         notices=[
             f"您帳號的{label} {masked_value} 已從帳號移除。",
-            ('<span style="' + _S_NOTICE_EN + '">The '
-             f'{removed_type} {masked_value} was removed from your account.</span>'),
+            (
+                '<span style="' + _S_NOTICE_EN + '">The '
+                f"{removed_type} {masked_value} was removed from your account.</span>"
+            ),
         ],
         footer_lines=[
             "若非本人操作，請立即聯繫我們。 If this was not you, contact us immediately.",
@@ -340,9 +376,11 @@ def build_contact_replaced_email(replaced_type: str, masked_new_value: str) -> t
         h1="帳號的聯絡方式已變更 Contact changed",
         notices=[
             f"您帳號的{label}已變更為 {masked_new_value}，新的值可以用來登入與重設密碼。",
-            ('<span style="' + _S_NOTICE_EN + '">Your account\'s '
-             f'{replaced_type} was changed to {masked_new_value}, which can now be used to '
-             'sign in and to reset the password.</span>'),
+            (
+                '<span style="' + _S_NOTICE_EN + "\">Your account's "
+                f"{replaced_type} was changed to {masked_new_value}, which can now be used to "
+                "sign in and to reset the password.</span>"
+            ),
         ],
         footer_lines=[
             "若非本人操作，請立即聯繫我們。 If this was not you, contact us immediately.",
@@ -410,18 +448,24 @@ def build_step_up_code_email(
     subject = f"【{_BRAND_ZH}】{heading}"
     html = _render_email(
         h1=heading,
-        intro=(f"有人正在要求{zh_what}。若這是您本人，請使用以下驗證碼：",
-               f"Someone is asking to {en_what}. If this is you, use this code:"),
+        intro=(
+            f"有人正在要求{zh_what}。若這是您本人，請使用以下驗證碼：",
+            f"Someone is asking to {en_what}. If this is you, use this code:",
+        ),
         code=code,
         notices=[
-            _notice(f"此驗證碼 <strong>10 分鐘</strong>內有效，且僅能用於{zh_what}。",
-                    "This code is valid for <strong>10 minutes</strong> and authorizes "
-                    f"only one thing: to {en_what}."),
-            _notice("<strong>若這不是您本人的操作，請勿提供此驗證碼給任何人</strong>——"
-                    "有人可能已經取得您帳號的登入狀態，請立即變更密碼並聯繫我們。",
-                    "<strong>If this was not you, do not share this code with anyone.</strong> "
-                    "Someone may already be signed in to your account — change your password "
-                    "and contact us immediately."),
+            _notice(
+                f"此驗證碼 <strong>10 分鐘</strong>內有效，且僅能用於{zh_what}。",
+                "This code is valid for <strong>10 minutes</strong> and authorizes "
+                f"only one thing: to {en_what}.",
+            ),
+            _notice(
+                "<strong>若這不是您本人的操作，請勿提供此驗證碼給任何人</strong>——"
+                "有人可能已經取得您帳號的登入狀態，請立即變更密碼並聯繫我們。",
+                "<strong>If this was not you, do not share this code with anyone.</strong> "
+                "Someone may already be signed in to your account — change your password "
+                "and contact us immediately.",
+            ),
         ],
         footer_lines=[
             "未提供驗證碼，這項變更就不會發生。 Without this code, the change does not happen.",
@@ -460,13 +504,16 @@ def build_password_set_email(
     html = _render_email(
         h1=heading,
         notices=[
-            _notice(f"您的帳號（{masked_value}）的登入密碼已設定，所有裝置都已登出。",
-                    f"The sign-in password was set on your account ({masked_value}), and every "
-                    "session was signed out."),
-            _notice("<strong>若非本人操作，請立即使用第三方登入進入帳號並變更密碼</strong>，"
-                    "並聯繫我們。",
-                    "<strong>If this was not you, sign in with your third-party provider, "
-                    "change the password immediately</strong> and contact us."),
+            _notice(
+                f"您的帳號（{masked_value}）的登入密碼已設定，所有裝置都已登出。",
+                f"The sign-in password was set on your account ({masked_value}), and every "
+                "session was signed out.",
+            ),
+            _notice(
+                "<strong>若非本人操作，請立即使用第三方登入進入帳號並變更密碼</strong>，並聯繫我們。",
+                "<strong>If this was not you, sign in with your third-party provider, "
+                "change the password immediately</strong> and contact us.",
+            ),
         ],
         footer_lines=[_FOOTER_BRAND],
     )
@@ -485,8 +532,10 @@ def _password_changed_email(at: datetime) -> tuple[str, str, str]:
     when = at.astimezone(_TAIWAN).strftime("%Y/%m/%d %H:%M")
     heading = "您的帳號密碼已變更 Password changed"
     zh = f"你的密碼在 {when} 變更了。如果不是你自己改的，請馬上到登入頁按「忘記密碼」重設。"
-    en = (f"Your password was changed at {when}, Taiwan time. If it wasn't you, go to the sign-in page "
-          "right away and reset it with 「忘記密碼」 (Forgot password).")
+    en = (
+        f"Your password was changed at {when}, Taiwan time. If it wasn't you, go to the sign-in page "
+        "right away and reset it with 「忘記密碼」 (Forgot password)."
+    )
     html = _render_email(h1=heading, notices=[_notice(zh, en)], footer_lines=[_FOOTER_BRAND])
     return f"【{_BRAND_ZH}】{heading}", html, f"{zh}\n\n{en}\n"
 
@@ -506,11 +555,15 @@ def build_login_method_changed_email(added: bool, provider: str) -> tuple[str, s
     html = _render_email(
         h1=heading,
         notices=[
-            _notice(f"您的帳號{verb_zh} <strong>{label}</strong> 登入方式。",
-                    f"<strong>{label}</strong> {verb_en} your account as a sign-in method."),
-            _notice("<strong>若非本人操作，請立即移除該登入方式並變更密碼</strong>，並聯繫我們。",
-                    "<strong>If this was not you, remove that sign-in method and change your "
-                    "password immediately</strong>, then contact us."),
+            _notice(
+                f"您的帳號{verb_zh} <strong>{label}</strong> 登入方式。",
+                f"<strong>{label}</strong> {verb_en} your account as a sign-in method.",
+            ),
+            _notice(
+                "<strong>若非本人操作，請立即移除該登入方式並變更密碼</strong>，並聯繫我們。",
+                "<strong>If this was not you, remove that sign-in method and change your "
+                "password immediately</strong>, then contact us.",
+            ),
         ],
         footer_lines=[_FOOTER_BRAND],
     )

@@ -43,7 +43,7 @@ def test_query_at_the_maximum_length_is_accepted():
 
 
 def test_surrounding_whitespace_does_not_count_towards_the_minimum():
-    """" 水 " is one character of query, not three."""
+    """' 水 ' is one character of query, not three."""
     with pytest.raises(SearchQueryError):
         normalize_query("  水  ")
 

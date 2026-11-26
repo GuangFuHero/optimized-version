@@ -1,0 +1,16 @@
+{
+  "name": "leaflet",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/leaflet/src",
+  "projectType": "library",
+  "tags": ["type:leaflet"],
+  "targets": {
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "vitest run --config libs/leaflet/vitest.config.ts",
+        "cwd": "{workspaceRoot}"
+      }
+    }
+  }
+}

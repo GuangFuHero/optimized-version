@@ -1,8 +1,9 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { Box, Stack, Typography } from '@mui/material';
 
-import { displayTextSize } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
 import { useStationDetailColorScheme } from './constants';
 import { StationDetailIconSlot } from './station-detail-primitives';
@@ -21,10 +22,10 @@ export function StationContactCard({
       sx={{
         width: '100%',
         p: '17px',
-        borderRadius: '32px',
+        borderRadius: `${designTokens.radius.xl}px`,
         bgcolor: stationDetailPalette.cardSurface,
         border: `1px solid ${stationDetailPalette.cardBorder}`,
-        boxShadow: '0px 1px 1px rgba(0, 0, 0, 0.05)',
+        boxShadow: designTokens.elevationShadow.stationDetailCard,
       }}
     >
       <Stack spacing={1}>
@@ -39,7 +40,7 @@ export function StationContactCard({
             sx={{
               width: 40,
               height: 40,
-              borderRadius: '999px',
+              borderRadius: `${designTokens.radius.full}px`,
               bgcolor: stationDetailPalette.contactAvatarBackground,
               display: 'inline-flex',
               alignItems: 'center',

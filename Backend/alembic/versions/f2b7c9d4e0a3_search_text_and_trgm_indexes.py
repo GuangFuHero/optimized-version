@@ -19,13 +19,14 @@ Revises: a1b2c3d4e5f6
 Create Date: 2026-08-16
 
 """
+
 from collections.abc import Sequence
 
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = 'f2b7c9d4e0a3'
-down_revision: str | Sequence[str] | None = 'a1b2c3d4e5f6'
+revision: str = "f2b7c9d4e0a3"
+down_revision: str | Sequence[str] | None = "a1b2c3d4e5f6"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -84,25 +85,19 @@ def upgrade() -> None:
         # create_all and production by this migration. NOT NULL is safe — every part of
         # the expression is coalesce()-wrapped, so the result is never NULL. (ADR-149)
         op.execute(
-            f"ALTER TABLE {table} ADD COLUMN search_text varchar "
-            f"GENERATED ALWAYS AS ({expr}) STORED NOT NULL"
+            f"ALTER TABLE {table} ADD COLUMN search_text varchar GENERATED ALWAYS AS ({expr}) STORED NOT NULL"
         )
         op.execute(
-            f"CREATE INDEX ix_{table}_search_text_trgm "
-            f"ON {table} USING gin (search_text gin_trgm_ops)"
+            f"CREATE INDEX ix_{table}_search_text_trgm ON {table} USING gin (search_text gin_trgm_ops)"
         )
 
     # These two columns are named after 巷/弄 but hold something else in practice. The
     # comments are the cheap half of the fix; renaming them would touch the GraphQL types
     # and the frontend forms, so that is deliberately left to a separate change.
     op.execute(
-        "COMMENT ON COLUMN secondary_locations.lane IS "
-        "'路／街名（road）——欄位名為 lane，但實際存路名，非巷'"
+        "COMMENT ON COLUMN secondary_locations.lane IS '路／街名（road）——欄位名為 lane，但實際存路名，非巷'"
     )
-    op.execute(
-        "COMMENT ON COLUMN secondary_locations.alley IS "
-        "'巷弄——欄位名為 alley，但實際存巷弄'"
-    )
+    op.execute("COMMENT ON COLUMN secondary_locations.alley IS '巷弄——欄位名為 alley，但實際存巷弄'")
 
 
 def downgrade() -> None:

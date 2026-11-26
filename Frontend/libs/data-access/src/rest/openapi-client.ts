@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import createClient from 'openapi-fetch';
 import { z } from 'zod';
 

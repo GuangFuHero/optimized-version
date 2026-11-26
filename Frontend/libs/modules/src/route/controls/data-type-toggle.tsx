@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
 import { ButtonBase, Stack } from '@mui/material';
@@ -74,7 +75,7 @@ export function SiteDataTypeToggle({
               onClick={() => onChange(dataType)}
               sx={segmentSx(active)}
             >
-              <Icon sx={{ fontSize: 14 }} />
+              <Icon sx={{ fontSize: designTokens.iconSize.sm }} />
               {SITE_DATA_TYPE_LABELS[dataType]}
             </ButtonBase>
           );

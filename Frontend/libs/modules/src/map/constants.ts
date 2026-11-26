@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import {
   Route,
   Ban,
@@ -181,8 +182,8 @@ export const DEFAULT_RESCUE_MAP_OVERLAY_LAYERS: readonly RescueMapOverlayLayer[]
  * the tickets' priority colours and of the 危險區's orange.
  */
 export const PUBLIC_ZONE_COLORS: Record<RescueMapPublicZone['kind'], string> = {
-  team_zone: '#4338CA',
-  mark_zone: '#15803D',
+  team_zone: designTokens.color.bg.map.teamZone,
+  mark_zone: designTokens.color.bg.map.markZone,
 };
 
 export const OVERLAY_LAYER_CONFIG: Record<

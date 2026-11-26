@@ -40,8 +40,10 @@ class ActiveIdentity:
         letting one drift into the other would tie the API's shape to the audit format.
         """
         return {
-            "role_uuid": self.role_uuid, "role": self.role_name,
-            "team_uuid": self.team_uuid, "team": self.team_name,
+            "role_uuid": self.role_uuid,
+            "role": self.role_name,
+            "team_uuid": self.team_uuid,
+            "team": self.team_name,
         }
 
     def to_audit_context(self) -> dict:
@@ -53,8 +55,10 @@ class ActiveIdentity:
         """
         return {
             "identity": {
-                "role_uuid": self.role_uuid, "role": self.role_name,
-                "team_uuid": self.team_uuid, "team": self.team_name,
+                "role_uuid": self.role_uuid,
+                "role": self.role_name,
+                "team_uuid": self.team_uuid,
+                "team": self.team_name,
             }
         }
 

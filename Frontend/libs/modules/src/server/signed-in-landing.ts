@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 import {
   currentUserFromBackendAsync,
   NO_BACK_OFFICE_IDENTITY,
