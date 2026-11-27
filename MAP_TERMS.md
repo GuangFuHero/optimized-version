@@ -33,7 +33,7 @@
   - 盡力提供，沒有服務保證，可能不經通知就被封鎖。
   - 不可以大量下載，也不可以預先抓使用者畫面以外的範圍。不可以做離線使用，包括「下載離線地圖」這類功能。
   - 瀏覽器直接取用：用預設設定的瀏覽器就符合技術要求。網頁要送出 Referer，不可以設定會擋掉 Referer 的 Referrer-Policy。
-  - 自己的伺服器轉抓：官方一般不建議。要用認得出服務、聯絡得到人的 User-Agent；要照上游回的快取標頭快取，讀不到時每張至少快取 7 天；不可以預設送 no-cache；不可以移除或清空瀏覽器送來的 Referer。
+  - 自己的伺服器轉抓：官方一般不建議。要用認得出服務、聯絡得到人的 User-Agent；要照上游回的快取標頭快取，讀不到時每張至少快取 7 天；過期的圖磚重抓時要用條件式請求（`If-None-Match`、`If-Modified-Since`）；不可以預設送 no-cache；不可以移除或清空瀏覽器送來的 Referer。
 - **平台現況**：預設底圖由瀏覽器直接取。後端轉抓的那個選項送出 `UPSTREAM_USER_AGENT` 設定的 User-Agent，把瀏覽器送來的 Referer 縮成網站來源（例如 `https://example.org/`，跟瀏覽器直接跨站取圖時預設送的一樣）再送上游，並照上游的 `Cache-Control: max-age` 或 `Expires` 快取，兩個都沒有時快取 7 天。過期的圖磚整張重抓，沒有用條件式請求（`If-None-Match`、`If-Modified-Since`）。地圖上的出處文字連到 <https://www.openstreetmap.org/copyright>。
 - **風險**：災害發生時流量會突然暴增，可能被限流或封鎖。一定要有其他來源的底圖可以切換。
 
@@ -45,7 +45,7 @@
 
 ## EOX Sentinel-2 cloudless 2024
 
-- **授權**：CC BY-NC-SA 4.0。只准非商業用途；用它做出來的圖要用同一個授權；要標示「Sentinel-2 cloudless - https://s2maps.eu by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2024)」。商業用途 EOX 另外有付費授權。
+- **授權**：CC BY-NC-SA 4.0。只准非商業用途；用它做出來的圖要用同一個授權；要照 <https://cloudless.eox.at/license-non-commercial> 標示「EOxCloudless https://cloudless.eox.at by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2024)」。商業用途 EOX 另外有付費授權。
 - **授權說明**（<https://cloudless.eox.at/documentation/license>）：
   - 把「（地方）政府機關」（(local) government organizations and agencies）的使用列在商業用途。商業用途要向 EOX 取得商業授權。
   - 不可以用自己的授權散布，也不可以沒有 EOX 書面同意就讓別人另外再利用；不可以把影像單獨當成產品賣。
