@@ -314,7 +314,10 @@ def main():
 
     heading("產生方式")
     line("前端", f"讀取 Frontend/pnpm-lock.yaml（lockfile 9.0）的全部套件與相依圖。授權、作者取自套件的 package.json（pnpm {meta['pnpm_version']} `pnpm licenses list`），本機沒有安裝的平台限定套件改查 npm registry。雜湊為鎖定檔記載的 npm 套件檔 SHA-512。")
-    line("後端", f"Backend 沒有鎖定檔（uv.lock／requirements.txt），pyproject.toml 只寫版本下限。本表以 uv {meta['uv_version']} `uv pip compile` 解析，Python 3.13、--universal，並以 --exclude-newer {meta['py_resolved_at']}（{meta['version']} 那個 commit 的時間）固定為當時可取得的版本。授權、作者與雜湊取自 PyPI；雜湊為該版本原始碼包（sdist）的 SHA-256。")
+    if meta.get("py_locked"):
+        line("後端", f"版本照 Backend/uv.lock，跟後端映像安裝的一樣（Backend/Dockerfile 的 `uv sync --locked`）。本表以 uv {meta['uv_version']} `uv export` 匯出鎖定的版本，再以它為限制用 `uv pip compile` 列出相依關係，Python 3.13、--universal。授權、作者與雜湊取自 PyPI；雜湊為該版本原始碼包（sdist）的 SHA-256。")
+    else:
+        line("後端", f"Backend 沒有鎖定檔（uv.lock／requirements.txt），pyproject.toml 只寫版本下限。本表以 uv {meta['uv_version']} `uv pip compile` 解析，Python 3.13、--universal，並以 --exclude-newer {meta['py_resolved_at']}（{meta['version']} 那個 commit 的時間）固定為當時可取得的版本。授權、作者與雜湊取自 PyPI；雜湊為該版本原始碼包（sdist）的 SHA-256。")
     line("使用範圍", "執行期：正式環境安裝時會裝進來的套件（前端＝`pnpm install --prod`，後端＝pyproject.toml 的 dependencies 及其相依）。開發／建置、開發／測試：只有開發、建置、測試時才用到的套件，不會進入正式環境。前端分類已用 `pnpm install --prod` 另外安裝一次比對，兩邊一致。")
     line("相依關係", "直接：專案的 package.json／pyproject.toml 有寫。間接：被其他套件帶進來。")
     line("平台限定", "同一套件針對不同作業系統、CPU 的預編譯檔（例如 @next/swc-*、@img/sharp-*）。鎖定檔全部列出，實際安裝時只會裝符合該機器的那一個；正式環境為 Linux（Alpine，musl）。")
