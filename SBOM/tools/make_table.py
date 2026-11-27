@@ -3,7 +3,7 @@
 
 用法：
   python make_table.py --rows <out>/_rows.json --out <檔名>.xlsx \
-      --zip-name <原始碼壓縮檔名> --zip-sha256 <雜湊> --cdx-name <CycloneDX 檔名>
+      [--zip-name <原始碼壓縮檔名> --zip-sha256 <雜湊>] --cdx-name <CycloneDX 檔名>
 """
 
 import argparse
@@ -39,7 +39,7 @@ WORKSPACE = {
     "libs/data-access": "資料存取 libs/data-access",
 }
 
-FE_SHEET, BE_SHEET, OT_SHEET = "前端套件", "後端套件", "容器與其他元件"
+FE_SHEET, BE_SHEET, OT_SHEET, SV_SHEET = "前端套件", "後端套件", "容器與其他元件", "外部服務與授權"
 
 
 def ref(sheet, col):
@@ -68,18 +68,39 @@ def write_table(ws, headers, rows, widths, wrap_cols=()):
     ws.row_dimensions[1].height = 30
 
 
+# 寬鬆授權：可以和 GPL-3.0 的程式一起散布，不用另外說明。其餘列在「說明」頁的授權確認。
+PERMISSIVE = {
+    "MIT", "MIT-0", "ISC", "Apache-2.0", "BSD", "BSD-2-Clause", "BSD-3-Clause", "0BSD", "BlueOak-1.0.0",
+    "Unlicense", "CC0-1.0", "Python-2.0", "PSF-2.0", "Zlib", "WTFPL", "OFL-1.1",
+}
+
+
+def is_permissive(expr):
+    """True when every alternative of an SPDX-ish expression is made only of permissive licenses."""
+    import re
+
+    alternatives = re.split(r"\s+OR\s+", expr.replace("(", " ").replace(")", " "))
+    for alt in alternatives:
+        ids = [x for x in re.split(r"\s+AND\s+|\s+", alt.strip()) if x and x not in ("AND", "WITH")]
+        if ids and all(i in PERMISSIVE for i in ids):
+            return True
+    return False
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--rows", required=True)
     ap.add_argument("--out", required=True)
-    ap.add_argument("--zip-name", required=True)
-    ap.add_argument("--zip-sha256", required=True)
+    # 只在原始碼壓縮檔有公開（例如 release 附件）時填；分支快照不填，以 commit 為準。
+    ap.add_argument("--zip-name")
+    ap.add_argument("--zip-sha256")
     ap.add_argument("--cdx-name", required=True)
     ap.add_argument("--date", required=True, help="表格上寫的產生日期（YYYY-MM-DD）")
     args = ap.parse_args()
 
     data = json.loads(Path(args.rows).read_text(encoding="utf-8"))
     meta, fe, be, other = data["meta"], data["frontend"], data["backend"], data["other"]
+    services = data.get("services", [])
 
     wb = Workbook()
 
@@ -156,6 +177,21 @@ def main():
     )
     ws_ot.freeze_panes = "D2"
 
+    # ------------------------------------------------------------------ 外部服務與授權
+    ws_sv = wb.create_sheet(SV_SHEET)
+    sv_rows = [
+        [i, sv["group"], sv["name"], sv["provider"], sv["purpose"], sv["status"], sv["auth"], sv["terms"], sv["terms_url"], sv["verdict"], sv["basis"], "\n".join(sv["endpoints"]), sv["source"], sv["note"]]
+        for i, sv in enumerate(services, start=1)
+    ]
+    write_table(
+        ws_sv,
+        ["項次", "類別", "名稱", "提供者", "用途", "目前狀態", "取用方式（金鑰或帳號）", "授權／使用條款", "條款連結", "授權確認", "依據", "連線位置", "程式位置", "備註"],
+        sv_rows,
+        [6, 12, 28, 22, 34, 24, 26, 30, 34, 16, 44, 34, 36, 30],
+        wrap_cols=(5, 6, 7, 8, 11, 12, 13, 14),
+    )
+    ws_sv.freeze_panes = "D2"
+
     # ------------------------------------------------------------------ 授權統計（公式）
     ws_lic = wb.create_sheet("授權統計")
     lic_count = Counter(r["license"] for r in fe) + Counter(r["license"] for r in be)
@@ -220,7 +256,10 @@ def main():
     line("受測標的", f"{meta['repo']}（前台、管理平台、後端 API）", fill=FILL_KEY)
     line("版本", meta["version"], fill=FILL_KEY)
     line("Commit", meta["commit"], fill=FILL_KEY)
-    line("原始碼壓縮檔", f"{args.zip_name}\nSHA-256：{args.zip_sha256}", fill=FILL_KEY)
+    if args.zip_name and args.zip_sha256:
+        line("原始碼壓縮檔", f"{args.zip_name}\nSHA-256：{args.zip_sha256}", fill=FILL_KEY)
+    else:
+        line("原始碼", f"以上面的 commit 為準（`git archive {meta['commit'][:12]}` 可取得同一份原始碼）", fill=FILL_KEY)
     line("本專案授權", "GPL-3.0-only", fill=FILL_KEY)
     line("產生日期", args.date, fill=FILL_KEY)
     line("機器可讀版本", f"{args.cdx_name}（CycloneDX 1.6 JSON，含完整相依關係圖，已通過 CycloneDX 1.6 schema 驗證）", fill=FILL_KEY)
@@ -237,7 +276,8 @@ def main():
     line("　其中開發／測試", f'=COUNTIF({ref(BE_SHEET, "D")},"開發／測試")')
     line("　其中直接相依", f'=COUNTIF({ref(BE_SHEET, "E")},"直接")')
     line("容器映像與其他元件", f"=COUNTA({ref(OT_SHEET, 'C')})-1")
-    for r in range(ws.max_row - 9, ws.max_row + 1):
+    line("外部服務", f"=COUNTA({ref(SV_SHEET, 'C')})-1")
+    for r in range(ws.max_row - 10, ws.max_row + 1):
         ws.cell(row=r, column=2).alignment = Alignment(horizontal="left", vertical="top")
         ws.cell(row=r, column=1).font = F_BASE
 
@@ -245,7 +285,32 @@ def main():
     line(FE_SHEET, "Frontend/pnpm-lock.yaml 鎖定的全部 npm 套件（前台、管理平台、共用程式庫與開發工具）。")
     line(BE_SHEET, "Backend/pyproject.toml 的執行期相依與 dev 群組，展開到所有間接相依。")
     line(OT_SHEET, "不經套件管理器的元件：容器基礎映像、作業系統套件、字型。")
+    line(SV_SHEET, "程式執行時會連到、要有帳號金鑰或要遵守對方條款的外部服務與圖資。逐項列出取用方式、授權或使用條款，以及授權確認結果：✅ 合格、⚠️ 待確認或有使用限制。")
     line("授權統計", "依授權與使用範圍計數，數字由公式從前兩張表算出。")
+
+    heading("授權確認")
+    missing = [r["name"] for r in fe + be if not r["license"]]
+    line("缺授權資訊", "無。" if not missing else "、".join(missing))
+    import re
+
+    platform = re.compile(r"-(darwin|linux|linuxmusl|win32|android|freebsd|wasm32)(-[a-z0-9]+)*$")
+    groups = {}  # license -> {(order, label, family): count}
+    for side, rows in (("前端", fe), ("後端", be)):
+        for r in rows:
+            if is_permissive(r["license"]):
+                continue
+            runtime = r["scope"] == "runtime"
+            scope = "執行期" if runtime else ("開發／建置" if side == "前端" else "開發／測試")
+            key = (0 if runtime else 1, f"{side}{scope}", platform.sub("-*", r["name"]))
+            fam = groups.setdefault(r["license"], {})
+            fam[key] = fam.get(key, 0) + 1
+    for lic, fam in sorted(groups.items()):
+        parts = [f"{label}：{name}" + (f"（{n} 個平台版本）" if n > 1 else "") for (_, label, name), n in sorted(fam.items())]
+        line(lic, "、".join(parts))
+    lic_list = "、".join(sorted(groups)) or "無"
+    line("結論", f"{'套件都有授權資訊。' if not missing else '有套件缺授權資訊，見「缺授權資訊」。'}非寬鬆授權的套件：{lic_list}，各自的使用範圍見上面幾列。容器映像 PostGIS（GPL-2.0-or-later）與 Redis（7.4 起 RSALv2／SSPLv1）以獨立服務執行，不與本專案程式連結散布。外部服務的確認結果見「外部服務與授權」頁。")
+    for r in range(ws.max_row - len(groups) - 1, ws.max_row + 1):
+        ws.cell(row=r, column=2).alignment = Alignment(wrap_text=True, vertical="top")
 
     heading("產生方式")
     line("前端", f"讀取 Frontend/pnpm-lock.yaml（lockfile 9.0）的全部套件與相依圖。授權、作者取自套件的 package.json（pnpm {meta['pnpm_version']} `pnpm licenses list`），本機沒有安裝的平台限定套件改查 npm registry。雜湊為鎖定檔記載的 npm 套件檔 SHA-512。")
@@ -256,10 +321,11 @@ def main():
 
     heading("範圍與限制")
     line("1", "執行期是「安裝時會裝進來」的範圍，比實際打包進網站的檔案多：Next.js 的 standalone 輸出只會帶走執行時真的用到的檔案。")
-    line("2", "後端版本是依 tag 時間解析的結果。容器建置時（Backend/Dockerfile 執行 `uv pip install .`）會取建置當天的最新版本，實際部署版本可能較新。")
+    line("2", "後端版本是依版本 commit 的時間解析的結果。容器建置時（Backend/Dockerfile 執行 `uv pip install .`）會取建置當天的最新版本，實際部署版本可能較新。")
     line("3", "容器映像使用浮動 tag（3.13-slim、22-alpine、7-alpine、latest），未以 digest 固定；映像內作業系統套件不在本表範圍，需另做容器映像掃描。")
     line("4", "本表不含已知漏洞（CVE）資訊，弱點請見源碼檢測（SCA）報告；也不含各元件供應者所在國別。")
-    line("5", "交付版須以修補後的最終版本重新產生本表。")
+    line("5", "外部服務的條款以各服務官方頁面為準；表中標「未確認」的，條款還沒讀到原文。")
+    line("6", "交付版須以修補後的最終版本重新產生本表。")
     ws.cell(row=1, column=1).alignment = Alignment(vertical="center")
 
     wb.calculation.fullCalcOnLoad = True
@@ -268,7 +334,7 @@ def main():
     # 給人核對用：把公式應得的數字印出來
     print("前端", len(fe), Counter(r["scope"] for r in fe), "直接", sum(r["direct"] for r in fe), "平台限定", sum(bool(r["platform"]) for r in fe))
     print("後端", len(be), Counter(r["scope"] for r in be), "直接", sum(r["direct"] for r in be))
-    print("其他", len(other), "授權種類", len(licenses))
+    print("其他", len(other), "外部服務", len(services), "授權種類", len(licenses))
 
 
 if __name__ == "__main__":
