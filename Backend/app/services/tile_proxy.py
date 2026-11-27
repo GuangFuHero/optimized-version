@@ -4,10 +4,13 @@ import base64
 import contextlib
 import re
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
+from email.utils import parsedate_to_datetime
+from urllib.parse import urlsplit
 
 import httpx
 
+from app.core.config import settings
 from app.schemas.map import AttributionResponse
 from app.services.address import NON_STRICT_SSL
 
@@ -15,10 +18,6 @@ from app.services.address import NON_STRICT_SSL
 BLANK_TILE = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQI12NgAAIAAQAABjkB6QAAAABJRU5ErkJggg=="
 )
-
-# Sent on every upstream request so tile providers can identify and contact the platform.
-USER_AGENT = "GuangFuHero/1.0 (+https://github.com/GuangFuHero/optimized-version)"
-HEADERS = {"User-Agent": USER_AGENT}
 
 
 @dataclass
@@ -35,6 +34,10 @@ class SourceConfig:
     cache_ttl: int = 604800
     # Deepest zoom the source serves; deeper requests get a blank tile without asking upstream.
     max_zoom: int | None = None
+    # True keeps a tile as long as the upstream caching headers say, and cache_ttl only when they are missing.
+    cache_from_headers: bool = False
+    # True passes on the origin of the page that asked for the tile as Referer.
+    forward_referer: bool = False
 
 
 SOURCE_REGISTRY: dict[tuple[str, str], SourceConfig] = {
@@ -65,17 +68,13 @@ SOURCE_REGISTRY: dict[tuple[str, str], SourceConfig] = {
         image_format="image/jpeg",
         strict_x509=False,
     ),
-    ("satellite", "sinica"): SourceConfig(
-        url_template=("https://gis.sinica.edu.tw/tileserver/file-exists.php?img={layer}/{z}/{x}/{y}"),
-        image_format="image/png",
-    ),
+    # The OSM Foundation tile usage policy asks a proxy to honour the caching headers (7 days when they are
+    # missing) and to keep the browser's Referer.
     ("road", "osm"): SourceConfig(
         url_template="https://tile.openstreetmap.org/{z}/{x}/{y}.png",
         image_format="image/png",
-    ),
-    ("road", "carto"): SourceConfig(
-        url_template="https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
-        image_format="image/png",
+        cache_from_headers=True,
+        forward_referer=True,
     ),
 }
 
@@ -101,13 +100,13 @@ ATTRIBUTION_REGISTRY: dict[tuple[str, str], AttributionResponse] = {
     ("satellite", "eox"): AttributionResponse(
         source="eox",
         type="satellite",
-        name="Sentinel-2 Cloudless by EOX",
+        name="EOxCloudless",
         license="CC BY-NC-SA 4.0",
         attribution_text=(
-            "Sentinel-2 cloudless - https://s2maps.eu by EOX IT Services GmbH "
+            "EOxCloudless https://cloudless.eox.at by EOX IT Services GmbH "
             "(Contains modified Copernicus Sentinel data 2024)"
         ),
-        attribution_url="https://s2maps.eu",
+        attribution_url="https://cloudless.eox.at",
         image_format="image/jpeg",
         commercial_use=False,
         requires_logo=False,
@@ -122,26 +121,13 @@ ATTRIBUTION_REGISTRY: dict[tuple[str, str], AttributionResponse] = {
         attribution_text="© 內政部國土測繪中心",
         attribution_url="https://maps.nlsc.gov.tw/pro/use_clause.jsp",
         image_format="image/jpeg",
-        commercial_use=False,
+        commercial_use=True,
         requires_logo=False,
         logo_url=None,
         notes=(
             "No layer-specific licence found. The service terms allow public display with the source "
             "credited, and forbid bulk downloading and removing or covering source and copyright notices."
         ),
-    ),
-    ("satellite", "sinica"): AttributionResponse(
-        source="sinica",
-        type="satellite",
-        name="中央研究院",
-        license="Academic (unconfirmed)",
-        attribution_text="© 中央研究院",
-        attribution_url="https://gis.sinica.edu.tw/worldmap/",
-        image_format="image/png",
-        commercial_use=False,
-        requires_logo=False,
-        logo_url=None,
-        notes="ToS unconfirmed — confirm before production use.",
     ),
     ("road", "osm"): AttributionResponse(
         source="osm",
@@ -150,19 +136,6 @@ ATTRIBUTION_REGISTRY: dict[tuple[str, str], AttributionResponse] = {
         license="ODbL",
         attribution_text="© OpenStreetMap contributors",
         attribution_url="https://www.openstreetmap.org/copyright",
-        image_format="image/png",
-        commercial_use=True,
-        requires_logo=False,
-        logo_url=None,
-        notes=None,
-    ),
-    ("road", "carto"): AttributionResponse(
-        source="carto",
-        type="road",
-        name="CARTO",
-        license="OSM ODbL + CARTO ToS",
-        attribution_text="© OpenStreetMap contributors, © CARTO",
-        attribution_url="https://carto.com/attributions",
         image_format="image/png",
         commercial_use=True,
         requires_logo=False,
@@ -183,6 +156,38 @@ def build_cache_key(
     """Build a Redis cache key for a tile request including sorted query params."""
     sorted_params = ",".join(f"{k}={v}" for k, v in sorted(query_params.items())) if query_params else "_"
     return f"tile:{source}:{type_}:{sorted_params}:{z}:{x}:{y}"
+
+
+def upstream_headers(referer: str | None = None) -> dict[str, str]:
+    """Headers for an upstream request: the configured User-Agent, plus the origin of `referer` if given.
+
+    Only the origin is passed on, as a browser does by default for a cross-origin request, so a page's path
+    and query never leave the platform.
+    """
+    headers = {"User-Agent": settings.UPSTREAM_USER_AGENT}
+    parts = urlsplit(referer or "")
+    if parts.scheme in ("http", "https") and parts.netloc:
+        headers["Referer"] = f"{parts.scheme}://{parts.netloc}/"
+    return headers
+
+
+def cache_ttl_from_headers(headers, default: int) -> int:
+    """Seconds a response may be cached by its `Cache-Control: max-age` or `Expires`, else `default`.
+
+    `max-age` counts from when the response was made, so the `Age` an upstream cache adds is taken off, and an
+    unreadable `Expires` counts as already expired, as HTTP defines both.
+    """
+    max_age = re.search(r"\bmax-age=(\d+)", headers.get("cache-control", ""), re.IGNORECASE)
+    if max_age:
+        age = headers.get("age", "")
+        return int(max_age.group(1)) - (int(age) if age.isdigit() else 0)
+    if "expires" not in headers:
+        return default
+    try:
+        sent = parsedate_to_datetime(headers["date"]) if "date" in headers else datetime.now(UTC)
+        return int((parsedate_to_datetime(headers["expires"]) - sent).total_seconds())
+    except (TypeError, ValueError):
+        return 0
 
 
 def get_source_config(type_: str, source: str) -> SourceConfig | None:
@@ -210,7 +215,7 @@ async def resolve_tile_date(redis, source: str, dates_url: str) -> str | None:
         pass  # Redis down — ask GIBS directly
 
     try:
-        async with httpx.AsyncClient(timeout=10.0, headers=HEADERS) as client:
+        async with httpx.AsyncClient(timeout=10.0, headers=upstream_headers()) as client:
             response = await client.get(dates_url)
         # The domain is comma-separated dates or ranges such as "2026-03-02/2026-10-22/P1D", newest last,
         # with gaps between them that GIBS answers with 404. Only each item's last two days can matter.
@@ -238,6 +243,7 @@ async def fetch_tile(
     x: int,
     y: int,
     query_params: dict[str, str],
+    referer: str | None = None,
 ) -> tuple[bytes, str]:
     """Return (tile_bytes, content_type) for the requested tile.
 
@@ -245,6 +251,7 @@ async def fetch_tile(
     On any upstream error, returns BLANK_TILE.
     If Redis is unavailable, bypasses cache and fetches upstream directly.
     A source with `dates_url` resolves its tile date first, and the date becomes part of the cache key.
+    `referer` is the Referer of the browser's request, passed on only to a source with `forward_referer`.
     """
     config = get_source_config(type_, source)
     if config.max_zoom is not None and z > config.max_zoom:
@@ -266,13 +273,12 @@ async def fetch_tile(
         cached = None  # Redis down — proceed to upstream
 
     # --- Upstream fetch ---
-    url = config.url_template.format(
-        z=z, x=x, y=y, layer=params.get("layer", ""), date=params.get("date", "")
-    )
+    url = config.url_template.format(z=z, x=x, y=y, date=params.get("date", ""))
 
     try:
         verify = True if config.strict_x509 else NON_STRICT_SSL
-        async with httpx.AsyncClient(timeout=10.0, verify=verify, headers=HEADERS) as client:
+        headers = upstream_headers(referer if config.forward_referer else None)
+        async with httpx.AsyncClient(timeout=10.0, verify=verify, headers=headers) as client:
             response = await client.get(url)
 
         if response.status_code != 200:
@@ -280,14 +286,20 @@ async def fetch_tile(
 
         tile_bytes = response.content
         content_type = response.headers.get("content-type", config.image_format)
+        ttl = (
+            cache_ttl_from_headers(response.headers, config.cache_ttl)
+            if config.cache_from_headers
+            else config.cache_ttl
+        )
 
     except Exception:
         return BLANK_TILE, "image/png"
 
     # --- Store in cache (best-effort, skip if Redis down) ---
+    # An expiry of zero or less deletes the key, so a tile that is already stale is not kept.
     try:
         await redis.hset(cache_key, mapping={"data": tile_bytes, "ct": content_type})
-        await redis.expire(cache_key, config.cache_ttl)
+        await redis.expire(cache_key, ttl)
     except Exception:
         pass
 

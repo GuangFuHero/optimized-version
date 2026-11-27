@@ -18,6 +18,8 @@ on:
 
 jobs:
   init:
+    # Dependabot's PRs get no repo secrets, and its weekly upgrades need no notice.
+    if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     outputs:
       pr_number: ${{ steps.set_pr_info.outputs.pr_number }}

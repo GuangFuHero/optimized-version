@@ -24,6 +24,8 @@ on:
 
 jobs:
   init:
+    # Dependabot's events get no repo secrets, and its weekly branches need no notice.
+    if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     outputs:
       event_type: ${{ steps.set_info.outputs.event_type }}

@@ -16,11 +16,9 @@ export type RescueMapMarkerVariant =
 export type RescueMapBaseLayer =
   | 'osm-direct'
   | 'osm'
-  | 'carto'
   | 'nasa_gibs'
   | 'eox'
-  | 'nlsc'
-  | 'sinica';
+  | 'nlsc';
 export type RescueMapTileSourceType = 'road' | 'satellite';
 export type RescueMapTileSource = RescueMapBaseLayer;
 

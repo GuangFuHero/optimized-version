@@ -11,12 +11,12 @@ from httpx import ASGITransport, AsyncClient
 
 os.environ["ENV"] = "testing"
 
+from app.core.config import settings  # noqa: E402
 from app.main import app  # noqa: E402
 from app.schemas.map import AttributionResponse  # noqa: E402
 from app.services.tile_proxy import (  # noqa: E402
     BLANK_TILE,
     NON_STRICT_SSL,
-    USER_AGENT,
     build_cache_key,
     fetch_tile,
     get_attribution,
@@ -265,42 +265,6 @@ async def test_fetch_tile_redis_down_fetches_upstream():
     assert ct == "image/png"
 
 
-@pytest.mark.asyncio
-async def test_fetch_tile_sinica_layer_in_url(fake_redis):
-    """Sinica layer param is substituted into the upstream URL."""
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.content = b"SINICA_TILE"
-    mock_response.headers = {"content-type": "image/png"}
-
-    captured_url = []
-
-    with patch("app.services.tile_proxy.httpx.AsyncClient") as mock_client_cls:
-        mock_client = AsyncMock()
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
-
-        async def capture_get(url, **kwargs):
-            captured_url.append(url)
-            return mock_response
-
-        mock_client.get = capture_get
-        mock_client_cls.return_value = mock_client
-
-        await fetch_tile(
-            redis=fake_redis,
-            source="sinica",
-            type_="satellite",
-            z=8,
-            x=10,
-            y=20,
-            query_params={"layer": "EARTH"},
-        )
-
-    assert "EARTH" in captured_url[0]
-    assert "layer=EARTH" not in captured_url[0]  # param consumed, not forwarded as query string
-
-
 def _gibs_client(domains_response):
     """Mock httpx client answering GIBS's dates URL with domains_response and any tile URL with a PNG."""
     tile_response = MagicMock()
@@ -434,12 +398,17 @@ async def test_tile_endpoint_invalid_zoom(map_client):
 
 
 @pytest.mark.asyncio
-async def test_tile_endpoint_sinica_missing_layer(map_client):
-    """Sinica tile requests without a layer query param return 400."""
+@pytest.mark.parametrize(("type_", "source"), [("road", "carto"), ("satellite", "sinica")])
+async def test_tile_and_attribution_endpoints_refuse_removed_sources(map_client, type_, source):
+    """CARTO and Academia Sinica are no longer served, so neither their tiles nor their attribution is."""
     ac, _ = map_client
-    resp = await ac.get("/api/v1/map/tile/satellite/sinica/10/1/2")
-    assert resp.status_code == 400
-    assert "layer" in resp.json()["detail"].lower()
+    with patch("app.services.tile_proxy.httpx.AsyncClient") as cls:
+        tile = await ac.get(f"/api/v1/map/tile/{type_}/{source}/10/1/2?layer=TAIWAN_MOSAIC")
+    attribution = await ac.get(f"/api/v1/map/attribution/{type_}/{source}")
+
+    assert tile.status_code == attribution.status_code == 400
+    assert get_source_config(type_, source) is None
+    cls.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -512,7 +481,7 @@ async def test_fetch_tile_sends_platform_user_agent_only(fake_redis, type_, sour
     with patch("app.services.tile_proxy.httpx.AsyncClient", return_value=_client_returning(response)) as cls:
         await fetch_tile(fake_redis, source, type_, 14, 13721, 7031, {})
 
-    assert cls.call_args.kwargs["headers"] == {"User-Agent": USER_AGENT}
+    assert cls.call_args.kwargs["headers"] == {"User-Agent": settings.UPSTREAM_USER_AGENT}
     assert "headers" not in cls.return_value.get.call_args.kwargs
 
 
@@ -523,7 +492,96 @@ async def test_resolve_tile_date_sends_platform_user_agent(fake_redis):
     with patch("app.services.tile_proxy.httpx.AsyncClient", return_value=_client_returning(domains)) as cls:
         await resolve_tile_date(fake_redis, "nasa_gibs", "https://example.test/all.xml")
 
-    assert cls.call_args.kwargs["headers"] == {"User-Agent": USER_AGENT}
+    assert cls.call_args.kwargs["headers"] == {"User-Agent": settings.UPSTREAM_USER_AGENT}
+
+
+@pytest.mark.asyncio
+async def test_upstream_requests_use_the_user_agent_setting(fake_redis, monkeypatch):
+    """A deployment's own User-Agent setting reaches tile and GIBS dates requests."""
+    monkeypatch.setattr(settings, "UPSTREAM_USER_AGENT", "ExampleRelief/2.0 (+mailto:ops@example.test)")
+    response = MagicMock(status_code=200, content=b"TILE", headers={"content-type": "image/png"})
+    with patch("app.services.tile_proxy.httpx.AsyncClient", return_value=_client_returning(response)) as cls:
+        await fetch_tile(fake_redis, "eox", "satellite", 14, 13721, 7031, {})
+    domains = MagicMock(text="<Domain>2026-10-20/2026-10-22/P1D</Domain>")
+    with patch("app.services.tile_proxy.httpx.AsyncClient", return_value=_client_returning(domains)) as cls2:
+        await resolve_tile_date(fake_redis, "nasa_gibs", "https://example.test/all.xml")
+
+    expected = {"User-Agent": "ExampleRelief/2.0 (+mailto:ops@example.test)"}
+    assert cls.call_args.kwargs["headers"] == cls2.call_args.kwargs["headers"] == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("headers", "expected_ttl"),
+    [
+        # Upstream says 3 days: honoured even though it is shorter than 7.
+        ({"cache-control": "max-age=259200, stale-while-revalidate=604800"}, 259200),
+        # Upstream says 30 days.
+        ({"cache-control": "max-age=2592000"}, 2592000),
+        # Directive names are case-insensitive, and the time a CDN already held the tile is taken off.
+        ({"cache-control": "MAX-AGE=86400", "age": "3600"}, 82800),
+        # Only Expires, 2 days after Date.
+        ({"date": "Sat, 21 Nov 2026 00:00:00 GMT", "expires": "Mon, 23 Nov 2026 00:00:00 GMT"}, 172800),
+        # No caching headers at all: 7 days.
+        ({}, 604800),
+    ],
+)
+async def test_fetch_tile_osm_caches_for_as_long_as_upstream_says(fake_redis, headers, expected_ttl):
+    """OSM tiles are kept for the upstream max-age or Expires, and for 7 days when neither is sent."""
+    response = MagicMock(status_code=200, content=b"OSM", headers={"content-type": "image/png", **headers})
+    with patch("app.services.tile_proxy.httpx.AsyncClient", return_value=_client_returning(response)):
+        await fetch_tile(fake_redis, "osm", "road", 14, 13721, 7031, {})
+
+    ttl = await fake_redis.ttl("tile:osm:road:_:14:13721:7031")
+    assert expected_ttl - 5 <= ttl <= expected_ttl
+
+
+@pytest.mark.asyncio
+async def test_fetch_tile_osm_does_not_keep_an_already_expired_tile(fake_redis):
+    """A tile upstream marks as already expired is returned but not cached."""
+    response = MagicMock(
+        status_code=200,
+        content=b"OSM",
+        headers={"content-type": "image/png", "cache-control": "max-age=0"},
+    )
+    with patch("app.services.tile_proxy.httpx.AsyncClient", return_value=_client_returning(response)):
+        data, _ = await fetch_tile(fake_redis, "osm", "road", 14, 13721, 7031, {})
+
+    assert data == b"OSM"
+    assert not await fake_redis.exists("tile:osm:road:_:14:13721:7031")
+
+
+@pytest.mark.asyncio
+async def test_fetch_tile_other_sources_keep_their_fixed_ttl(fake_redis):
+    """Sources other than OSM ignore upstream caching headers and keep their own TTL."""
+    response = MagicMock(
+        status_code=200,
+        content=b"EOX",
+        headers={"content-type": "image/jpeg", "cache-control": "max-age=60"},
+    )
+    with patch("app.services.tile_proxy.httpx.AsyncClient", return_value=_client_returning(response)):
+        await fetch_tile(fake_redis, "eox", "satellite", 14, 13721, 7031, {})
+
+    assert await fake_redis.ttl("tile:eox:satellite:_:14:13721:7031") > 604800 - 5
+
+
+@pytest.mark.asyncio
+async def test_tile_endpoint_passes_the_page_origin_as_referer_to_osm_only(map_client):
+    """OSM gets the browser's Referer cut to its origin, so no page path or query leaves the platform."""
+    ac, _ = map_client
+    referer = {"Referer": "https://admin.example.test/tickets/123?token=secret"}
+    response = MagicMock(status_code=200, content=b"TILE", headers={"content-type": "image/png"})
+    with patch("app.services.tile_proxy.httpx.AsyncClient", return_value=_client_returning(response)) as cls:
+        await ac.get("/api/v1/map/tile/road/osm/14/13721/7031", headers=referer)
+        osm_headers = cls.call_args.kwargs["headers"]
+        await ac.get("/api/v1/map/tile/satellite/eox/14/13721/7031", headers=referer)
+        eox_headers = cls.call_args.kwargs["headers"]
+
+    assert osm_headers == {
+        "User-Agent": settings.UPSTREAM_USER_AGENT,
+        "Referer": "https://admin.example.test/",
+    }
+    assert eox_headers == {"User-Agent": settings.UPSTREAM_USER_AGENT}
 
 
 @pytest.mark.asyncio
@@ -546,4 +604,16 @@ def test_nlsc_attribution_names_service_terms():
     assert attr.attribution_url == "https://maps.nlsc.gov.tw/pro/use_clause.jsp"
     assert attr.attribution_text == "© 內政部國土測繪中心"
     assert attr.image_format == "image/jpeg"
+    assert attr.commercial_use is True
     assert "bulk downloading" in attr.notes
+
+
+def test_eox_attribution_is_the_credit_its_licence_asks_for():
+    """EOX's credit is the 2024 line of its non-commercial licence, linked to the product's page."""
+    attr = get_attribution("satellite", "eox")
+    assert attr.attribution_text == (
+        "EOxCloudless https://cloudless.eox.at by EOX IT Services GmbH "
+        "(Contains modified Copernicus Sentinel data 2024)"
+    )
+    assert attr.attribution_url == "https://cloudless.eox.at"
+    assert attr.commercial_use is False
