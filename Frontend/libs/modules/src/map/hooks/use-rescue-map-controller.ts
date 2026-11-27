@@ -55,7 +55,7 @@ export function buildAttributionMarkup(
   }
 
   const escapedText = escapeHtml(text);
-  // The credit links to the provider's own page, which the OpenStreetMap and NLSC terms ask for.
+  // The credit links to the provider's own page, as OpenStreetMap's attribution guidelines suggest.
   const credit = /^https?:\/\//.test(payload.attribution_url)
     ? `<a href="${escapeHtml(payload.attribution_url)}" target="_blank" rel="noopener noreferrer">${escapedText}</a>`
     : escapedText;

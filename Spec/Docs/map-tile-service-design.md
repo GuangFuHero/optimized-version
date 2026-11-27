@@ -152,7 +152,7 @@ Returns structured metadata for a given `type`/`source` combination. Used by the
 | source | name | attribution_text | license | commercial_use | requires_logo | logo_url |
 |---|---|---|---|---|---|---|
 | `nasa_gibs` | NASA GIBS | `Imagery provided by NASA's Global Imagery Browse Services (GIBS), part of NASA's ESDIS (HLS, contains modified Copernicus Sentinel data)` | US Gov Open Data | true | false | null |
-| `eox` | Sentinel-2 Cloudless by EOX | `Sentinel-2 cloudless - https://s2maps.eu by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2024)` | CC BY-NC-SA 4.0 | false | false | null |
+| `eox` | EOxCloudless | `EOxCloudless https://cloudless.eox.at by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2024)` | CC BY-NC-SA 4.0 | false | false | null |
 | `nlsc` | 內政部國土測繪中心 | `© 內政部國土測繪中心` | 國土測繪圖資服務雲服務使用條款 | true | false | null |
 | `osm` | OpenStreetMap | `© OpenStreetMap contributors` | ODbL | true | false | null |
 
