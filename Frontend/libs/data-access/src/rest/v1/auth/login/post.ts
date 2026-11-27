@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import API_ENDPOINTS from '../../../endpoints';
+import { formBody } from '../../../form-body';
 import { requestFormAsync } from '../../../request-async';
 import type { ITokenPair } from '../../../types';
 
@@ -8,7 +9,7 @@ async function loginAsync(
   password: string,
   grant_type = 'password',
 ) {
-  const body = new URLSearchParams({
+  const body = formBody({
     username,
     password,
     grant_type,

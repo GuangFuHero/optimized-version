@@ -3,6 +3,7 @@
 
 import { broadcastAuthChange } from './auth-broadcast';
 import { isSessionExpiredResponse, markSessionExpired } from './expiry';
+import { loadPage } from '../route/navigate';
 
 let signingOutHere = false;
 
@@ -46,7 +47,7 @@ export function continueSignedOut(href?: string): void {
   broadcastAuthChange('signed-out');
 
   if (href) {
-    window.location.assign(href);
+    loadPage(href);
   } else {
     window.location.reload();
   }

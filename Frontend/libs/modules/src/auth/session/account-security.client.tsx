@@ -71,6 +71,7 @@ import {
 import { clearDraftsOnSignOut } from './sign-out-drafts';
 import { useAddContact } from './use-add-contact';
 import { useContactDraft, type ContactDraft } from './use-contact-draft';
+import { loadPage } from '../../route/navigate';
 
 interface AccountSecurityClientProps {
   /** The account, so a contact kept for the way back from LINE is only brought back to it. */
@@ -318,7 +319,7 @@ export function AccountSecurityClient({
       // An ended session reloads the tab as a guest by itself; anything else, LINE is tried anyway.
     }
 
-    window.location.assign(buildAccountStepUpHref(action));
+    loadPage(buildAccountStepUpHref(action));
   };
 
   const contact = useAddContact({
