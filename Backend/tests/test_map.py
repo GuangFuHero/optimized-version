@@ -606,3 +606,14 @@ def test_nlsc_attribution_names_service_terms():
     assert attr.image_format == "image/jpeg"
     assert attr.commercial_use is True
     assert "bulk downloading" in attr.notes
+
+
+def test_eox_attribution_is_the_credit_its_licence_asks_for():
+    """EOX's credit is the 2024 line of its non-commercial licence, linked to the product's page."""
+    attr = get_attribution("satellite", "eox")
+    assert attr.attribution_text == (
+        "EOxCloudless https://cloudless.eox.at by EOX IT Services GmbH "
+        "(Contains modified Copernicus Sentinel data 2024)"
+    )
+    assert attr.attribution_url == "https://cloudless.eox.at"
+    assert attr.commercial_use is False

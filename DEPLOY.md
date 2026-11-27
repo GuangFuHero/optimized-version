@@ -204,9 +204,9 @@ gcloud secrets versions access latest --project=wanguard-250923 --secret=staging
 | **強制 HTTPS Cookie (`AUTH_COOKIE_SECURE`)** | `true` | `true` | `false`（本機為純 HTTP） |
 | **允許寫入來源 (`AUTH_ALLOWED_ORIGINS`)** | `https://wan-guard.com,https://admin.wan-guard.com` | `https://staging.wan-guard.com,https://admin-staging.wan-guard.com` | `http://localhost:3000,http://localhost:3001` |
 | **OAuth Callback 基底 (`OAUTH_REDIRECT_BASE_URL`)** | `https://wan-guard.com` | `https://staging.wan-guard.com` | `http://localhost:3000` |
-| **向圖磚來源表明身分 (`UPSTREAM_USER_AGENT`)** | 你的服務名稱與聯絡方式，例如 `MyRelief/1.0 (+https://example.org/contact)` | 未設定，用預設值 `GuangFuHero/1.0 (+https://github.com/GuangFuHero/optimized-version)` | 未設定，用預設值 |
+| **向圖磚來源表明身分 (`UPSTREAM_USER_AGENT`)** | 未設定，用預設值 `GuangFuHero/1.0 (+https://github.com/GuangFuHero/optimized-version)` | 未設定，用預設值 | 未設定，用預設值 |
 
-> ⚠️ 情境 B、C 自建環境請照 **Production 那一欄的格式**，換成自己的網域（填法見 [第 10 節 Step 5](#step-5僅限自建新環境在你的-fork-調整網域與-bucket-名稱)）。最右邊那欄只適用本機開發（情境 D），不是情境 C：情境 C 雖然也架在自己的電腦，網站一樣要讓別人用網址連進來。本機開發的值 `.env.example` 已經寫好，不用自己填。
+> ⚠️ 情境 B、C 自建環境請照 **Production 那一欄的格式**，換成自己的網域（填法見 [第 10 節 Step 5](#step-5僅限自建新環境在你的-fork-調整網域與-bucket-名稱)）。`UPSTREAM_USER_AGENT` 的預設值是這個專案的，自建環境要在 `Backend/scripts/deploy-config.staging.env` 設成自己的服務名稱與聯絡方式，例如 `MyRelief/1.0 (+https://example.org/contact)`。最右邊那欄只適用本機開發（情境 D），不是情境 C：情境 C 雖然也架在自己的電腦，網站一樣要讓別人用網址連進來。本機開發的值 `.env.example` 已經寫好，不用自己填。
 
 > 💡 **為什麼後台網址叫 `admin-staging.wan-guard.com` 而不是 `admin.staging.wan-guard.com`？**
 > 因為 Cloudflare 免費通用 SSL 憑證僅涵蓋 `*.wan-guard.com`（一層子網域），若用兩層子網域（`admin.staging.*`）會無法通過憑證驗證。也因為 Staging 與 Production 共用上層網域 `.wan-guard.com`，系統透過不同的 `AUTH_COOKIE_PREFIX`（`wgstg` vs `wg`）確保兩邊的 Cookie 不會互相干擾。

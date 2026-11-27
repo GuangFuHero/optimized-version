@@ -100,13 +100,13 @@ ATTRIBUTION_REGISTRY: dict[tuple[str, str], AttributionResponse] = {
     ("satellite", "eox"): AttributionResponse(
         source="eox",
         type="satellite",
-        name="Sentinel-2 Cloudless by EOX",
+        name="EOxCloudless",
         license="CC BY-NC-SA 4.0",
         attribution_text=(
-            "Sentinel-2 cloudless - https://s2maps.eu by EOX IT Services GmbH "
+            "EOxCloudless https://cloudless.eox.at by EOX IT Services GmbH "
             "(Contains modified Copernicus Sentinel data 2024)"
         ),
-        attribution_url="https://s2maps.eu",
+        attribution_url="https://cloudless.eox.at",
         image_format="image/jpeg",
         commercial_use=False,
         requires_logo=False,

@@ -79,7 +79,7 @@ export const BASE_LAYER_CONFIG: Record<
     description: '適合觀察地形與現地狀況',
     preview: TERRAIN_PREVIEW,
     attribution:
-      '&copy; EOX IT Services GmbH, contains modified Copernicus Sentinel data',
+      'EOxCloudless https://cloudless.eox.at by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2024)',
     attributionApiPath: '/api/v1/map/attribution/satellite/eox',
     url: '/api/v1/map/tile/satellite/eox/{z}/{x}/{y}',
     tileSourceType: 'satellite',
