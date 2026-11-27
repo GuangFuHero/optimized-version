@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 'use client';
 
+import { loadPage } from '../../route/navigate';
 import { broadcastAuthChange } from '../../session/auth-broadcast';
 
 /**
@@ -11,5 +12,5 @@ import { broadcastAuthChange } from '../../session/auth-broadcast';
  */
 export function continueSignedIn(path: string): void {
   broadcastAuthChange('signed-in');
-  window.location.assign(path);
+  loadPage(path);
 }

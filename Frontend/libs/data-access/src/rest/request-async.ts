@@ -68,7 +68,7 @@ export async function requestJsonAsync<T>(
 
 export async function requestFormAsync<T>(
   input: string,
-  body: URLSearchParams,
+  body: string,
   options: Omit<RequestOptions, 'body' | 'headers'> & {
     headers?: HeadersInit;
   } = {},

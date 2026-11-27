@@ -23,6 +23,7 @@ import {
   passwordSignInErrorMessage,
 } from './utils/login-error';
 import { oauthStartHref, safeReturnPath } from './utils/return-path';
+import { loadPage } from '../../route/navigate';
 
 /** `app`: where the backend sends a Google or LINE sign-in back to. */
 export function LoginFormClient({
@@ -50,7 +51,7 @@ export function LoginFormClient({
 
   function signInWithProvider(provider: 'google' | 'line') {
     // A whole-page navigation: the backend sends the browser on to Google or LINE.
-    window.location.assign(
+    loadPage(
       oauthStartHref(provider, {
         app,
         callbackUrl: requestedCallbackUrl,

@@ -41,6 +41,7 @@ import { BACK_OFFICE_HREF } from './portal-entry';
 import { useApplyDraft } from './use-apply-draft';
 import { usePhoneVerification } from './use-phone-verification';
 import { useWithdrawRoleRequest } from './use-withdraw-role-request';
+import { loadPage } from '../route/navigate';
 
 const { color, radius } = designTokens;
 type CurrentUser = components['schemas']['UserResponse'];
@@ -422,7 +423,7 @@ function InviteForm({
       } catch {
         // The session layer handles an ended session; LINE can retry a transient failure.
       }
-      window.location.assign(buildPhoneStepUpHref(window.location));
+      loadPage(buildPhoneStepUpHref(window.location));
     },
   });
   const resumed = useRef(false);

@@ -50,6 +50,7 @@ import { useApplyDraft } from './use-apply-draft';
 import { usePhoneVerification } from './use-phone-verification';
 import { useRoleRequestTeams } from './use-role-request-teams';
 import { useWithdrawRoleRequest } from './use-withdraw-role-request';
+import { loadPage } from '../route/navigate';
 
 const { color, radius } = designTokens;
 
@@ -137,7 +138,7 @@ export function RoleRequestDrawer({
       // An ended session reloads the tab as a guest by itself; anything else, LINE is tried anyway.
     }
 
-    window.location.assign(buildPhoneStepUpHref(window.location));
+    loadPage(buildPhoneStepUpHref(window.location));
   };
 
   const verification = usePhoneVerification({
