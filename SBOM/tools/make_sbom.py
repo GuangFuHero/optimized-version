@@ -13,7 +13,8 @@
   --out           輸出資料夾
   --version       受測版本（tag）
   --commit        受測 commit
-  --resolved-at   後端套件解析時間點（uv --exclude-newer 用的時間）
+  --resolved-at   受測 commit 的時間；沒有 --py-locked 時也是 uv --exclude-newer 用的時間
+  --py-locked     後端版本照 Backend/uv.lock（uv pip compile 以 uv export 的結果為限制），沒有鎖定檔的版本不加
   --pnpm-version  匯出前端授權時用的 pnpm 版本（寫進 SBOM 的工具欄）
   --uv-version    解析後端相依時用的 uv 版本（寫進 SBOM 的工具欄）
 
@@ -496,6 +497,7 @@ def main():
     ap.add_argument("--version", required=True)
     ap.add_argument("--commit", required=True)
     ap.add_argument("--resolved-at", required=True)
+    ap.add_argument("--py-locked", action="store_true")
     ap.add_argument("--pnpm-version", required=True)
     ap.add_argument("--uv-version", required=True)
     args = ap.parse_args()
@@ -604,6 +606,7 @@ def main():
         "commit": args.commit,
         "generated_at": now,
         "py_resolved_at": args.resolved_at,
+        "py_locked": args.py_locked,
         "pnpm_version": args.pnpm_version,
         "uv_version": args.uv_version,
     }
@@ -691,7 +694,11 @@ def main():
                 "licenses": [{"license": {"id": "GPL-3.0-only"}}],
                 "purl": f"pkg:github/GuangFuHero/optimized-version@{args.version}",
                 "externalReferences": [{"type": "vcs", "url": "https://github.com/GuangFuHero/optimized-version"}],
-                "properties": [{"name": "wanguard:commit", "value": args.commit}, {"name": "wanguard:python-resolved-at", "value": args.resolved_at}],
+                "properties": [
+                    {"name": "wanguard:commit", "value": args.commit},
+                    {"name": "wanguard:python-resolved-at", "value": args.resolved_at},
+                    {"name": "wanguard:python-versions-from", "value": "Backend/uv.lock" if args.py_locked else "uv pip compile --exclude-newer"},
+                ],
             },
         },
         "components": components,
