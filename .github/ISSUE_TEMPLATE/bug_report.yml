@@ -1,0 +1,59 @@
+name: 回報錯誤
+description: 畫面或功能跟預期不一樣、壞掉、出現錯誤訊息
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        謝謝你回報！寫清楚一點，我們比較快找得到問題。
+
+        - **資安問題請不要開 issue**，到 [Security → Report a vulnerability](https://github.com/GuangFuHero/optimized-version/security/advisories/new) 私下通報。
+        - **不要放真實的個人資料**：姓名、電話、地址、帳號，文字和截圖都一樣。截圖裡有的話，請先遮住。
+  - type: dropdown
+    id: area
+    attributes:
+      label: 在哪裡發生
+      options:
+        - 前台（民眾、志工用的網站）
+        - 管理平台
+        - 後端 API
+        - 部署、安裝
+        - 不確定
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 做了什麼
+      description: 一步一步寫，別人照著做也會遇到。
+      placeholder: |
+        1. 登入管理平台
+        2. 到「任務管理」，按「新增任務」
+        3. 不填地址直接送出
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 預期看到什麼
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 實際看到什麼
+      description: 有錯誤訊息的話，請整段貼上。可以直接把截圖拖進來。
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: 網址、瀏覽器、裝置
+      placeholder: 例：staging，Chrome 131，iPhone 15
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: 送出前
+      options:
+        - label: 我確認文字和截圖裡沒有真實的個人資料。
+          required: true
