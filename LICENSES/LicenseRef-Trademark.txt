@@ -1,0 +1,22 @@
+Names, logos and other marks: not licensed
+
+A file under this identifier holds a name, logo or other mark. The mark is not licensed under
+GPL-3.0-only, CC-BY-SA-4.0 or any other license in this repository, and all rights to it stay with
+its owner.
+
+- The names and logos of this project, Wan Guard 島嶼守望 ("Wan Guard 島嶼守望", "Wan Guard", "島嶼守望",
+  "Wan Guard 島嶼守望-光復超人", "光復超人", "GuangFuHero", and the logo files): using them needs written
+  permission, which you can ask for at wanguard25@gmail.com. If you deploy your own version, replace them
+  with your own.
+- Other companies' marks, such as the Google, LINE, Facebook and X logos on the sign-in and share
+  buttons, belong to those companies and are used under each one's brand guidelines.
+
+名稱、標誌與商標：不授權
+
+用這個識別碼的檔案含有名稱、Logo 或其他商標。它們不在本 repo 的 GPL-3.0-only、CC-BY-SA-4.0
+或任何其他授權範圍內，權利屬於各自的所有人。
+
+- 本專案 Wan Guard 島嶼守望的名稱與 Logo（「Wan Guard 島嶼守望」「Wan Guard」「島嶼守望」
+  「Wan Guard 島嶼守望-光復超人」「光復超人」「GuangFuHero」與 Logo 檔）：未經書面同意不得使用，
+  請寄信到 wanguard25@gmail.com。部署自己的版本時，請換成你自己的。
+- 其他公司的標誌，例如登入和分享按鈕上的 Google、LINE、Facebook、X：屬於各公司，依各品牌的使用規範使用。

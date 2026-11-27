@@ -1,0 +1,32 @@
+name: REUSE
+
+# Every file in the repository has a license and a copyright, in the file itself or in REUSE.toml.
+# No `paths:` filter: this checks the whole repository, so it runs on every pull request and in the
+# merge queue, and a required check whose workflow never starts would stay pending forever.
+on:
+  pull_request:
+  merge_group:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  reuse-lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.13.7"
+          python-version: "3.13"
+      # reuse needs a module to detect each file's encoding. charset-normalizer, the other one that
+      # needs no system library, misreads some of the Chinese text here and then misses the license
+      # line at the top of those files; chardet reads them all.
+      - name: Check REUSE compliance
+        env:
+          REUSE_ENCODING_MODULE: chardet
+        run: uvx --from "reuse[chardet]==6.3.0" --with "chardet==7.7.0" reuse lint
